@@ -1,0 +1,16 @@
+[workspace]
+members = ["tact-client", "ribbit-client"]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+authors = ["Daniel S. Reichenbach <daniel@kogit.network>"]
+edition = "2024"
+rust-version = "1.86"
+repository = "https://github.com/wowemulation-dev/cascette-rs"
+
+[workspace.dependencies]
+criterion = "0.6"
+thiserror = "2.0"
+tracing = "0.1"
+tracing-subscriber = "0.3"

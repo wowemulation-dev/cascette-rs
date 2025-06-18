@@ -1,0 +1,19 @@
+[package]
+name = "ribbit-client"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+description = "Ribbit protocol client for Cascette"
+
+[dependencies]
+asn1 = "0.21"
+mail-parser = "0.11"
+sha2 = "0.10"
+thiserror.workspace = true
+tokio = { version = "1.45", features = ["full"] }
+tracing.workspace = true
+
+[dev-dependencies]
+criterion.workspace = true

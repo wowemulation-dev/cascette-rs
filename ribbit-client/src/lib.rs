@@ -1,0 +1,1 @@
+//! Ribbit protocol client for Cascette
