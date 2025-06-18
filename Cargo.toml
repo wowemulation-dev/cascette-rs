@@ -7,7 +7,9 @@ version = "0.1.0"
 authors = ["Daniel S. Reichenbach <daniel@kogit.network>"]
 edition = "2024"
 rust-version = "1.86"
+license = "MIT OR Apache-2.0"
 repository = "https://github.com/wowemulation-dev/cascette-rs"
+homepage = "https://github.com/wowemulation-dev/cascette-rs"
 
 [workspace.dependencies]
 criterion = "0.6"
