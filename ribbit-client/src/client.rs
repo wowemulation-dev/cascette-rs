@@ -326,13 +326,16 @@ impl Response {
     ///
     /// This allows direct access to the BPSV document structure.
     /// Note: This method adjusts HEX field lengths for Blizzard's format.
+    ///
+    /// # Errors
+    /// Returns an error if the response has no data or BPSV parsing fails.
     pub fn as_bpsv(&self) -> Result<ngdp_bpsv::BpsvDocument> {
         match &self.data {
             Some(data) => {
                 // Use the same adjustment as TypedResponse
                 let adjusted_data = crate::response_types::adjust_hex_field_lengths(data);
                 ngdp_bpsv::BpsvDocument::parse(&adjusted_data).map_err(|e| {
-                    crate::error::Error::ParseError(format!("BPSV parse error: {}", e))
+                    crate::error::Error::ParseError(format!("BPSV parse error: {e}"))
                 })
             }
             None => Err(crate::error::Error::ParseError(
@@ -616,7 +619,7 @@ impl Default for RibbitClient {
 impl fmt::Display for Response {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.data {
-            Some(data) => write!(f, "{}", data),
+            Some(data) => write!(f, "{data}"),
             None => write!(f, "<empty response>"),
         }
     }

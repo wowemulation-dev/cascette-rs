@@ -33,7 +33,7 @@ pub(crate) fn adjust_hex_field_lengths(data: &str) -> String {
 
         // Reconstruct the document with adjusted header
         let mut result = vec![adjusted_header];
-        result.extend(lines.map(|l| l.to_string()));
+        result.extend(lines.map(std::string::ToString::to_string));
         result.join("\n")
     } else {
         data.to_string()
@@ -43,9 +43,15 @@ pub(crate) fn adjust_hex_field_lengths(data: &str) -> String {
 /// Trait for typed responses that can be parsed from BPSV documents
 pub trait TypedResponse: Sized {
     /// Parse the response from a BPSV document
+    ///
+    /// # Errors
+    /// Returns an error if parsing the BPSV document fails.
     fn from_bpsv(doc: &BpsvDocument) -> Result<Self>;
 
     /// Parse from a raw response
+    ///
+    /// # Errors
+    /// Returns an error if the response has no data or parsing fails.
     fn from_response(response: &Response) -> Result<Self> {
         match &response.data {
             Some(data) => {
@@ -53,7 +59,7 @@ pub trait TypedResponse: Sized {
                 // interprets it as 16 hex chars. We need to adjust the header.
                 let adjusted_data = adjust_hex_field_lengths(data);
                 let doc = BpsvDocument::parse(&adjusted_data)
-                    .map_err(|e| Error::ParseError(format!("BPSV parse error: {}", e)))?;
+                    .map_err(|e| Error::ParseError(format!("BPSV parse error: {e}")))?;
                 Self::from_bpsv(&doc)
             }
             None => Err(Error::ParseError("No data in response".to_string())),
@@ -171,8 +177,8 @@ impl<'a> FieldAccessor<'a> {
     fn get_string(&self, field: &str) -> Result<String> {
         self.row
             .get_raw_by_name(field, self.schema)
-            .map(|s| s.to_string())
-            .ok_or_else(|| Error::ParseError(format!("Missing field: {}", field)))
+            .map(std::string::ToString::to_string)
+            .ok_or_else(|| Error::ParseError(format!("Missing field: {field}")))
     }
 
     fn get_string_optional(&self, field: &str) -> Option<String> {
@@ -189,7 +195,7 @@ impl<'a> FieldAccessor<'a> {
         let value = self.get_string(field)?;
         value
             .parse()
-            .map_err(|_| Error::ParseError(format!("Invalid u32 for {}: {}", field, value)))
+            .map_err(|_| Error::ParseError(format!("Invalid u32 for {field}: {value}")))
     }
 
     fn get_string_list(&self, field: &str, separator: char) -> Result<Vec<String>> {

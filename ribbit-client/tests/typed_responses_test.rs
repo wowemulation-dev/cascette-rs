@@ -14,7 +14,7 @@ async fn test_typed_product_versions() {
         .await
         .expect("Failed to get WoW versions");
 
-    assert!(versions.entries.len() > 0);
+    assert!(!versions.entries.is_empty());
     assert!(versions.sequence_number.is_some());
 
     // Check that all entries have required fields
@@ -45,20 +45,20 @@ async fn test_typed_product_cdns() {
         .await
         .expect("Failed to get WoW CDNs");
 
-    assert!(cdns.entries.len() > 0);
+    assert!(!cdns.entries.is_empty());
     assert!(cdns.sequence_number.is_some());
 
     // Check CDN entries
     for entry in &cdns.entries {
         assert!(!entry.name.is_empty());
         assert!(!entry.path.is_empty());
-        assert!(entry.hosts.len() > 0);
+        assert!(!entry.hosts.is_empty());
         assert!(!entry.config_path.is_empty());
     }
 
     // Test all_hosts method
     let all_hosts = cdns.all_hosts();
-    assert!(all_hosts.len() > 0);
+    assert!(!all_hosts.is_empty());
 }
 
 #[tokio::test]
@@ -70,7 +70,7 @@ async fn test_typed_summary() {
         .await
         .expect("Failed to get summary");
 
-    assert!(summary.products.len() > 0);
+    assert!(!summary.products.is_empty());
     assert!(summary.sequence_number.is_some());
 
     // Check for known products
@@ -104,8 +104,8 @@ async fn test_response_convenience_methods() {
 
     // Test as_bpsv
     let bpsv = response.as_bpsv().expect("Failed to parse as BPSV");
-    assert!(bpsv.schema().field_names().len() > 0);
-    assert!(bpsv.rows().len() > 0);
+    assert!(!bpsv.schema().field_names().is_empty());
+    assert!(!bpsv.rows().is_empty());
 }
 
 #[tokio::test]
@@ -124,7 +124,7 @@ async fn test_version_entry_methods() {
 
     // Test build_ids method
     let build_ids = versions.build_ids();
-    assert!(build_ids.len() > 0);
+    assert!(!build_ids.is_empty());
     // Build IDs should be sorted and unique
     for i in 1..build_ids.len() {
         assert!(build_ids[i] >= build_ids[i - 1]);
