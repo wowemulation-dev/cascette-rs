@@ -27,4 +27,8 @@ pub enum Error {
     /// Cache corruption detected
     #[error("Cache corruption detected: {0}")]
     CacheCorruption(String),
+
+    /// Ribbit client error
+    #[error("Ribbit client error: {0}")]
+    RibbitClient(#[from] ribbit_client::Error),
 }

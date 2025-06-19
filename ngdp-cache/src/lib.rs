@@ -8,6 +8,7 @@
 
 use std::path::{Path, PathBuf};
 
+pub mod cached_ribbit_client;
 pub mod cdn;
 pub mod error;
 pub mod generic;

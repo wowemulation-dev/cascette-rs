@@ -24,6 +24,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Automatic directory creation
   - TTL support for time-based cache expiration
   - Streaming file operations for large archives
+  - **CachedRibbitClient**: Transparent caching wrapper for RibbitClient
+    - Uses Blizzard MIME filename convention: command-argument(s)-sequencenumber.bmime
+    - Certificate requests cached for 30 days vs 5 minutes for regular responses
+    - Automatic cache invalidation and cleanup
+    - Same API as RibbitClient for easy integration
 - **Testing**: 
   - Unit tests for all cache types
   - 12 comprehensive integration tests covering:
@@ -42,7 +47,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Ribbit cache write and validation
   - Concurrent write operations
   - Hash-based path segmentation
-- **Examples**: Basic usage example demonstrating all cache types
+- **Examples**: 
+  - Basic usage example demonstrating all cache types
+  - `cached_ribbit_client.rs` - Demonstrates CachedRibbitClient usage with performance comparison
 
 ### Changed
 
@@ -338,6 +345,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Examples**
   - `query_products.rs` - Using ngdp-client as a library
+  - `cached_certificate_fetch.rs` - Demonstrates integrating CachedRibbitClient for certificate caching
 
 - **Documentation**
   - Comprehensive README with usage examples
@@ -383,6 +391,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### `ngdp-cache`
 
 - `dirs` (6.0) - Platform-specific directory paths (workspace dependency)
+- `ribbit-client` (0.1) - For CachedRibbitClient functionality (workspace dependency)
 - `thiserror` (2.0) - Error type derivation (workspace dependency)
 - `tokio` (1.45) - Async runtime with fs and io-util features (workspace dependency)
 - `tracing` (0.1) - Structured logging (workspace dependency)
@@ -392,6 +401,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `clap` (4.5) - Command-line argument parsing with derive API (workspace dependency)
 - `comfy-table` (7.1.1) - Terminal table formatting with Unicode support
 - `ngdp-bpsv` (0.1) - BPSV parsing for inspect commands (workspace dependency)
+- `ngdp-cache` (0.1) - Caching functionality (workspace dependency)
 - `owo-colors` (4.2.1) - Terminal color support with automatic detection
 - `reqwest` (0.12) - HTTP client for fetching remote BPSV data
 - `ribbit-client` (0.1) - Ribbit protocol client (workspace dependency)

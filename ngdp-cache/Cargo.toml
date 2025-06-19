@@ -13,6 +13,7 @@ categories = ["caching", "filesystem", "games"]
 
 [dependencies]
 dirs = { workspace = true }
+ribbit-client = { path = "../ribbit-client" }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["fs", "io-util"] }
 tracing = { workspace = true }

@@ -10,6 +10,7 @@ This crate provides specialized cache implementations for different NGDP compone
 - **TACT Cache**: For TACT protocol data (configs, indices, data files)
 - **CDN Cache**: For CDN content (archives, loose files)
 - **Ribbit Cache**: For Ribbit protocol responses with TTL support
+- **Cached Ribbit Client**: Wrapper around RibbitClient for transparent caching
 
 ## Usage
 
@@ -23,7 +24,12 @@ ngdp-cache = "0.1.0"
 ### Example
 
 ```rust
-use ngdp_cache::{generic::GenericCache, tact::TactCache};
+use ngdp_cache::{
+    generic::GenericCache, 
+    tact::TactCache,
+    cached_ribbit_client::CachedRibbitClient
+};
+use ribbit_client::{Endpoint, Region};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -36,6 +42,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let tact = TactCache::new().await?;
     let hash = "abcdef1234567890abcdef1234567890";
     tact.write_config(hash, b"config data").await?;
+
+    // Cached Ribbit client for transparent request caching
+    let client = CachedRibbitClient::new(Region::US).await?;
+    let endpoint = Endpoint::Cert("abc123".to_string());
+    let raw_response = client.request_raw(&endpoint).await?;
 
     Ok(())
 }
@@ -55,6 +66,7 @@ Each cache type has its own subdirectory:
 - `tact/` - TACT protocol data (config/, data/, patch/)
 - `cdn/` - CDN content (archives/, loose/)
 - `ribbit/` - Ribbit responses organized by region/product/endpoint
+- `ribbit/cached/` - Cached Ribbit client responses using Blizzard MIME naming
 
 ## License
 
