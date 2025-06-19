@@ -1,5 +1,5 @@
 [workspace]
-members = ["tact-client", "ribbit-client", "ngdp-bpsv"]
+members = ["tact-client", "ribbit-client", "ngdp-bpsv", "ngdp-client"]
 resolver = "2"
 
 [workspace.package]
@@ -12,6 +12,7 @@ repository = "https://github.com/wowemulation-dev/cascette-rs"
 homepage = "https://github.com/wowemulation-dev/cascette-rs"
 
 [workspace.dependencies]
+clap = "4.5"
 criterion = "0.6"
 dirs = "6.0"
 serde = "1.0"

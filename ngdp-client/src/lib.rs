@@ -1,0 +1,249 @@
+//! NGDP client library
+//!
+//! This library provides the core functionality for the ngdp CLI tool.
+
+pub mod commands;
+
+// Re-export command handlers
+pub use crate::commands::{
+    config::handle as handle_config, download::handle as handle_download,
+    inspect::handle as handle_inspect, products::handle as handle_products,
+    storage::handle as handle_storage,
+};
+
+use clap::Subcommand;
+use std::path::PathBuf;
+
+#[derive(Subcommand)]
+pub enum ProductsCommands {
+    /// List all available products
+    List {
+        /// Filter by product name pattern
+        #[arg(short, long)]
+        filter: Option<String>,
+
+        /// Region to query
+        #[arg(short, long, default_value = "us")]
+        region: String,
+    },
+
+    /// Show versions for a specific product
+    Versions {
+        /// Product name (e.g., wow, d3, agent)
+        product: String,
+
+        /// Region to query
+        #[arg(short, long, default_value = "us")]
+        region: String,
+
+        /// Show all regions
+        #[arg(short, long)]
+        all_regions: bool,
+    },
+
+    /// Show CDN configuration for a product
+    Cdns {
+        /// Product name
+        product: String,
+
+        /// Region to query
+        #[arg(short, long, default_value = "us")]
+        region: String,
+    },
+
+    /// Get detailed information about a product
+    Info {
+        /// Product name
+        product: String,
+
+        /// Region to query
+        #[arg(short, long, default_value = "us")]
+        region: String,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum StorageCommands {
+    /// Initialize a new CASC storage
+    Init {
+        /// Path to storage directory
+        #[arg(default_value = ".")]
+        path: PathBuf,
+
+        /// Product to initialize for
+        #[arg(short, long)]
+        product: Option<String>,
+    },
+
+    /// Show storage information
+    Info {
+        /// Path to storage directory
+        #[arg(default_value = ".")]
+        path: PathBuf,
+    },
+
+    /// Verify storage integrity
+    Verify {
+        /// Path to storage directory
+        #[arg(default_value = ".")]
+        path: PathBuf,
+
+        /// Fix corrupted files
+        #[arg(short, long)]
+        fix: bool,
+    },
+
+    /// Clean up unused data
+    Clean {
+        /// Path to storage directory
+        #[arg(default_value = ".")]
+        path: PathBuf,
+
+        /// Dry run (don't actually delete)
+        #[arg(short = 'n', long)]
+        dry_run: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum DownloadCommands {
+    /// Download a specific build
+    Build {
+        /// Product name
+        product: String,
+
+        /// Build ID or version
+        build: String,
+
+        /// Output directory
+        #[arg(short, long, default_value = ".")]
+        output: PathBuf,
+
+        /// Region
+        #[arg(short, long, default_value = "us")]
+        region: String,
+    },
+
+    /// Download specific files
+    Files {
+        /// Product name
+        product: String,
+
+        /// File patterns to download
+        patterns: Vec<String>,
+
+        /// Output directory
+        #[arg(short, long, default_value = ".")]
+        output: PathBuf,
+
+        /// Build ID or version
+        #[arg(short, long)]
+        build: Option<String>,
+    },
+
+    /// Resume an interrupted download
+    Resume {
+        /// Session ID or path
+        session: String,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum InspectCommands {
+    /// Parse and display BPSV data
+    Bpsv {
+        /// Input file or URL
+        input: String,
+
+        /// Show raw data
+        #[arg(short, long)]
+        raw: bool,
+    },
+
+    /// Inspect build configuration
+    BuildConfig {
+        /// Product name
+        product: String,
+
+        /// Build ID
+        build: String,
+
+        /// Region
+        #[arg(short, long, default_value = "us")]
+        region: String,
+    },
+
+    /// Inspect CDN configuration
+    CdnConfig {
+        /// Product name
+        product: String,
+
+        /// Region
+        #[arg(short, long, default_value = "us")]
+        region: String,
+    },
+
+    /// Show encoding information
+    Encoding {
+        /// Path to encoding file
+        file: PathBuf,
+
+        /// Show statistics
+        #[arg(short, long)]
+        stats: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum ConfigCommands {
+    /// Show current configuration
+    Show,
+
+    /// Set a configuration value
+    Set {
+        /// Configuration key
+        key: String,
+
+        /// Configuration value
+        value: String,
+    },
+
+    /// Get a configuration value
+    Get {
+        /// Configuration key
+        key: String,
+    },
+
+    /// Reset configuration to defaults
+    Reset {
+        /// Confirm reset
+        #[arg(short, long)]
+        yes: bool,
+    },
+}
+
+/// Output format options for the CLI
+#[derive(clap::ValueEnum, Clone, Copy, Debug)]
+pub enum OutputFormat {
+    /// Plain text output
+    Text,
+    /// JSON output
+    Json,
+    /// Pretty-printed JSON
+    JsonPretty,
+    /// Raw BPSV format
+    Bpsv,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_output_format_debug() {
+        assert_eq!(format!("{:?}", OutputFormat::Text), "Text");
+        assert_eq!(format!("{:?}", OutputFormat::Json), "Json");
+        assert_eq!(format!("{:?}", OutputFormat::JsonPretty), "JsonPretty");
+        assert_eq!(format!("{:?}", OutputFormat::Bpsv), "Bpsv");
+    }
+}

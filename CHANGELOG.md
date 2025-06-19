@@ -21,6 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Fixed unnecessary `Result` wrapping in internal functions
   - Improved code organization and reduced redundancy
 
+#### Workspace
+
+- Moved `tokio` dependency to workspace level (1.45) for consistency across crates
+
 ### Fixed
 
 #### `ribbit-client` crate
@@ -202,9 +206,65 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial crate setup for future TACT protocol implementation
 - Placeholder library structure
 
+#### `ngdp-client` crate
+
+- **CLI Application**
+  - Comprehensive command-line interface for NGDP operations
+  - Built with clap using derive API for clean command structure
+  - Support for multiple output formats: text, JSON, pretty JSON, BPSV
+  - Global options for logging level and configuration file
+
+- **Command Structure**
+  - `products` - Query product information from Ribbit
+    - `list` - List available products with optional filtering
+    - `versions` - Show version information for a product
+    - `cdns` - Display CDN configuration
+    - `info` - Get detailed product information
+  - `storage` - Manage local CASC storage (placeholder)
+    - `init` - Initialize new storage
+    - `info` - Show storage information
+    - `verify` - Check storage integrity
+    - `clean` - Remove unused data
+  - `download` - Download content using TACT (placeholder)
+    - `build` - Download specific build
+    - `files` - Download specific files
+    - `resume` - Resume interrupted download
+  - `inspect` - Inspect NGDP data structures
+    - `bpsv` - Parse and display BPSV data (functional)
+    - `build-config` - Inspect build configuration (placeholder)
+    - `cdn-config` - Inspect CDN configuration (placeholder)
+    - `encoding` - Show encoding information (placeholder)
+  - `config` - Manage configuration
+    - `show` - Display current configuration
+    - `set` - Set configuration value
+    - `get` - Get configuration value
+    - `reset` - Reset to defaults
+
+- **Features**
+  - Async command handlers using Tokio
+  - Structured logging with tracing
+  - Library and binary dual-purpose design
+  - Comprehensive error handling
+  - Region support for all Blizzard regions
+
+- **Testing**
+  - 8 integration tests for CLI functionality
+  - Command help and version testing
+  - Output format verification
+  - Error handling tests
+
+- **Examples**
+  - `query_products.rs` - Using ngdp-client as a library
+
+- **Documentation**
+  - Comprehensive README with usage examples
+  - Command-line help for all commands
+  - API documentation for library usage
+
 ### Project Infrastructure
 
 - Workspace configuration with shared dependencies
+- Added `clap` (4.5) to workspace dependencies for CLI applications
 - Development tooling configuration (`.editorconfig`, `.gitattributes`)
 - Consistent code formatting and style guidelines
 - BPSV format documentation in `docs/bpsv-format.md`
@@ -232,6 +292,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `tokio` (1.45) - Async runtime with full features
 - `tracing` (0.1) - Structured logging and debugging
 - `x509-cert` (0.2) - X.509 certificate parsing and validation
+
+#### `ngdp-client`
+
+- `clap` (4.5) - Command-line argument parsing with derive API (workspace dependency)
+- `ngdp-bpsv` (0.1) - BPSV parsing for inspect commands (workspace dependency)
+- `reqwest` (0.12) - HTTP client for fetching remote BPSV data
+- `ribbit-client` (0.1) - Ribbit protocol client (workspace dependency)
+- `serde` (1.0) - Serialization for JSON output (workspace dependency)
+- `serde_json` (1.0) - JSON formatting (workspace dependency)
+- `tokio` (1.45) - Async runtime (workspace dependency)
+- `tracing` (0.1) - Structured logging (workspace dependency)
+- `tracing-subscriber` (0.3) - Logging implementation
 
 #### Development Dependencies
 
