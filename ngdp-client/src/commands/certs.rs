@@ -2,6 +2,7 @@
 
 use crate::{CertFormat, CertsCommands, OutputFormat, cached_client};
 use ribbit_client::Endpoint;
+use serde_json::json;
 use std::str::FromStr;
 
 /// Handle certificate commands
@@ -44,17 +45,43 @@ async fn download(
         .as_text()
         .ok_or("No certificate data in response")?;
 
-    // If showing details, parse the certificate
-    if show_details {
-        if let Ok(cert_info) = extract_certificate_info(cert_data) {
-            match output_format {
-                OutputFormat::Json => {
-                    println!("{}", serde_json::to_string(&cert_info)?);
+    // Handle JSON output format specially
+    match output_format {
+        OutputFormat::Json | OutputFormat::JsonPretty => {
+            // For JSON output, always include both certificate and details
+            let mut json_output = json!({
+                "ski": ski,
+                "certificate": cert_data,
+            });
+
+            // Add details if requested
+            if show_details {
+                if let Ok(cert_info) = extract_certificate_info(cert_data) {
+                    json_output["details"] = json!(cert_info);
                 }
-                OutputFormat::JsonPretty => {
-                    println!("{}", serde_json::to_string_pretty(&cert_info)?);
-                }
-                _ => {
+            }
+
+            // Write to file or stdout
+            if let Some(output_path) = output {
+                let json_string = if matches!(output_format, OutputFormat::JsonPretty) {
+                    serde_json::to_string_pretty(&json_output)?
+                } else {
+                    serde_json::to_string(&json_output)?
+                };
+                std::fs::write(&output_path, json_string)?;
+                tracing::info!("Certificate written to: {}", output_path.display());
+            } else if matches!(output_format, OutputFormat::JsonPretty) {
+                println!("{}", serde_json::to_string_pretty(&json_output)?);
+            } else {
+                println!("{}", serde_json::to_string(&json_output)?);
+            }
+        }
+        _ => {
+            // For non-JSON output formats
+
+            // Show details if requested (text format only)
+            if show_details {
+                if let Ok(cert_info) = extract_certificate_info(cert_data) {
                     use crate::output::{OutputStyle, format_header, format_key_value};
                     let style = OutputStyle::new();
 
@@ -89,30 +116,30 @@ async fn download(
                     println!();
                 }
             }
-        }
-    }
 
-    // Handle output format conversion
-    let output_data = match cert_format {
-        CertFormat::Pem => cert_data.as_bytes().to_vec(),
-        CertFormat::Der => {
-            // Convert PEM to DER
-            convert_pem_to_der(cert_data)?
-        }
-    };
+            // Handle output format conversion
+            let output_data = match cert_format {
+                CertFormat::Pem => cert_data.as_bytes().to_vec(),
+                CertFormat::Der => {
+                    // Convert PEM to DER
+                    convert_pem_to_der(cert_data)?
+                }
+            };
 
-    // Write to output
-    if let Some(output_path) = output {
-        std::fs::write(&output_path, &output_data)?;
-        tracing::info!("Certificate written to: {}", output_path.display());
-    } else {
-        // Write to stdout
-        if cert_format == CertFormat::Pem {
-            print!("{}", cert_data);
-        } else {
-            // For DER format, write binary to stdout
-            use std::io::Write;
-            std::io::stdout().write_all(&output_data)?;
+            // Write to output
+            if let Some(output_path) = output {
+                std::fs::write(&output_path, &output_data)?;
+                tracing::info!("Certificate written to: {}", output_path.display());
+            } else {
+                // Write to stdout
+                if cert_format == CertFormat::Pem {
+                    print!("{}", cert_data);
+                } else {
+                    // For DER format, write binary to stdout
+                    use std::io::Write;
+                    std::io::stdout().write_all(&output_data)?;
+                }
+            }
         }
     }
 

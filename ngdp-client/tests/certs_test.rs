@@ -71,9 +71,9 @@ fn test_certs_download_with_json_output() {
         .timeout(std::time::Duration::from_secs(30))
         .assert()
         .success()
-        .stdout(predicate::str::contains("\"subject\""))
-        .stdout(predicate::str::contains("\"issuer\""))
-        .stdout(predicate::str::contains("\"serial_number\""));
+        .stdout(predicate::str::contains("\"certificate\""))
+        .stdout(predicate::str::contains("\"ski\""))
+        .stdout(predicate::str::contains("\"details\""));
 }
 
 #[test]
