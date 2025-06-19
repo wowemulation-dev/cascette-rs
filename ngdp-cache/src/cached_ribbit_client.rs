@@ -127,7 +127,7 @@ impl CachedRibbitClient {
                     .unwrap()
                     .as_secs();
 
-                return (now - timestamp) < ttl.as_secs();
+                return now.saturating_sub(timestamp) < ttl.as_secs();
             }
         }
 
@@ -255,7 +255,7 @@ impl CachedRibbitClient {
                             DEFAULT_CACHE_TTL
                         };
                         
-                        if (now - timestamp) >= ttl.as_secs() {
+                        if now.saturating_sub(timestamp) >= ttl.as_secs() {
                             // Remove both files
                             let _ = tokio::fs::remove_file(&path).await;
                             let _ = tokio::fs::remove_file(&meta_path).await;

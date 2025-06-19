@@ -30,8 +30,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Automatic cache invalidation and cleanup
     - Same API as RibbitClient for easy integration
 - **Testing**: 
-  - Unit tests for all cache types
-  - 12 comprehensive integration tests covering:
+  - Unit tests for all cache types including CachedRibbitClient
+  - 21 comprehensive integration tests covering:
     - Cross-cache isolation
     - TACT workflow simulation
     - Product-specific CDN caching
@@ -40,6 +40,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Cache expiration and TTL validation
     - Corruption detection
     - Key validation with various formats
+    - CachedRibbitClient functionality (9 integration tests)
+      - Client creation and configuration
+      - Cache enable/disable controls
+      - TTL differentiation by endpoint type
+      - Cache clearing and expiration cleanup
+      - Concurrent access handling
+      - Multi-region cache isolation
+      - Directory structure validation
 - **Benchmarks**: Performance benchmarks for:
   - Generic cache read/write operations (small/medium/large data)
   - TACT cache operations and path construction
@@ -47,6 +55,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Ribbit cache write and validation
   - Concurrent write operations
   - Hash-based path segmentation
+  - CachedRibbitClient operations:
+    - Filename generation performance
+    - Cache validity checking
+    - Cache write operations
+    - Expired entry cleanup
 - **Examples**: 
   - Basic usage example demonstrating all cache types
   - `cached_ribbit_client.rs` - Demonstrates CachedRibbitClient usage with performance comparison
