@@ -3,6 +3,7 @@
 //! This library provides the core functionality for the ngdp CLI tool.
 
 pub mod commands;
+pub mod output;
 
 // Re-export command handlers
 pub use crate::commands::{
@@ -233,6 +234,15 @@ pub enum OutputFormat {
     JsonPretty,
     /// Raw BPSV format
     Bpsv,
+}
+
+/// Context for command execution
+#[derive(Clone, Debug)]
+pub struct CommandContext {
+    /// Output format
+    pub format: OutputFormat,
+    /// Whether to disable colors
+    pub no_color: bool,
 }
 
 #[cfg(test)]

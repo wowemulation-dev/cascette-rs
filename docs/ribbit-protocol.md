@@ -70,12 +70,21 @@ Where `{region}` can be:
 
 - `us` - United States
 - `eu` - Europe
-- `cn` - China
+- `cn` - China (⚠️ See regional restrictions below)
 - `kr` - Korea
 - `tw` - Taiwan
 - `sg` - Singapore
 
 Port: `1119` (TCP)
+
+#### Regional Restrictions
+
+**Important**: The CN (China) region server (`cn.version.battle.net`) is typically only accessible from within China due to network restrictions and firewall rules. Attempting to connect from outside China will usually result in connection timeouts.
+
+If you need to access CN region data from outside China, consider:
+- Using a VPN with Chinese servers
+- Accessing cached data from other sources
+- Using alternative regions for testing purposes
 
 ### Protocol Format
 
@@ -296,6 +305,7 @@ Common product identifiers used with Ribbit:
 - Standard regions: `us`, `eu`, `cn`, `kr`, `tw`
 - Additional regions for some products: `sg` (Singapore)
 - The `xx` region appears in data but is not a valid endpoint
+- **CN Region Access**: The `cn.version.battle.net` server is restricted to access from within China only. Connections from outside China will timeout after ~10 seconds
 
 ### Path Patterns
 
@@ -327,6 +337,7 @@ Common product identifiers used with Ribbit:
    - TCP connection errors surface directly
    - Invalid responses throw parsing exceptions
    - No authentication required
+   - Connection timeouts recommended (10-30 seconds) to handle unreachable servers
 
 ### Response Parsing
 
@@ -374,7 +385,8 @@ This approach eliminates the need for:
 - Sequence numbers never decrease - they only increase or stay the same
 - The same product identifiers used in TACT work with Ribbit
 - As of June 2022, sequence numbers from summary may not match individual endpoints
-- No connection timeout handling in basic implementation
+- Implement connection timeouts (10-30 seconds) to handle unreachable servers
 - Each request creates a new connection (no pooling)
 - V2 commands return the same data as V1 but without MIME wrapping
 - SKI from signatures can be used directly with cert/ocsp endpoints (major discovery)
+- **CN region servers are only accessible from within China** - connections from other locations will timeout

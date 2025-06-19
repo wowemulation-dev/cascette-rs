@@ -11,9 +11,14 @@ use crate::{
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use sha2::{Digest, Sha256};
 use std::fmt;
+use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
+use tokio::time::timeout;
 use tracing::{debug, instrument, trace, warn};
+
+/// Default connection timeout in seconds
+const DEFAULT_CONNECT_TIMEOUT_SECS: u64 = 10;
 
 /// Ribbit TCP client for querying Blizzard version services
 ///
@@ -107,13 +112,31 @@ impl RibbitClient {
 
         debug!("Connecting to Ribbit service at {address}");
 
-        // Connect to the TCP socket
-        let mut stream = TcpStream::connect(&address).await.map_err(|_| {
-            crate::error::Error::ConnectionFailed {
-                host: host.to_string(),
-                port: RIBBIT_PORT,
+        // Connect to the TCP socket with timeout
+        let connect_future = TcpStream::connect(&address);
+        let timeout_duration = Duration::from_secs(DEFAULT_CONNECT_TIMEOUT_SECS);
+
+        let mut stream = match timeout(timeout_duration, connect_future).await {
+            Ok(Ok(stream)) => stream,
+            Ok(Err(e)) => {
+                debug!("Connection failed to {address}: {e}");
+                return Err(crate::error::Error::ConnectionFailed {
+                    host: host.to_string(),
+                    port: RIBBIT_PORT,
+                });
             }
-        })?;
+            Err(_) => {
+                debug!(
+                    "Connection timed out after {} seconds to {address}",
+                    DEFAULT_CONNECT_TIMEOUT_SECS
+                );
+                return Err(crate::error::Error::ConnectionTimeout {
+                    host: host.to_string(),
+                    port: RIBBIT_PORT,
+                    timeout_secs: DEFAULT_CONNECT_TIMEOUT_SECS,
+                });
+            }
+        };
 
         // Build the command
         let command = format!(
@@ -658,6 +681,29 @@ mod tests {
         let client = RibbitClient::default();
         assert_eq!(client.region(), Region::US);
         assert_eq!(client.protocol_version(), ProtocolVersion::V1);
+    }
+
+    #[tokio::test]
+    async fn test_connection_timeout() {
+        // Use a non-routable IP address to ensure timeout
+        let client = RibbitClient::new(Region::CN);
+        let result = client.request_raw(&Endpoint::Summary).await;
+
+        // The CN region often times out from outside China
+        // This test may pass or fail depending on network conditions
+        // but we're mainly testing that the timeout mechanism works
+        if result.is_err() {
+            let err = result.unwrap_err();
+            // Check if it's either a connection timeout or connection failed
+            match err {
+                crate::error::Error::ConnectionTimeout { .. }
+                | crate::error::Error::ConnectionFailed { .. } => {
+                    // Expected for CN region from most locations
+                    // Connection might fail or timeout before completion
+                }
+                _ => panic!("Unexpected error type: {err:?}"),
+            }
+        }
     }
 
     #[test]

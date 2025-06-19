@@ -1,4 +1,10 @@
-use crate::{InspectCommands, OutputFormat};
+use crate::{
+    InspectCommands, OutputFormat,
+    output::{
+        OutputStyle, create_table, format_count_badge, format_header, format_key_value,
+        header_cell, numeric_cell, print_section_header, print_subsection_header, regular_cell,
+    },
+};
 use ngdp_bpsv::BpsvDocument;
 
 pub async fn handle(
@@ -79,32 +85,80 @@ async fn inspect_bpsv(
             println!("{}", doc.to_bpsv_string());
         }
         OutputFormat::Text => {
-            println!("BPSV Document Analysis");
-            println!("{}", "=".repeat(40));
+            let style = OutputStyle::new();
 
-            println!("\nSchema:");
+            print_section_header("BPSV Document Analysis", &style);
+
+            print_subsection_header("Schema", &style);
+            let mut schema_table = create_table(&style);
+            schema_table.set_header(vec![
+                header_cell("Index", &style),
+                header_cell("Field Name", &style),
+                header_cell("Type", &style),
+            ]);
+
             for (i, field) in doc.schema().fields().iter().enumerate() {
-                println!("  [{}] {} ({})", i, field.name, field.field_type);
+                schema_table.add_row(vec![
+                    numeric_cell(&i.to_string()),
+                    regular_cell(&field.name),
+                    regular_cell(&field.field_type.to_string()),
+                ]);
             }
+            println!("{}", schema_table);
 
             if let Some(seq) = doc.sequence_number() {
-                println!("\nSequence Number: {}", seq);
+                println!();
+                println!(
+                    "{}",
+                    format_key_value("Sequence Number", &seq.to_string(), &style)
+                );
             }
 
-            println!("\nData:");
-            println!("  Rows: {}", doc.rows().len());
+            print_subsection_header(
+                &format!(
+                    "Data {}",
+                    format_count_badge(doc.rows().len(), "row", &style)
+                ),
+                &style,
+            );
 
             if !doc.rows().is_empty() {
-                println!("\nFirst 5 rows:");
-                for (i, row) in doc.rows().iter().take(5).enumerate() {
-                    println!("\n  Row {}:", i + 1);
-                    for (field, value) in doc.schema().field_names().iter().zip(row.raw_values()) {
-                        println!("    {}: {}", field, value);
-                    }
+                // Show first few rows in a table
+                let preview_count = std::cmp::min(5, doc.rows().len());
+                println!(
+                    "\n{}",
+                    format_header(&format!("Preview (first {} rows)", preview_count), &style)
+                );
+
+                let mut data_table = create_table(&style);
+
+                // Set headers from schema
+                let mut headers = vec![header_cell("#", &style)];
+                headers.extend(
+                    doc.schema()
+                        .field_names()
+                        .iter()
+                        .map(|name| header_cell(name, &style)),
+                );
+                data_table.set_header(headers);
+
+                // Add rows
+                for (i, row) in doc.rows().iter().take(preview_count).enumerate() {
+                    let mut cells = vec![numeric_cell(&(i + 1).to_string())];
+                    cells.extend(row.raw_values().iter().map(|v| regular_cell(v)));
+                    data_table.add_row(cells);
                 }
 
-                if doc.rows().len() > 5 {
-                    println!("\n  ... and {} more rows", doc.rows().len() - 5);
+                println!("{}", data_table);
+
+                if doc.rows().len() > preview_count {
+                    println!(
+                        "\n{}",
+                        format_header(
+                            &format!("... and {} more rows", doc.rows().len() - preview_count),
+                            &style
+                        )
+                    );
                 }
             }
         }

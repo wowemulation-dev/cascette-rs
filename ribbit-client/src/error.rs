@@ -43,6 +43,17 @@ pub enum Error {
         port: u16,
     },
 
+    /// Connection timed out
+    #[error("Connection timed out after {timeout_secs}s to {host}:{port}")]
+    ConnectionTimeout {
+        /// The hostname that timed out
+        host: String,
+        /// The port number that timed out
+        port: u16,
+        /// The timeout duration in seconds
+        timeout_secs: u64,
+    },
+
     /// Failed to send request to the server
     #[error("Failed to send request")]
     SendFailed,
@@ -89,6 +100,16 @@ mod tests {
             port: 1119,
         };
         assert_eq!(err.to_string(), "Connection failed to test.battle.net:1119");
+
+        let err = Error::ConnectionTimeout {
+            host: "test.battle.net".to_string(),
+            port: 1119,
+            timeout_secs: 10,
+        };
+        assert_eq!(
+            err.to_string(),
+            "Connection timed out after 10s to test.battle.net:1119"
+        );
 
         let err = Error::SendFailed;
         assert_eq!(err.to_string(), "Failed to send request");

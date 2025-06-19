@@ -21,6 +21,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Fixed unnecessary `Result` wrapping in internal functions
   - Improved code organization and reduced redundancy
 
+#### `ngdp-client` crate
+
+- Redesigned `products versions --all-regions` output to use a cleaner multi-row format:
+  - Single "Configuration Hash" column with labeled hash values
+  - Each region displays Build Config, CDN Config, Product Config, and Key Ring (if present)
+  - Improved readability with consistent alignment and styling
+  - Full hash values displayed for easy copy-paste
+- Improved `products cdns` output with table-based display:
+  - Separate table per region showing Path, Config Path, CDN Hosts, and Servers
+  - CDN Hosts displayed before Servers with one host per line
+  - Servers displayed with one URL per line for better readability
+  - Consistent formatting between CDN Hosts and Servers fields
+  - Better organization and visual clarity of CDN configuration
+
 #### Workspace
 
 - Moved `tokio` dependency to workspace level (1.45) for consistency across crates
@@ -37,6 +51,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Improved numeric literal readability with separators (123_456 instead of 123456)
 - Removed unused imports that were causing linter warnings
 - Fixed all remaining clippy warnings for better code quality
+- **Fixed infinite hang when connecting to CN region from outside China**:
+  - Added 10-second connection timeout to prevent indefinite hanging
+  - Added proper timeout error handling with user-friendly messages
+  - Added guidance for users about CN region accessibility restrictions
+- Fixed clippy warnings in test code (merged match arms, inline format args)
+
+#### `ngdp-client` crate
+
+- Fixed missing Product Config hash in `products versions --all-regions` table
+- Fixed missing Key Ring hash in `products versions --all-regions` table
+- Improved error handling with user-friendly messages for connection issues
 
 ### Added
 
@@ -246,6 +271,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Library and binary dual-purpose design
   - Comprehensive error handling
   - Region support for all Blizzard regions
+  - Beautiful terminal output with tables and colors
+  - Respects `NO_COLOR` environment variable and `--no-color` flag
+
+- **Terminal Output Formatting**
+  - Added `comfy-table` (7.1.1) for beautiful Unicode tables with rounded corners
+  - Added `owo-colors` (4.2.1) for colored terminal output with automatic detection
+  - Created comprehensive output formatting module with:
+    - Consistent color scheme (blue headers, green success, yellow warnings, red errors)
+    - Unicode box-drawing characters for professional appearance
+    - Proper alignment for different data types
+    - Count badges for collections (e.g., "(59 products)")
+    - Special formatting for URLs (underlined), hashes (dimmed+italic), and paths
+  - All commands now use formatted output in text mode:
+    - Products list: Table with product names, sequence numbers, and flags column
+    - Products info: Hierarchical sections with key-value pairs and tables
+    - Products versions: Region-based tables with all hash values (Build, CDN, Product, Key Ring)
+    - Products cdns: Formatted CDN hosts with bullet points
+    - Config show: Sorted configuration in a clean table
+    - Inspect bpsv: Schema tables and data preview tables
+  - Support for ASCII-only output when Unicode is not available
+  - Dynamic table width adjustment (up to 200 chars) for displaying full hash values
 
 - **Testing**
   - 8 integration tests for CLI functionality
@@ -268,6 +314,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Development tooling configuration (`.editorconfig`, `.gitattributes`)
 - Consistent code formatting and style guidelines
 - BPSV format documentation in `docs/bpsv-format.md`
+- Updated Ribbit protocol documentation to include CN region access restrictions
+  - Added warnings about CN server accessibility from outside China
+  - Documented connection timeout recommendations
+  - Added troubleshooting guidance for regional restrictions
 
 ### Dependencies
 
@@ -296,7 +346,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### `ngdp-client`
 
 - `clap` (4.5) - Command-line argument parsing with derive API (workspace dependency)
+- `comfy-table` (7.1.1) - Terminal table formatting with Unicode support
 - `ngdp-bpsv` (0.1) - BPSV parsing for inspect commands (workspace dependency)
+- `owo-colors` (4.2.1) - Terminal color support with automatic detection
 - `reqwest` (0.12) - HTTP client for fetching remote BPSV data
 - `ribbit-client` (0.1) - Ribbit protocol client (workspace dependency)
 - `serde` (1.0) - Serialization for JSON output (workspace dependency)

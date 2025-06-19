@@ -28,6 +28,10 @@ struct Cli {
     #[arg(short = 'o', long, value_enum, global = true, default_value = "text")]
     format: OutputFormat,
 
+    /// Disable colored output
+    #[arg(long, global = true)]
+    no_color: bool,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -86,13 +90,63 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_target(false)
         .init();
 
+    // Set global color override if requested
+    if cli.no_color {
+        unsafe {
+            std::env::set_var("NO_COLOR", "1");
+        }
+    }
+
     // Handle commands
-    match cli.command {
-        Commands::Products(cmd) => commands::products::handle(cmd, cli.format).await?,
-        Commands::Storage(cmd) => commands::storage::handle(cmd, cli.format).await?,
-        Commands::Download(cmd) => commands::download::handle(cmd, cli.format).await?,
-        Commands::Inspect(cmd) => commands::inspect::handle(cmd, cli.format).await?,
-        Commands::Config(cmd) => commands::config::handle(cmd, cli.format).await?,
+    let result = match cli.command {
+        Commands::Products(cmd) => commands::products::handle(cmd, cli.format).await,
+        Commands::Storage(cmd) => commands::storage::handle(cmd, cli.format).await,
+        Commands::Download(cmd) => commands::download::handle(cmd, cli.format).await,
+        Commands::Inspect(cmd) => commands::inspect::handle(cmd, cli.format).await,
+        Commands::Config(cmd) => commands::config::handle(cmd, cli.format).await,
+    };
+
+    // Handle errors with more user-friendly messages
+    if let Err(e) = result {
+        // Check if it's a ribbit connection timeout error
+        if let Some(ribbit_error) = e.downcast_ref::<ribbit_client::Error>() {
+            match ribbit_error {
+                ribbit_client::Error::ConnectionTimeout {
+                    host,
+                    port,
+                    timeout_secs,
+                } => {
+                    eprintln!("Error: Connection timed out after {timeout_secs} seconds");
+                    eprintln!("Failed to connect to {host}:{port}");
+                    eprintln!("\nPossible causes:");
+                    eprintln!("  - The server may be unreachable from your location");
+                    eprintln!("  - Network restrictions may be blocking the connection");
+                    eprintln!("  - The service may be temporarily unavailable");
+
+                    if host.contains("cn.version.battle.net") {
+                        eprintln!(
+                            "\nNote: The CN (China) region servers are typically only accessible from within China."
+                        );
+                        eprintln!(
+                            "Consider using a different region (e.g., --region us, --region eu)"
+                        );
+                    }
+                    std::process::exit(1);
+                }
+                ribbit_client::Error::ConnectionFailed { host, port } => {
+                    eprintln!("Error: Failed to connect to {host}:{port}");
+                    eprintln!("\nPlease check your internet connection and try again.");
+                    std::process::exit(1);
+                }
+                _ => {
+                    eprintln!("Error: {e}");
+                    std::process::exit(1);
+                }
+            }
+        } else {
+            eprintln!("Error: {e}");
+            std::process::exit(1);
+        }
     }
 
     Ok(())

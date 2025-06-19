@@ -19,6 +19,8 @@ path = "src/main.rs"
 
 [dependencies]
 clap = { workspace = true, features = ["derive", "cargo", "env"] }
+comfy-table = "7.1.1"
+owo-colors = { version = "4.2.1", features = ["supports-colors"] }
 ribbit-client = { path = "../ribbit-client" }
 tact-client = { path = "../tact-client" }
 ngdp-bpsv = { path = "../ngdp-bpsv" }

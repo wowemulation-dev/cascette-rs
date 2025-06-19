@@ -1,4 +1,11 @@
-use crate::{OutputFormat, ProductsCommands};
+use crate::{
+    OutputFormat, ProductsCommands,
+    output::{
+        OutputStyle, create_list_table, create_table, format_count_badge, format_hash,
+        format_header, format_key_value, format_success, format_url, format_warning, hash_cell,
+        header_cell, numeric_cell, print_section_header, print_subsection_header, regular_cell,
+    },
+};
 use ribbit_client::{
     Endpoint, ProductCdnsResponse, ProductVersionsResponse, Region, RibbitClient, SummaryResponse,
 };
@@ -32,22 +39,28 @@ async fn list_products(
     let summary: SummaryResponse = client.request_typed(&Endpoint::Summary).await?;
 
     let mut products = summary.products.clone();
-    products.sort_by_key(|p| p.product.clone());
 
     // Apply filter if provided
     if let Some(filter) = &filter {
         products.retain(|p| p.product.contains(filter));
     }
 
+    // Sort by product name first, then by sequence number
+    products.sort_by(|a, b| a.product.cmp(&b.product).then_with(|| a.seqn.cmp(&b.seqn)));
+
     match format {
         OutputFormat::Json | OutputFormat::JsonPretty => {
             let json_data: Vec<_> = products
                 .iter()
                 .map(|entry| {
-                    serde_json::json!({
+                    let mut obj = serde_json::json!({
                         "code": entry.product,
                         "seqn": entry.seqn,
-                    })
+                    });
+                    if let Some(flags) = &entry.flags {
+                        obj["flags"] = serde_json::json!(flags);
+                    }
+                    obj
                 })
                 .collect();
 
@@ -64,12 +77,46 @@ async fn list_products(
             }
         }
         OutputFormat::Text => {
-            println!("Available products ({})", products.len());
-            println!("{:<20} Sequence", "Product");
-            println!("{}", "-".repeat(30));
+            let style = OutputStyle::new();
 
+            // Print header with count
+            println!(
+                "{} {}",
+                format_header("Available products", &style),
+                format_count_badge(products.len(), "product", &style)
+            );
+
+            // Create table
+            let mut table = create_table(&style);
+            table.set_header(vec![
+                header_cell("Product", &style),
+                header_cell("Sequence", &style),
+                header_cell("Flags", &style),
+            ]);
+
+            // Add rows
             for entry in &products {
-                println!("{:<20} {}", entry.product, entry.seqn);
+                table.add_row(vec![
+                    regular_cell(&entry.product),
+                    numeric_cell(&entry.seqn.to_string()),
+                    regular_cell(entry.flags.as_deref().unwrap_or("")),
+                ]);
+            }
+
+            println!("{}", table);
+
+            // Add a note about flags if any products have flags
+            if products.iter().any(|p| p.flags.is_some()) {
+                println!();
+                println!("{}", format_header("Flag meanings:", &style));
+                println!(
+                    "  {} - Product has CDN configuration",
+                    format_success("cdn", &style)
+                );
+                println!(
+                    "  {} - Product has background download configuration",
+                    format_success("bgdl", &style)
+                );
             }
         }
     }
@@ -144,33 +191,121 @@ async fn show_versions(
             }
         }
         OutputFormat::Text => {
-            println!("Product: {}", product);
+            let style = OutputStyle::new();
+
+            print_section_header(&format!("Product: {}", product), &style);
             if let Some(seqn) = versions.sequence_number {
-                println!("Sequence: {}", seqn);
+                println!(
+                    "{}",
+                    format_key_value("Sequence", &seqn.to_string(), &style)
+                );
             }
-            println!();
 
             if all_regions {
-                println!("{:<10} {:<20} {:<10}", "Region", "Version", "Build ID");
-                println!("{}", "-".repeat(45));
+                println!();
+
+                // Create table for all regions with multi-row format
+                let mut table = create_table(&style);
+                table.set_header(vec![
+                    header_cell("Region", &style),
+                    header_cell("Version", &style),
+                    header_cell("Build", &style),
+                    header_cell("Configuration Hash", &style),
+                ]);
 
                 for entry in &versions.entries {
-                    println!(
-                        "{:<10} {:<20} {:<10}",
-                        entry.region, entry.versions_name, entry.build_id
-                    );
+                    // First row with build config
+                    table.add_row(vec![
+                        regular_cell(&entry.region),
+                        regular_cell(&entry.versions_name),
+                        numeric_cell(&entry.build_id.to_string()),
+                        hash_cell(&format!("Build Config:   {}", &entry.build_config), &style),
+                    ]);
+
+                    // Second row with CDN config
+                    table.add_row(vec![
+                        regular_cell(""),
+                        regular_cell(""),
+                        regular_cell(""),
+                        hash_cell(&format!("CDN Config:     {}", &entry.cdn_config), &style),
+                    ]);
+
+                    // Third row with Product config
+                    table.add_row(vec![
+                        regular_cell(""),
+                        regular_cell(""),
+                        regular_cell(""),
+                        hash_cell(
+                            &format!("Product Config: {}", &entry.product_config),
+                            &style,
+                        ),
+                    ]);
+
+                    // Fourth row with Key Ring (if present)
+                    if let Some(key_ring) = &entry.key_ring {
+                        table.add_row(vec![
+                            regular_cell(""),
+                            regular_cell(""),
+                            regular_cell(""),
+                            hash_cell(&format!("Key Ring:       {}", key_ring), &style),
+                        ]);
+                    }
                 }
+
+                println!("{}", table);
             } else if let Some(entry) = versions.get_region(region.as_str()) {
-                println!("Region:       {}", entry.region);
-                println!("Version:      {}", entry.versions_name);
-                println!("Build ID:     {}", entry.build_id);
-                println!("Build Config: {}", entry.build_config);
-                println!("CDN Config:   {}", entry.cdn_config);
-                println!("Product Config: {}", entry.product_config);
+                println!();
+
+                // Create a detailed table for single region
+                let mut table = create_table(&style);
+                table.set_header(vec![
+                    header_cell("Property", &style),
+                    header_cell("Value", &style),
+                ]);
+
+                table.add_row(vec![regular_cell("Region"), regular_cell(&entry.region)]);
+
+                table.add_row(vec![
+                    regular_cell("Version"),
+                    regular_cell(&entry.versions_name),
+                ]);
+
+                table.add_row(vec![
+                    regular_cell("Build ID"),
+                    regular_cell(&entry.build_id.to_string()),
+                ]);
+
+                table.add_row(vec![
+                    regular_cell("Build Config"),
+                    hash_cell(&entry.build_config, &style),
+                ]);
+
+                table.add_row(vec![
+                    regular_cell("CDN Config"),
+                    hash_cell(&entry.cdn_config, &style),
+                ]);
+
+                table.add_row(vec![
+                    regular_cell("Product Config"),
+                    hash_cell(&entry.product_config, &style),
+                ]);
+
+                if let Some(key_ring) = &entry.key_ring {
+                    table.add_row(vec![regular_cell("Key Ring"), hash_cell(key_ring, &style)]);
+                }
+
+                println!("{}", table);
             } else {
+                println!();
                 println!(
-                    "No version information available for region '{}'",
-                    region.as_str()
+                    "{}",
+                    format_warning(
+                        &format!(
+                            "No version information available for region '{}'",
+                            region.as_str()
+                        ),
+                        &style
+                    )
                 );
             }
         }
@@ -219,20 +354,69 @@ async fn show_cdns(
             }
         }
         OutputFormat::Text => {
-            println!("CDN Configuration for {}", product);
+            let style = OutputStyle::new();
+
+            print_section_header(&format!("CDN Configuration for {}", product), &style);
             if let Some(seqn) = cdns.sequence_number {
-                println!("Sequence: {}", seqn);
+                println!(
+                    "{}",
+                    format_key_value("Sequence", &seqn.to_string(), &style)
+                );
             }
+
             println!();
 
+            // Create a table for each region
             for entry in &cdns.entries {
-                println!("Name: {}", entry.name);
-                println!("Path: {}", entry.path);
-                println!("Config Path: {}", entry.config_path);
-                println!("Hosts:");
-                for host in &entry.hosts {
-                    println!("  - {}", host);
+                print_subsection_header(&format!("Region: {}", &entry.name), &style);
+
+                let mut table = create_table(&style);
+                table.set_header(vec![
+                    header_cell("Property", &style),
+                    header_cell("Value", &style),
+                ]);
+
+                table.add_row(vec![regular_cell("Path"), regular_cell(&entry.path)]);
+
+                table.add_row(vec![
+                    regular_cell("Config Path"),
+                    regular_cell(&entry.config_path),
+                ]);
+
+                // Add hosts to the table (before servers)
+                if !entry.hosts.is_empty() {
+                    // First host
+                    table.add_row(vec![
+                        regular_cell("CDN Hosts"),
+                        regular_cell(&entry.hosts[0]),
+                    ]);
+
+                    // Additional hosts on separate lines
+                    for host in &entry.hosts[1..] {
+                        table.add_row(vec![regular_cell(""), regular_cell(host)]);
+                    }
                 }
+
+                if let Some(servers) = &entry.servers {
+                    if !servers.is_empty() {
+                        // Split servers by spaces and display one per line
+                        let server_list: Vec<&str> = servers.split_whitespace().collect();
+                        if !server_list.is_empty() {
+                            // First server
+                            table.add_row(vec![
+                                regular_cell("Servers"),
+                                regular_cell(server_list[0]),
+                            ]);
+
+                            // Additional servers on separate lines
+                            for server in &server_list[1..] {
+                                table.add_row(vec![regular_cell(""), regular_cell(server)]);
+                            }
+                        }
+                    }
+                }
+
+                println!("{}", table);
                 println!();
             }
         }
@@ -326,33 +510,94 @@ async fn show_info(
             }
         }
         OutputFormat::Text => {
-            println!("Product Information: {}", product);
-            println!("{}", "=".repeat(40));
+            let style = OutputStyle::new();
+
+            print_section_header(&format!("Product Information: {}", product), &style);
 
             if let Some(summary_entry) = summary.get_product(&product) {
-                println!("\nSummary:");
-                println!("  Sequence: {}", summary_entry.seqn);
+                print_subsection_header("Summary", &style);
+                println!(
+                    "{}",
+                    format_key_value("Sequence", &summary_entry.seqn.to_string(), &style)
+                );
+                if let Some(flags) = &summary_entry.flags {
+                    println!("{}", format_key_value("Flags", flags, &style));
+                }
             }
 
             if let Some(version) = versions.get_region(region.as_str()) {
-                println!("\nCurrent Version ({}):", region.as_str());
-                println!("  Version:      {}", version.versions_name);
-                println!("  Build ID:     {}", version.build_id);
-                println!("  Build Config: {}", version.build_config);
-                println!("  CDN Config:   {}", version.cdn_config);
+                print_subsection_header(&format!("Current Version ({})", region.as_str()), &style);
+                println!(
+                    "{}",
+                    format_key_value("Version", &version.versions_name, &style)
+                );
+                println!(
+                    "{}",
+                    format_key_value("Build ID", &version.build_id.to_string(), &style)
+                );
+                println!(
+                    "{}",
+                    format_key_value(
+                        "Build Config",
+                        &format_hash(&version.build_config, &style),
+                        &style
+                    )
+                );
+                println!(
+                    "{}",
+                    format_key_value(
+                        "CDN Config",
+                        &format_hash(&version.cdn_config, &style),
+                        &style
+                    )
+                );
+                println!(
+                    "{}",
+                    format_key_value(
+                        "Product Config",
+                        &format_hash(&version.product_config, &style),
+                        &style
+                    )
+                );
             }
 
-            println!("\nAvailable Regions:");
+            // Available regions
             let mut regions: Vec<_> = versions.entries.iter().map(|e| &e.region).collect();
             regions.sort();
             regions.dedup();
-            for r in regions {
-                println!("  - {}", r);
-            }
 
-            println!("\nCDN Hosts:");
-            for host in cdns.all_hosts() {
-                println!("  - {}", host);
+            print_subsection_header("Available Regions", &style);
+            let mut table = create_list_table(&style);
+            table.set_header(vec![
+                header_cell("Region", &style),
+                header_cell("Version", &style),
+            ]);
+
+            for region_name in &regions {
+                if let Some(entry) = versions.entries.iter().find(|e| &e.region == *region_name) {
+                    table.add_row(vec![
+                        regular_cell(&entry.region),
+                        regular_cell(&entry.versions_name),
+                    ]);
+                }
+            }
+            println!("{}", table);
+
+            // CDN hosts
+            let hosts = cdns.all_hosts();
+            print_subsection_header(
+                &format!(
+                    "CDN Hosts {}",
+                    format_count_badge(hosts.len(), "host", &style)
+                ),
+                &style,
+            );
+            for host in hosts {
+                println!(
+                    "  {} {}",
+                    format_success("•", &style),
+                    format_url(&host, &style)
+                );
             }
         }
     }

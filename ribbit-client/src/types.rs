@@ -4,6 +4,14 @@ use std::fmt;
 
 /// Supported regions for Ribbit endpoints
 ///
+/// # Regional Availability
+///
+/// Some regions may have network restrictions:
+/// - `CN` (China): Typically only accessible from within China
+/// - Other regions (`US`, `EU`, `KR`, `TW`, `SG`): Generally accessible globally
+///
+/// The client will timeout after 10 seconds if a region is unreachable.
+///
 /// # Example
 ///
 /// ```
