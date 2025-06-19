@@ -1,11 +1,13 @@
 [package]
 name = "ngdp-bpsv"
-version = "0.1.0"
-edition = "2021"
-authors = ["wowemulation-dev team"]
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
 description = "BPSV (Blizzard Pipe-Separated Values) parser and writer for NGDP"
-license = "MIT OR Apache-2.0"
-repository = "https://github.com/wowemulation-dev/cascette-rs"
 keywords = ["blizzard", "ngdp", "tact", "parsing", "bpsv"]
 categories = ["parsing", "data-structures"]
 

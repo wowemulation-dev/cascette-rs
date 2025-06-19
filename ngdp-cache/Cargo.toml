@@ -1,0 +1,28 @@
+[package]
+name = "ngdp-cache"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Generic caching functionality for NGDP components"
+keywords = ["ngdp", "cache", "blizzard", "tact", "cdn"]
+categories = ["caching", "filesystem", "games"]
+
+[dependencies]
+dirs = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["fs", "io-util"] }
+tracing = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+rand = "0.8"
+tokio = { workspace = true, features = ["full", "test-util"] }
+tracing-subscriber = { workspace = true }
+
+[[bench]]
+name = "cache_benchmark"
+harness = false

@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+#### `ngdp-cache` crate
+
+- **New crate for generic NGDP caching functionality**
+- **Cache Types**:
+  - `GenericCache`: Key-value storage for arbitrary data
+  - `TactCache`: TACT protocol data (configs, indices, data files)
+  - `CdnCache`: CDN content (archives, loose files) with product-specific support
+  - `RibbitCache`: Ribbit protocol responses with TTL-based expiration
+- **Features**:
+  - Platform-specific cache directory using `dirs::cache_dir()`
+  - CDN-compatible directory structure (hash-based path segmentation)
+  - Async I/O operations using Tokio
+  - Automatic directory creation
+  - TTL support for time-based cache expiration
+  - Streaming file operations for large archives
+- **Testing**: 
+  - Unit tests for all cache types
+  - 12 comprehensive integration tests covering:
+    - Cross-cache isolation
+    - TACT workflow simulation
+    - Product-specific CDN caching
+    - Concurrent access patterns
+    - Large file handling (10MB+)
+    - Cache expiration and TTL validation
+    - Corruption detection
+    - Key validation with various formats
+- **Benchmarks**: Performance benchmarks for:
+  - Generic cache read/write operations (small/medium/large data)
+  - TACT cache operations and path construction
+  - CDN archive operations and size queries
+  - Ribbit cache write and validation
+  - Concurrent write operations
+  - Hash-based path segmentation
+- **Examples**: Basic usage example demonstrating all cache types
+
 ### Changed
 
 #### `ribbit-client` crate
@@ -342,6 +379,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `tokio` (1.45) - Async runtime with full features
 - `tracing` (0.1) - Structured logging and debugging
 - `x509-cert` (0.2) - X.509 certificate parsing and validation
+
+#### `ngdp-cache`
+
+- `dirs` (6.0) - Platform-specific directory paths (workspace dependency)
+- `thiserror` (2.0) - Error type derivation (workspace dependency)
+- `tokio` (1.45) - Async runtime with fs and io-util features (workspace dependency)
+- `tracing` (0.1) - Structured logging (workspace dependency)
 
 #### `ngdp-client`
 

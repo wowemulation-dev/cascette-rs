@@ -1,6 +1,6 @@
 //! Benchmarks for BPSV parsing and building performance
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use ngdp_bpsv::{BpsvBuilder, BpsvDocument, BpsvFieldType, BpsvValue};
 use std::hint::black_box;
 

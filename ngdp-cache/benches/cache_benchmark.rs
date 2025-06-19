@@ -1,0 +1,282 @@
+//! Benchmarks for ngdp-cache operations
+
+use criterion::{BatchSize, BenchmarkId, Criterion, criterion_group, criterion_main};
+use ngdp_cache::{cdn::CdnCache, generic::GenericCache, ribbit::RibbitCache, tact::TactCache};
+use std::hint::black_box;
+use std::time::Duration;
+use tokio::runtime::Runtime;
+
+/// Test data of various sizes
+const SMALL_DATA: &[u8] = b"Small test data - 16 bytes";
+const MEDIUM_DATA: &[u8] = &[0u8; 1024]; // 1KB
+const LARGE_DATA: &[u8] = &[0u8; 1024 * 1024]; // 1MB
+
+/// Sample hash for consistent paths
+const TEST_HASH: &str = "abcdef1234567890abcdef1234567890";
+
+fn bench_generic_cache_write(c: &mut Criterion) {
+    let runtime = Runtime::new().unwrap();
+
+    let mut group = c.benchmark_group("generic_cache_write");
+
+    for (name, data) in &[
+        ("small", SMALL_DATA),
+        ("medium", MEDIUM_DATA),
+        ("large", LARGE_DATA),
+    ] {
+        group.bench_with_input(BenchmarkId::from_parameter(name), data, |b, &data| {
+            b.iter_batched(
+                || {
+                    // Setup: create cache and key
+                    let cache = runtime.block_on(GenericCache::new()).unwrap();
+                    let key = format!("bench_key_{}", rand::random::<u32>());
+                    (cache, key)
+                },
+                |(cache, key)| {
+                    runtime.block_on(async move {
+                        cache.write(&key, black_box(data)).await.unwrap();
+                        // Cleanup
+                        cache.delete(&key).await.unwrap();
+                    });
+                },
+                BatchSize::SmallInput,
+            );
+        });
+    }
+
+    group.finish();
+}
+
+fn bench_generic_cache_read(c: &mut Criterion) {
+    let runtime = Runtime::new().unwrap();
+
+    let mut group = c.benchmark_group("generic_cache_read");
+
+    for (name, data) in &[
+        ("small", SMALL_DATA),
+        ("medium", MEDIUM_DATA),
+        ("large", LARGE_DATA),
+    ] {
+        group.bench_with_input(BenchmarkId::from_parameter(name), data, |b, &data| {
+            b.iter_batched(
+                || {
+                    // Setup: create cache, write data
+                    let cache = runtime.block_on(GenericCache::new()).unwrap();
+                    let key = format!("bench_key_{}", rand::random::<u32>());
+                    runtime.block_on(cache.write(&key, data)).unwrap();
+                    (cache, key)
+                },
+                |(cache, key)| {
+                    runtime.block_on(async move {
+                        let _data = black_box(cache.read(&key).await.unwrap());
+                        // Cleanup
+                        cache.delete(&key).await.unwrap();
+                    });
+                },
+                BatchSize::SmallInput,
+            );
+        });
+    }
+
+    group.finish();
+}
+
+fn bench_tact_cache_operations(c: &mut Criterion) {
+    let runtime = Runtime::new().unwrap();
+
+    c.bench_function("tact_cache_write_config", |b| {
+        b.iter_batched(
+            || {
+                let cache = runtime.block_on(TactCache::new()).unwrap();
+                let hash = format!("{}{:08x}", TEST_HASH, rand::random::<u32>());
+                (cache, hash)
+            },
+            |(cache, hash)| {
+                runtime.block_on(async move {
+                    cache
+                        .write_config(&hash, black_box(MEDIUM_DATA))
+                        .await
+                        .unwrap();
+                    // Cleanup
+                    tokio::fs::remove_file(cache.config_path(&hash)).await.ok();
+                });
+            },
+            BatchSize::SmallInput,
+        );
+    });
+
+    c.bench_function("tact_cache_path_construction", |b| {
+        let cache = runtime.block_on(TactCache::new()).unwrap();
+        b.iter(|| {
+            let _path = black_box(cache.config_path(black_box(TEST_HASH)));
+        });
+    });
+}
+
+fn bench_cdn_cache_operations(c: &mut Criterion) {
+    let runtime = Runtime::new().unwrap();
+
+    c.bench_function("cdn_cache_write_archive", |b| {
+        b.iter_batched(
+            || {
+                let cache = runtime.block_on(CdnCache::new()).unwrap();
+                let hash = format!("{}{:08x}", TEST_HASH, rand::random::<u32>());
+                (cache, hash)
+            },
+            |(cache, hash)| {
+                runtime.block_on(async move {
+                    cache
+                        .write_archive(&hash, black_box(LARGE_DATA))
+                        .await
+                        .unwrap();
+                    // Cleanup
+                    tokio::fs::remove_file(cache.archive_path(&hash)).await.ok();
+                });
+            },
+            BatchSize::SmallInput,
+        );
+    });
+
+    c.bench_function("cdn_cache_archive_size", |b| {
+        b.iter_batched(
+            || {
+                // Setup: create archive
+                let cache = runtime.block_on(CdnCache::new()).unwrap();
+                let hash = format!("{}{:08x}", TEST_HASH, rand::random::<u32>());
+                runtime
+                    .block_on(cache.write_archive(&hash, LARGE_DATA))
+                    .unwrap();
+                (cache, hash)
+            },
+            |(cache, hash)| {
+                runtime.block_on(async move {
+                    let _size = black_box(cache.archive_size(&hash).await.unwrap());
+                    // Cleanup
+                    tokio::fs::remove_file(cache.archive_path(&hash)).await.ok();
+                });
+            },
+            BatchSize::SmallInput,
+        );
+    });
+}
+
+fn bench_ribbit_cache_operations(c: &mut Criterion) {
+    let runtime = Runtime::new().unwrap();
+
+    c.bench_function("ribbit_cache_write", |b| {
+        b.iter_batched(
+            || {
+                let cache = runtime.block_on(RibbitCache::new()).unwrap();
+                let endpoint = format!("endpoint_{}", rand::random::<u32>());
+                (cache, endpoint)
+            },
+            |(cache, endpoint)| {
+                runtime.block_on(async move {
+                    cache
+                        .write("us", "wow", &endpoint, black_box(MEDIUM_DATA))
+                        .await
+                        .unwrap();
+                    // Cleanup
+                    tokio::fs::remove_file(cache.cache_path("us", "wow", &endpoint))
+                        .await
+                        .ok();
+                    tokio::fs::remove_file(cache.metadata_path("us", "wow", &endpoint))
+                        .await
+                        .ok();
+                });
+            },
+            BatchSize::SmallInput,
+        );
+    });
+
+    c.bench_function("ribbit_cache_is_valid", |b| {
+        b.iter_batched(
+            || {
+                // Setup: create valid cache entry
+                let cache = runtime
+                    .block_on(RibbitCache::with_ttl(Duration::from_secs(300)))
+                    .unwrap();
+                let endpoint = format!("endpoint_{}", rand::random::<u32>());
+                runtime
+                    .block_on(cache.write("us", "wow", &endpoint, SMALL_DATA))
+                    .unwrap();
+                (cache, endpoint)
+            },
+            |(cache, endpoint)| {
+                runtime.block_on(async move {
+                    let _valid = black_box(cache.is_valid("us", "wow", &endpoint).await);
+                    // Cleanup
+                    tokio::fs::remove_file(cache.cache_path("us", "wow", &endpoint))
+                        .await
+                        .ok();
+                    tokio::fs::remove_file(cache.metadata_path("us", "wow", &endpoint))
+                        .await
+                        .ok();
+                });
+            },
+            BatchSize::SmallInput,
+        );
+    });
+}
+
+fn bench_concurrent_operations(c: &mut Criterion) {
+    let runtime = Runtime::new().unwrap();
+
+    c.bench_function("concurrent_writes", |b| {
+        b.iter(|| {
+            runtime.block_on(async {
+                let _cache = GenericCache::new().await.unwrap();
+
+                let mut handles = vec![];
+                for i in 0..10 {
+                    let cache_clone = GenericCache::new().await.unwrap();
+                    let handle = tokio::spawn(async move {
+                        let key = format!("concurrent_{}", i);
+                        cache_clone.write(&key, SMALL_DATA).await.unwrap();
+                        cache_clone.delete(&key).await.unwrap();
+                    });
+                    handles.push(handle);
+                }
+
+                for handle in handles {
+                    handle.await.unwrap();
+                }
+            });
+        });
+    });
+}
+
+fn bench_path_operations(c: &mut Criterion) {
+    let runtime = Runtime::new().unwrap();
+
+    c.bench_function("hash_path_segmentation", |b| {
+        let tact = runtime.block_on(TactCache::new()).unwrap();
+        let hashes = vec![
+            "0123456789abcdef0123456789abcdef",
+            "fedcba9876543210fedcba9876543210",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "00000000000000000000000000000000",
+        ];
+
+        b.iter(|| {
+            for hash in &hashes {
+                let _config = black_box(tact.config_path(black_box(hash)));
+                let _data = black_box(tact.data_path(black_box(hash)));
+                let _index = black_box(tact.index_path(black_box(hash)));
+            }
+        });
+    });
+}
+
+criterion_group!(
+    benches,
+    bench_generic_cache_write,
+    bench_generic_cache_read,
+    bench_tact_cache_operations,
+    bench_cdn_cache_operations,
+    bench_ribbit_cache_operations,
+    bench_concurrent_operations,
+    bench_path_operations,
+);
+
+criterion_main!(benches);

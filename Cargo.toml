@@ -1,5 +1,11 @@
 [workspace]
-members = ["tact-client", "ribbit-client", "ngdp-bpsv", "ngdp-client"]
+members = [
+  "ngdp-bpsv",
+  "ngdp-cache",
+  "ribbit-client",
+  "tact-client",
+  "ngdp-client",
+]
 resolver = "2"
 
 [workspace.package]
