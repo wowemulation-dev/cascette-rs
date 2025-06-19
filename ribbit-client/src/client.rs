@@ -179,12 +179,15 @@ pub struct MimeParts {
     pub signature: Option<Vec<u8>>,
     /// Parsed signature information
     pub signature_info: Option<crate::signature::SignatureInfo>,
+    /// Enhanced signature verification info (if available)
+    pub signature_verification: Option<crate::signature_verify::EnhancedSignatureInfo>,
     /// Checksum from epilogue
     pub checksum: Option<String>,
 }
 
 impl Response {
     /// Parse a V1 (MIME) response
+    #[allow(clippy::too_many_lines)]
     fn parse_v1(raw: &[u8]) -> Result<Self> {
         // First, check if there's a checksum at the end of the raw data
         let (_, checksum) = Self::extract_checksum(raw);
@@ -306,25 +309,57 @@ impl Response {
         let mime_parts =
             if data_content.is_some() || signature_content.is_some() || checksum.is_some() {
                 // Parse signature if present
-                let signature_info = if let Some(ref sig_bytes) = signature_content {
-                    match crate::signature::parse_signature(sig_bytes) {
-                        Ok(info) => {
-                            debug!("Parsed signature: {info:?}");
-                            Some(info)
+                let (signature_info, signature_verification) =
+                    if let Some(ref sig_bytes) = signature_content {
+                        // For signature verification, use the data without checksum
+                        let data_for_verification = if checksum.is_some() {
+                            let (data_without_checksum, _) = Self::extract_checksum(raw);
+                            data_without_checksum
+                        } else {
+                            raw
+                        };
+
+                        // Try enhanced parsing first
+                        match crate::signature_verify::parse_and_verify_signature(
+                            sig_bytes,
+                            Some(data_for_verification),
+                        ) {
+                            Ok(enhanced_info) => {
+                                debug!("Enhanced signature parsing: {enhanced_info:?}");
+                                // Convert to basic SignatureInfo for backward compatibility
+                                let basic_info = crate::signature::SignatureInfo {
+                                    format: enhanced_info.format.clone(),
+                                    size: enhanced_info.size,
+                                    algorithm: enhanced_info.digest_algorithm.clone(),
+                                    signer_count: enhanced_info.signer_count,
+                                    certificate_count: enhanced_info.certificates.len(),
+                                };
+                                (Some(basic_info), Some(enhanced_info))
+                            }
+                            Err(e) => {
+                                warn!("Enhanced signature parsing failed: {e}");
+                                // Fall back to basic parsing
+                                match crate::signature::parse_signature(sig_bytes) {
+                                    Ok(info) => {
+                                        debug!("Basic signature parsing: {info:?}");
+                                        (Some(info), None)
+                                    }
+                                    Err(e) => {
+                                        warn!("Failed to parse signature: {e}");
+                                        (None, None)
+                                    }
+                                }
+                            }
                         }
-                        Err(e) => {
-                            warn!("Failed to parse signature: {e}");
-                            None
-                        }
-                    }
-                } else {
-                    None
-                };
+                    } else {
+                        (None, None)
+                    };
 
                 Some(MimeParts {
                     data: data_content.clone().unwrap_or_default(),
                     signature: signature_content,
                     signature_info,
+                    signature_verification,
                     checksum,
                 })
             } else {
@@ -491,11 +526,12 @@ mod tests {
 
     #[test]
     fn test_validate_checksum() {
+        use sha2::{Digest, Sha256};
+
         // Test data
         let message = b"test message";
 
         // Compute expected checksum
-        use sha2::{Digest, Sha256};
         let mut hasher = Sha256::new();
         hasher.update(message);
         let expected = format!("{:x}", hasher.finalize());
@@ -529,6 +565,8 @@ mod tests {
 
     #[test]
     fn test_parse_v1_with_checksum() {
+        use sha2::{Digest, Sha256};
+
         // Create MIME with checksum
         let mime_data =
             concat!("Content-Type: text/plain\r\n", "\r\n", "test data\r\n",).as_bytes();
@@ -537,7 +575,6 @@ mod tests {
         let mut data_with_checksum = mime_data.to_vec();
 
         // Calculate real checksum
-        use sha2::{Digest, Sha256};
         let mut hasher = Sha256::new();
         hasher.update(&data_with_checksum);
         let checksum = format!("Checksum: {:x}\n", hasher.finalize());
@@ -612,8 +649,7 @@ mod tests {
         let sig_len = mime_parts.signature.as_ref().unwrap().len();
         assert!(
             sig_len > 0,
-            "Signature should not be empty, got {} bytes",
-            sig_len
+            "Signature should not be empty, got {sig_len} bytes"
         );
 
         // For now, just check that we got a signature

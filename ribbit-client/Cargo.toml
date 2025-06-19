@@ -12,16 +12,24 @@ description = "Ribbit protocol client for Cascette"
 [dependencies]
 asn1 = "0.21"
 base64 = "0.22"
+cms = "0.2"
+der = "0.7"
+digest = "0.10"
+dirs.workspace = true
+hex = "0.4"
 mail-parser = "0.11"
+rsa = { version = "0.9", features = ["sha2"] }
 sha2 = "0.10"
 thiserror.workspace = true
 tokio = { version = "1.45", features = ["full"] }
 tracing.workspace = true
+x509-cert = "0.2"
 
 [dev-dependencies]
 criterion.workspace = true
 tokio-test = "0.4"
 tracing-subscriber.workspace = true
+regex = "1.11"
 
 [[bench]]
 name = "client_benchmark"

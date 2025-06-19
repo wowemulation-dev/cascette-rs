@@ -40,9 +40,9 @@ TACT protocol v1, providing the same data through a different transport mechanis
 ### Security Features
 
 - ASN.1 base-64 message validation
-- Signature verification (MITM protection)
+- PKCS#7/CMS signature verification (MITM protection)
 - Timestamped updates (V1)
-- Certificate and OCSP support
+- Certificate and OCSP support (SHA-1 fingerprints or Subject Key Identifier)
 
 ### Caching Support
 
@@ -105,8 +105,8 @@ Base format: `v1/{endpoint}`
 | `v1/products/{product}/versions` | Returns version information for a product |
 | `v1/products/{product}/cdns` | Returns CDN configuration for a product |
 | `v1/products/{product}/bgdl` | Returns background downloader information (often empty) |
-| `v1/certs/{hash}` | Returns certificate by hash |
-| `v1/ocsp/{hash}` | Returns certificate revocation status |
+| `v1/certs/{identifier}` | Returns certificate by SHA-1 fingerprint or Subject Key Identifier (SKI) |
+| `v1/ocsp/{identifier}` | Returns certificate revocation status by SHA-1 fingerprint or Subject Key Identifier (SKI) |
 
 ## Ribbit V2 Commands
 
@@ -127,6 +127,7 @@ v1/products/wow_beta/cdns
 v2/products/wow/versions
 v2/summary
 v1/certs/5168ff90af0207753cccd9656462a212b859723b
+v1/certs/782a8a710b950421127250a3e91b751ca356e202
 ```
 
 ## Response Format
@@ -181,25 +182,28 @@ V2 responses return raw PSV data without MIME wrapping:
 
 ### Certificate Responses
 
-Certificate endpoints (`v1/certs/{hash}`) return X.509 certificates in PEM format:
+Certificate endpoints (`v1/certs/{identifier}`) return X.509 certificates in PEM format:
 
 - Standard MIME structure with single content chunk
 - Content-Disposition: `cert`
 - Certificate in PEM format (base64-encoded DER between BEGIN/END markers)
 - Typically contains intermediate CA certificates for CDN verification
-- Example: Hash `5168ff90af0207753cccd9656462a212b859723b` returns DigiCert SHA2 High Assurance Server CA
+- **Accepts both SHA-1 fingerprints and Subject Key Identifiers (SKI)**
+- Example SHA-1: `5168ff90af0207753cccd9656462a212b859723b` returns DigiCert SHA2 High Assurance Server CA
+- Example SKI: `782a8a710b950421127250a3e91b751ca356e202` returns CN=version.battle.net certificate
 - Includes standard checksum validation in epilogue
 
 ### OCSP Responses
 
-OCSP endpoints (`v1/ocsp/{hash}`) return certificate revocation status:
+OCSP endpoints (`v1/ocsp/{identifier}`) return certificate revocation status:
 
 - Standard MIME structure with single content chunk
 - Content-Disposition: `ocsp`
 - Content-Type: `application/ocsp-response`
 - Response is base64-encoded ASN.1 format OCSP response
 - Contains certificate validity status and timestamps
-- Example: Same hash `5168ff90af0207753cccd9656462a212b859723b` can be used
+- **Accepts both SHA-1 fingerprints and Subject Key Identifiers (SKI)**
+- Same identifiers work: `5168ff90af0207753cccd9656462a212b859723b` or `782a8a710b950421127250a3e91b751ca356e202`
 - Includes standard checksum validation in epilogue
 
 ### PSV Data Format
@@ -338,6 +342,31 @@ Common product identifiers used with Ribbit:
    - Sequence number on separate line: `## seqn = {number}`
    - Parse headers by removing type suffix after `!`
 
+## PKI and Signature Verification
+
+### Key Discovery: SKI Usage
+
+Ribbit signatures use Subject Key Identifier (SKI) instead of embedding certificates. The SKI from PKCS#7/CMS signatures can be used directly with both certificate and OCSP endpoints:
+
+1. **Extract SKI from Signature**: Parse the PKCS#7 signature to find the SubjectKeyIdentifier
+2. **Fetch Certificate**: Use `/v1/certs/{ski}` to retrieve the signer's certificate
+3. **Check Status**: Use `/v1/ocsp/{ski}` to verify the certificate isn't revoked
+4. **Extract Public Key**: Parse the certificate to get the public key for signature verification
+
+### Example Workflow
+
+```
+Signature contains: SubjectKeyIdentifier: 782a8a710b950421127250a3e91b751ca356e202
+Certificate endpoint: /v1/certs/782a8a710b950421127250a3e91b751ca356e202
+OCSP endpoint: /v1/ocsp/782a8a710b950421127250a3e91b751ca356e202
+```
+
+This approach eliminates the need for:
+
+- Certificate stores or bundles
+- Complex certificate matching logic
+- Manual certificate management
+
 ## Important Notes
 
 - Ribbit replaced HTTP-based TACT v1 endpoints as the primary protocol
@@ -348,3 +377,4 @@ Common product identifiers used with Ribbit:
 - No connection timeout handling in basic implementation
 - Each request creates a new connection (no pooling)
 - V2 commands return the same data as V1 but without MIME wrapping
+- SKI from signatures can be used directly with cert/ocsp endpoints (major discovery)

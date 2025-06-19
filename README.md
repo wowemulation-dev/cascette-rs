@@ -15,10 +15,11 @@ for World of Warcraft emulation.
 
 ## 🎯 Project Status
 
-| Component       | Status      | Description                    |
-| --------------- | ----------- | ------------------------------ |
-| `ribbit-client` | Ready       | Ribbit protocol client         |
-| `tact-client`   | Planned     | TACT content transfer protocol |
+| Component       | Status      | Description                         |
+| --------------- | ----------- | ----------------------------------- |
+| `ngdp-bpsv`     | Ready       | BPSV parser/writer for NGDP formats |
+| `ribbit-client` | Ready       | Ribbit protocol client              |
+| `tact-client`   | Planned     | TACT content transfer protocol      |
 
 ## 🚀 Quick Start
 
@@ -29,12 +30,14 @@ Add to your `Cargo.toml`:
 ```toml
 [dependencies]
 ribbit-client = "0.1"
+ngdp-bpsv = "0.1"
 ```
 
 Basic example:
 
 ```rust
 use ribbit_client::{RibbitClient, Region, Endpoint};
+use ngdp_bpsv::BpsvDocument;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -45,10 +48,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let endpoint = Endpoint::ProductVersions("wow".to_string());
     let response = client.request(&endpoint).await?;
 
-    // Parse the PSV data
+    // Parse the BPSV data
     if let Some(data) = response.data {
-        for line in data.lines() {
-            println!("{}", line);
+        let doc = BpsvDocument::parse(&data)?;
+        println!("Found {} versions", doc.rows().len());
+
+        // Access specific fields
+        for row in doc.rows() {
+            let region = row.get_raw_by_name("Region", doc.schema()).unwrap_or("");
+            let build_id = row.get_raw_by_name("BuildId", doc.schema()).unwrap_or("");
+            println!("{}: {}", region, build_id);
         }
     }
 
@@ -61,7 +70,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ### From crates.io
 
 ```bash
-cargo add ribbit-client
+cargo add ribbit-client ngdp-bpsv
 ```
 
 ### From source
@@ -74,8 +83,14 @@ cargo build --release
 
 ## 📚 Documentation
 
-- [API Documentation](https://docs.rs/cascette)
-- [Examples](./ribbit-client/examples)
+- [BPSV Format Specification](docs/bpsv-format.md)
+- [BPSV Examples](ngdp-bpsv/examples)
+- [Ribbit Protocol](docs/ribbit-protocol.md)
+- [Ribbit Examples](ribbit-client/examples)
+- [TACT Protocol](docs/tact-protocol.md)
+
+## 📚 Online References
+
 - [TACT Reference](https://wowdev.wiki/TACT)
 - [Ribbit Reference](https://wowdev.wiki/Ribbit)
 - [CASC Reference](https://wowdev.wiki/CASC)
@@ -83,6 +98,15 @@ cargo build --release
 ## 🔧 Features
 
 ### Current
+
+- **BPSV Parser/Writer**
+  - ✅ Complete BPSV format support
+  - ✅ Type-safe field definitions (STRING, HEX, DEC)
+  - ✅ Schema validation
+  - ✅ Sequence number handling
+  - ✅ Builder pattern for document creation
+  - ✅ Round-trip compatibility
+  - ✅ Empty value support
 
 - **Ribbit Protocol Client**
   - ✅ All Blizzard regions (US, EU, CN, KR, TW, SG)

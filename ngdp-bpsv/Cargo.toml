@@ -1,0 +1,38 @@
+[package]
+name = "ngdp-bpsv"
+version = "0.1.0"
+edition = "2021"
+authors = ["wowemulation-dev team"]
+description = "BPSV (Blizzard Pipe-Separated Values) parser and writer for NGDP"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/wowemulation-dev/cascette-rs"
+keywords = ["blizzard", "ngdp", "tact", "parsing", "bpsv"]
+categories = ["parsing", "data-structures"]
+
+[dependencies]
+thiserror.workspace = true
+serde = { workspace = true, features = ["derive"], optional = true }
+
+[features]
+default = []
+serde = ["dep:serde"]
+
+[dev-dependencies]
+serde_json = "1.0"
+criterion.workspace = true
+
+[[example]]
+name = "parse_basic"
+path = "examples/parse_basic.rs"
+
+[[example]]
+name = "build_bpsv"
+path = "examples/build_bpsv.rs"
+
+[[example]]
+name = "typed_access"
+path = "examples/typed_access.rs"
+
+[[bench]]
+name = "bpsv_benchmark"
+harness = false
