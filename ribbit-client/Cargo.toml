@@ -22,7 +22,7 @@ ngdp-bpsv = { path = "../ngdp-bpsv" }
 rsa = { version = "0.9", features = ["sha2"] }
 sha2 = "0.10"
 thiserror.workspace = true
-tokio = { version = "1.45", features = ["full"] }
+tokio = { workspace = true, features = ["full"] }
 tracing.workspace = true
 x509-cert = "0.2"
 
