@@ -35,6 +35,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
       - All convenience methods: `get_summary()`, `get_product_versions()`, etc.
     - Supports both V1 (MIME) and V2 (raw) protocol versions
     - Perfect for CLI integration to reduce API calls
+    - **Proper sequence number extraction from responses**:
+      - Cache files now use actual sequence numbers from responses (e.g., `summary-#-3021124.bmime`)
+      - Automatically finds and uses the most recent cached version
+      - Falls back to 0 for endpoints without sequence numbers (e.g., certificates)
 - **Testing**: 
   - Unit tests for all cache types including CachedRibbitClient
   - 21 comprehensive integration tests covering:

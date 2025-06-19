@@ -1,10 +1,11 @@
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
+use std::str::FromStr;
 use tracing::Level;
 
 use ngdp_client::{
     ConfigCommands, DownloadCommands, InspectCommands, OutputFormat, ProductsCommands,
-    StorageCommands, commands,
+    StorageCommands, cached_client, commands,
 };
 
 #[derive(Parser)]
@@ -31,6 +32,14 @@ struct Cli {
     /// Disable colored output
     #[arg(long, global = true)]
     no_color: bool,
+
+    /// Disable request caching
+    #[arg(long, global = true)]
+    no_cache: bool,
+
+    /// Clear all cached data before running command
+    #[arg(long, global = true)]
+    clear_cache: bool,
 
     #[command(subcommand)]
     command: Commands,
@@ -95,6 +104,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         unsafe {
             std::env::set_var("NO_COLOR", "1");
         }
+    }
+
+    // Handle cache flags
+    if cli.no_cache {
+        cached_client::set_caching_enabled(false);
+        tracing::debug!("Caching disabled via --no-cache flag");
+    }
+
+    if cli.clear_cache {
+        // Clear cache for all regions
+        tracing::info!("Clearing all cached data...");
+        for region in ["us", "eu", "kr", "tw", "cn", "sg"] {
+            if let Ok(r) = ribbit_client::Region::from_str(region) {
+                if let Ok(client) = cached_client::create_client(r).await {
+                    let _ = client.clear_cache().await;
+                }
+            }
+        }
+        tracing::info!("Cache cleared successfully");
     }
 
     // Handle commands

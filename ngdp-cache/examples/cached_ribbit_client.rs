@@ -22,7 +22,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Test certificate endpoint caching
     let cert_hash = "5168ff90af0207753cccd9656462a212b859723b";
     let cert_endpoint = Endpoint::Cert(cert_hash.to_string());
-    
+
     println!("\n1. First request (cache miss):");
     let start = std::time::Instant::now();
     let raw_response = client.request_raw(&cert_endpoint).await?;
@@ -56,7 +56,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Test with regular endpoint (shorter TTL)
     let versions_endpoint = Endpoint::ProductVersions("wow".to_string());
-    
+
     println!("\n3. Testing regular endpoint caching:");
     let start = std::time::Instant::now();
     let raw_response = client.request_raw(&versions_endpoint).await?;
@@ -81,7 +81,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n4. Testing cache control:");
     client.set_caching_enabled(false);
     println!("   Disabled caching");
-    
+
     let start = std::time::Instant::now();
     let _response = client.request_raw(&versions_endpoint).await?;
     let duration = start.elapsed();
@@ -103,7 +103,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .join("ribbit")
         .join("cached")
         .join("us");
-    
+
     if cache_dir.exists() {
         println!("\n6. Cache files created:");
         let mut entries = tokio::fs::read_dir(&cache_dir).await?;

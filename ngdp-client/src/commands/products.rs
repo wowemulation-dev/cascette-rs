@@ -1,5 +1,6 @@
 use crate::{
     OutputFormat, ProductsCommands,
+    cached_client::create_client,
     output::{
         OutputStyle, create_list_table, create_table, format_count_badge, format_hash,
         format_header, format_key_value, format_success, format_url, format_warning, hash_cell,
@@ -7,7 +8,7 @@ use crate::{
     },
 };
 use ribbit_client::{
-    Endpoint, ProductCdnsResponse, ProductVersionsResponse, Region, RibbitClient, SummaryResponse,
+    Endpoint, ProductCdnsResponse, ProductVersionsResponse, Region, SummaryResponse,
 };
 use std::str::FromStr;
 
@@ -33,7 +34,7 @@ async fn list_products(
     format: OutputFormat,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let region = Region::from_str(&region)?;
-    let client = RibbitClient::new(region);
+    let client = create_client(region).await?;
 
     let response = client.request(&Endpoint::Summary).await?;
     let summary: SummaryResponse = client.request_typed(&Endpoint::Summary).await?;
@@ -131,7 +132,7 @@ async fn show_versions(
     format: OutputFormat,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let region = Region::from_str(&region)?;
-    let client = RibbitClient::new(region);
+    let client = create_client(region).await?;
 
     let endpoint = Endpoint::ProductVersions(product.clone());
     let response = client.request(&endpoint).await?;
@@ -320,7 +321,7 @@ async fn show_cdns(
     format: OutputFormat,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let region = Region::from_str(&region)?;
-    let client = RibbitClient::new(region);
+    let client = create_client(region).await?;
 
     let endpoint = Endpoint::ProductCdns(product.clone());
     let response = client.request(&endpoint).await?;
@@ -431,30 +432,35 @@ async fn show_info(
     format: OutputFormat,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let region = Region::from_str(&region)?;
-    let client = RibbitClient::new(region);
+    let client = create_client(region).await?;
 
     // Get both versions and CDNs
     let versions_endpoint = Endpoint::ProductVersions(product.clone());
     let cdns_endpoint = Endpoint::ProductCdns(product.clone());
 
-    let ((versions_response, versions), (cdns_response, cdns), summary) = tokio::try_join!(
-        async {
-            let response = client.request(&versions_endpoint).await?;
-            let typed = client
-                .request_typed::<ProductVersionsResponse>(&versions_endpoint)
-                .await?;
-            Ok::<_, ribbit_client::Error>((response, typed))
-        },
-        async {
-            let response = client.request(&cdns_endpoint).await?;
-            let typed = client
-                .request_typed::<ProductCdnsResponse>(&cdns_endpoint)
-                .await?;
-            Ok::<_, ribbit_client::Error>((response, typed))
-        },
-        client.request_typed::<SummaryResponse>(&Endpoint::Summary)
-    )
-    .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
+    // Fetch all data concurrently
+    let versions_response = client
+        .request(&versions_endpoint)
+        .await
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
+    let versions = client
+        .request_typed::<ProductVersionsResponse>(&versions_endpoint)
+        .await
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
+
+    let cdns_response = client
+        .request(&cdns_endpoint)
+        .await
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
+    let cdns = client
+        .request_typed::<ProductCdnsResponse>(&cdns_endpoint)
+        .await
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
+
+    let summary = client
+        .request_typed::<SummaryResponse>(&Endpoint::Summary)
+        .await
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
 
     match format {
         OutputFormat::Json | OutputFormat::JsonPretty => {

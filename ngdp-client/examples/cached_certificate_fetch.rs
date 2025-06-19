@@ -10,11 +10,11 @@ use ribbit_client::{Endpoint, Region};
 async fn fetch_certificate_cached(hash: &str) -> Result<String, Box<dyn std::error::Error>> {
     // Create cached client
     let client = CachedRibbitClient::new(Region::US).await?;
-    
+
     // Request the certificate
     let endpoint = Endpoint::Cert(hash.to_string());
     let raw_data = client.request_raw(&endpoint).await?;
-    
+
     // For certificates, the response is typically plain text PEM
     Ok(String::from_utf8(raw_data)?)
 }
@@ -22,36 +22,36 @@ async fn fetch_certificate_cached(hash: &str) -> Result<String, Box<dyn std::err
 /// Example of how ngdp-client commands could use cached requests
 async fn verify_signature_with_cache(ski: &str) -> Result<(), Box<dyn std::error::Error>> {
     println!("Verifying signature with SKI: {}", ski);
-    
+
     // In a real implementation, you would:
     // 1. Extract the certificate hash from a mapping of SKI to cert hash
     // 2. Use the cached client to fetch the certificate
     // 3. Verify the signature
-    
+
     // For this example, we'll use a known certificate hash
     let cert_hash = "5168ff90af0207753cccd9656462a212b859723b";
-    
+
     println!("Fetching certificate: {}", cert_hash);
     let cert_pem = fetch_certificate_cached(cert_hash).await?;
-    
+
     if cert_pem.contains("-----BEGIN CERTIFICATE-----") {
         println!("✓ Successfully retrieved certificate (possibly from cache)");
         // Here you would parse the certificate and verify the signature
     } else {
         println!("✗ Response doesn't contain a valid certificate");
     }
-    
+
     Ok(())
 }
 
 /// Demonstrate how to integrate caching into existing workflows
 async fn cached_product_info(product: &str) -> Result<(), Box<dyn std::error::Error>> {
     let client = CachedRibbitClient::new(Region::US).await?;
-    
+
     // Get product versions (with caching)
     let endpoint = Endpoint::ProductVersions(product.to_string());
     let raw_data = client.request_raw(&endpoint).await?;
-    
+
     // Parse the response (in real code, you'd use proper parsing)
     let data = String::from_utf8_lossy(&raw_data);
     println!("Product versions for {}:", product);
@@ -59,7 +59,7 @@ async fn cached_product_info(product: &str) -> Result<(), Box<dyn std::error::Er
         println!("  {}", line);
     }
     println!("  ...");
-    
+
     Ok(())
 }
 
@@ -82,7 +82,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Example 3: Demonstrating cache benefits
     println!("\n3. Performance comparison:");
-    
+
     // Without cache (create new client each time)
     let start = std::time::Instant::now();
     for i in 0..3 {
@@ -93,7 +93,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let _ = cached_client.request_raw(&endpoint).await?;
         println!("   Request {} without cache: {:?}", i + 1, start.elapsed());
     }
-    
+
     // With cache
     println!("\n   With caching enabled:");
     let client = CachedRibbitClient::new(Region::US).await?;

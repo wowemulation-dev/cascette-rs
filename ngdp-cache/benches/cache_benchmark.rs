@@ -2,11 +2,8 @@
 
 use criterion::{BatchSize, BenchmarkId, Criterion, criterion_group, criterion_main};
 use ngdp_cache::{
-    cached_ribbit_client::CachedRibbitClient, 
-    cdn::CdnCache, 
-    generic::GenericCache, 
-    ribbit::RibbitCache, 
-    tact::TactCache
+    cached_ribbit_client::CachedRibbitClient, cdn::CdnCache, generic::GenericCache,
+    ribbit::RibbitCache, tact::TactCache,
 };
 use ribbit_client::{Endpoint, Region};
 use std::hint::black_box;
@@ -277,19 +274,19 @@ fn bench_path_operations(c: &mut Criterion) {
 
 fn bench_cached_ribbit_client(c: &mut Criterion) {
     let runtime = Runtime::new().unwrap();
-    
+
     let mut group = c.benchmark_group("cached_ribbit_client");
-    
+
     // Benchmark cache filename generation
     group.bench_function("filename_generation", |b| {
         b.iter_batched(
             || {
-                runtime.block_on(
-                    CachedRibbitClient::with_cache_dir(
+                runtime
+                    .block_on(CachedRibbitClient::with_cache_dir(
                         Region::US,
-                        std::env::temp_dir().join("bench_ribbit_cache")
-                    )
-                ).unwrap()
+                        std::env::temp_dir().join("bench_ribbit_cache"),
+                    ))
+                    .unwrap()
             },
             |_client| {
                 // Test various endpoint types
@@ -300,7 +297,7 @@ fn bench_cached_ribbit_client(c: &mut Criterion) {
                     Endpoint::Cert("abc123def456".to_string()),
                     Endpoint::Ocsp("789xyz".to_string()),
                 ];
-                
+
                 for endpoint in endpoints {
                     // This benchmarks the internal filename generation logic
                     // via the cache path construction
@@ -310,33 +307,45 @@ fn bench_cached_ribbit_client(c: &mut Criterion) {
             BatchSize::SmallInput,
         );
     });
-    
+
     // Benchmark cache validity check
     group.bench_function("cache_validity_check", |b| {
         b.iter_batched(
             || {
                 // Setup: create client with cache entry
-                let temp_dir = std::env::temp_dir().join(format!("bench_ribbit_{}", rand::random::<u32>()));
-                let client = runtime.block_on(
-                    CachedRibbitClient::with_cache_dir(Region::US, temp_dir.clone())
-                ).unwrap();
-                
+                let temp_dir =
+                    std::env::temp_dir().join(format!("bench_ribbit_{}", rand::random::<u32>()));
+                let client = runtime
+                    .block_on(CachedRibbitClient::with_cache_dir(
+                        Region::US,
+                        temp_dir.clone(),
+                    ))
+                    .unwrap();
+
                 // Pre-populate cache with fresh data
                 let cache_file = temp_dir.join("us").join("test-endpoint-0.bmime");
                 let meta_file = temp_dir.join("us").join("test-endpoint-0.meta");
-                
+
                 runtime.block_on(async {
-                    tokio::fs::create_dir_all(cache_file.parent().unwrap()).await.unwrap();
+                    tokio::fs::create_dir_all(cache_file.parent().unwrap())
+                        .await
+                        .unwrap();
                     tokio::fs::write(&cache_file, b"cached data").await.unwrap();
-                    
+
                     let timestamp = std::time::SystemTime::now()
                         .duration_since(std::time::UNIX_EPOCH)
                         .unwrap()
                         .as_secs();
-                    tokio::fs::write(&meta_file, timestamp.to_string()).await.unwrap();
+                    tokio::fs::write(&meta_file, timestamp.to_string())
+                        .await
+                        .unwrap();
                 });
-                
-                (client, temp_dir, Endpoint::Custom("test/endpoint".to_string()))
+
+                (
+                    client,
+                    temp_dir,
+                    Endpoint::Custom("test/endpoint".to_string()),
+                )
             },
             |(client, temp_dir, endpoint)| {
                 runtime.block_on(async move {
@@ -347,7 +356,7 @@ fn bench_cached_ribbit_client(c: &mut Criterion) {
                         Ok(data) => black_box(data),
                         Err(_) => vec![], // Server request would fail for test endpoint
                     };
-                    
+
                     // Cleanup
                     let _ = tokio::fs::remove_dir_all(&temp_dir).await;
                 });
@@ -355,15 +364,19 @@ fn bench_cached_ribbit_client(c: &mut Criterion) {
             BatchSize::SmallInput,
         );
     });
-    
+
     // Benchmark cache write performance
     group.bench_function("cache_write", |b| {
         b.iter_batched(
             || {
-                let temp_dir = std::env::temp_dir().join(format!("bench_write_{}", rand::random::<u32>()));
-                let client = runtime.block_on(
-                    CachedRibbitClient::with_cache_dir(Region::US, temp_dir.clone())
-                ).unwrap();
+                let temp_dir =
+                    std::env::temp_dir().join(format!("bench_write_{}", rand::random::<u32>()));
+                let client = runtime
+                    .block_on(CachedRibbitClient::with_cache_dir(
+                        Region::US,
+                        temp_dir.clone(),
+                    ))
+                    .unwrap();
                 (client, temp_dir)
             },
             |(_client, temp_dir)| {
@@ -371,12 +384,13 @@ fn bench_cached_ribbit_client(c: &mut Criterion) {
                     // Simulate writing cache data
                     let cache_dir = temp_dir.join("us");
                     let _ = tokio::fs::create_dir_all(&cache_dir).await;
-                    
+
                     // Write cache and metadata files
                     let data = b"test response data";
                     let _ = tokio::fs::write(cache_dir.join("bench-test-0.bmime"), data).await;
-                    let _ = tokio::fs::write(cache_dir.join("bench-test-0.meta"), "1234567890").await;
-                    
+                    let _ =
+                        tokio::fs::write(cache_dir.join("bench-test-0.meta"), "1234567890").await;
+
                     // Cleanup
                     let _ = tokio::fs::remove_dir_all(&temp_dir).await;
                 });
@@ -384,26 +398,30 @@ fn bench_cached_ribbit_client(c: &mut Criterion) {
             BatchSize::SmallInput,
         );
     });
-    
+
     // Benchmark cache cleanup operations
     group.bench_function("clear_expired", |b| {
         b.iter_batched(
             || {
                 // Setup: create client with mix of expired and fresh entries
-                let temp_dir = std::env::temp_dir().join(format!("bench_expire_{}", rand::random::<u32>()));
-                let client = runtime.block_on(
-                    CachedRibbitClient::with_cache_dir(Region::US, temp_dir.clone())
-                ).unwrap();
-                
+                let temp_dir =
+                    std::env::temp_dir().join(format!("bench_expire_{}", rand::random::<u32>()));
+                let client = runtime
+                    .block_on(CachedRibbitClient::with_cache_dir(
+                        Region::US,
+                        temp_dir.clone(),
+                    ))
+                    .unwrap();
+
                 let cache_dir = temp_dir.join("us");
                 runtime.block_on(async {
                     tokio::fs::create_dir_all(&cache_dir).await.unwrap();
-                    
+
                     let now = std::time::SystemTime::now()
                         .duration_since(std::time::UNIX_EPOCH)
                         .unwrap()
                         .as_secs();
-                    
+
                     // Create mix of fresh and expired entries
                     for i in 0..10 {
                         let is_cert = i % 3 == 0;
@@ -415,21 +433,25 @@ fn bench_cached_ribbit_client(c: &mut Criterion) {
                         } else {
                             now - (6 * 60) // Expired regular
                         };
-                        
+
                         let cache_file = cache_dir.join(format!("{}-test{}-0.bmime", prefix, i));
                         let meta_file = cache_dir.join(format!("{}-test{}-0.meta", prefix, i));
-                        
-                        tokio::fs::write(&cache_file, format!("data {}", i)).await.unwrap();
-                        tokio::fs::write(&meta_file, timestamp.to_string()).await.unwrap();
+
+                        tokio::fs::write(&cache_file, format!("data {}", i))
+                            .await
+                            .unwrap();
+                        tokio::fs::write(&meta_file, timestamp.to_string())
+                            .await
+                            .unwrap();
                     }
                 });
-                
+
                 (client, temp_dir)
             },
             |(client, temp_dir)| {
                 runtime.block_on(async move {
                     client.clear_expired().await.unwrap();
-                    
+
                     // Cleanup
                     let _ = tokio::fs::remove_dir_all(&temp_dir).await;
                 });
@@ -437,7 +459,7 @@ fn bench_cached_ribbit_client(c: &mut Criterion) {
             BatchSize::SmallInput,
         );
     });
-    
+
     group.finish();
 }
 
