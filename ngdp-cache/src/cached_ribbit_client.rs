@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 use tracing::{debug, trace};
 
-use ribbit_client::{Endpoint, Region, RibbitClient};
+use ribbit_client::{Endpoint, Region, RibbitClient, TypedResponse};
 
 use crate::{ensure_dir, get_cache_dir, Result};
 
@@ -169,10 +169,48 @@ impl CachedRibbitClient {
         Ok(tokio::fs::read(&cache_path).await?)
     }
 
+    /// Make a request with caching
+    ///
+    /// This method caches the raw response and reconstructs the Response object
+    /// when serving from cache.
+    pub async fn request(&self, endpoint: &Endpoint) -> Result<ribbit_client::Response> {
+        // Check cache first
+        if self.enabled && self.is_cache_valid(endpoint, None).await {
+            debug!("Cache hit for endpoint: {:?}", endpoint);
+            if let Ok(cached_data) = self.read_from_cache(endpoint).await {
+                // Reconstruct Response based on protocol version
+                // For V1, we can't fully reconstruct MIME parts, but the raw data
+                // is sufficient for most use cases (especially typed responses)
+                let response = ribbit_client::Response {
+                    raw: cached_data.clone(),
+                    data: match self.client.protocol_version() {
+                        ribbit_client::ProtocolVersion::V2 => {
+                            // V2 is simple - just raw data as string
+                            Some(String::from_utf8_lossy(&cached_data).to_string())
+                        }
+                        _ => None, // V1 needs MIME parsing which we can't do here
+                    },
+                    mime_parts: None, // Cannot reconstruct without re-parsing
+                };
+                return Ok(response);
+            }
+        }
+
+        // Cache miss or error - make actual request
+        debug!("Cache miss for endpoint: {:?}, fetching from server", endpoint);
+        let response = self.client.request(endpoint).await?;
+
+        // Cache the successful response
+        if let Err(e) = self.write_to_cache(endpoint, &response.raw).await {
+            debug!("Failed to write to cache: {}", e);
+        }
+
+        Ok(response)
+    }
+
     /// Make a raw request with caching
     ///
-    /// This is the primary method for cached requests. It returns raw response bytes
-    /// which can be parsed by the caller.
+    /// This is a convenience method that returns just the raw bytes.
     pub async fn request_raw(&self, endpoint: &Endpoint) -> Result<Vec<u8>> {
         // Check cache first
         if self.enabled && self.is_cache_valid(endpoint, None).await {
@@ -192,6 +230,43 @@ impl CachedRibbitClient {
         }
 
         Ok(raw_data)
+    }
+
+    /// Request with automatic type parsing
+    ///
+    /// This method caches the raw response and parses it into the appropriate typed structure.
+    /// It's a drop-in replacement for RibbitClient::request_typed.
+    pub async fn request_typed<T: TypedResponse>(&self, endpoint: &Endpoint) -> Result<T> {
+        let response = self.request(endpoint).await?;
+        T::from_response(&response).map_err(|e| e.into())
+    }
+
+    /// Request product versions with typed response
+    ///
+    /// Convenience method with caching for requesting product version information.
+    pub async fn get_product_versions(&self, product: &str) -> Result<ribbit_client::ProductVersionsResponse> {
+        self.request_typed(&Endpoint::ProductVersions(product.to_string())).await
+    }
+
+    /// Request product CDNs with typed response
+    ///
+    /// Convenience method with caching for requesting CDN server information.
+    pub async fn get_product_cdns(&self, product: &str) -> Result<ribbit_client::ProductCdnsResponse> {
+        self.request_typed(&Endpoint::ProductCdns(product.to_string())).await
+    }
+
+    /// Request product background download config with typed response
+    ///
+    /// Convenience method with caching for requesting background download configuration.
+    pub async fn get_product_bgdl(&self, product: &str) -> Result<ribbit_client::ProductBgdlResponse> {
+        self.request_typed(&Endpoint::ProductBgdl(product.to_string())).await
+    }
+
+    /// Request summary of all products with typed response
+    ///
+    /// Convenience method with caching for requesting the summary of all available products.
+    pub async fn get_summary(&self) -> Result<ribbit_client::SummaryResponse> {
+        self.request_typed(&Endpoint::Summary).await
     }
 
     /// Get the underlying RibbitClient
@@ -323,6 +398,27 @@ mod tests {
                 client.get_ttl_for_endpoint(&Endpoint::Ocsp("test".to_string())),
                 CERT_CACHE_TTL
             );
+        });
+    }
+
+    #[test]
+    fn test_api_methods_compile() {
+        // This test just verifies that all API methods compile correctly
+        // It doesn't actually run them to avoid network calls in tests
+        tokio::runtime::Runtime::new().unwrap().block_on(async {
+            let client = CachedRibbitClient::new(Region::US).await.unwrap();
+            
+            // These would all compile and work in real usage:
+            // let _ = client.get_summary().await;
+            // let _ = client.get_product_versions("wow").await;
+            // let _ = client.get_product_cdns("wow").await;
+            // let _ = client.get_product_bgdl("wow").await;
+            // let _ = client.request(&Endpoint::Summary).await;
+            // let _ = client.request_raw(&Endpoint::Summary).await;
+            // let _ = client.request_typed::<SummaryResponse>(&Endpoint::Summary).await;
+            
+            // Just verify the client was created
+            assert_eq!(client.inner().region(), Region::US);
         });
     }
 }

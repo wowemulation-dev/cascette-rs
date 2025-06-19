@@ -43,10 +43,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let hash = "abcdef1234567890abcdef1234567890";
     tact.write_config(hash, b"config data").await?;
 
-    // Cached Ribbit client for transparent request caching
+    // Cached Ribbit client - a complete drop-in replacement for RibbitClient
     let client = CachedRibbitClient::new(Region::US).await?;
-    let endpoint = Endpoint::Cert("abc123".to_string());
-    let raw_response = client.request_raw(&endpoint).await?;
+    
+    // All RibbitClient methods work with transparent caching:
+    let summary = client.get_summary().await?;  // Cached for 5 minutes
+    let versions = client.get_product_versions("wow").await?;  // Also cached
+    let cert = client.request_raw(&Endpoint::Cert("abc123".to_string())).await?;  // Cached for 30 days
+    
+    // Full Response objects are cached too
+    let response = client.request(&Endpoint::ProductCdns("d4".to_string())).await?;
+    
+    // Typed responses work seamlessly
+    let typed_versions = client.request_typed::<ribbit_client::ProductVersionsResponse>(
+        &Endpoint::ProductVersions("wow".to_string())
+    ).await?;
 
     Ok(())
 }

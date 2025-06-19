@@ -24,11 +24,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Automatic directory creation
   - TTL support for time-based cache expiration
   - Streaming file operations for large archives
-  - **CachedRibbitClient**: Transparent caching wrapper for RibbitClient
+  - **CachedRibbitClient**: Complete drop-in replacement for RibbitClient with transparent caching
     - Uses Blizzard MIME filename convention: command-argument(s)-sequencenumber.bmime
     - Certificate requests cached for 30 days vs 5 minutes for regular responses
     - Automatic cache invalidation and cleanup
-    - Same API as RibbitClient for easy integration
+    - Implements full RibbitClient API:
+      - `request()` - Returns cached Response objects with raw data
+      - `request_raw()` - Returns cached raw bytes
+      - `request_typed<T>()` - Returns typed responses with caching
+      - All convenience methods: `get_summary()`, `get_product_versions()`, etc.
+    - Supports both V1 (MIME) and V2 (raw) protocol versions
+    - Perfect for CLI integration to reduce API calls
 - **Testing**: 
   - Unit tests for all cache types including CachedRibbitClient
   - 21 comprehensive integration tests covering:
@@ -63,6 +69,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Examples**: 
   - Basic usage example demonstrating all cache types
   - `cached_ribbit_client.rs` - Demonstrates CachedRibbitClient usage with performance comparison
+  - `cached_request_example.rs` - Shows caching of full Response objects
+  - `drop_in_replacement.rs` - Demonstrates complete API compatibility with RibbitClient
 
 ### Changed
 
