@@ -79,9 +79,12 @@ Port: `1119` (TCP)
 
 #### Regional Restrictions
 
-**Important**: The CN (China) region server (`cn.version.battle.net`) is typically only accessible from within China due to network restrictions and firewall rules. Attempting to connect from outside China will usually result in connection timeouts.
+**Important**: The CN (China) region server (`cn.version.battle.net`) is typically
+only accessible from within China due to network restrictions and firewall rules.
+Attempting to connect from outside China will usually result in connection timeouts.
 
 If you need to access CN region data from outside China, consider:
+
 - Using a VPN with Chinese servers
 - Accessing cached data from other sources
 - Using alternative regions for testing purposes
@@ -191,15 +194,18 @@ V2 responses return raw PSV data without MIME wrapping:
 
 ### Certificate Responses
 
-Certificate endpoints (`v1/certs/{identifier}`) return X.509 certificates in PEM format:
+Certificate endpoints (`v1/certs/{identifier}`) return X.509 certificates in PEM
+format:
 
 - Standard MIME structure with single content chunk
 - Content-Disposition: `cert`
 - Certificate in PEM format (base64-encoded DER between BEGIN/END markers)
 - Typically contains intermediate CA certificates for CDN verification
 - **Accepts both SHA-1 fingerprints and Subject Key Identifiers (SKI)**
-- Example SHA-1: `5168ff90af0207753cccd9656462a212b859723b` returns DigiCert SHA2 High Assurance Server CA
-- Example SKI: `782a8a710b950421127250a3e91b751ca356e202` returns CN=version.battle.net certificate
+- Example SHA-1: `5168ff90af0207753cccd9656462a212b859723b` returns DigiCert SHA2
+  High Assurance Server CA
+- Example SKI: `782a8a710b950421127250a3e91b751ca356e202` returns CN=version.battle.net
+  certificate
 - Includes standard checksum validation in epilogue
 
 ### OCSP Responses
@@ -248,7 +254,8 @@ wow|2868866|bgdl
 wow|3014093|
 ```
 
-Note: Flags indicate the type of sequence number - "cdn" for CDN config, "bgdl" for background download, or empty for versions.
+Note: Flags indicate the type of sequence number - "cdn" for CDN config, "bgdl"
+for background download, or empty for versions.
 
 Column types:
 
@@ -293,8 +300,10 @@ Common product identifiers used with Ribbit:
 
 ### Response Handling
 
-1. **Empty Responses**: Some endpoints (particularly bgdl) may return only headers without data rows
-2. **404 Errors**: Not all products have all endpoint types (e.g., wow_classic_era has no bgdl)
+1. **Empty Responses**: Some endpoints (particularly bgdl) may return only headers
+   without data rows
+2. **404 Errors**: Not all products have all endpoint types (e.g., wow_classic_era
+   currently has no bgdl)
 3. **Column Variations**: Different endpoints have different column sets:
    - Versions includes `KeyRing` and `ProductConfig` columns
    - CDNs includes `Servers` column with full URLs
@@ -305,7 +314,8 @@ Common product identifiers used with Ribbit:
 - Standard regions: `us`, `eu`, `cn`, `kr`, `tw`
 - Additional regions for some products: `sg` (Singapore)
 - The `xx` region appears in data but is not a valid endpoint
-- **CN Region Access**: The `cn.version.battle.net` server is restricted to access from within China only. Connections from outside China will timeout after ~10 seconds
+- **CN Region Access**: The `cn.version.battle.net` server is restricted to access
+  from within China only. Connections from outside China will timeout after ~10 seconds
 
 ### Path Patterns
 
@@ -357,16 +367,19 @@ Common product identifiers used with Ribbit:
 
 ### Key Discovery: SKI Usage
 
-Ribbit signatures use Subject Key Identifier (SKI) instead of embedding certificates. The SKI from PKCS#7/CMS signatures can be used directly with both certificate and OCSP endpoints:
+Ribbit signatures use Subject Key Identifier (SKI) instead of embedding certificates.
+The SKI from PKCS#7/CMS signatures can be used directly with both certificate and
+OCSP endpoints:
 
 1. **Extract SKI from Signature**: Parse the PKCS#7 signature to find the SubjectKeyIdentifier
 2. **Fetch Certificate**: Use `/v1/certs/{ski}` to retrieve the signer's certificate
 3. **Check Status**: Use `/v1/ocsp/{ski}` to verify the certificate isn't revoked
-4. **Extract Public Key**: Parse the certificate to get the public key for signature verification
+4. **Extract Public Key**: Parse the certificate to get the public key for signature
+   verification
 
 ### Example Workflow
 
-```
+```text
 Signature contains: SubjectKeyIdentifier: 782a8a710b950421127250a3e91b751ca356e202
 Certificate endpoint: /v1/certs/782a8a710b950421127250a3e91b751ca356e202
 OCSP endpoint: /v1/ocsp/782a8a710b950421127250a3e91b751ca356e202
@@ -389,4 +402,5 @@ This approach eliminates the need for:
 - Each request creates a new connection (no pooling)
 - V2 commands return the same data as V1 but without MIME wrapping
 - SKI from signatures can be used directly with cert/ocsp endpoints (major discovery)
-- **CN region servers are only accessible from within China** - connections from other locations will timeout
+- **CN region servers are only accessible from within China** - connections from
+  other locations will timeout

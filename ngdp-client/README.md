@@ -8,7 +8,9 @@ Command-line interface for interacting with Blizzard's NGDP (Next Generation Dat
 - 📂 Manage local CASC storage (placeholder)
 - ⬇️ Download content using TACT protocol (placeholder)
 - 🔍 Inspect NGDP data structures
+- 🔐 Download certificates by SKI/hash
 - ⚙️ Configuration management
+- 💾 Built-in caching for API responses
 
 ## Installation
 
@@ -74,6 +76,25 @@ ngdp inspect bpsv data.bpsv --raw
 ngdp inspect bpsv https://example.com/data.bpsv
 ```
 
+### Certificate Commands
+
+```bash
+# Download a certificate by SKI/hash
+ngdp certs download 5168ff90af0207753cccd9656462a212b859723b
+
+# Download and show certificate details
+ngdp certs download 5168ff90af0207753cccd9656462a212b859723b --details
+
+# Save certificate to file
+ngdp certs download 5168ff90af0207753cccd9656462a212b859723b --output cert.pem
+
+# Download certificate in DER format
+ngdp certs download 5168ff90af0207753cccd9656462a212b859723b --output cert.der --cert-format der
+
+# Get certificate details as JSON
+ngdp certs download 5168ff90af0207753cccd9656462a212b859723b --details -o json
+```
+
 ### Configuration
 
 ```bash
@@ -88,6 +109,18 @@ ngdp config set default_region eu
 
 # Reset configuration to defaults
 ngdp config reset --yes
+```
+
+### Caching
+
+The CLI includes built-in caching for Ribbit API responses:
+
+```bash
+# Disable caching for a single command
+ngdp products list --no-cache
+
+# Clear all cached data before running command
+ngdp products list --clear-cache
 ```
 
 ## Library Usage

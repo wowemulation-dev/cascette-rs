@@ -1254,8 +1254,10 @@ name = "ngdp-client"
 version = "0.1.0"
 dependencies = [
  "assert_cmd",
+ "base64",
  "clap",
  "comfy-table",
+ "der",
  "dirs",
  "ngdp-bpsv",
  "ngdp-cache",
@@ -1266,10 +1268,12 @@ dependencies = [
  "serde",
  "serde_json",
  "tact-client",
+ "tempfile",
  "thiserror",
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "x509-cert",
 ]
 
 [[package]]

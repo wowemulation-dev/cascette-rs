@@ -8,9 +8,9 @@ pub mod output;
 
 // Re-export command handlers
 pub use crate::commands::{
-    config::handle as handle_config, download::handle as handle_download,
-    inspect::handle as handle_inspect, products::handle as handle_products,
-    storage::handle as handle_storage,
+    certs::handle as handle_certs, config::handle as handle_config,
+    download::handle as handle_download, inspect::handle as handle_inspect,
+    products::handle as handle_products, storage::handle as handle_storage,
 };
 
 use clap::Subcommand;
@@ -222,6 +222,39 @@ pub enum ConfigCommands {
         #[arg(short, long)]
         yes: bool,
     },
+}
+
+#[derive(Subcommand)]
+pub enum CertsCommands {
+    /// Download a certificate by its SKI/hash
+    Download {
+        /// Subject Key Identifier or certificate hash
+        ski: String,
+
+        /// Output file (defaults to stdout)
+        #[arg(long)]
+        output: Option<PathBuf>,
+
+        /// Region to query
+        #[arg(short, long, default_value = "us")]
+        region: String,
+
+        /// Certificate format (pem or der)
+        #[arg(short = 'F', long = "cert-format", value_enum, default_value = "pem")]
+        cert_format: CertFormat,
+
+        /// Show certificate details
+        #[arg(short, long)]
+        details: bool,
+    },
+}
+
+#[derive(clap::ValueEnum, Clone, Copy, Debug, PartialEq)]
+pub enum CertFormat {
+    /// PEM format (text)
+    Pem,
+    /// DER format (binary)
+    Der,
 }
 
 /// Output format options for the CLI

@@ -92,6 +92,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 #### `ngdp-client` crate
 
+- **New `certs` subcommand for certificate operations**:
+  - `certs download` - Download certificates by SKI/hash
+  - Support for both PEM and DER output formats
+  - Certificate details extraction (subject, issuer, validity dates)
+  - JSON output format for programmatic access
+  - Cached certificate downloads using CachedRibbitClient
+  - Example: `ngdp certs download 5168ff90af0207753cccd9656462a212b859723b --details`
 - Redesigned `products versions --all-regions` output to use a cleaner multi-row format:
   - Single "Configuration Hash" column with labeled hash values
   - Each region displays Build Config, CDN Config, Product Config, and Key Ring (if present)

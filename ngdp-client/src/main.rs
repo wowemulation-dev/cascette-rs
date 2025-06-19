@@ -4,8 +4,8 @@ use std::str::FromStr;
 use tracing::Level;
 
 use ngdp_client::{
-    ConfigCommands, DownloadCommands, InspectCommands, OutputFormat, ProductsCommands,
-    StorageCommands, cached_client, commands,
+    CertsCommands, ConfigCommands, DownloadCommands, InspectCommands, OutputFormat,
+    ProductsCommands, StorageCommands, cached_client, commands,
 };
 
 #[derive(Parser)]
@@ -87,6 +87,10 @@ enum Commands {
     /// Manage configuration
     #[command(subcommand)]
     Config(ConfigCommands),
+
+    /// Certificate operations
+    #[command(subcommand)]
+    Certs(CertsCommands),
 }
 
 #[tokio::main]
@@ -132,6 +136,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Commands::Download(cmd) => commands::download::handle(cmd, cli.format).await,
         Commands::Inspect(cmd) => commands::inspect::handle(cmd, cli.format).await,
         Commands::Config(cmd) => commands::config::handle(cmd, cli.format).await,
+        Commands::Certs(cmd) => commands::certs::handle(cmd, cli.format).await,
     };
 
     // Handle errors with more user-friendly messages
