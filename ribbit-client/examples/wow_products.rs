@@ -8,7 +8,7 @@
 //!
 //! Run with: `cargo run --example wow_products`
 
-use ribbit_client::{Endpoint, ProtocolVersion, Region, RibbitClient};
+use ribbit_client::{Region, RibbitClient};
 use std::collections::HashMap;
 
 /// Product information structure
@@ -16,8 +16,9 @@ use std::collections::HashMap;
 struct ProductInfo {
     name: &'static str,
     latest_version: Option<String>,
-    build_id: Option<String>,
+    build_id: Option<u32>,
     cdn_hosts: Vec<String>,
+    bgdl_available: bool,
 }
 
 #[tokio::main]
@@ -43,32 +44,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 latest_version: None,
                 build_id: None,
                 cdn_hosts: Vec::new(),
+                bgdl_available: false,
             },
         );
     }
 
     let client = RibbitClient::new(Region::US);
 
-    // Fetch version information
+    // Fetch version information using typed API
     println!("Fetching version information...\n");
     for (product_id, _) in &products {
-        let endpoint = Endpoint::ProductVersions(product_id.to_string());
-
-        match client.request_raw(&endpoint).await {
-            Ok(data) => {
-                let response = String::from_utf8_lossy(&data);
-
-                // Parse the first data line (usually US region)
-                for line in response.lines() {
-                    if line.contains("|") && !line.starts_with("Region") && !line.starts_with("#") {
-                        let fields: Vec<&str> = line.split('|').collect();
-                        if fields.len() >= 6 {
-                            if let Some(info) = product_infos.get_mut(product_id) {
-                                info.build_id = Some(fields[4].to_string());
-                                info.latest_version = Some(fields[5].to_string());
-                            }
-                        }
-                        break;
+        match client.get_product_versions(product_id).await {
+            Ok(versions) => {
+                // Get the first entry (usually US region)
+                if let Some(first_entry) = versions.entries.first() {
+                    if let Some(info) = product_infos.get_mut(product_id) {
+                        info.build_id = Some(first_entry.build_id);
+                        info.latest_version = Some(first_entry.versions_name.clone());
                     }
                 }
             }
@@ -76,36 +68,36 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // Fetch CDN information
+    // Fetch CDN information using typed API
     println!("Fetching CDN information...\n");
-    let cdn_client = RibbitClient::new(Region::US).with_protocol_version(ProtocolVersion::V2);
-
     for (product_id, _) in &products {
-        let endpoint = Endpoint::ProductCdns(product_id.to_string());
-
-        match cdn_client.request_raw(&endpoint).await {
-            Ok(data) => {
-                let response = String::from_utf8_lossy(&data);
-
-                // Parse CDN hosts
-                for line in response.lines() {
-                    if line.contains("|") && !line.starts_with("Name") && !line.starts_with("#") {
-                        let fields: Vec<&str> = line.split('|').collect();
-                        if fields.len() >= 3 {
-                            if let Some(info) = product_infos.get_mut(product_id) {
-                                let hosts: Vec<String> = fields[2]
-                                    .split_whitespace()
-                                    .take(2) // Take first 2 hosts
-                                    .map(|s| s.to_string())
-                                    .collect();
-                                info.cdn_hosts = hosts;
-                            }
-                        }
-                        break;
-                    }
+        match client.get_product_cdns(product_id).await {
+            Ok(cdns) => {
+                // Get all unique hosts
+                let all_hosts = cdns.all_hosts();
+                if let Some(info) = product_infos.get_mut(product_id) {
+                    info.cdn_hosts = all_hosts.into_iter().take(2).collect();
                 }
             }
             Err(e) => eprintln!("Failed to fetch CDNs for {}: {}", product_id, e),
+        }
+    }
+
+    // Check for background download endpoints using typed API
+    println!("Checking background download availability...\n");
+    for (product_id, _) in &products {
+        match client.get_product_bgdl(product_id).await {
+            Ok(bgdl) => {
+                if let Some(info) = product_infos.get_mut(product_id) {
+                    info.bgdl_available = !bgdl.entries.is_empty();
+                }
+            }
+            Err(_) => {
+                // BGDL might not be available for all products
+                if let Some(info) = product_infos.get_mut(product_id) {
+                    info.bgdl_available = false;
+                }
+            }
         }
     }
 
@@ -120,7 +112,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "  Version: {}",
             info.latest_version.as_deref().unwrap_or("N/A")
         );
-        println!("  Build ID: {}", info.build_id.as_deref().unwrap_or("N/A"));
+        println!(
+            "  Build ID: {}",
+            info.build_id
+                .map(|b| b.to_string())
+                .unwrap_or_else(|| "N/A".to_string())
+        );
 
         if !info.cdn_hosts.is_empty() {
             println!("  CDN Hosts:");
@@ -130,40 +127,43 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         } else {
             println!("  CDN Hosts: N/A");
         }
+
+        println!(
+            "  BGDL: {}",
+            if info.bgdl_available {
+                "Available"
+            } else {
+                "Not available"
+            }
+        );
         println!();
     }
 
-    // Check for background download endpoints
+    // Additional analysis using convenience methods
     println!("{:=<60}", "");
-    println!("Background Download Status");
+    println!("Additional Analysis");
     println!("{:=<60}\n", "");
 
-    for (product_id, name) in &products {
-        let endpoint = Endpoint::ProductBgdl(product_id.to_string());
-
-        match client.request_raw(&endpoint).await {
-            Ok(data) => {
-                if data.is_empty() {
-                    println!("{}: No BGDL data", name);
-                } else {
-                    let response = String::from_utf8_lossy(&data);
-                    let has_data = response.lines().any(|line| {
-                        line.contains("|") && !line.starts_with("Region") && !line.starts_with("#")
-                    });
-                    println!(
-                        "{}: {}",
-                        name,
-                        if has_data {
-                            "BGDL available"
-                        } else {
-                            "No BGDL data"
-                        }
-                    );
-                }
-            }
-            Err(e) => println!("{}: Error - {}", name, e),
+    // Compare build IDs across products
+    println!("Build ID Comparison:");
+    for (product_id, info) in &product_infos {
+        if let Some(build_id) = info.build_id {
+            println!("  {}: {}", product_id, build_id);
         }
     }
+
+    // Check if classic products exist
+    let classic_products = ["wow_classic", "wow_classic_era"];
+    let active_classic_products = classic_products
+        .iter()
+        .filter(|&&p| product_infos.get(p).and_then(|i| i.build_id).is_some())
+        .count();
+
+    println!(
+        "\nActive Classic products: {}/{}",
+        active_classic_products,
+        classic_products.len()
+    );
 
     println!("\n{:=<60}", "");
 

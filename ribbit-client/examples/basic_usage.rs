@@ -2,12 +2,12 @@
 //!
 //! This example demonstrates how to:
 //! - Create a Ribbit client
-//! - Query different endpoints
-//! - Handle responses
+//! - Query different endpoints using typed responses
+//! - Handle responses with type safety
 //!
 //! Run with: `cargo run --example basic_usage`
 
-use ribbit_client::{Endpoint, ProtocolVersion, Region, RibbitClient};
+use ribbit_client::{Endpoint, Region, RibbitClient};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -18,33 +18,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Creating Ribbit client for US region...");
     let client = RibbitClient::new(Region::US);
 
-    // Example 1: Get summary of all products
-    println!("\n1. Fetching product summary (V1)...");
-    match client.request_raw(&Endpoint::Summary).await {
-        Ok(data) => {
-            println!("Received {} bytes", data.len());
-            // Print first 200 chars of response
-            let preview = String::from_utf8_lossy(&data);
-            println!(
-                "Preview: {}...",
-                &preview.chars().take(200).collect::<String>()
-            );
+    // Example 1: Get summary of all products (typed response)
+    println!("\n1. Fetching product summary (typed)...");
+    match client.get_summary().await {
+        Ok(summary) => {
+            println!("Total products: {}", summary.products.len());
+            println!("First 5 products:");
+            for product in summary.products.iter().take(5) {
+                println!("  - {} (seqn: {})", product.product, product.seqn);
+            }
         }
         Err(e) => println!("Error: {}", e),
     }
 
-    // Example 2: Get WoW version information with V2 protocol
-    println!("\n2. Fetching WoW versions (V2)...");
-    let client_v2 = RibbitClient::new(Region::US).with_protocol_version(ProtocolVersion::V2);
-    match client_v2
-        .request_raw(&Endpoint::ProductVersions("wow".to_string()))
-        .await
-    {
-        Ok(data) => {
-            let response = String::from_utf8_lossy(&data);
-            println!("WoW Versions (first 3 lines):");
-            for line in response.lines().take(3) {
-                println!("  {}", line);
+    // Example 2: Get WoW version information (typed response)
+    println!("\n2. Fetching WoW versions (typed)...");
+    match client.get_product_versions("wow").await {
+        Ok(versions) => {
+            println!("WoW Versions (sequence: {:?}):", versions.sequence_number);
+            for entry in &versions.entries {
+                println!(
+                    "  {}: {} (build {})",
+                    entry.region, entry.versions_name, entry.build_id
+                );
             }
         }
         Err(e) => println!("Error: {}", e),
@@ -56,36 +52,51 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     for product in products {
         println!("\n  Product: {}", product);
-        let endpoint = Endpoint::ProductVersions(product.to_string());
 
-        match client.request_raw(&endpoint).await {
-            Ok(data) => {
-                let response = String::from_utf8_lossy(&data);
-                // Extract version from first data line
-                for line in response.lines() {
-                    if line.contains("|") && !line.starts_with("Region") && !line.starts_with("#") {
-                        if let Some(version) = line.split('|').nth(5) {
-                            println!("    Latest version: {}", version);
-                            break;
-                        }
-                    }
+        match client.get_product_versions(product).await {
+            Ok(versions) => {
+                // Get unique version names
+                let unique_versions: std::collections::HashSet<_> =
+                    versions.entries.iter().map(|e| &e.versions_name).collect();
+
+                if let Some(version) = unique_versions.iter().next() {
+                    println!("    Latest version: {}", version);
+                    println!("    Available in {} regions", versions.entries.len());
                 }
             }
             Err(e) => println!("    Error: {}", e),
         }
     }
 
-    // Example 4: Get a certificate
-    println!("\n4. Fetching certificate...");
+    // Example 4: Get CDN information (typed response)
+    println!("\n4. Fetching CDN information...");
+    match client.get_product_cdns("wow").await {
+        Ok(cdns) => {
+            println!("CDN Configuration:");
+            for entry in &cdns.entries {
+                println!("  {} -> {} hosts", entry.name, entry.hosts.len());
+            }
+
+            // Show all unique hosts
+            let all_hosts = cdns.all_hosts();
+            println!("\nUnique CDN hosts ({} total):", all_hosts.len());
+            for host in all_hosts.iter().take(3) {
+                println!("  - {}", host);
+            }
+        }
+        Err(e) => println!("Error: {}", e),
+    }
+
+    // Example 5: Raw response access (for certificates or custom endpoints)
+    println!("\n5. Fetching certificate (raw response)...");
     let cert_hash = "5168ff90af0207753cccd9656462a212b859723b";
-    match client
-        .request_raw(&Endpoint::Cert(cert_hash.to_string()))
-        .await
-    {
-        Ok(data) => {
-            let response = String::from_utf8_lossy(&data);
-            if response.contains("BEGIN CERTIFICATE") {
-                println!("Successfully retrieved certificate for hash: {}", cert_hash);
+    match client.request(&Endpoint::Cert(cert_hash.to_string())).await {
+        Ok(response) => {
+            if let Some(text) = response.as_text() {
+                if text.contains("BEGIN CERTIFICATE") {
+                    println!("Successfully retrieved certificate for hash: {}", cert_hash);
+                    println!("Certificate size: {} bytes", text.len());
+                }
             }
         }
         Err(e) => println!("Error: {}", e),

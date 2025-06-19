@@ -66,6 +66,10 @@ pub enum Error {
     /// ASN.1 parsing failed for signature data
     #[error("ASN.1 parsing error: {0}")]
     Asn1Error(String),
+
+    /// General parsing error for response data
+    #[error("Parse error: {0}")]
+    ParseError(String),
 }
 
 /// Result type alias using the Ribbit Error type
@@ -103,6 +107,9 @@ mod tests {
 
         let err = Error::Asn1Error("invalid ASN.1".to_string());
         assert_eq!(err.to_string(), "ASN.1 parsing error: invalid ASN.1");
+
+        let err = Error::ParseError("invalid BPSV".to_string());
+        assert_eq!(err.to_string(), "Parse error: invalid BPSV");
     }
 
     #[test]

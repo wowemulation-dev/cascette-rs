@@ -21,6 +21,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Fixed unnecessary `Result` wrapping in internal functions
   - Improved code organization and reduced redundancy
 
+### Fixed
+
+#### `ribbit-client` crate
+
+- Fixed compilation error in typed response tests caused by API method name change
+- Corrected BPSV document method calls from `headers()` to `schema().field_names()`
+- Fixed missing error documentation for all Result-returning public methods
+- Added proper `#[must_use]` attributes to methods that should have return values used
+- Fixed documentation markdown formatting issues (missing backticks)
+- Improved numeric literal readability with separators (123_456 instead of 123456)
+- Removed unused imports that were causing linter warnings
+- Fixed all remaining clippy warnings for better code quality
+
 ### Added
 
 #### `ngdp-bpsv` crate

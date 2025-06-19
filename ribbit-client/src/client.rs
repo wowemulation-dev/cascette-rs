@@ -2,10 +2,15 @@
 
 use crate::{
     error::Result,
+    response_types::{
+        ProductBgdlResponse, ProductCdnsResponse, ProductVersionsResponse, SummaryResponse,
+        TypedResponse,
+    },
     types::{Endpoint, ProtocolVersion, RIBBIT_PORT, Region},
 };
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use sha2::{Digest, Sha256};
+use std::fmt;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tracing::{debug, instrument, trace, warn};
@@ -155,6 +160,129 @@ impl RibbitClient {
             ProtocolVersion::V2 => Ok(Response::parse_v2(&raw_response)),
         }
     }
+
+    /// Request with automatic type parsing
+    ///
+    /// This method automatically parses the response into the appropriate typed structure
+    /// based on the type parameter.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// # use ribbit_client::{RibbitClient, Region, Endpoint, ProductVersionsResponse};
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let client = RibbitClient::new(Region::US);
+    /// let versions: ProductVersionsResponse = client
+    ///     .request_typed(&Endpoint::ProductVersions("wow".to_string()))
+    ///     .await?;
+    ///
+    /// for entry in &versions.entries {
+    ///     println!("{}: {} (build {})", entry.region, entry.versions_name, entry.build_id);
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The request fails
+    /// - The response cannot be parsed as BPSV
+    /// - The BPSV data doesn't match the expected schema
+    #[instrument(skip(self))]
+    pub async fn request_typed<T: TypedResponse>(&self, endpoint: &Endpoint) -> Result<T> {
+        let response = self.request(endpoint).await?;
+        T::from_response(&response)
+    }
+
+    /// Request product versions with typed response
+    ///
+    /// Convenience method for requesting product version information.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// # use ribbit_client::{RibbitClient, Region};
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let client = RibbitClient::new(Region::US);
+    /// let versions = client.get_product_versions("wow").await?;
+    ///
+    /// if let Some(us_version) = versions.get_region("us") {
+    ///     println!("US version: {}", us_version.versions_name);
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The request fails
+    /// - The response cannot be parsed as BPSV
+    /// - The BPSV data doesn't match the expected schema
+    pub async fn get_product_versions(&self, product: &str) -> Result<ProductVersionsResponse> {
+        self.request_typed(&Endpoint::ProductVersions(product.to_string()))
+            .await
+    }
+
+    /// Request product CDNs with typed response
+    ///
+    /// Convenience method for requesting CDN server information.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The request fails
+    /// - The response cannot be parsed as BPSV
+    /// - The BPSV data doesn't match the expected schema
+    pub async fn get_product_cdns(&self, product: &str) -> Result<ProductCdnsResponse> {
+        self.request_typed(&Endpoint::ProductCdns(product.to_string()))
+            .await
+    }
+
+    /// Request product background download config with typed response
+    ///
+    /// Convenience method for requesting background download configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The request fails
+    /// - The response cannot be parsed as BPSV
+    /// - The BPSV data doesn't match the expected schema
+    pub async fn get_product_bgdl(&self, product: &str) -> Result<ProductBgdlResponse> {
+        self.request_typed(&Endpoint::ProductBgdl(product.to_string()))
+            .await
+    }
+
+    /// Request summary of all products with typed response
+    ///
+    /// Convenience method for requesting the summary of all available products.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// # use ribbit_client::{RibbitClient, Region};
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let client = RibbitClient::new(Region::US);
+    /// let summary = client.get_summary().await?;
+    ///
+    /// for product in &summary.products {
+    ///     println!("{}: seqn {}", product.product, product.seqn);
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The request fails
+    /// - The response cannot be parsed as BPSV
+    /// - The BPSV data doesn't match the expected schema
+    pub async fn get_summary(&self) -> Result<SummaryResponse> {
+        self.request_typed(&Endpoint::Summary).await
+    }
 }
 
 /// Parsed Ribbit response
@@ -186,6 +314,33 @@ pub struct MimeParts {
 }
 
 impl Response {
+    /// Get the data content as a string slice
+    ///
+    /// This is a convenience method similar to Ribbit.NET's `ToString()`
+    #[must_use]
+    pub fn as_text(&self) -> Option<&str> {
+        self.data.as_deref()
+    }
+
+    /// Parse the response data as BPSV
+    ///
+    /// This allows direct access to the BPSV document structure.
+    /// Note: This method adjusts HEX field lengths for Blizzard's format.
+    pub fn as_bpsv(&self) -> Result<ngdp_bpsv::BpsvDocument> {
+        match &self.data {
+            Some(data) => {
+                // Use the same adjustment as TypedResponse
+                let adjusted_data = crate::response_types::adjust_hex_field_lengths(data);
+                ngdp_bpsv::BpsvDocument::parse(&adjusted_data).map_err(|e| {
+                    crate::error::Error::ParseError(format!("BPSV parse error: {}", e))
+                })
+            }
+            None => Err(crate::error::Error::ParseError(
+                "No data in response".to_string(),
+            )),
+        }
+    }
+
     /// Parse a V1 (MIME) response
     #[allow(clippy::too_many_lines)]
     fn parse_v1(raw: &[u8]) -> Result<Self> {
@@ -455,6 +610,15 @@ impl Response {
 impl Default for RibbitClient {
     fn default() -> Self {
         Self::new(Region::US)
+    }
+}
+
+impl fmt::Display for Response {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.data {
+            Some(data) => write!(f, "{}", data),
+            None => write!(f, "<empty response>"),
+        }
     }
 }
 

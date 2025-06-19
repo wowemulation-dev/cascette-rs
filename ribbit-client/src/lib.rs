@@ -31,10 +31,15 @@ pub mod certificate_fetcher;
 pub mod client;
 pub mod cms_parser;
 pub mod error;
+pub mod response_types;
 pub mod signature;
 pub mod signature_verify;
 pub mod types;
 
 pub use client::{Response, RibbitClient};
 pub use error::{Error, Result};
+pub use response_types::{
+    BgdlEntry, CdnEntry, ProductBgdlResponse, ProductCdnsResponse, ProductSummary,
+    ProductVersionsResponse, SummaryResponse, TypedResponse, VersionEntry,
+};
 pub use types::{Endpoint, ProtocolVersion, Region};

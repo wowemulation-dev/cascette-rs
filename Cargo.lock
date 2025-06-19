@@ -1483,6 +1483,7 @@ dependencies = [
  "dirs",
  "hex",
  "mail-parser",
+ "ngdp-bpsv",
  "regex",
  "rsa",
  "sha2",
