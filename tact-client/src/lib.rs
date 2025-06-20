@@ -8,4 +8,4 @@ pub mod response_types;
 pub use error::{Error, Result};
 pub use http::{HttpClient, ProtocolVersion};
 pub use region::Region;
-pub use response_types::{CdnEntry, VersionEntry};
+pub use response_types::{parse_cdns, parse_versions, CdnEntry, VersionEntry};

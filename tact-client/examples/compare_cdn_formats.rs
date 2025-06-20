@@ -1,6 +1,6 @@
 //! Example demonstrating CDN data handling from both HTTP and Ribbit protocols
 
-use tact_client::{HttpClient, ProtocolVersion, Region};
+use tact_client::{parse_cdns, HttpClient, ProtocolVersion, Region};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -12,7 +12,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Fetching CDN data for World of Warcraft...\n");
 
     // Get CDN information
-    let cdn_entries = client.get_cdns_parsed("wow").await?;
+    let response = client.get_cdns("wow").await?;
+    let cdn_data = response.text().await?;
+    let cdn_entries = parse_cdns(&cdn_data)?;
 
     println!("Found {} CDN configurations:", cdn_entries.len());
     println!("{:-<80}", "");
