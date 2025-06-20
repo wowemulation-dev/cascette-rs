@@ -305,8 +305,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 #### `tact-client` crate
 
-- Initial crate setup for future TACT protocol implementation
-- Placeholder library structure
+- **HTTP Client Implementation**
+  - Support for both TACT protocol versions:
+    - V1: TCP-based on port 1119 (`http://{region}.patch.battle.net:1119`)
+    - V2: HTTPS-based REST API (`https://{region}.version.battle.net/v2/products`)
+  - Async operations using tokio and reqwest
+  - Region support for all major regions: US, EU, KR, CN, TW
+  - Builder pattern for client configuration
+  - Connection timeout configuration (30 seconds default)
+
+- **Available Endpoints**
+  - `/{product}/versions` - Version manifest with build configurations
+  - `/{product}/cdns` - CDN configuration and hosts
+  - `/{product}/bgdl` - Background downloader manifest
+  - Note: TACT v2 endpoints mirror v1 endpoints with identical response formats
+
+- **Enhanced Error Handling**
+  - Comprehensive error types with contextual information:
+    - Network errors: `Http`, `CdnExhausted`, `ConnectionTimeout`
+    - Data format errors: `InvalidManifest`, `MissingField`, `InvalidHash`, `ChecksumMismatch`
+    - Configuration errors: `InvalidRegion`, `UnsupportedProduct`, `InvalidProtocolVersion`
+    - File errors: `FileNotFound`, `Io`
+  - Helper methods for common error construction
+  - Detailed error messages with line numbers and expected values
+  - Based on best practices from reference implementations
+
+- **Content Download Support**
+  - `download_file()` method for CDN file retrieval
+  - Hash-based directory structure: `/{hash[0:2]}/{hash[2:4]}/{hash}`
+  - Proper 404 error handling for missing files
+
+- **Examples**
+  - `basic_usage.rs` - Introduction to TACT client usage
+  - `explore_endpoints.rs` - Endpoint discovery and testing tool
+  - `test_v1_summary.rs` - V1 protocol endpoint testing
+  - `test_different_products.rs` - Multi-product endpoint testing
+  - `test_certs_endpoint.rs` - Certificate endpoint exploration
+
+- **Testing**
+  - Unit tests for all core functionality
+  - Integration tests for client behavior
+  - Error handling tests with comprehensive coverage
+  - Protocol version and region switching tests
+
+- **Documentation**
+  - Comprehensive README with endpoint documentation
+  - Response format examples for all endpoints
+  - Supported products list with testing status
+  - Error handling comparison with reference implementations
 
 #### `ngdp-client` crate
 
@@ -427,6 +473,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `ribbit-client` (0.1) - For CachedRibbitClient functionality (workspace dependency)
 - `thiserror` (2.0) - Error type derivation (workspace dependency)
 - `tokio` (1.45) - Async runtime with fs and io-util features (workspace dependency)
+- `tracing` (0.1) - Structured logging (workspace dependency)
+
+#### `tact-client`
+
+- `reqwest` (0.12) - HTTP client with JSON and stream features
+- `thiserror` (2.0) - Error type derivation (workspace dependency)
+- `tokio` (1.45) - Async runtime with full features (workspace dependency)
 - `tracing` (0.1) - Structured logging (workspace dependency)
 
 #### `ngdp-client`
