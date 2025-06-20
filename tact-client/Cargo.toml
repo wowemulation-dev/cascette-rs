@@ -19,3 +19,7 @@ tracing.workspace = true
 [dev-dependencies]
 criterion.workspace = true
 tracing-subscriber.workspace = true
+
+[[bench]]
+name = "response_parsing"
+harness = false

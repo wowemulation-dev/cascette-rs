@@ -344,8 +344,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Configuration errors: `InvalidRegion`, `UnsupportedProduct`, `InvalidProtocolVersion`
     - File errors: `FileNotFound`, `Io`
   - Helper methods for common error construction
-  - Detailed error messages with line numbers and expected values
-  - Based on best practices from reference implementations
+
+- **Performance Benchmarks**
+  - Benchmarks for response parsing using Criterion
+  - Tests for versions and CDN manifest parsing
+  - Benchmarks for empty servers and large datasets
+  - Performance metrics for typical TACT responses
 
 - **Content Download Support**
   - `download_file()` method for CDN file retrieval
