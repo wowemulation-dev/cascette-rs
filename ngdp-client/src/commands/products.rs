@@ -398,22 +398,16 @@ async fn show_cdns(
                     }
                 }
 
-                if let Some(servers) = &entry.servers {
-                    if !servers.is_empty() {
-                        // Split servers by spaces and display one per line
-                        let server_list: Vec<&str> = servers.split_whitespace().collect();
-                        if !server_list.is_empty() {
-                            // First server
-                            table.add_row(vec![
-                                regular_cell("Servers"),
-                                regular_cell(server_list[0]),
-                            ]);
+                if !entry.servers.is_empty() {
+                    // First server
+                    table.add_row(vec![
+                        regular_cell("Servers"),
+                        regular_cell(&entry.servers[0]),
+                    ]);
 
-                            // Additional servers on separate lines
-                            for server in &server_list[1..] {
-                                table.add_row(vec![regular_cell(""), regular_cell(server)]);
-                            }
-                        }
+                    // Additional servers on separate lines
+                    for server in &entry.servers[1..] {
+                        table.add_row(vec![regular_cell(""), regular_cell(server)]);
                     }
                 }
 

@@ -113,8 +113,8 @@ pub struct CdnEntry {
     pub path: String,
     /// List of CDN hostnames
     pub hosts: Vec<String>,
-    /// Optional server list
-    pub servers: Option<String>,
+    /// List of CDN server URLs
+    pub servers: Vec<String>,
     /// Configuration path on the CDN
     pub config_path: String,
 }
@@ -251,7 +251,14 @@ impl TypedResponse for ProductCdnsResponse {
                 name: accessor.get_string("Name")?,
                 path: accessor.get_string("Path")?,
                 hosts: accessor.get_string_list("Hosts", ' ')?,
-                servers: accessor.get_string_optional("Servers"),
+                servers: accessor
+                    .get_string_optional("Servers")
+                    .map(|s| {
+                        s.split_whitespace()
+                            .map(std::string::ToString::to_string)
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default(),
                 config_path: accessor.get_string("ConfigPath")?,
             });
         }

@@ -2156,6 +2156,7 @@ name = "tact-client"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "ngdp-bpsv",
  "reqwest",
  "thiserror",
  "tokio",

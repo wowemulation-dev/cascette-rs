@@ -1,6 +1,6 @@
 //! HTTP client for TACT protocol
 
-use crate::{Error, Region, Result};
+use crate::{CdnEntry, Error, Region, Result, VersionEntry, response_types};
 use reqwest::{Client, Response};
 use std::time::Duration;
 use tracing::{debug, trace};
@@ -183,6 +183,27 @@ impl HttpClient {
         trace!("Download response status: {}", response.status());
 
         Ok(response)
+    }
+
+    /// Get parsed versions manifest for a product
+    pub async fn get_versions_parsed(&self, product: &str) -> Result<Vec<VersionEntry>> {
+        let response = self.get_versions(product).await?;
+        let text = response.text().await?;
+        response_types::parse_versions(&text)
+    }
+
+    /// Get parsed CDN manifest for a product
+    pub async fn get_cdns_parsed(&self, product: &str) -> Result<Vec<CdnEntry>> {
+        let response = self.get_cdns(product).await?;
+        let text = response.text().await?;
+        response_types::parse_cdns(&text)
+    }
+
+    /// Get parsed BGDL manifest for a product
+    pub async fn get_bgdl_parsed(&self, product: &str) -> Result<Vec<response_types::BgdlEntry>> {
+        let response = self.get_bgdl(product).await?;
+        let text = response.text().await?;
+        response_types::parse_bgdl(&text)
     }
 }
 

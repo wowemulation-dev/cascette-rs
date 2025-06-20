@@ -90,6 +90,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Fixed unnecessary `Result` wrapping in internal functions
   - Improved code organization and reduced redundancy
 - Added test-case to examine a certificate checksum bug on Blizzards side
+- **CDN servers field parsing consistency**:
+  - Changed `servers` field from `Option<String>` to `Vec<String>`
+  - Now parses servers as space-separated list, same as hosts field
+  - Ensures consistency with TACT HTTP client implementation
+  - Added comprehensive tests for servers field parsing
 
 #### `ngdp-client` crate
 
@@ -313,12 +318,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Region support for all major regions: US, EU, KR, CN, TW
   - Builder pattern for client configuration
   - Connection timeout configuration (30 seconds default)
+  - **Typed response parsing using ngdp-bpsv crate**:
+    - `get_versions_parsed()` - Returns `Vec<VersionEntry>`
+    - `get_cdns_parsed()` - Returns `Vec<CdnEntry>`
+    - `get_bgdl_parsed()` - Returns `Vec<BgdlEntry>`
 
 - **Available Endpoints**
   - `/{product}/versions` - Version manifest with build configurations
   - `/{product}/cdns` - CDN configuration and hosts
   - `/{product}/bgdl` - Background downloader manifest
   - Note: TACT v2 endpoints mirror v1 endpoints with identical response formats
+
+- **CDN Data Handling**
+  - Consistent parsing of CDN hosts and servers fields
+  - Both fields parsed as `Vec<String>` from space-separated lists
+  - Support for legacy hosts field (bare hostnames)
+  - Support for modern servers field (full URLs with protocols)
+  - Comprehensive documentation on CDN usage patterns
+  - Examples demonstrating URL construction for both fields
 
 - **Enhanced Error Handling**
   - Comprehensive error types with contextual information:

@@ -15,6 +15,9 @@ pub enum Error {
     ConnectionTimeout { host: String },
 
     // Data format errors
+    #[error("BPSV parse error: {0}")]
+    Bpsv(#[from] ngdp_bpsv::Error),
+
     #[error("Invalid manifest format at line {line}: {reason}")]
     InvalidManifest { line: usize, reason: String },
 
