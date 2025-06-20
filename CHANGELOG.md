@@ -106,6 +106,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Now parses servers as space-separated list, same as hosts field
   - Ensures consistency with TACT HTTP client implementation
   - Added comprehensive tests for servers field parsing
+- **Added automatic retry support with exponential backoff**:
+  - Configurable retry behavior with builder pattern methods
+  - Default of 0 retries maintains backward compatibility
+  - Exponential backoff with configurable parameters:
+    - `with_max_retries()` - Set maximum retry attempts (default: 0)
+    - `with_initial_backoff_ms()` - Initial backoff duration (default: 100ms)
+    - `with_max_backoff_ms()` - Maximum backoff cap (default: 10 seconds)
+    - `with_backoff_multiplier()` - Backoff growth factor (default: 2.0)
+    - `with_jitter_factor()` - Randomness to prevent thundering herd (default: 0.1)
+  - Only retries transient network errors (connection failures, timeouts, send/receive errors)
+  - Parse errors and other non-retryable errors fail immediately
+  - Added example `retry_handling.rs` demonstrating retry strategies
+  - Fully compatible with CachedRibbitClient wrapper
 
 #### `ngdp-client` crate
 
@@ -333,6 +346,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `get_versions_parsed()` - Returns `Vec<VersionEntry>`
     - `get_cdns_parsed()` - Returns `Vec<CdnEntry>`
     - `get_bgdl_parsed()` - Returns `Vec<BgdlEntry>`
+  - **Added automatic retry support with exponential backoff**:
+    - Configurable retry behavior with builder pattern methods
+    - Default of 0 retries maintains backward compatibility
+    - Exponential backoff with configurable parameters:
+      - `with_max_retries()` - Set maximum retry attempts (default: 0)
+      - `with_initial_backoff_ms()` - Initial backoff duration (default: 100ms)
+      - `with_max_backoff_ms()` - Maximum backoff cap (default: 10 seconds)
+      - `with_backoff_multiplier()` - Backoff growth factor (default: 2.0)
+      - `with_jitter_factor()` - Randomness to prevent thundering herd (default: 0.1)
+    - Retries network errors and specific HTTP status codes:
+      - Connection failures, timeouts, send/receive errors
+      - HTTP 5xx server errors
+      - HTTP 429 Too Many Requests
+    - Non-retryable errors fail immediately
+    - Added example `retry_handling.rs` demonstrating retry strategies
 
 - **Available Endpoints**
   - `/{product}/versions` - Version manifest with build configurations
@@ -492,6 +520,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `dirs` (6.0) - Platform-specific directory paths (workspace dependency)
 - `hex` (0.4) - Hex encoding/decoding for certificates and SKI
 - `mail-parser` (0.11) - MIME message parsing
+- `rand` (0.9) - Random number generation for retry jitter
 - `rsa` (0.9) - RSA signature verification
 - `sha2` (0.10) - SHA-256/384/512 checksum validation
 - `thiserror` (2.0) - Error type derivation
@@ -509,6 +538,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 #### `tact-client`
 
+- `rand` (0.9) - Random number generation for retry jitter (workspace dependency)
 - `reqwest` (0.12) - HTTP client with JSON and stream features
 - `thiserror` (2.0) - Error type derivation (workspace dependency)
 - `tokio` (1.45) - Async runtime with full features (workspace dependency)

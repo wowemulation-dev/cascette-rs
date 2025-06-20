@@ -1,6 +1,6 @@
 //! Example demonstrating CDN data handling from both HTTP and Ribbit protocols
 
-use tact_client::{parse_cdns, HttpClient, ProtocolVersion, Region};
+use tact_client::{HttpClient, ProtocolVersion, Region, parse_cdns};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

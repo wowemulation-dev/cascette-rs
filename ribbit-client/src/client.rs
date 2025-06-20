@@ -14,15 +14,31 @@ use std::fmt;
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
-use tokio::time::timeout;
+use tokio::time::{sleep, timeout};
 use tracing::{debug, instrument, trace, warn};
 
 /// Default connection timeout in seconds
 const DEFAULT_CONNECT_TIMEOUT_SECS: u64 = 10;
 
+/// Default maximum retries (0 = no retries, maintains backward compatibility)
+const DEFAULT_MAX_RETRIES: u32 = 0;
+
+/// Default initial backoff in milliseconds
+const DEFAULT_INITIAL_BACKOFF_MS: u64 = 100;
+
+/// Default maximum backoff in milliseconds
+const DEFAULT_MAX_BACKOFF_MS: u64 = 10_000;
+
+/// Default backoff multiplier
+const DEFAULT_BACKOFF_MULTIPLIER: f64 = 2.0;
+
+/// Default jitter factor (0.0 to 1.0)
+const DEFAULT_JITTER_FACTOR: f64 = 0.1;
+
 /// Ribbit TCP client for querying Blizzard version services
 ///
 /// The client supports multiple regions and both V1 (MIME) and V2 (raw PSV) protocols.
+/// It also supports automatic retries with exponential backoff for transient network errors.
 ///
 /// # Example
 ///
@@ -32,7 +48,8 @@ const DEFAULT_CONNECT_TIMEOUT_SECS: u64 = 10;
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 /// // Create a client for EU region with V2 protocol
 /// let client = RibbitClient::new(Region::EU)
-///     .with_protocol_version(ProtocolVersion::V2);
+///     .with_protocol_version(ProtocolVersion::V2)
+///     .with_max_retries(3);
 ///
 /// // Request version information
 /// let endpoint = Endpoint::ProductVersions("wow".to_string());
@@ -43,6 +60,11 @@ const DEFAULT_CONNECT_TIMEOUT_SECS: u64 = 10;
 pub struct RibbitClient {
     region: Region,
     protocol_version: ProtocolVersion,
+    max_retries: u32,
+    initial_backoff_ms: u64,
+    max_backoff_ms: u64,
+    backoff_multiplier: f64,
+    jitter_factor: f64,
 }
 
 impl RibbitClient {
@@ -52,6 +74,11 @@ impl RibbitClient {
         Self {
             region,
             protocol_version: ProtocolVersion::V1,
+            max_retries: DEFAULT_MAX_RETRIES,
+            initial_backoff_ms: DEFAULT_INITIAL_BACKOFF_MS,
+            max_backoff_ms: DEFAULT_MAX_BACKOFF_MS,
+            backoff_multiplier: DEFAULT_BACKOFF_MULTIPLIER,
+            jitter_factor: DEFAULT_JITTER_FACTOR,
         }
     }
 
@@ -59,6 +86,52 @@ impl RibbitClient {
     #[must_use]
     pub fn with_protocol_version(mut self, version: ProtocolVersion) -> Self {
         self.protocol_version = version;
+        self
+    }
+
+    /// Set the maximum number of retries for failed requests
+    ///
+    /// Default is 0 (no retries) to maintain backward compatibility.
+    /// Only network and connection errors are retried, not parsing errors.
+    #[must_use]
+    pub fn with_max_retries(mut self, max_retries: u32) -> Self {
+        self.max_retries = max_retries;
+        self
+    }
+
+    /// Set the initial backoff duration in milliseconds
+    ///
+    /// Default is 100ms. This is the base delay before the first retry.
+    #[must_use]
+    pub fn with_initial_backoff_ms(mut self, initial_backoff_ms: u64) -> Self {
+        self.initial_backoff_ms = initial_backoff_ms;
+        self
+    }
+
+    /// Set the maximum backoff duration in milliseconds
+    ///
+    /// Default is 10,000ms (10 seconds). Backoff will not exceed this value.
+    #[must_use]
+    pub fn with_max_backoff_ms(mut self, max_backoff_ms: u64) -> Self {
+        self.max_backoff_ms = max_backoff_ms;
+        self
+    }
+
+    /// Set the backoff multiplier
+    ///
+    /// Default is 2.0. The backoff duration is multiplied by this value after each retry.
+    #[must_use]
+    pub fn with_backoff_multiplier(mut self, backoff_multiplier: f64) -> Self {
+        self.backoff_multiplier = backoff_multiplier;
+        self
+    }
+
+    /// Set the jitter factor (0.0 to 1.0)
+    ///
+    /// Default is 0.1 (10% jitter). Adds randomness to prevent thundering herd.
+    #[must_use]
+    pub fn with_jitter_factor(mut self, jitter_factor: f64) -> Self {
+        self.jitter_factor = jitter_factor.clamp(0.0, 1.0);
         self
     }
 
@@ -84,14 +157,38 @@ impl RibbitClient {
         self.protocol_version = version;
     }
 
+    /// Calculate backoff duration with exponential backoff and jitter
+    #[allow(
+        clippy::cast_precision_loss,
+        clippy::cast_possible_wrap,
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss
+    )]
+    fn calculate_backoff(&self, attempt: u32) -> Duration {
+        let base_backoff =
+            self.initial_backoff_ms as f64 * self.backoff_multiplier.powi(attempt as i32);
+        let capped_backoff = base_backoff.min(self.max_backoff_ms as f64);
+
+        // Add jitter
+        let jitter_range = capped_backoff * self.jitter_factor;
+        let jitter = rand::random::<f64>() * 2.0 * jitter_range - jitter_range;
+        let final_backoff = (capped_backoff + jitter).max(0.0) as u64;
+
+        Duration::from_millis(final_backoff)
+    }
+
     /// Send a request to the Ribbit service and get the raw response
+    ///
+    /// This method supports automatic retries with exponential backoff for
+    /// transient network errors. Parsing errors are not retried.
     ///
     /// # Example
     ///
     /// ```no_run
     /// # use ribbit_client::{RibbitClient, Region, Endpoint};
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let client = RibbitClient::new(Region::US);
+    /// let client = RibbitClient::new(Region::US)
+    ///     .with_max_retries(3);
     /// let raw_data = client.request_raw(&Endpoint::Summary).await?;
     /// println!("Received {} bytes", raw_data.len());
     /// # Ok(())
@@ -101,7 +198,7 @@ impl RibbitClient {
     /// # Errors
     ///
     /// Returns an error if:
-    /// - The connection to the Ribbit server fails
+    /// - The connection to the Ribbit server fails after all retries
     /// - Sending the request fails
     /// - Receiving the response fails
     /// - The response is invalid or incomplete
@@ -109,11 +206,78 @@ impl RibbitClient {
     pub async fn request_raw(&self, endpoint: &Endpoint) -> Result<Vec<u8>> {
         let host = self.region.hostname();
         let address = format!("{host}:{RIBBIT_PORT}");
+        let command = format!(
+            "{}/{}\n",
+            self.protocol_version.prefix(),
+            endpoint.as_path()
+        );
 
-        debug!("Connecting to Ribbit service at {address}");
+        let mut last_error = None;
+
+        for attempt in 0..=self.max_retries {
+            if attempt > 0 {
+                let backoff = self.calculate_backoff(attempt - 1);
+                debug!("Retry attempt {} after {:?} backoff", attempt, backoff);
+                sleep(backoff).await;
+            }
+
+            debug!(
+                "Connecting to Ribbit service at {address} (attempt {})",
+                attempt + 1
+            );
+
+            // Try to connect and send request
+            match self.attempt_request(&address, &command).await {
+                Ok(response) => {
+                    let len = response.len();
+                    debug!("Received {len} bytes");
+                    return Ok(response);
+                }
+                Err(e) => {
+                    // Check if error is retryable
+                    let is_retryable = matches!(
+                        &e,
+                        crate::error::Error::ConnectionFailed { .. }
+                            | crate::error::Error::ConnectionTimeout { .. }
+                            | crate::error::Error::SendFailed
+                            | crate::error::Error::ReceiveFailed
+                    );
+
+                    if is_retryable && attempt < self.max_retries {
+                        warn!(
+                            "Request failed (attempt {}): {}, will retry",
+                            attempt + 1,
+                            e
+                        );
+                        last_error = Some(e);
+                    } else {
+                        // Non-retryable error or final attempt
+                        debug!(
+                            "Request failed (attempt {}): {}, not retrying",
+                            attempt + 1,
+                            e
+                        );
+                        return Err(e);
+                    }
+                }
+            }
+        }
+
+        // This should only be reached if all retries failed
+        Err(
+            last_error.unwrap_or_else(|| crate::error::Error::ConnectionFailed {
+                host: host.to_string(),
+                port: RIBBIT_PORT,
+            }),
+        )
+    }
+
+    /// Attempt a single request (helper for retry logic)
+    async fn attempt_request(&self, address: &str, command: &str) -> Result<Vec<u8>> {
+        let host = self.region.hostname();
 
         // Connect to the TCP socket with timeout
-        let connect_future = TcpStream::connect(&address);
+        let connect_future = TcpStream::connect(address);
         let timeout_duration = Duration::from_secs(DEFAULT_CONNECT_TIMEOUT_SECS);
 
         let mut stream = match timeout(timeout_duration, connect_future).await {
@@ -138,12 +302,6 @@ impl RibbitClient {
             }
         };
 
-        // Build the command
-        let command = format!(
-            "{}/{}\n",
-            self.protocol_version.prefix(),
-            endpoint.as_path()
-        );
         let trimmed = command.trim();
         trace!("Sending command: {trimmed}");
 
@@ -160,8 +318,6 @@ impl RibbitClient {
             .await
             .map_err(|_| crate::error::Error::ReceiveFailed)?;
 
-        let len = response.len();
-        debug!("Received {len} bytes");
         Ok(response)
     }
 
@@ -869,5 +1025,59 @@ mod tests {
         if let Some(sig_info) = mime_parts.signature_info {
             assert_eq!(sig_info.format, "PKCS#7/CMS");
         }
+    }
+
+    #[test]
+    fn test_client_retry_configuration() {
+        let client = RibbitClient::new(Region::US)
+            .with_max_retries(3)
+            .with_initial_backoff_ms(200)
+            .with_max_backoff_ms(5000)
+            .with_backoff_multiplier(1.5)
+            .with_jitter_factor(0.2);
+
+        assert_eq!(client.max_retries, 3);
+        assert_eq!(client.initial_backoff_ms, 200);
+        assert_eq!(client.max_backoff_ms, 5000);
+        assert_eq!(client.backoff_multiplier, 1.5);
+        assert_eq!(client.jitter_factor, 0.2);
+    }
+
+    #[test]
+    fn test_jitter_factor_clamping() {
+        let client1 = RibbitClient::new(Region::US).with_jitter_factor(1.5);
+        assert_eq!(client1.jitter_factor, 1.0); // Should be clamped to 1.0
+
+        let client2 = RibbitClient::new(Region::US).with_jitter_factor(-0.5);
+        assert_eq!(client2.jitter_factor, 0.0); // Should be clamped to 0.0
+    }
+
+    #[test]
+    fn test_backoff_calculation() {
+        let client = RibbitClient::new(Region::US)
+            .with_initial_backoff_ms(100)
+            .with_max_backoff_ms(1000)
+            .with_backoff_multiplier(2.0)
+            .with_jitter_factor(0.0); // No jitter for predictable test
+
+        // Test exponential backoff
+        let backoff0 = client.calculate_backoff(0);
+        assert_eq!(backoff0.as_millis(), 100); // 100ms * 2^0 = 100ms
+
+        let backoff1 = client.calculate_backoff(1);
+        assert_eq!(backoff1.as_millis(), 200); // 100ms * 2^1 = 200ms
+
+        let backoff2 = client.calculate_backoff(2);
+        assert_eq!(backoff2.as_millis(), 400); // 100ms * 2^2 = 400ms
+
+        // Test max backoff capping
+        let backoff5 = client.calculate_backoff(5);
+        assert_eq!(backoff5.as_millis(), 1000); // Would be 3200ms but capped at 1000ms
+    }
+
+    #[test]
+    fn test_default_retry_configuration() {
+        let client = RibbitClient::new(Region::US);
+        assert_eq!(client.max_retries, 0); // Default should be 0 for backward compatibility
     }
 }

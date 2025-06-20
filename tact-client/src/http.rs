@@ -3,7 +3,23 @@
 use crate::{CdnEntry, Error, Region, Result, VersionEntry, response_types};
 use reqwest::{Client, Response};
 use std::time::Duration;
-use tracing::{debug, trace};
+use tokio::time::sleep;
+use tracing::{debug, trace, warn};
+
+/// Default maximum retries (0 = no retries, maintains backward compatibility)
+const DEFAULT_MAX_RETRIES: u32 = 0;
+
+/// Default initial backoff in milliseconds
+const DEFAULT_INITIAL_BACKOFF_MS: u64 = 100;
+
+/// Default maximum backoff in milliseconds
+const DEFAULT_MAX_BACKOFF_MS: u64 = 10_000;
+
+/// Default backoff multiplier
+const DEFAULT_BACKOFF_MULTIPLIER: f64 = 2.0;
+
+/// Default jitter factor (0.0 to 1.0)
+const DEFAULT_JITTER_FACTOR: f64 = 0.1;
 
 /// TACT protocol version
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -20,6 +36,11 @@ pub struct HttpClient {
     client: Client,
     region: Region,
     version: ProtocolVersion,
+    max_retries: u32,
+    initial_backoff_ms: u64,
+    max_backoff_ms: u64,
+    backoff_multiplier: f64,
+    jitter_factor: f64,
 }
 
 impl HttpClient {
@@ -31,6 +52,11 @@ impl HttpClient {
             client,
             region,
             version,
+            max_retries: DEFAULT_MAX_RETRIES,
+            initial_backoff_ms: DEFAULT_INITIAL_BACKOFF_MS,
+            max_backoff_ms: DEFAULT_MAX_BACKOFF_MS,
+            backoff_multiplier: DEFAULT_BACKOFF_MULTIPLIER,
+            jitter_factor: DEFAULT_JITTER_FACTOR,
         })
     }
 
@@ -40,7 +66,53 @@ impl HttpClient {
             client,
             region,
             version,
+            max_retries: DEFAULT_MAX_RETRIES,
+            initial_backoff_ms: DEFAULT_INITIAL_BACKOFF_MS,
+            max_backoff_ms: DEFAULT_MAX_BACKOFF_MS,
+            backoff_multiplier: DEFAULT_BACKOFF_MULTIPLIER,
+            jitter_factor: DEFAULT_JITTER_FACTOR,
         }
+    }
+
+    /// Set the maximum number of retries for failed requests
+    ///
+    /// Default is 0 (no retries) to maintain backward compatibility.
+    /// Only network and connection errors are retried, not parsing errors.
+    pub fn with_max_retries(mut self, max_retries: u32) -> Self {
+        self.max_retries = max_retries;
+        self
+    }
+
+    /// Set the initial backoff duration in milliseconds
+    ///
+    /// Default is 100ms. This is the base delay before the first retry.
+    pub fn with_initial_backoff_ms(mut self, initial_backoff_ms: u64) -> Self {
+        self.initial_backoff_ms = initial_backoff_ms;
+        self
+    }
+
+    /// Set the maximum backoff duration in milliseconds
+    ///
+    /// Default is 10,000ms (10 seconds). Backoff will not exceed this value.
+    pub fn with_max_backoff_ms(mut self, max_backoff_ms: u64) -> Self {
+        self.max_backoff_ms = max_backoff_ms;
+        self
+    }
+
+    /// Set the backoff multiplier
+    ///
+    /// Default is 2.0. The backoff duration is multiplied by this value after each retry.
+    pub fn with_backoff_multiplier(mut self, backoff_multiplier: f64) -> Self {
+        self.backoff_multiplier = backoff_multiplier;
+        self
+    }
+
+    /// Set the jitter factor (0.0 to 1.0)
+    ///
+    /// Default is 0.1 (10% jitter). Adds randomness to prevent thundering herd.
+    pub fn with_jitter_factor(mut self, jitter_factor: f64) -> Self {
+        self.jitter_factor = jitter_factor.clamp(0.0, 1.0);
+        self
     }
 
     /// Get the base URL for the current configuration
@@ -70,6 +142,87 @@ impl HttpClient {
         self.region = region;
     }
 
+    /// Calculate backoff duration with exponential backoff and jitter
+    #[allow(
+        clippy::cast_precision_loss,
+        clippy::cast_possible_wrap,
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss
+    )]
+    fn calculate_backoff(&self, attempt: u32) -> Duration {
+        let base_backoff =
+            self.initial_backoff_ms as f64 * self.backoff_multiplier.powi(attempt as i32);
+        let capped_backoff = base_backoff.min(self.max_backoff_ms as f64);
+
+        // Add jitter
+        let jitter_range = capped_backoff * self.jitter_factor;
+        let jitter = rand::random::<f64>() * 2.0 * jitter_range - jitter_range;
+        let final_backoff = (capped_backoff + jitter).max(0.0) as u64;
+
+        Duration::from_millis(final_backoff)
+    }
+
+    /// Execute an HTTP request with retry logic
+    async fn execute_with_retry(&self, url: &str) -> Result<Response> {
+        let mut last_error = None;
+
+        for attempt in 0..=self.max_retries {
+            if attempt > 0 {
+                let backoff = self.calculate_backoff(attempt - 1);
+                debug!("Retry attempt {} after {:?} backoff", attempt, backoff);
+                sleep(backoff).await;
+            }
+
+            debug!("HTTP request to {} (attempt {})", url, attempt + 1);
+
+            match self.client.get(url).send().await {
+                Ok(response) => {
+                    trace!("Response status: {}", response.status());
+                    
+                    // Check if we should retry based on status code
+                    let status = response.status();
+                    if status.is_server_error() || status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+                        if attempt < self.max_retries {
+                            warn!(
+                                "Request returned {} (attempt {}): will retry",
+                                status, 
+                                attempt + 1
+                            );
+                            last_error = Some(Error::InvalidResponse);
+                            continue;
+                        }
+                    }
+                    
+                    return Ok(response);
+                }
+                Err(e) => {
+                    // Check if error is retryable
+                    let is_retryable = e.is_connect() || e.is_timeout() || e.is_request();
+
+                    if is_retryable && attempt < self.max_retries {
+                        warn!(
+                            "Request failed (attempt {}): {}, will retry",
+                            attempt + 1,
+                            e
+                        );
+                        last_error = Some(Error::Http(e));
+                    } else {
+                        // Non-retryable error or final attempt
+                        debug!(
+                            "Request failed (attempt {}): {}, not retrying",
+                            attempt + 1,
+                            e
+                        );
+                        return Err(Error::Http(e));
+                    }
+                }
+            }
+        }
+
+        // This should only be reached if all retries failed
+        Err(last_error.unwrap_or(Error::InvalidResponse))
+    }
+
     /// Get versions manifest for a product (V1 protocol)
     pub async fn get_versions(&self, product: &str) -> Result<Response> {
         if self.version != ProtocolVersion::V1 {
@@ -77,12 +230,7 @@ impl HttpClient {
         }
 
         let url = format!("{}/{}/versions", self.base_url(), product);
-        debug!("Fetching versions from: {}", url);
-
-        let response = self.client.get(&url).send().await?;
-        trace!("Response status: {}", response.status());
-
-        Ok(response)
+        self.execute_with_retry(&url).await
     }
 
     /// Get CDN configuration for a product (V1 protocol)
@@ -92,12 +240,7 @@ impl HttpClient {
         }
 
         let url = format!("{}/{}/cdns", self.base_url(), product);
-        debug!("Fetching CDNs from: {}", url);
-
-        let response = self.client.get(&url).send().await?;
-        trace!("Response status: {}", response.status());
-
-        Ok(response)
+        self.execute_with_retry(&url).await
     }
 
     /// Get BGDL manifest for a product (V1 protocol)
@@ -107,12 +250,7 @@ impl HttpClient {
         }
 
         let url = format!("{}/{}/bgdl", self.base_url(), product);
-        debug!("Fetching BGDL from: {}", url);
-
-        let response = self.client.get(&url).send().await?;
-        trace!("Response status: {}", response.status());
-
-        Ok(response)
+        self.execute_with_retry(&url).await
     }
 
     /// Get product summary (V2 protocol)
@@ -122,12 +260,7 @@ impl HttpClient {
         }
 
         let url = self.base_url();
-        debug!("Fetching summary from: {}", url);
-
-        let response = self.client.get(&url).send().await?;
-        trace!("Response status: {}", response.status());
-
-        Ok(response)
+        self.execute_with_retry(&url).await
     }
 
     /// Get product details (V2 protocol)
@@ -137,12 +270,7 @@ impl HttpClient {
         }
 
         let url = format!("{}/{}", self.base_url(), product);
-        debug!("Fetching product details from: {}", url);
-
-        let response = self.client.get(&url).send().await?;
-        trace!("Response status: {}", response.status());
-
-        Ok(response)
+        self.execute_with_retry(&url).await
     }
 
     /// Make a raw GET request to a path
@@ -153,12 +281,7 @@ impl HttpClient {
             format!("{}/{}", self.base_url(), path)
         };
 
-        debug!("GET request to: {}", url);
-
-        let response = self.client.get(&url).send().await?;
-        trace!("Response status: {}", response.status());
-
-        Ok(response)
+        self.execute_with_retry(&url).await
     }
 
     /// Download a file from CDN
@@ -172,15 +295,12 @@ impl HttpClient {
             hash
         );
 
-        debug!("Downloading file from: {}", url);
+        // Use execute_with_retry for CDN downloads as well
+        let response = self.execute_with_retry(&url).await?;
 
-        let response = self.client.get(&url).send().await?;
-
-        if response.status() == 404 {
+        if response.status() == reqwest::StatusCode::NOT_FOUND {
             return Err(Error::file_not_found(hash));
         }
-
-        trace!("Download response status: {}", response.status());
 
         Ok(response)
     }
@@ -249,5 +369,65 @@ mod tests {
         client.set_region(Region::EU);
         assert_eq!(client.region(), Region::EU);
         assert_eq!(client.base_url(), "http://eu.patch.battle.net:1119");
+    }
+
+    #[test]
+    fn test_retry_configuration() {
+        let client = HttpClient::new(Region::US, ProtocolVersion::V1)
+            .unwrap()
+            .with_max_retries(3)
+            .with_initial_backoff_ms(200)
+            .with_max_backoff_ms(5000)
+            .with_backoff_multiplier(1.5)
+            .with_jitter_factor(0.2);
+
+        assert_eq!(client.max_retries, 3);
+        assert_eq!(client.initial_backoff_ms, 200);
+        assert_eq!(client.max_backoff_ms, 5000);
+        assert_eq!(client.backoff_multiplier, 1.5);
+        assert_eq!(client.jitter_factor, 0.2);
+    }
+
+    #[test]
+    fn test_jitter_factor_clamping() {
+        let client1 = HttpClient::new(Region::US, ProtocolVersion::V1)
+            .unwrap()
+            .with_jitter_factor(1.5);
+        assert_eq!(client1.jitter_factor, 1.0); // Should be clamped to 1.0
+
+        let client2 = HttpClient::new(Region::US, ProtocolVersion::V1)
+            .unwrap()
+            .with_jitter_factor(-0.5);
+        assert_eq!(client2.jitter_factor, 0.0); // Should be clamped to 0.0
+    }
+
+    #[test]
+    fn test_backoff_calculation() {
+        let client = HttpClient::new(Region::US, ProtocolVersion::V1)
+            .unwrap()
+            .with_initial_backoff_ms(100)
+            .with_max_backoff_ms(1000)
+            .with_backoff_multiplier(2.0)
+            .with_jitter_factor(0.0); // No jitter for predictable test
+
+        // Test exponential backoff
+        let backoff0 = client.calculate_backoff(0);
+        assert_eq!(backoff0.as_millis(), 100); // 100ms * 2^0 = 100ms
+
+        let backoff1 = client.calculate_backoff(1);
+        assert_eq!(backoff1.as_millis(), 200); // 100ms * 2^1 = 200ms
+
+        let backoff2 = client.calculate_backoff(2);
+        assert_eq!(backoff2.as_millis(), 400); // 100ms * 2^2 = 400ms
+
+        // Test max backoff capping
+        let backoff5 = client.calculate_backoff(5);
+        assert_eq!(backoff5.as_millis(), 1000); // Would be 3200ms but capped at 1000ms
+    }
+
+    #[test]
+    fn test_default_retry_configuration() {
+        let client = HttpClient::new(Region::US, ProtocolVersion::V1).unwrap();
+        assert_eq!(client.max_retries, 0); // Default should be 0 for backward compatibility
     }
 }

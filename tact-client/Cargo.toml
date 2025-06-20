@@ -11,6 +11,7 @@ description = "TACT protocol client for Cascette"
 
 [dependencies]
 ngdp-bpsv = { path = "../ngdp-bpsv" }
+rand.workspace = true
 reqwest = { version = "0.12", features = ["json", "stream"] }
 thiserror.workspace = true
 tokio = { workspace = true, features = ["full"] }
