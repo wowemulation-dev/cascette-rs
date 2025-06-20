@@ -89,6 +89,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added comprehensive error documentation with `# Errors` sections
   - Fixed unnecessary `Result` wrapping in internal functions
   - Improved code organization and reduced redundancy
+- Added test-case to examine a certificate checksum bug on Blizzards side
 
 #### `ngdp-client` crate
 
