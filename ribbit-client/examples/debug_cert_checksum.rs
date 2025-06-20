@@ -25,7 +25,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let data_str = String::from_utf8_lossy(&raw_data);
 
             // Look for the checksum in epilogue
-            let mut message_without_checksum = &raw_data[..];
             if let Some(checksum_start) = data_str.find("Checksum: ") {
                 let checksum_line = &data_str[checksum_start..];
                 if let Some(end) = checksum_line.find('\n') {
@@ -34,7 +33,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                     // Get the byte position of the checksum line start
                     let checksum_byte_pos = checksum_start;
-                    message_without_checksum = &raw_data[..checksum_byte_pos];
+                    let message_without_checksum = &raw_data[..checksum_byte_pos];
 
                     // Compute checksum of message without the checksum line
                     let mut hasher = Sha256::new();
