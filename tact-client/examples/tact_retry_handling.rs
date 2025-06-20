@@ -33,7 +33,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("Testing with wow product (should succeed)...");
     match client.get_versions_parsed("wow").await {
         Ok(versions) => {
-            info!("✓ Successfully retrieved {} version entries", versions.len());
+            info!(
+                "✓ Successfully retrieved {} version entries",
+                versions.len()
+            );
             if let Some(first) = versions.first() {
                 debug!("First entry: Region={:?}", first.region);
             }
@@ -64,7 +67,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Ok(cdns) => {
             info!("✓ Successfully retrieved {} CDN entries", cdns.len());
             if let Some(first) = cdns.first() {
-                debug!("First CDN: Name={}, Hosts={}", first.name, first.hosts.len());
+                debug!(
+                    "First CDN: Name={}, Hosts={}",
+                    first.name,
+                    first.hosts.len()
+                );
             }
         }
         Err(e) => {

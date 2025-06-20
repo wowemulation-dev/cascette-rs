@@ -25,12 +25,11 @@ async fn test_endpoint(client: &HttpClient, path: &str) -> EndpointResult {
 
             let first_bytes = match response.text().await {
                 Ok(text) => {
-                    let preview = if text.len() > 500 {
+                    if text.len() > 500 {
                         format!("{}...", &text[..500])
                     } else {
                         text
-                    };
-                    preview
+                    }
                 }
                 Err(e) => format!("Error reading body: {}", e),
             };

@@ -178,21 +178,22 @@ impl HttpClient {
             match self.client.get(url).send().await {
                 Ok(response) => {
                     trace!("Response status: {}", response.status());
-                    
+
                     // Check if we should retry based on status code
                     let status = response.status();
-                    if status.is_server_error() || status == reqwest::StatusCode::TOO_MANY_REQUESTS {
-                        if attempt < self.max_retries {
-                            warn!(
-                                "Request returned {} (attempt {}): will retry",
-                                status, 
-                                attempt + 1
-                            );
-                            last_error = Some(Error::InvalidResponse);
-                            continue;
-                        }
+                    if (status.is_server_error()
+                        || status == reqwest::StatusCode::TOO_MANY_REQUESTS)
+                        && attempt < self.max_retries
+                    {
+                        warn!(
+                            "Request returned {} (attempt {}): will retry",
+                            status,
+                            attempt + 1
+                        );
+                        last_error = Some(Error::InvalidResponse);
+                        continue;
                     }
-                    
+
                     return Ok(response);
                 }
                 Err(e) => {

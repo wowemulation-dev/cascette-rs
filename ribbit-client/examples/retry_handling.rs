@@ -1,7 +1,6 @@
 //! Example demonstrating retry handling with exponential backoff
 
 use ribbit_client::{Endpoint, Region, RibbitClient};
-use tracing_subscriber;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

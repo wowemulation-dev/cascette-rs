@@ -79,15 +79,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Compare protocols
     println!("\n4. Protocol comparison:");
     println!("   V1 Response:");
-    println!("     - Has raw data: {}", response.raw.is_empty() == false);
+    println!("     - Has raw data: {}", !response.raw.is_empty());
     println!("     - Has parsed data: {}", response.data.is_some());
     println!("     - Has MIME parts: {}", response.mime_parts.is_some());
 
     println!("   V2 Response:");
-    println!(
-        "     - Has raw data: {}",
-        v2_response.raw.is_empty() == false
-    );
+    println!("     - Has raw data: {}", !v2_response.raw.is_empty());
     println!("     - Has parsed data: {}", v2_response.data.is_some());
     println!(
         "     - Has MIME parts: {}",

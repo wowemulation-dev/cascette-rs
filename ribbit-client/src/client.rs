@@ -1039,17 +1039,17 @@ mod tests {
         assert_eq!(client.max_retries, 3);
         assert_eq!(client.initial_backoff_ms, 200);
         assert_eq!(client.max_backoff_ms, 5000);
-        assert_eq!(client.backoff_multiplier, 1.5);
-        assert_eq!(client.jitter_factor, 0.2);
+        assert!((client.backoff_multiplier - 1.5).abs() < f64::EPSILON);
+        assert!((client.jitter_factor - 0.2).abs() < f64::EPSILON);
     }
 
     #[test]
     fn test_jitter_factor_clamping() {
         let client1 = RibbitClient::new(Region::US).with_jitter_factor(1.5);
-        assert_eq!(client1.jitter_factor, 1.0); // Should be clamped to 1.0
+        assert!((client1.jitter_factor - 1.0).abs() < f64::EPSILON); // Should be clamped to 1.0
 
         let client2 = RibbitClient::new(Region::US).with_jitter_factor(-0.5);
-        assert_eq!(client2.jitter_factor, 0.0); // Should be clamped to 0.0
+        assert!((client2.jitter_factor - 0.0).abs() < f64::EPSILON); // Should be clamped to 0.0
     }
 
     #[test]

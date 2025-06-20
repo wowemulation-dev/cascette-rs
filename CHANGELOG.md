@@ -12,11 +12,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed example filename collisions across crates:
   - Renamed `basic_usage.rs` examples to unique names per crate
   - `ribbit-client`: `basic_usage.rs` → `ribbit_basic_usage.rs`
-  - `tact-client`: `basic_usage.rs` → `tact_basic_usage.rs`
+  - `tact-client`: `basic_usage.rs` → `tact_basic_usage.rs` and `retry_handling.rs` → `tact_retry_handling.rs`
   - `ngdp-cache`: `basic_usage.rs` → `cache_basic_usage.rs`
 - Fixed missing export of parse functions in `tact-client`:
   - Exported `parse_cdns` and `parse_versions` from the crate root
   - Updated example to use the correct import path
+- Fixed code quality issues:
+  - Resolved collapsible if statement in tact-client retry logic
+  - Fixed float comparison in ribbit-client tests using epsilon comparison
+  - Removed redundant imports in examples
+  - Fixed bool comparison style in ngdp-cache examples
 
 ### Added
 
