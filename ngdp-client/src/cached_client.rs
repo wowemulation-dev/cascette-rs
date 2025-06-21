@@ -1,9 +1,10 @@
-//! Cached Ribbit client support for the CLI
+//! Cached client support with automatic Ribbit to TACT fallback
 //!
-//! This module provides a cached Ribbit client that can be used throughout
-//! the CLI to reduce redundant API calls.
+//! This module provides a client that uses Ribbit as the primary protocol
+//! and automatically falls back to TACT if Ribbit fails. Both protocols
+//! return identical BPSV data, ensuring seamless operation.
 
-use ngdp_cache::cached_ribbit_client::CachedRibbitClient;
+use crate::fallback_client::FallbackClient;
 use ribbit_client::Region;
 use std::sync::OnceLock;
 
@@ -20,31 +21,15 @@ pub fn is_caching_enabled() -> bool {
     *CACHING_ENABLED.get_or_init(|| true)
 }
 
-/// Create a Ribbit client with optional caching
+/// Create a client with automatic Ribbit->TACT fallback and optional caching
 ///
-/// If caching is enabled (default), returns a CachedRibbitClient that
-/// transparently caches all requests. Otherwise returns a regular RibbitClient.
-pub async fn create_client(
-    region: Region,
-) -> Result<CachedRibbitClient, Box<dyn std::error::Error>> {
-    let mut client = CachedRibbitClient::new(region).await?;
+/// If caching is enabled (default), both the Ribbit and TACT clients will
+/// transparently cache all requests. The client will try Ribbit first (as
+/// it's the primary protocol) and fall back to TACT on failure.
+pub async fn create_client(region: Region) -> Result<FallbackClient, Box<dyn std::error::Error>> {
+    let mut client = FallbackClient::new(region).await?;
 
     // If caching is disabled globally, disable it on the client
-    if !is_caching_enabled() {
-        client.set_caching_enabled(false);
-    }
-
-    Ok(client)
-}
-
-/// Create a client with a specific cache directory (for testing)
-#[cfg(test)]
-pub async fn create_client_with_cache_dir(
-    region: Region,
-    cache_dir: std::path::PathBuf,
-) -> Result<CachedRibbitClient, Box<dyn std::error::Error>> {
-    let mut client = CachedRibbitClient::with_cache_dir(region, cache_dir).await?;
-
     if !is_caching_enabled() {
         client.set_caching_enabled(false);
     }

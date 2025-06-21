@@ -4,6 +4,7 @@
 
 pub mod cached_client;
 pub mod commands;
+pub mod fallback_client;
 pub mod output;
 
 // Re-export command handlers
@@ -58,9 +59,9 @@ pub enum ProductsCommands {
         /// Product name
         product: String,
 
-        /// Region to query
-        #[arg(short, long, default_value = "us")]
-        region: String,
+        /// Region to query (omit to show all regions)
+        #[arg(short, long)]
+        region: Option<String>,
     },
 }
 

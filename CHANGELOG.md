@@ -25,6 +25,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Now parses BPSV responses directly without field manipulation
   - Simplifies code and improves reliability
 
+### Added
+
+#### `ngdp-client` crate
+
+- **Added automatic Ribbit to TACT fallback**:
+  - New `FallbackClient` that tries Ribbit first (primary protocol)
+  - Automatically falls back to TACT HTTP if Ribbit fails
+  - Both protocols return identical BPSV data
+  - Transparent caching for both protocols
+  - SG region automatically maps to US for TACT (not supported)
+  - All product commands now benefit from improved reliability
+
+- **Improved `products info` command behavior**:
+  - Now respects the `--region` parameter properly
+  - When `--region` is specified, shows only that region's information
+  - When no region is specified, shows all regions in a table
+  - CDN hosts are filtered to match the specified region
+  - More intuitive and consistent with user expectations
+
+- **Fixed `products cdns` command to filter by region**:
+  - Now shows CDN configuration only for the specified region
+  - Header indicates which region is being displayed
+  - Shows both CDN hosts and servers for the region
+  - Displays warning if no CDN configuration exists for the region
+  - Consistent behavior across all output formats
+
+- **Fixed `products info` command to display CDN servers**:
+  - Now displays both CDN hosts and CDN servers sections
+  - Collects unique servers from all filtered CDN entries
+  - Shows server count in section headers
+  - JSON output includes servers in CDN data
+  - Consistent display format with CDN hosts
+
 ### Changed
 
 #### `tact-client` crate

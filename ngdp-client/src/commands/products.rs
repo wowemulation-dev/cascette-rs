@@ -8,7 +8,7 @@ use crate::{
     },
 };
 use ribbit_client::{
-    Endpoint, ProductCdnsResponse, ProductVersionsResponse, Region, SummaryResponse,
+    CdnEntry, Endpoint, ProductCdnsResponse, ProductVersionsResponse, Region, SummaryResponse,
 };
 use std::str::FromStr;
 
@@ -320,17 +320,20 @@ async fn show_cdns(
     region: String,
     format: OutputFormat,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let region = Region::from_str(&region)?;
-    let client = create_client(region).await?;
+    let region_enum = Region::from_str(&region)?;
+    let client = create_client(region_enum).await?;
 
     let endpoint = Endpoint::ProductCdns(product.clone());
     let response = client.request(&endpoint).await?;
     let cdns: ProductCdnsResponse = client.request_typed(&endpoint).await?;
 
+    // Filter CDN entries for the specified region
+    let filtered_entries: Vec<&CdnEntry> =
+        cdns.entries.iter().filter(|e| e.name == region).collect();
+
     match format {
         OutputFormat::Json | OutputFormat::JsonPretty => {
-            let json_data = cdns
-                .entries
+            let json_data = filtered_entries
                 .iter()
                 .map(|e| {
                     serde_json::json!({
@@ -338,6 +341,7 @@ async fn show_cdns(
                         "path": e.path,
                         "config_path": e.config_path,
                         "hosts": e.hosts,
+                        "servers": e.servers,
                     })
                 })
                 .collect::<Vec<_>>();
@@ -357,7 +361,10 @@ async fn show_cdns(
         OutputFormat::Text => {
             let style = OutputStyle::new();
 
-            print_section_header(&format!("CDN Configuration for {}", product), &style);
+            print_section_header(
+                &format!("CDN Configuration for {} ({})", product, region),
+                &style,
+            );
             if let Some(seqn) = cdns.sequence_number {
                 println!(
                     "{}",
@@ -367,52 +374,59 @@ async fn show_cdns(
 
             println!();
 
-            // Create a table for each region
-            for entry in &cdns.entries {
-                print_subsection_header(&format!("Region: {}", &entry.name), &style);
-
-                let mut table = create_table(&style);
-                table.set_header(vec![
-                    header_cell("Property", &style),
-                    header_cell("Value", &style),
-                ]);
-
-                table.add_row(vec![regular_cell("Path"), regular_cell(&entry.path)]);
-
-                table.add_row(vec![
-                    regular_cell("Config Path"),
-                    regular_cell(&entry.config_path),
-                ]);
-
-                // Add hosts to the table (before servers)
-                if !entry.hosts.is_empty() {
-                    // First host
-                    table.add_row(vec![
-                        regular_cell("CDN Hosts"),
-                        regular_cell(&entry.hosts[0]),
+            if filtered_entries.is_empty() {
+                println!(
+                    "{}",
+                    format_warning(
+                        &format!("No CDN configuration found for region '{}'", region),
+                        &style
+                    )
+                );
+            } else {
+                // Show the CDN config for the specified region
+                for entry in &filtered_entries {
+                    let mut table = create_table(&style);
+                    table.set_header(vec![
+                        header_cell("Property", &style),
+                        header_cell("Value", &style),
                     ]);
 
-                    // Additional hosts on separate lines
-                    for host in &entry.hosts[1..] {
-                        table.add_row(vec![regular_cell(""), regular_cell(host)]);
-                    }
-                }
+                    table.add_row(vec![regular_cell("Path"), regular_cell(&entry.path)]);
 
-                if !entry.servers.is_empty() {
-                    // First server
                     table.add_row(vec![
-                        regular_cell("Servers"),
-                        regular_cell(&entry.servers[0]),
+                        regular_cell("Config Path"),
+                        regular_cell(&entry.config_path),
                     ]);
 
-                    // Additional servers on separate lines
-                    for server in &entry.servers[1..] {
-                        table.add_row(vec![regular_cell(""), regular_cell(server)]);
-                    }
-                }
+                    // Add hosts to the table (before servers)
+                    if !entry.hosts.is_empty() {
+                        // First host
+                        table.add_row(vec![
+                            regular_cell("CDN Hosts"),
+                            regular_cell(&entry.hosts[0]),
+                        ]);
 
-                println!("{}", table);
-                println!();
+                        // Additional hosts on separate lines
+                        for host in &entry.hosts[1..] {
+                            table.add_row(vec![regular_cell(""), regular_cell(host)]);
+                        }
+                    }
+
+                    if !entry.servers.is_empty() {
+                        // First server
+                        table.add_row(vec![
+                            regular_cell("Servers"),
+                            regular_cell(&entry.servers[0]),
+                        ]);
+
+                        // Additional servers on separate lines
+                        for server in &entry.servers[1..] {
+                            table.add_row(vec![regular_cell(""), regular_cell(server)]);
+                        }
+                    }
+
+                    println!("{}", table);
+                }
             }
         }
     }
@@ -422,11 +436,13 @@ async fn show_cdns(
 
 async fn show_info(
     product: String,
-    region: String,
+    region: Option<String>,
     format: OutputFormat,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let region = Region::from_str(&region)?;
-    let client = create_client(region).await?;
+    // Use US as default for fetching data, but we'll show all regions if none specified
+    let fetch_region = region.as_deref().unwrap_or("us");
+    let fetch_region_enum = Region::from_str(fetch_region)?;
+    let client = create_client(fetch_region_enum).await?;
 
     // Get both versions and CDNs
     let versions_endpoint = Endpoint::ProductVersions(product.clone());
@@ -458,9 +474,11 @@ async fn show_info(
 
     match format {
         OutputFormat::Json | OutputFormat::JsonPretty => {
-            let versions_data = versions
+            // Filter data based on region parameter
+            let versions_data: Vec<_> = versions
                 .entries
                 .iter()
+                .filter(|e| region.is_none() || region.as_deref() == Some(&e.region))
                 .map(|e| {
                     serde_json::json!({
                         "region": e.region,
@@ -468,18 +486,22 @@ async fn show_info(
                         "build_id": e.build_id,
                     })
                 })
-                .collect::<Vec<_>>();
+                .collect();
 
-            let cdns_data = cdns
+            let cdns_data: Vec<_> = cdns
                 .entries
                 .iter()
+                .filter(|e| region.is_none() || region.as_deref() == Some(&e.name))
                 .map(|e| {
                     serde_json::json!({
                         "name": e.name,
                         "hosts": e.hosts,
+                        "servers": e.servers,
+                        "path": e.path,
+                        "config_path": e.config_path,
                     })
                 })
-                .collect::<Vec<_>>();
+                .collect();
 
             let info = serde_json::json!({
                 "product": product,
@@ -512,7 +534,12 @@ async fn show_info(
         OutputFormat::Text => {
             let style = OutputStyle::new();
 
-            print_section_header(&format!("Product Information: {}", product), &style);
+            let header = if let Some(ref r) = region {
+                format!("Product Information: {} ({})", product, r)
+            } else {
+                format!("Product Information: {}", product)
+            };
+            print_section_header(&header, &style);
 
             if let Some(summary_entry) = summary.get_product(&product) {
                 print_subsection_header("Summary", &style);
@@ -525,79 +552,151 @@ async fn show_info(
                 }
             }
 
-            if let Some(version) = versions.get_region(region.as_str()) {
-                print_subsection_header(&format!("Current Version ({})", region.as_str()), &style);
-                println!(
-                    "{}",
-                    format_key_value("Version", &version.versions_name, &style)
-                );
-                println!(
-                    "{}",
-                    format_key_value("Build ID", &version.build_id.to_string(), &style)
-                );
-                println!(
-                    "{}",
-                    format_key_value(
-                        "Build Config",
-                        &format_hash(&version.build_config, &style),
-                        &style
-                    )
-                );
-                println!(
-                    "{}",
-                    format_key_value(
-                        "CDN Config",
-                        &format_hash(&version.cdn_config, &style),
-                        &style
-                    )
-                );
-                println!(
-                    "{}",
-                    format_key_value(
-                        "Product Config",
-                        &format_hash(&version.product_config, &style),
-                        &style
-                    )
-                );
-            }
+            // Filter versions based on region parameter
+            let filtered_versions: Vec<_> = versions
+                .entries
+                .iter()
+                .filter(|e| region.is_none() || region.as_deref() == Some(&e.region))
+                .collect();
 
-            // Available regions
-            let mut regions: Vec<_> = versions.entries.iter().map(|e| &e.region).collect();
-            regions.sort();
-            regions.dedup();
+            if region.is_some() {
+                // Show detailed info for specific region
+                if let Some(version) = filtered_versions.first() {
+                    print_subsection_header(&format!("Version ({})", version.region), &style);
+                    println!(
+                        "{}",
+                        format_key_value("Version", &version.versions_name, &style)
+                    );
+                    println!(
+                        "{}",
+                        format_key_value("Build ID", &version.build_id.to_string(), &style)
+                    );
+                    println!(
+                        "{}",
+                        format_key_value(
+                            "Build Config",
+                            &format_hash(&version.build_config, &style),
+                            &style
+                        )
+                    );
+                    println!(
+                        "{}",
+                        format_key_value(
+                            "CDN Config",
+                            &format_hash(&version.cdn_config, &style),
+                            &style
+                        )
+                    );
+                    println!(
+                        "{}",
+                        format_key_value(
+                            "Product Config",
+                            &format_hash(&version.product_config, &style),
+                            &style
+                        )
+                    );
+                    if let Some(key_ring) = &version.key_ring {
+                        println!(
+                            "{}",
+                            format_key_value("Key Ring", &format_hash(key_ring, &style), &style)
+                        );
+                    }
+                }
+            } else {
+                // Show all regions in a table
+                print_subsection_header("Available Regions", &style);
+                let mut table = create_list_table(&style);
+                table.set_header(vec![
+                    header_cell("Region", &style),
+                    header_cell("Version", &style),
+                    header_cell("Build ID", &style),
+                ]);
 
-            print_subsection_header("Available Regions", &style);
-            let mut table = create_list_table(&style);
-            table.set_header(vec![
-                header_cell("Region", &style),
-                header_cell("Version", &style),
-            ]);
-
-            for region_name in &regions {
-                if let Some(entry) = versions.entries.iter().find(|e| &e.region == *region_name) {
+                for version in &filtered_versions {
                     table.add_row(vec![
-                        regular_cell(&entry.region),
-                        regular_cell(&entry.versions_name),
+                        regular_cell(&version.region),
+                        regular_cell(&version.versions_name),
+                        numeric_cell(&version.build_id.to_string()),
                     ]);
                 }
+                println!("{}", table);
             }
-            println!("{}", table);
 
-            // CDN hosts
-            let hosts = cdns.all_hosts();
-            print_subsection_header(
-                &format!(
-                    "CDN Hosts {}",
-                    format_count_badge(hosts.len(), "host", &style)
-                ),
-                &style,
-            );
-            for host in hosts {
-                println!(
-                    "  {} {}",
-                    format_success("•", &style),
-                    format_url(&host, &style)
-                );
+            // CDN hosts - filter based on region
+            let filtered_cdns: Vec<_> = cdns
+                .entries
+                .iter()
+                .filter(|e| region.is_none() || region.as_deref() == Some(&e.name))
+                .collect();
+
+            if !filtered_cdns.is_empty() {
+                // Collect unique hosts
+                let hosts: Vec<String> = filtered_cdns
+                    .iter()
+                    .flat_map(|e| e.hosts.iter())
+                    .cloned()
+                    .collect::<std::collections::HashSet<_>>()
+                    .into_iter()
+                    .collect();
+
+                // Display CDN hosts
+                if !hosts.is_empty() {
+                    let cdn_header = if region.is_some() {
+                        format!(
+                            "CDN Hosts for {} {}",
+                            region.as_deref().unwrap(),
+                            format_count_badge(hosts.len(), "host", &style)
+                        )
+                    } else {
+                        format!(
+                            "CDN Hosts {}",
+                            format_count_badge(hosts.len(), "host", &style)
+                        )
+                    };
+                    print_subsection_header(&cdn_header, &style);
+
+                    for host in hosts {
+                        println!(
+                            "  {} {}",
+                            format_success("•", &style),
+                            format_url(&host, &style)
+                        );
+                    }
+                }
+
+                // Collect unique servers
+                let servers: Vec<String> = filtered_cdns
+                    .iter()
+                    .flat_map(|e| e.servers.iter())
+                    .cloned()
+                    .collect::<std::collections::HashSet<_>>()
+                    .into_iter()
+                    .collect();
+
+                // Display CDN servers
+                if !servers.is_empty() {
+                    let servers_header = if region.is_some() {
+                        format!(
+                            "CDN Servers for {} {}",
+                            region.as_deref().unwrap(),
+                            format_count_badge(servers.len(), "server", &style)
+                        )
+                    } else {
+                        format!(
+                            "CDN Servers {}",
+                            format_count_badge(servers.len(), "server", &style)
+                        )
+                    };
+                    print_subsection_header(&servers_header, &style);
+
+                    for server in servers {
+                        println!(
+                            "  {} {}",
+                            format_success("•", &style),
+                            format_url(&server, &style)
+                        );
+                    }
+                }
             }
         }
     }

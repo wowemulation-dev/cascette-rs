@@ -11,6 +11,7 @@ Command-line interface for interacting with Blizzard's NGDP (Next Generation Dis
 - 🔐 Download certificates by SKI/hash
 - ⚙️ Configuration management
 - 💾 Built-in caching for API responses
+- 🔄 Automatic fallback from Ribbit to TACT on failures
 
 ## Installation
 
@@ -38,11 +39,14 @@ ngdp products versions wow
 # Show all regions for a product
 ngdp products versions wow --all-regions
 
-# Get product information
+# Get product information (specific region)
+ngdp products info wow --region eu
+
+# Get product information (all regions)
 ngdp products info wow
 
-# Show CDN configuration
-ngdp products cdns wow
+# Show CDN configuration for a specific region
+ngdp products cdns wow --region us
 ```
 
 ### Output Formats
@@ -111,9 +115,9 @@ ngdp config set default_region eu
 ngdp config reset --yes
 ```
 
-### Caching
+### Caching and Fallback
 
-The CLI includes built-in caching for Ribbit API responses:
+The CLI includes built-in caching for both Ribbit and TACT API responses with automatic fallback:
 
 ```bash
 # Disable caching for a single command
@@ -122,6 +126,13 @@ ngdp products list --no-cache
 # Clear all cached data before running command
 ngdp products list --clear-cache
 ```
+
+**Fallback Behavior:**
+- Primary: Ribbit protocol (TCP-based, official)
+- Fallback: TACT HTTP protocol (when Ribbit fails)
+- Both protocols return identical BPSV data
+- Caching works transparently for both protocols
+- SG region automatically falls back to US for TACT
 
 ## Library Usage
 
