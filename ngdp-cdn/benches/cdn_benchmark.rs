@@ -17,7 +17,7 @@ fn benchmark_url_building(c: &mut Criterion) {
 }
 
 fn benchmark_client_creation(c: &mut Criterion) {
-    c.bench_function("client_new", |b| b.iter(|| CdnClient::new()));
+    c.bench_function("client_new", |b| b.iter(CdnClient::new));
 
     c.bench_function("client_builder", |b| {
         b.iter(|| {

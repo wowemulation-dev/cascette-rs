@@ -8,6 +8,8 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 description = "Ribbit protocol client for Cascette"
+keywords = ["ngdp", "ribbit", "blizzard", "wow", "tcp"]
+categories = ["network-programming", "game-development", "parser-implementations"]
 
 [dependencies]
 asn1 = "0.21"

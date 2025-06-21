@@ -149,7 +149,7 @@ cn|deadbeefcafebabedeadbeefcafebabe|61494|"#;
 
     // Valid values
     println!("   Testing valid values:");
-    match builder.add_raw_row(vec![
+    match builder.add_raw_row(&[
         "hello".to_string(),
         "deadbeef".to_string(),
         "1234".to_string(),
@@ -163,12 +163,12 @@ cn|deadbeefcafebabedeadbeefcafebabe|61494|"#;
     let mut builder2 = BpsvBuilder::new();
     builder2.add_field("ShortString", BpsvFieldType::String(3))?;
 
-    match builder2.add_raw_row(vec!["ok".to_string()]) {
+    match builder2.add_raw_row(&["ok".to_string()]) {
         Ok(_) => println!("     ✅ Short string accepted"),
         Err(e) => println!("     ❌ Error: {}", e),
     }
 
-    match builder2.add_raw_row(vec!["toolong".to_string()]) {
+    match builder2.add_raw_row(&["toolong".to_string()]) {
         Ok(_) => println!("     ❌ Long string should have been rejected!"),
         Err(e) => println!("     ✅ Long string correctly rejected: {}", e),
     }
@@ -178,12 +178,12 @@ cn|deadbeefcafebabedeadbeefcafebabe|61494|"#;
     let mut builder3 = BpsvBuilder::new();
     builder3.add_field("HexField", BpsvFieldType::Hex(4))?;
 
-    match builder3.add_raw_row(vec!["abcd".to_string()]) {
+    match builder3.add_raw_row(&["abcd".to_string()]) {
         Ok(_) => println!("     ✅ Valid hex accepted"),
         Err(e) => println!("     ❌ Error: {}", e),
     }
 
-    match builder3.add_raw_row(vec!["xyz".to_string()]) {
+    match builder3.add_raw_row(&["xyz".to_string()]) {
         Ok(_) => println!("     ❌ Invalid hex should have been rejected!"),
         Err(e) => println!("     ✅ Invalid hex correctly rejected: {}", e),
     }

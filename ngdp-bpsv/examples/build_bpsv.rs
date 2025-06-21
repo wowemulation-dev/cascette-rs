@@ -48,17 +48,17 @@ fn main() -> Result<(), Error> {
         .add_field("Flags", BpsvFieldType::String(0))?;
 
     // Add data using raw string values (will be parsed)
-    builder2.add_raw_row(vec![
+    builder2.add_raw_row(&[
         "wow".to_string(),
         "3016450".to_string(),
         "cdn".to_string(),
     ])?;
-    builder2.add_raw_row(vec![
+    builder2.add_raw_row(&[
         "agent".to_string(),
         "3011139".to_string(),
         "".to_string(),
     ])?;
-    builder2.add_raw_row(vec![
+    builder2.add_raw_row(&[
         "d3".to_string(),
         "2985234".to_string(),
         "cdn".to_string(),
@@ -108,8 +108,8 @@ eu|5678"#;
     let mut builder4 = BpsvBuilder::from_bpsv(existing_bpsv)?;
 
     // Add more rows to the existing data
-    builder4.add_raw_row(vec!["kr".to_string(), "9999".to_string()])?;
-    builder4.add_raw_row(vec!["cn".to_string(), "8888".to_string()])?;
+    builder4.add_raw_row(&["kr".to_string(), "9999".to_string()])?;
+    builder4.add_raw_row(&["cn".to_string(), "8888".to_string()])?;
     builder4.set_sequence_number(42);
 
     let document4 = builder4.build()?;
@@ -132,14 +132,14 @@ eu|5678"#;
         .add_field("ConfigPath", BpsvFieldType::String(0))?
         .set_sequence_number(2241282);
 
-    cdn_builder.add_raw_row(vec![
+    cdn_builder.add_raw_row(&[
         "us".to_string(),
         "tpr/wow".to_string(),
         "us.cdn.blizzard.com level3.blizzard.com".to_string(),
         "tpr/configs/data".to_string(),
     ])?;
 
-    cdn_builder.add_raw_row(vec![
+    cdn_builder.add_raw_row(&[
         "eu".to_string(),
         "tpr/wow".to_string(),
         "eu.cdn.blizzard.com level3.blizzard.com".to_string(),
@@ -162,13 +162,13 @@ eu|5678"#;
     error_builder.add_field("TestField", BpsvFieldType::Hex(4))?;
 
     // This should succeed
-    match error_builder.add_raw_row(vec!["abcd".to_string()]) {
+    match error_builder.add_raw_row(&["abcd".to_string()]) {
         Ok(_) => println!("   ✅ Valid hex value accepted"),
         Err(e) => println!("   ❌ Unexpected error: {}", e),
     }
 
     // This should fail - invalid hex
-    match error_builder.add_raw_row(vec!["xyz".to_string()]) {
+    match error_builder.add_raw_row(&["xyz".to_string()]) {
         Ok(_) => println!("   ❌ Invalid hex should have been rejected!"),
         Err(e) => println!("   ✅ Invalid hex correctly rejected: {}", e),
     }

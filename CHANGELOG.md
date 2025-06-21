@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `ribbit-client`: `basic_usage.rs` → `ribbit_basic_usage.rs`
   - `tact-client`: `basic_usage.rs` → `tact_basic_usage.rs` and `retry_handling.rs` → `tact_retry_handling.rs`
   - `ngdp-cache`: `basic_usage.rs` → `cache_basic_usage.rs`
+  - `ngdp-cdn`: `basic_usage.rs` → `basic_usage.rs` (kept as is, new crate)
 - Fixed missing export of parse functions in `tact-client`:
   - Exported `parse_cdns` and `parse_versions` from the crate root
   - Updated example to use the correct import path
@@ -22,6 +23,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Fixed float comparison in ribbit-client tests using epsilon comparison
   - Removed redundant imports in examples
   - Fixed bool comparison style in ngdp-cache examples
+- Fixed clippy warnings across all crates:
+  - Fixed raw string literal hashes in ngdp-bpsv tests
+  - Fixed string interpolation in format strings
+  - Used `Self` instead of repeating type names
+  - Fixed integer cast warnings using proper `from()` conversions
+  - Added missing `#[must_use]` attributes
+  - Added missing `# Errors` documentation sections
+  - Fixed needless pass-by-value in `add_raw_row` method
+  - Fixed redundant closures in benchmarks and examples
+  - Added missing package metadata (keywords and categories) to all crates
 
 ### Added
 
@@ -48,6 +59,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
       - `request()` - Returns cached Response objects with raw data
       - `request_raw()` - Returns cached raw bytes
       - `request_typed<T>()` - Returns typed responses with caching
+
+#### `ngdp-cdn` crate
+
+- **New crate for CDN content delivery operations**
+- **Features**:
+  - Async HTTP client with connection pooling (using `reqwest`)
+  - Automatic retry with exponential backoff and jitter
+  - Support for gzip/deflate compression
+  - Configurable timeouts and retry policies
+  - Rate limiting detection and handling
+  - Content verification error types
+  - CDN URL building following Blizzard's path structure
+- **Builder pattern configuration**:
+  - Connection timeout
+  - Request timeout
+  - Pool size per host
+  - Retry parameters (max retries, backoff, jitter)
+- **Error handling**:
+  - Specific error types for CDN operations
+  - Content not found (404) with hash extraction
+  - Rate limiting with retry-after support
+  - Size mismatch detection
+  - Network timeout errors
       - All convenience methods: `get_summary()`, `get_product_versions()`, etc.
     - Supports both V1 (MIME) and V2 (raw) protocol versions
     - Perfect for CLI integration to reduce API calls

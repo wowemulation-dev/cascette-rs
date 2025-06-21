@@ -8,6 +8,8 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 description = "TACT protocol client for Cascette"
+keywords = ["ngdp", "tact", "blizzard", "wow", "http"]
+categories = ["network-programming", "game-development", "web-programming::http-client"]
 
 [dependencies]
 ngdp-bpsv = { path = "../ngdp-bpsv" }

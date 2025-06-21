@@ -8,6 +8,8 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 description = "NGDP client CLI for Cascette"
+keywords = ["ngdp", "cli", "blizzard", "wow", "casc"]
+categories = ["command-line-utilities", "game-development"]
 
 [lib]
 name = "ngdp_client"

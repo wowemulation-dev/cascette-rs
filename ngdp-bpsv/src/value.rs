@@ -41,7 +41,7 @@ impl BpsvValue {
     /// ```
     pub fn parse(value: &str, field_type: &BpsvFieldType) -> Result<Self> {
         if value.is_empty() {
-            return Ok(BpsvValue::Empty);
+            return Ok(Self::Empty);
         }
 
         match field_type {
@@ -53,29 +53,29 @@ impl BpsvValue {
                         value: value.to_string(),
                     });
                 }
-                Ok(BpsvValue::String(value.to_string()))
+                Ok(Self::String(value.to_string()))
             }
             BpsvFieldType::Hex(_) => {
                 // This should not happen due to early return, but be defensive
                 if value.is_empty() {
-                    return Ok(BpsvValue::Empty);
+                    return Ok(Self::Empty);
                 }
                 if !field_type.is_valid_value(value) {
                     return Err(Error::InvalidHex {
                         value: value.to_string(),
                     });
                 }
-                Ok(BpsvValue::Hex(value.to_lowercase()))
+                Ok(Self::Hex(value.to_lowercase()))
             }
             BpsvFieldType::Decimal(_) => {
                 // This should not happen due to early return, but be defensive
                 if value.is_empty() {
-                    return Ok(BpsvValue::Empty);
+                    return Ok(Self::Empty);
                 }
                 let num = value.parse::<i64>().map_err(|_| Error::InvalidNumber {
                     value: value.to_string(),
                 })?;
-                Ok(BpsvValue::Decimal(num))
+                Ok(Self::Decimal(num))
             }
         }
     }
@@ -83,22 +83,22 @@ impl BpsvValue {
     /// Convert the value to its string representation for BPSV output
     pub fn to_bpsv_string(&self) -> String {
         match self {
-            BpsvValue::String(s) => s.clone(),
-            BpsvValue::Hex(h) => h.clone(),
-            BpsvValue::Decimal(d) => d.to_string(),
-            BpsvValue::Empty => String::new(),
+            Self::String(s) => s.clone(),
+            Self::Hex(h) => h.clone(),
+            Self::Decimal(d) => d.to_string(),
+            Self::Empty => String::new(),
         }
     }
 
     /// Check if this value is empty
     pub fn is_empty(&self) -> bool {
-        matches!(self, BpsvValue::Empty)
+        matches!(self, Self::Empty)
     }
 
     /// Get the value as a string, if it is a string type
     pub fn as_string(&self) -> Option<&str> {
         match self {
-            BpsvValue::String(s) => Some(s),
+            Self::String(s) => Some(s),
             _ => None,
         }
     }
@@ -106,7 +106,7 @@ impl BpsvValue {
     /// Get the value as a hex string, if it is a hex type
     pub fn as_hex(&self) -> Option<&str> {
         match self {
-            BpsvValue::Hex(h) => Some(h),
+            Self::Hex(h) => Some(h),
             _ => None,
         }
     }
@@ -114,7 +114,7 @@ impl BpsvValue {
     /// Get the value as a decimal number, if it is a decimal type
     pub fn as_decimal(&self) -> Option<i64> {
         match self {
-            BpsvValue::Decimal(d) => Some(*d),
+            Self::Decimal(d) => Some(*d),
             _ => None,
         }
     }
@@ -122,7 +122,7 @@ impl BpsvValue {
     /// Convert to string value, consuming self
     pub fn into_string(self) -> Option<String> {
         match self {
-            BpsvValue::String(s) => Some(s),
+            Self::String(s) => Some(s),
             _ => None,
         }
     }
@@ -130,7 +130,7 @@ impl BpsvValue {
     /// Convert to hex value, consuming self
     pub fn into_hex(self) -> Option<String> {
         match self {
-            BpsvValue::Hex(h) => Some(h),
+            Self::Hex(h) => Some(h),
             _ => None,
         }
     }
@@ -138,7 +138,7 @@ impl BpsvValue {
     /// Convert to decimal value, consuming self
     pub fn into_decimal(self) -> Option<i64> {
         match self {
-            BpsvValue::Decimal(d) => Some(d),
+            Self::Decimal(d) => Some(d),
             _ => None,
         }
     }
@@ -146,20 +146,20 @@ impl BpsvValue {
     /// Get the type of this value
     pub fn value_type(&self) -> &'static str {
         match self {
-            BpsvValue::String(_) => "String",
-            BpsvValue::Hex(_) => "Hex",
-            BpsvValue::Decimal(_) => "Decimal",
-            BpsvValue::Empty => "Empty",
+            Self::String(_) => "String",
+            Self::Hex(_) => "Hex",
+            Self::Decimal(_) => "Decimal",
+            Self::Empty => "Empty",
         }
     }
 
     /// Check if this value is compatible with the given field type
     pub fn is_compatible_with(&self, field_type: &BpsvFieldType) -> bool {
         match (self, field_type) {
-            (BpsvValue::String(_), BpsvFieldType::String(_)) => true,
-            (BpsvValue::Hex(_), BpsvFieldType::Hex(_)) => true,
-            (BpsvValue::Decimal(_), BpsvFieldType::Decimal(_)) => true,
-            (BpsvValue::Empty, _) => true, // Empty is compatible with any type
+            (Self::String(_), BpsvFieldType::String(_)) => true,
+            (Self::Hex(_), BpsvFieldType::Hex(_)) => true,
+            (Self::Decimal(_), BpsvFieldType::Decimal(_)) => true,
+            (Self::Empty, _) => true, // Empty is compatible with any type
             _ => false,
         }
     }
@@ -174,9 +174,9 @@ impl fmt::Display for BpsvValue {
 impl From<String> for BpsvValue {
     fn from(s: String) -> Self {
         if s.is_empty() {
-            BpsvValue::Empty
+            Self::Empty
         } else {
-            BpsvValue::String(s)
+            Self::String(s)
         }
     }
 }
@@ -184,34 +184,35 @@ impl From<String> for BpsvValue {
 impl From<&str> for BpsvValue {
     fn from(s: &str) -> Self {
         if s.is_empty() {
-            BpsvValue::Empty
+            Self::Empty
         } else {
-            BpsvValue::String(s.to_string())
+            Self::String(s.to_string())
         }
     }
 }
 
 impl From<i64> for BpsvValue {
     fn from(i: i64) -> Self {
-        BpsvValue::Decimal(i)
+        Self::Decimal(i)
     }
 }
 
 impl From<i32> for BpsvValue {
     fn from(i: i32) -> Self {
-        BpsvValue::Decimal(i as i64)
+        Self::Decimal(i64::from(i))
     }
 }
 
 impl From<u32> for BpsvValue {
     fn from(i: u32) -> Self {
-        BpsvValue::Decimal(i as i64)
+        Self::Decimal(i64::from(i))
     }
 }
 
 impl From<u64> for BpsvValue {
     fn from(i: u64) -> Self {
-        BpsvValue::Decimal(i as i64)
+        #[allow(clippy::cast_possible_wrap)]
+        Self::Decimal(i as i64)
     }
 }
 

@@ -259,10 +259,10 @@ mod tests {
 
     #[test]
     fn test_parse_complete_document() {
-        let content = r#"Region!STRING:0|BuildConfig!HEX:16|BuildId!DEC:4
+        let content = r"Region!STRING:0|BuildConfig!HEX:16|BuildId!DEC:4
 ## seqn = 12345
 us|abcd1234abcd1234|1234
-eu|1234abcd1234abcd|5678"#;
+eu|1234abcd1234abcd|5678";
 
         let doc = BpsvParser::parse(content).unwrap();
 
@@ -278,9 +278,9 @@ eu|1234abcd1234abcd|5678"#;
 
     #[test]
     fn test_parse_without_sequence() {
-        let content = r#"Region!STRING:0|BuildId!DEC:4
+        let content = r"Region!STRING:0|BuildId!DEC:4
 us|1234
-eu|5678"#;
+eu|5678";
 
         let doc = BpsvParser::parse(content).unwrap();
 
@@ -290,9 +290,9 @@ eu|5678"#;
 
     #[test]
     fn test_parse_empty_fields() {
-        let content = r#"Region!STRING:0|BuildId!DEC:4|Optional!STRING:0
+        let content = r"Region!STRING:0|BuildId!DEC:4|Optional!STRING:0
 us|1234|
-eu||optional_value"#;
+eu||optional_value";
 
         let doc = BpsvParser::parse(content).unwrap();
 
@@ -317,7 +317,7 @@ eu||optional_value"#;
 
         for variation in &variations {
             let result = BpsvParser::parse_sequence_line(variation);
-            assert_eq!(result.unwrap(), Some(12345), "Failed for: {}", variation);
+            assert_eq!(result.unwrap(), Some(12345), "Failed for: {variation}");
         }
     }
 
@@ -332,15 +332,15 @@ eu||optional_value"#;
 
         for invalid_line in &invalid {
             let result = BpsvParser::parse_sequence_line(invalid_line);
-            assert!(result.is_err(), "Should have failed for: {}", invalid_line);
+            assert!(result.is_err(), "Should have failed for: {invalid_line}");
         }
     }
 
     #[test]
     fn test_parse_schema_only() {
-        let content = r#"Region!STRING:0|BuildConfig!HEX:16|BuildId!DEC:4
+        let content = r"Region!STRING:0|BuildConfig!HEX:16|BuildId!DEC:4
 ## seqn = 12345
-us|abcd1234abcd1234|1234"#;
+us|abcd1234abcd1234|1234";
 
         let schema = BpsvParser::parse_schema(content).unwrap();
 
@@ -352,11 +352,11 @@ us|abcd1234abcd1234|1234"#;
 
     #[test]
     fn test_parse_raw_rows() {
-        let content = r#"Region!STRING:0|BuildId!DEC:4
+        let content = r"Region!STRING:0|BuildId!DEC:4
 ## seqn = 12345
 us|1234
 eu|5678
-kr|9999"#;
+kr|9999";
 
         let rows = BpsvParser::parse_raw_rows(content).unwrap();
 
@@ -368,10 +368,10 @@ kr|9999"#;
 
     #[test]
     fn test_get_stats() {
-        let content = r#"Region!STRING:0|BuildConfig!HEX:16|BuildId!DEC:4
+        let content = r"Region!STRING:0|BuildConfig!HEX:16|BuildId!DEC:4
 ## seqn = 12345
 us|abcd1234abcd1234|1234
-eu|1234abcd1234abcd|5678"#;
+eu|1234abcd1234abcd|5678";
 
         let (field_count, row_count, has_seqn) = BpsvParser::get_stats(content).unwrap();
 
@@ -394,8 +394,8 @@ eu|1234abcd1234abcd|5678"#;
 
     #[test]
     fn test_schema_mismatch_in_parsing() {
-        let content = r#"Region!STRING:0|BuildId!DEC:4
-us|1234|extra_field"#; // Too many fields
+        let content = r"Region!STRING:0|BuildId!DEC:4
+us|1234|extra_field"; // Too many fields
 
         let result = BpsvParser::parse(content);
         assert!(matches!(result, Err(Error::RowValidation { .. })));
@@ -403,8 +403,8 @@ us|1234|extra_field"#; // Too many fields
 
     #[test]
     fn test_case_insensitive_types() {
-        let content = r#"Region!string:0|BuildId!dec:4
-us|1234"#;
+        let content = r"Region!string:0|BuildId!dec:4
+us|1234";
 
         let doc = BpsvParser::parse(content).unwrap();
         assert_eq!(doc.schema().field_count(), 2);

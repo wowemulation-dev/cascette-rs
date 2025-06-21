@@ -52,6 +52,7 @@ pub struct BpsvBuilder {
 
 impl BpsvBuilder {
     /// Create a new BPSV builder
+    #[must_use]
     pub fn new() -> Self {
         Self {
             schema: BpsvSchema::new(),
@@ -61,6 +62,7 @@ impl BpsvBuilder {
     }
 
     /// Create a builder from an existing schema
+    #[must_use]
     pub fn from_schema(schema: BpsvSchema) -> Self {
         Self {
             schema,
@@ -70,6 +72,10 @@ impl BpsvBuilder {
     }
 
     /// Add a field to the schema
+    ///
+    /// # Errors
+    /// 
+    /// Returns an error if the field name already exists in the schema.
     ///
     /// # Examples
     ///
@@ -101,6 +107,13 @@ impl BpsvBuilder {
     /// Add a row of typed values
     ///
     /// The number of values must match the number of fields in the schema.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The number of values doesn't match the schema field count
+    /// - Any value is incompatible with its corresponding field type
+    /// - Any value fails validation
     pub fn add_row(&mut self, values: Vec<BpsvValue>) -> Result<&mut Self> {
         if values.len() != self.schema.field_count() {
             return Err(Error::SchemaMismatch {
@@ -129,7 +142,7 @@ impl BpsvBuilder {
                         field: err_field, ..
                     } = &mut err
                     {
-                        *err_field = field.name.clone();
+                        err_field.clone_from(&field.name);
                     }
                     err
                 })?;
@@ -142,7 +155,13 @@ impl BpsvBuilder {
     /// Add a row from raw string values
     ///
     /// Values will be parsed according to the field types in the schema.
-    pub fn add_raw_row(&mut self, values: Vec<String>) -> Result<&mut Self> {
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The number of values doesn't match the schema field count
+    /// - Any value fails to parse according to its field type
+    pub fn add_raw_row(&mut self, values: &[String]) -> Result<&mut Self> {
         if values.len() != self.schema.field_count() {
             return Err(Error::SchemaMismatch {
                 expected: self.schema.field_count(),
@@ -160,7 +179,11 @@ impl BpsvBuilder {
         Ok(self)
     }
 
-    /// Add a row from a vector of values that can be converted to BpsvValue
+    /// Add a row from a vector of values that can be converted to `BpsvValue`
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the converted values fail validation.
     ///
     /// # Examples
     ///
@@ -182,31 +205,36 @@ impl BpsvBuilder {
     where
         T: Into<BpsvValue>,
     {
-        let typed_values: Vec<BpsvValue> = values.into_iter().map(|v| v.into()).collect();
+        let typed_values: Vec<BpsvValue> = values.into_iter().map(std::convert::Into::into).collect();
         self.add_row(typed_values)
     }
 
     /// Get the current number of fields
+    #[must_use]
     pub fn field_count(&self) -> usize {
         self.schema.field_count()
     }
 
     /// Get the current number of rows
+    #[must_use]
     pub fn row_count(&self) -> usize {
         self.rows.len()
     }
 
     /// Check if any fields have been defined
+    #[must_use]
     pub fn has_fields(&self) -> bool {
         self.schema.field_count() > 0
     }
 
     /// Check if any rows have been added
+    #[must_use]
     pub fn has_rows(&self) -> bool {
         !self.rows.is_empty()
     }
 
     /// Get the current schema
+    #[must_use]
     pub fn schema(&self) -> &BpsvSchema {
         &self.schema
     }
@@ -227,7 +255,11 @@ impl BpsvBuilder {
 
     /// Build the final BPSV document
     ///
-    /// This consumes the builder and returns a BpsvDocument.
+    /// This consumes the builder and returns a `BpsvDocument`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no fields have been defined in the schema.
     pub fn build(self) -> Result<BpsvDocument> {
         if self.schema.field_count() == 0 {
             return Err(Error::InvalidHeader {
@@ -248,6 +280,10 @@ impl BpsvBuilder {
     /// Build and return the BPSV string representation
     ///
     /// This is a convenience method that builds the document and converts it to a string.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if building the document fails.
     pub fn build_string(self) -> Result<String> {
         let document = self.build()?;
         Ok(document.to_bpsv_string())
@@ -255,7 +291,14 @@ impl BpsvBuilder {
 
     /// Validate the current builder state
     ///
-    /// Returns Ok(()) if the builder is in a valid state, Err otherwise.
+    /// Returns `Ok(())` if the builder is in a valid state, `Err` otherwise.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - No fields are defined
+    /// - Any row has incorrect number of fields
+    /// - Any value is incompatible with its field type
     pub fn validate(&self) -> Result<()> {
         if self.schema.field_count() == 0 {
             return Err(Error::InvalidHeader {
@@ -297,6 +340,10 @@ impl BpsvBuilder {
     /// Create a builder from existing BPSV content
     ///
     /// This parses the BPSV content and creates a builder with the same schema and data.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the BPSV content cannot be parsed.
     ///
     /// # Examples
     ///
@@ -387,10 +434,10 @@ mod tests {
             .unwrap();
 
         builder
-            .add_raw_row(vec!["us".to_string(), "1234".to_string()])
+            .add_raw_row(&["us".to_string(), "1234".to_string()])
             .unwrap();
         builder
-            .add_raw_row(vec!["eu".to_string(), "5678".to_string()])
+            .add_raw_row(&["eu".to_string(), "5678".to_string()])
             .unwrap();
 
         let document = builder.build().unwrap();
@@ -409,10 +456,10 @@ mod tests {
             .unwrap();
 
         builder
-            .add_raw_row(vec!["us".to_string(), "1234".to_string()])
+            .add_raw_row(&["us".to_string(), "1234".to_string()])
             .unwrap();
         builder
-            .add_raw_row(vec!["eu".to_string(), "5678".to_string()])
+            .add_raw_row(&["eu".to_string(), "5678".to_string()])
             .unwrap();
 
         let document = builder.build().unwrap();
@@ -432,7 +479,7 @@ mod tests {
         builder.set_sequence_number(12345);
 
         builder
-            .add_raw_row(vec!["us".to_string(), "1234".to_string()])
+            .add_raw_row(&["us".to_string(), "1234".to_string()])
             .unwrap();
 
         let bpsv_string = builder.build_string().unwrap();
@@ -445,10 +492,10 @@ mod tests {
 
     #[test]
     fn test_from_bpsv() {
-        let content = r#"Region!STRING:0|BuildId!DEC:4
+        let content = r"Region!STRING:0|BuildId!DEC:4
 ## seqn = 12345
 us|1234
-eu|5678"#;
+eu|5678";
 
         let builder = BpsvBuilder::from_bpsv(content).unwrap();
 
