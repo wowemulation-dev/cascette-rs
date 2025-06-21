@@ -1,11 +1,18 @@
 //! CDN content cache implementation
+//!
+//! This module caches all CDN content following the standard CDN path structure:
+//! - `config/{first2}/{next2}/{hash}` - Configuration files
+//! - `data/{first2}/{next2}/{hash}` - Data files and archives
+//! - `patch/{first2}/{next2}/{hash}` - Patch files
+//!
+//! Archives and indices are stored in the data directory with `.index` extension for indices.
 
 use std::path::PathBuf;
 use tracing::{debug, trace};
 
 use crate::{Result, ensure_dir, get_cache_dir};
 
-/// Cache for CDN content (archives, loose files, etc.)
+/// Cache for CDN content following the standard CDN directory structure
 pub struct CdnCache {
     /// Base directory for CDN cache
     base_dir: PathBuf,
@@ -35,111 +42,197 @@ impl CdnCache {
         Ok(Self { base_dir })
     }
 
-    /// Get the archives directory
-    pub fn archives_dir(&self) -> PathBuf {
-        self.base_dir.join("archives")
+    /// Get the config cache directory
+    pub fn config_dir(&self) -> PathBuf {
+        self.base_dir.join("config")
     }
 
-    /// Get the loose files directory
-    pub fn loose_dir(&self) -> PathBuf {
-        self.base_dir.join("loose")
+    /// Get the data cache directory
+    pub fn data_dir(&self) -> PathBuf {
+        self.base_dir.join("data")
     }
 
-    /// Construct an archive path from a hash
+    /// Get the patch cache directory
+    pub fn patch_dir(&self) -> PathBuf {
+        self.base_dir.join("patch")
+    }
+
+
+    /// Construct a config cache path from a hash
     ///
-    /// Archives are stored as: archives/{first2}/{next2}/{hash}
-    pub fn archive_path(&self, hash: &str) -> PathBuf {
+    /// Follows CDN structure: config/{first2}/{next2}/{hash}
+    pub fn config_path(&self, hash: &str) -> PathBuf {
         if hash.len() >= 4 {
-            self.archives_dir()
+            self.config_dir()
                 .join(&hash[..2])
                 .join(&hash[2..4])
                 .join(hash)
         } else {
-            self.archives_dir().join(hash)
+            self.config_dir().join(hash)
         }
     }
 
-    /// Construct a loose file path from a hash
+    /// Construct a data cache path from a hash
     ///
-    /// Loose files are stored as: loose/{first2}/{next2}/{hash}
-    pub fn loose_path(&self, hash: &str) -> PathBuf {
+    /// Follows CDN structure: data/{first2}/{next2}/{hash}
+    pub fn data_path(&self, hash: &str) -> PathBuf {
         if hash.len() >= 4 {
-            self.loose_dir()
+            self.data_dir()
                 .join(&hash[..2])
                 .join(&hash[2..4])
                 .join(hash)
         } else {
-            self.loose_dir().join(hash)
+            self.data_dir().join(hash)
         }
     }
 
-    /// Check if an archive exists in cache
-    pub async fn has_archive(&self, hash: &str) -> bool {
-        self.archive_path(hash).exists()
+    /// Construct a patch cache path from a hash
+    ///
+    /// Follows CDN structure: patch/{first2}/{next2}/{hash}
+    pub fn patch_path(&self, hash: &str) -> PathBuf {
+        if hash.len() >= 4 {
+            self.patch_dir()
+                .join(&hash[..2])
+                .join(&hash[2..4])
+                .join(hash)
+        } else {
+            self.patch_dir().join(hash)
+        }
     }
 
-    /// Check if a loose file exists in cache
-    pub async fn has_loose(&self, hash: &str) -> bool {
-        self.loose_path(hash).exists()
+    /// Construct an index cache path from a hash
+    ///
+    /// Follows CDN structure: data/{first2}/{next2}/{hash}.index
+    pub fn index_path(&self, hash: &str) -> PathBuf {
+        let mut path = self.data_path(hash);
+        path.set_extension("index");
+        path
     }
 
-    /// Write archive data to cache
-    pub async fn write_archive(&self, hash: &str, data: &[u8]) -> Result<()> {
-        let path = self.archive_path(hash);
+
+    /// Check if a config exists in cache
+    pub async fn has_config(&self, hash: &str) -> bool {
+        self.config_path(hash).exists()
+    }
+
+    /// Check if data exists in cache
+    pub async fn has_data(&self, hash: &str) -> bool {
+        self.data_path(hash).exists()
+    }
+
+    /// Check if a patch exists in cache
+    pub async fn has_patch(&self, hash: &str) -> bool {
+        self.patch_path(hash).exists()
+    }
+
+    /// Check if an index exists in cache
+    pub async fn has_index(&self, hash: &str) -> bool {
+        self.index_path(hash).exists()
+    }
+
+
+    /// Write config data to cache
+    pub async fn write_config(&self, hash: &str, data: &[u8]) -> Result<()> {
+        let path = self.config_path(hash);
 
         if let Some(parent) = path.parent() {
             ensure_dir(parent).await?;
         }
 
-        trace!("Writing {} bytes to archive cache: {}", data.len(), hash);
+        trace!("Writing {} bytes to config cache: {}", data.len(), hash);
         tokio::fs::write(&path, data).await?;
 
         Ok(())
     }
 
-    /// Write loose file to cache
-    pub async fn write_loose(&self, hash: &str, data: &[u8]) -> Result<()> {
-        let path = self.loose_path(hash);
+    /// Write data to cache
+    pub async fn write_data(&self, hash: &str, data: &[u8]) -> Result<()> {
+        let path = self.data_path(hash);
 
         if let Some(parent) = path.parent() {
             ensure_dir(parent).await?;
         }
 
-        trace!("Writing {} bytes to loose file cache: {}", data.len(), hash);
+        trace!("Writing {} bytes to data cache: {}", data.len(), hash);
         tokio::fs::write(&path, data).await?;
 
         Ok(())
     }
 
-    /// Read archive from cache
-    pub async fn read_archive(&self, hash: &str) -> Result<Vec<u8>> {
-        let path = self.archive_path(hash);
-        trace!("Reading archive from cache: {}", hash);
+    /// Write patch data to cache
+    pub async fn write_patch(&self, hash: &str, data: &[u8]) -> Result<()> {
+        let path = self.patch_path(hash);
+
+        if let Some(parent) = path.parent() {
+            ensure_dir(parent).await?;
+        }
+
+        trace!("Writing {} bytes to patch cache: {}", data.len(), hash);
+        tokio::fs::write(&path, data).await?;
+
+        Ok(())
+    }
+
+    /// Write index to cache
+    pub async fn write_index(&self, hash: &str, data: &[u8]) -> Result<()> {
+        let path = self.index_path(hash);
+
+        if let Some(parent) = path.parent() {
+            ensure_dir(parent).await?;
+        }
+
+        trace!("Writing {} bytes to index cache: {}", data.len(), hash);
+        tokio::fs::write(&path, data).await?;
+
+        Ok(())
+    }
+
+
+    /// Read config from cache
+    pub async fn read_config(&self, hash: &str) -> Result<Vec<u8>> {
+        let path = self.config_path(hash);
+        trace!("Reading config from cache: {}", hash);
         Ok(tokio::fs::read(&path).await?)
     }
 
-    /// Read loose file from cache
-    pub async fn read_loose(&self, hash: &str) -> Result<Vec<u8>> {
-        let path = self.loose_path(hash);
-        trace!("Reading loose file from cache: {}", hash);
+    /// Read data from cache
+    pub async fn read_data(&self, hash: &str) -> Result<Vec<u8>> {
+        let path = self.data_path(hash);
+        trace!("Reading data from cache: {}", hash);
         Ok(tokio::fs::read(&path).await?)
     }
 
-    /// Stream read an archive from cache
+    /// Read patch from cache
+    pub async fn read_patch(&self, hash: &str) -> Result<Vec<u8>> {
+        let path = self.patch_path(hash);
+        trace!("Reading patch from cache: {}", hash);
+        Ok(tokio::fs::read(&path).await?)
+    }
+
+    /// Read index from cache
+    pub async fn read_index(&self, hash: &str) -> Result<Vec<u8>> {
+        let path = self.index_path(hash);
+        trace!("Reading index from cache: {}", hash);
+        Ok(tokio::fs::read(&path).await?)
+    }
+
+
+    /// Stream read data from cache
     ///
     /// Returns a file handle for efficient streaming
-    pub async fn open_archive(&self, hash: &str) -> Result<tokio::fs::File> {
-        let path = self.archive_path(hash);
-        trace!("Opening archive for streaming: {}", hash);
+    pub async fn open_data(&self, hash: &str) -> Result<tokio::fs::File> {
+        let path = self.data_path(hash);
+        trace!("Opening data for streaming: {}", hash);
         Ok(tokio::fs::File::open(&path).await?)
     }
 
-    /// Get archive size without reading it
-    pub async fn archive_size(&self, hash: &str) -> Result<u64> {
-        let path = self.archive_path(hash);
+    /// Get data size without reading it
+    pub async fn data_size(&self, hash: &str) -> Result<u64> {
+        let path = self.data_path(hash);
         let metadata = tokio::fs::metadata(&path).await?;
         Ok(metadata.len())
     }
+
 
     /// Get the base directory of this cache
     pub fn base_dir(&self) -> &PathBuf {
@@ -157,11 +250,18 @@ mod tests {
 
         let hash = "deadbeef1234567890abcdef12345678";
 
-        let archive_path = cache.archive_path(hash);
-        assert!(archive_path.to_str().unwrap().contains("archives/de/ad"));
+        let config_path = cache.config_path(hash);
+        assert!(config_path.to_str().unwrap().contains("config/de/ad"));
 
-        let loose_path = cache.loose_path(hash);
-        assert!(loose_path.to_str().unwrap().contains("loose/de/ad"));
+        let data_path = cache.data_path(hash);
+        assert!(data_path.to_str().unwrap().contains("data/de/ad"));
+
+        let patch_path = cache.patch_path(hash);
+        assert!(patch_path.to_str().unwrap().contains("patch/de/ad"));
+
+        let index_path = cache.index_path(hash);
+        assert!(index_path.to_str().unwrap().contains("data/de/ad"));
+        assert!(index_path.to_str().unwrap().ends_with(".index"));
     }
 
     #[tokio::test]
@@ -174,20 +274,29 @@ mod tests {
     async fn test_cdn_cache_operations() {
         let cache = CdnCache::for_product("test").await.unwrap();
         let hash = "test5678901234567890abcdef123456";
-        let data = b"test archive data";
+        let data = b"test data content";
 
-        // Write and read archive
-        cache.write_archive(hash, data).await.unwrap();
-        assert!(cache.has_archive(hash).await);
+        // Write and read data
+        cache.write_data(hash, data).await.unwrap();
+        assert!(cache.has_data(hash).await);
 
-        let read_data = cache.read_archive(hash).await.unwrap();
+        let read_data = cache.read_data(hash).await.unwrap();
         assert_eq!(read_data, data);
 
         // Test size
-        let size = cache.archive_size(hash).await.unwrap();
+        let size = cache.data_size(hash).await.unwrap();
         assert_eq!(size, data.len() as u64);
 
+        // Test config
+        let config_data = b"test config data";
+        cache.write_config(hash, config_data).await.unwrap();
+        assert!(cache.has_config(hash).await);
+
+        let read_config = cache.read_config(hash).await.unwrap();
+        assert_eq!(read_config, config_data);
+
         // Cleanup
-        let _ = tokio::fs::remove_file(cache.archive_path(hash)).await;
+        let _ = tokio::fs::remove_file(cache.data_path(hash)).await;
+        let _ = tokio::fs::remove_file(cache.config_path(hash)).await;
     }
 }

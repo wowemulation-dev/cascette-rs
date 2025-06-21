@@ -74,8 +74,8 @@ The cache is stored in the platform-specific cache directory:
 Each cache type has its own subdirectory:
 
 - `generic/` - Generic cache data
-- `tact/` - TACT protocol data (config/, data/, patch/)
-- `cdn/` - CDN content (archives/, loose/)
+- `tact/` - TACT protocol metadata responses (versions, CDN configs, BGDL)
+- `cdn/` - CDN content (config/, data/, patch/, indices)
 - `ribbit/` - Ribbit responses organized by region/product/endpoint
 - `ribbit/cached/` - Cached Ribbit client responses using Blizzard MIME naming
 

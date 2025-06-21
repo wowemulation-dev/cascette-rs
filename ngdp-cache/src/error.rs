@@ -31,4 +31,16 @@ pub enum Error {
     /// Ribbit client error
     #[error("Ribbit client error: {0}")]
     RibbitClient(#[from] ribbit_client::Error),
+
+    /// TACT client error
+    #[error("TACT client error: {0}")]
+    TactClient(#[from] tact_client::Error),
+
+    /// JSON serialization/deserialization error
+    #[error("JSON error: {0}")]
+    Json(#[from] serde_json::Error),
+
+    /// HTTP request error
+    #[error("HTTP request error: {0}")]
+    Http(#[from] reqwest::Error),
 }

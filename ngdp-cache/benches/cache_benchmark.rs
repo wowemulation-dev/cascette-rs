@@ -3,7 +3,7 @@
 use criterion::{BatchSize, BenchmarkId, Criterion, criterion_group, criterion_main};
 use ngdp_cache::{
     cached_ribbit_client::CachedRibbitClient, cdn::CdnCache, generic::GenericCache,
-    ribbit::RibbitCache, tact::TactCache,
+    ribbit::RibbitCache,
 };
 use ribbit_client::{Endpoint, Region};
 use std::hint::black_box;
@@ -85,13 +85,35 @@ fn bench_generic_cache_read(c: &mut Criterion) {
     group.finish();
 }
 
-fn bench_tact_cache_operations(c: &mut Criterion) {
+
+fn bench_cdn_cache_operations(c: &mut Criterion) {
     let runtime = Runtime::new().unwrap();
 
-    c.bench_function("tact_cache_write_config", |b| {
+    c.bench_function("cdn_cache_write_data", |b| {
         b.iter_batched(
             || {
-                let cache = runtime.block_on(TactCache::new()).unwrap();
+                let cache = runtime.block_on(CdnCache::new()).unwrap();
+                let hash = format!("{}{:08x}", TEST_HASH, rand::random::<u32>());
+                (cache, hash)
+            },
+            |(cache, hash)| {
+                runtime.block_on(async move {
+                    cache
+                        .write_data(&hash, black_box(LARGE_DATA))
+                        .await
+                        .unwrap();
+                    // Cleanup
+                    tokio::fs::remove_file(cache.data_path(&hash)).await.ok();
+                });
+            },
+            BatchSize::SmallInput,
+        );
+    });
+
+    c.bench_function("cdn_cache_write_config", |b| {
+        b.iter_batched(
+            || {
+                let cache = runtime.block_on(CdnCache::new()).unwrap();
                 let hash = format!("{}{:08x}", TEST_HASH, rand::random::<u32>());
                 (cache, hash)
             },
@@ -109,58 +131,35 @@ fn bench_tact_cache_operations(c: &mut Criterion) {
         );
     });
 
-    c.bench_function("tact_cache_path_construction", |b| {
-        let cache = runtime.block_on(TactCache::new()).unwrap();
-        b.iter(|| {
-            let _path = black_box(cache.config_path(black_box(TEST_HASH)));
-        });
-    });
-}
-
-fn bench_cdn_cache_operations(c: &mut Criterion) {
-    let runtime = Runtime::new().unwrap();
-
-    c.bench_function("cdn_cache_write_archive", |b| {
+    c.bench_function("cdn_cache_data_size", |b| {
         b.iter_batched(
             || {
-                let cache = runtime.block_on(CdnCache::new()).unwrap();
-                let hash = format!("{}{:08x}", TEST_HASH, rand::random::<u32>());
-                (cache, hash)
-            },
-            |(cache, hash)| {
-                runtime.block_on(async move {
-                    cache
-                        .write_archive(&hash, black_box(LARGE_DATA))
-                        .await
-                        .unwrap();
-                    // Cleanup
-                    tokio::fs::remove_file(cache.archive_path(&hash)).await.ok();
-                });
-            },
-            BatchSize::SmallInput,
-        );
-    });
-
-    c.bench_function("cdn_cache_archive_size", |b| {
-        b.iter_batched(
-            || {
-                // Setup: create archive
+                // Setup: create data file
                 let cache = runtime.block_on(CdnCache::new()).unwrap();
                 let hash = format!("{}{:08x}", TEST_HASH, rand::random::<u32>());
                 runtime
-                    .block_on(cache.write_archive(&hash, LARGE_DATA))
+                    .block_on(cache.write_data(&hash, LARGE_DATA))
                     .unwrap();
                 (cache, hash)
             },
             |(cache, hash)| {
                 runtime.block_on(async move {
-                    let _size = black_box(cache.archive_size(&hash).await.unwrap());
+                    let _size = black_box(cache.data_size(&hash).await.unwrap());
                     // Cleanup
-                    tokio::fs::remove_file(cache.archive_path(&hash)).await.ok();
+                    tokio::fs::remove_file(cache.data_path(&hash)).await.ok();
                 });
             },
             BatchSize::SmallInput,
         );
+    });
+
+    c.bench_function("cdn_cache_path_construction", |b| {
+        let cache = runtime.block_on(CdnCache::new()).unwrap();
+        b.iter(|| {
+            let _config_path = black_box(cache.config_path(black_box(TEST_HASH)));
+            let _data_path = black_box(cache.data_path(black_box(TEST_HASH)));
+            let _patch_path = black_box(cache.patch_path(black_box(TEST_HASH)));
+        });
     });
 }
 
@@ -467,7 +466,6 @@ criterion_group!(
     benches,
     bench_generic_cache_write,
     bench_generic_cache_read,
-    bench_tact_cache_operations,
     bench_cdn_cache_operations,
     bench_ribbit_cache_operations,
     bench_concurrent_operations,

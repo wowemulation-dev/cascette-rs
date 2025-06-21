@@ -1,6 +1,6 @@
 //! Integration tests for ngdp-cache
 
-use ngdp_cache::{cdn::CdnCache, generic::GenericCache, ribbit::RibbitCache, tact::TactCache};
+use ngdp_cache::{cdn::CdnCache, generic::GenericCache, ribbit::RibbitCache};
 use std::time::Duration;
 
 /// Test data for various scenarios
@@ -24,8 +24,8 @@ async fn test_cache_directory_creation() {
     let generic = GenericCache::new().await.unwrap();
     assert!(generic.base_dir().exists());
 
-    let tact = TactCache::new().await.unwrap();
-    assert!(tact.base_dir().exists());
+    // CdnCache now handles all CDN content (config, data, patch)
+    // which was previously split between TactCache and CdnCache
 
     let cdn = CdnCache::new().await.unwrap();
     assert!(cdn.base_dir().exists());
@@ -38,33 +38,33 @@ async fn test_cache_directory_creation() {
 async fn test_cross_cache_isolation() {
     // Test that different cache types don't interfere with each other
     let generic = GenericCache::new().await.unwrap();
-    let tact = TactCache::new().await.unwrap();
+    let cdn = CdnCache::new().await.unwrap();
 
     // Write to generic cache
     generic.write("test_key", b"generic data").await.unwrap();
 
-    // Ensure it doesn't exist in TACT cache
-    assert!(!tact.has_config("test_key").await);
-    assert!(!tact.has_data("test_key").await);
+    // Ensure it doesn't exist in CDN cache
+    assert!(!cdn.has_config("test_key").await);
+    assert!(!cdn.has_data("test_key").await);
 
     // Cleanup
     generic.delete("test_key").await.unwrap();
 }
 
 #[tokio::test]
-async fn test_tact_cache_workflow() {
-    let tact = TactCache::new().await.unwrap();
+async fn test_cdn_cache_workflow() {
+    let cdn = CdnCache::new().await.unwrap();
 
-    // Simulate real TACT workflow
+    // Simulate real CDN workflow
     let build_config_hash = "be2bb98dc28aee05bbee519393696cdb";
     let cdn_config_hash = "fac77b9ca52c84ac28ad83a7dbe1c829";
     let index_hash = "0052ea9a56fd7b3b6fe7d1d906e6cdef";
 
     // Write configs
-    tact.write_config(build_config_hash, TEST_CONFIG_DATA)
+    cdn.write_config(build_config_hash, TEST_CONFIG_DATA)
         .await
         .unwrap();
-    tact.write_config(
+    cdn.write_config(
         cdn_config_hash,
         b"archives = 8a41b9e8bf2d85ad73e087c446c655fb",
     )
@@ -72,35 +72,35 @@ async fn test_tact_cache_workflow() {
     .unwrap();
 
     // Write index
-    tact.write_index(index_hash, b"binary index data")
+    cdn.write_index(index_hash, b"binary index data")
         .await
         .unwrap();
 
     // Write data
     let data_hash = "1234567890abcdef1234567890abcdef";
-    tact.write_data(data_hash, b"game data").await.unwrap();
+    cdn.write_data(data_hash, b"game data").await.unwrap();
 
     // Verify all exist
-    assert!(tact.has_config(build_config_hash).await);
-    assert!(tact.has_config(cdn_config_hash).await);
-    assert!(tact.has_index(index_hash).await);
-    assert!(tact.has_data(data_hash).await);
+    assert!(cdn.has_config(build_config_hash).await);
+    assert!(cdn.has_config(cdn_config_hash).await);
+    assert!(cdn.has_index(index_hash).await);
+    assert!(cdn.has_data(data_hash).await);
 
     // Read and verify
-    let config_data = tact.read_config(build_config_hash).await.unwrap();
+    let config_data = cdn.read_config(build_config_hash).await.unwrap();
     assert_eq!(config_data, TEST_CONFIG_DATA);
 
     // Cleanup
-    tokio::fs::remove_file(tact.config_path(build_config_hash))
+    tokio::fs::remove_file(cdn.config_path(build_config_hash))
         .await
         .ok();
-    tokio::fs::remove_file(tact.config_path(cdn_config_hash))
+    tokio::fs::remove_file(cdn.config_path(cdn_config_hash))
         .await
         .ok();
-    tokio::fs::remove_file(tact.index_path(index_hash))
+    tokio::fs::remove_file(cdn.index_path(index_hash))
         .await
         .ok();
-    tokio::fs::remove_file(tact.data_path(data_hash)).await.ok();
+    tokio::fs::remove_file(cdn.data_path(data_hash)).await.ok();
 }
 
 #[tokio::test]
@@ -109,22 +109,22 @@ async fn test_cdn_cache_product_separation() {
     let wow_cache = CdnCache::for_product("wow").await.unwrap();
     let d4_cache = CdnCache::for_product("d4").await.unwrap();
 
-    let archive_hash = "deadbeef1234567890abcdef12345678";
+    let data_hash = "deadbeef1234567890abcdef12345678";
 
     // Write to WoW cache
     wow_cache
-        .write_archive(archive_hash, TEST_ARCHIVE_DATA)
+        .write_data(data_hash, TEST_ARCHIVE_DATA)
         .await
         .unwrap();
 
     // Ensure it doesn't exist in D4 cache
-    assert!(!d4_cache.has_archive(archive_hash).await);
+    assert!(!d4_cache.has_data(data_hash).await);
 
     // But exists in WoW cache
-    assert!(wow_cache.has_archive(archive_hash).await);
+    assert!(wow_cache.has_data(data_hash).await);
 
     // Cleanup
-    tokio::fs::remove_file(wow_cache.archive_path(archive_hash))
+    tokio::fs::remove_file(wow_cache.data_path(data_hash))
         .await
         .ok();
 }
@@ -132,14 +132,14 @@ async fn test_cdn_cache_product_separation() {
 #[tokio::test]
 async fn test_cdn_cache_streaming() {
     let cdn = CdnCache::new().await.unwrap();
-    let archive_hash = "streamtest1234567890abcdef123456";
+    let data_hash = "streamtest1234567890abcdef123456";
 
     // Write large data
     let large_data = vec![0u8; 1024 * 1024]; // 1MB
-    cdn.write_archive(archive_hash, &large_data).await.unwrap();
+    cdn.write_data(data_hash, &large_data).await.unwrap();
 
     // Test streaming read
-    let mut file = cdn.open_archive(archive_hash).await.unwrap();
+    let mut file = cdn.open_data(data_hash).await.unwrap();
     let mut buffer = Vec::new();
     tokio::io::AsyncReadExt::read_to_end(&mut file, &mut buffer)
         .await
@@ -148,7 +148,7 @@ async fn test_cdn_cache_streaming() {
     assert_eq!(buffer.len(), large_data.len());
 
     // Cleanup
-    tokio::fs::remove_file(cdn.archive_path(archive_hash))
+    tokio::fs::remove_file(cdn.data_path(data_hash))
         .await
         .ok();
 }
@@ -290,20 +290,20 @@ async fn test_large_file_handling() {
     let large_data = vec![42u8; size];
 
     // Write large file
-    cdn.write_archive(large_hash, &large_data).await.unwrap();
+    cdn.write_data(large_hash, &large_data).await.unwrap();
 
     // Verify size
-    let reported_size = cdn.archive_size(large_hash).await.unwrap();
+    let reported_size = cdn.data_size(large_hash).await.unwrap();
     assert_eq!(reported_size, size as u64);
 
     // Read it back
-    let read_data = cdn.read_archive(large_hash).await.unwrap();
+    let read_data = cdn.read_data(large_hash).await.unwrap();
     assert_eq!(read_data.len(), size);
     assert_eq!(read_data[0], 42);
     assert_eq!(read_data[size - 1], 42);
 
     // Cleanup
-    tokio::fs::remove_file(cdn.archive_path(large_hash))
+    tokio::fs::remove_file(cdn.data_path(large_hash))
         .await
         .ok();
 }
@@ -336,25 +336,25 @@ async fn test_cache_clear_operations() {
 
 #[tokio::test]
 async fn test_nested_directory_creation() {
-    let tact = TactCache::new().await.unwrap();
+    let cdn = CdnCache::new().await.unwrap();
 
     // Use a hash that will create nested directories
     let deeply_nested_hash = "abcdef0123456789abcdef0123456789";
 
     // This should create all parent directories
-    tact.write_data(deeply_nested_hash, b"nested data")
+    cdn.write_data(deeply_nested_hash, b"nested data")
         .await
         .unwrap();
 
     // Verify it exists
-    assert!(tact.has_data(deeply_nested_hash).await);
+    assert!(cdn.has_data(deeply_nested_hash).await);
 
     // Read it back
-    let data = tact.read_data(deeply_nested_hash).await.unwrap();
+    let data = cdn.read_data(deeply_nested_hash).await.unwrap();
     assert_eq!(data, b"nested data");
 
     // Cleanup
-    tokio::fs::remove_file(tact.data_path(deeply_nested_hash))
+    tokio::fs::remove_file(cdn.data_path(deeply_nested_hash))
         .await
         .ok();
 }

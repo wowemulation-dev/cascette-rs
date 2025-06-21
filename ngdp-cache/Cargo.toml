@@ -13,7 +13,11 @@ categories = ["caching", "filesystem", "games"]
 
 [dependencies]
 dirs = { workspace = true }
+reqwest = "0.12"
 ribbit-client = { path = "../ribbit-client" }
+serde = { workspace = true, features = ["derive"] }
+serde_json = "1.0"
+tact-client = { path = "../tact-client" }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["fs", "io-util"] }
 tracing = { workspace = true }
@@ -21,6 +25,7 @@ tracing = { workspace = true }
 [dev-dependencies]
 criterion = { workspace = true }
 rand = "0.8"
+tempfile = "3.5"
 tokio = { workspace = true, features = ["full", "test-util"] }
 tracing-subscriber = { workspace = true }
 

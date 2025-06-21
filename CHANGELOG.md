@@ -50,6 +50,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Resolved collapsible if statement in tact-client retry logic
   - Fixed float comparison in ribbit-client tests using epsilon comparison
   - Removed redundant imports in examples
+
+### Added
+
+#### `ngdp-cache` crate
+
+- **Added CachedTactClient for TACT protocol caching**:
+  - Implements transparent caching for TACT metadata endpoints (versions, CDN configs, BGDL)
+  - Uses cache schema: `~/.cache/ngdp/tact/{region}/{protocol}/{product}/{endpoint}-{sequence}.bpsv`
+  - Automatic sequence number extraction and tracking from responses
+  - TTL strategies: 5 minutes for versions, 30 minutes for CDN configs and BGDL
+  - Full async support with proper error handling
+  - Important: This caches TACT metadata only, NOT actual CDN content files
+
+### Documentation
+
+#### `ngdp-cache` crate
+
+- **Clarified TACT vs CDN caching distinction**:
+  - Added comprehensive documentation explaining that TACT `/cdns` endpoint returns CDN configuration, not content
+  - Documented that actual CDN content caching should use `~/.cache/ngdp/cdn/`
+  - Added integration tests demonstrating proper cache isolation and structure
+  
+- **Merged TactCache into CdnCache**:
+  - Removed separate TactCache module as it was duplicating CDN functionality
+  - CdnCache now handles all CDN content types: config/, data/, patch/, and indices
+  - Updated all tests and examples to use the unified CdnCache API
+  - Cache structure follows standard CDN paths: `{type}/{hash[0:2]}/{hash[2:4]}/{hash}`
   - Fixed bool comparison style in ngdp-cache examples
 - Fixed clippy warnings across all crates:
   - Fixed raw string literal hashes in ngdp-bpsv tests

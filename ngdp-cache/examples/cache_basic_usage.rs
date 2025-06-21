@@ -1,6 +1,6 @@
 //! Basic usage example for ngdp-cache
 
-use ngdp_cache::{cdn::CdnCache, generic::GenericCache, ribbit::RibbitCache, tact::TactCache};
+use ngdp_cache::{cdn::CdnCache, generic::GenericCache, ribbit::RibbitCache};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -19,22 +19,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         String::from_utf8_lossy(&data)
     );
 
-    // TACT cache example
-    println!("\n2. TACT Cache:");
-    let tact = TactCache::new().await?;
-    let config_hash = "abcdef1234567890abcdef1234567890";
-    tact.write_config(config_hash, b"build-config-data").await?;
-    println!("   Config cached at: {:?}", tact.config_path(config_hash));
-
     // CDN cache example
-    println!("\n3. CDN Cache:");
+    println!("\n2. CDN Cache:");
     let cdn = CdnCache::for_product("wow").await?;
-    let archive_hash = "1234567890abcdef1234567890abcdef";
-    cdn.write_archive(archive_hash, b"archive-data").await?;
-    println!("   Archive cached at: {:?}", cdn.archive_path(archive_hash));
+    
+    // Cache config data
+    let config_hash = "abcdef1234567890abcdef1234567890";
+    cdn.write_config(config_hash, b"build-config-data").await?;
+    println!("   Config cached at: {:?}", cdn.config_path(config_hash));
+    
+    // Cache data/archive
+    let data_hash = "1234567890abcdef1234567890abcdef";
+    cdn.write_data(data_hash, b"archive-data").await?;
+    println!("   Data cached at: {:?}", cdn.data_path(data_hash));
 
     // Ribbit cache example
-    println!("\n4. Ribbit Cache:");
+    println!("\n3. Ribbit Cache:");
     let ribbit = RibbitCache::new().await?;
     ribbit
         .write("us", "wow", "versions", b"version-data")
@@ -44,7 +44,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Show cache directory
-    println!("\n5. Cache Directory:");
+    println!("\n4. Cache Directory:");
     println!("   Base cache dir: {:?}", ngdp_cache::get_cache_dir()?);
 
     Ok(())
