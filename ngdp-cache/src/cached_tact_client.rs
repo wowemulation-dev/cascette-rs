@@ -37,7 +37,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 use tracing::{debug, trace};
 
-use tact_client::{HttpClient, ProtocolVersion, Region, VersionEntry, CdnEntry};
+use tact_client::{CdnEntry, HttpClient, ProtocolVersion, Region, VersionEntry};
 
 use crate::{Result, ensure_dir, get_cache_dir};
 
@@ -84,7 +84,7 @@ impl TactEndpoint {
             Self::Bgdl => "bgdl",
         }
     }
-    
+
     fn ttl(&self) -> Duration {
         match self {
             Self::Versions => VERSIONS_CACHE_TTL,
@@ -110,7 +110,10 @@ impl CachedTactClient {
         let cache_dir = get_cache_dir()?.join("tact");
         ensure_dir(&cache_dir).await?;
 
-        debug!("Initialized cached TACT client for region {:?}, protocol {:?}", region, protocol);
+        debug!(
+            "Initialized cached TACT client for region {:?}, protocol {:?}",
+            region, protocol
+        );
 
         Ok(Self {
             client,
@@ -164,10 +167,10 @@ impl CachedTactClient {
             ProtocolVersion::V1 => "v1",
             ProtocolVersion::V2 => "v2",
         };
-        
+
         let seq = sequence.unwrap_or(0);
         let filename = format!("{}-{}.bpsv", endpoint.as_str(), seq);
-        
+
         self.cache_dir
             .join(region)
             .join(protocol)
@@ -248,8 +251,12 @@ impl CachedTactClient {
                             if let Ok(seqn) = seqn_part.parse::<u64>() {
                                 // Check if this file is still valid
                                 let meta_path = path.with_extension("meta");
-                                if let Ok(metadata_str) = tokio::fs::read_to_string(&meta_path).await {
-                                    if let Ok(metadata) = serde_json::from_str::<CacheMetadata>(&metadata_str) {
+                                if let Ok(metadata_str) =
+                                    tokio::fs::read_to_string(&meta_path).await
+                                {
+                                    if let Ok(metadata) =
+                                        serde_json::from_str::<CacheMetadata>(&metadata_str)
+                                    {
                                         if now.saturating_sub(metadata.timestamp) < ttl.as_secs()
                                             && seqn > best_seqn
                                         {
@@ -323,11 +330,7 @@ impl CachedTactClient {
     }
 
     /// Read response from cache
-    async fn read_from_cache(
-        &self,
-        product: &str,
-        endpoint: TactEndpoint,
-    ) -> Result<String> {
+    async fn read_from_cache(&self, product: &str, endpoint: TactEndpoint) -> Result<String> {
         if let Some((cache_path, _seqn)) = self.find_cached_file(product, endpoint).await {
             trace!("Reading from TACT cache: {:?}", cache_path);
             Ok(tokio::fs::read_to_string(&cache_path).await?)
@@ -362,7 +365,11 @@ impl CachedTactClient {
         }
 
         // Cache miss - fetch from server
-        debug!("Cache miss for TACT {}/{}, fetching from server", product, endpoint.as_str());
+        debug!(
+            "Cache miss for TACT {}/{}, fetching from server",
+            product,
+            endpoint.as_str()
+        );
         let response = self.client.get_versions(product).await?;
         let text = response.text().await?;
 
@@ -376,13 +383,13 @@ impl CachedTactClient {
     }
 
     /// Get CDN configuration with caching
-    /// 
+    ///
     /// **Important**: This returns CDN server configuration from the TACT `/cdns` endpoint,
     /// NOT actual CDN content. The TACT protocol has three metadata endpoints:
     /// - `/versions` - game version information
     /// - `/cdns` - CDN server configuration (which CDN servers to use)
     /// - `/bgdl` - background download configuration
-    /// 
+    ///
     /// For actual CDN content caching, use the ngdp-cdn crate with its own caching layer.
     pub async fn get_cdns(&self, product: &str) -> Result<reqwest::Response> {
         // For raw Response objects, we need to use the underlying client directly
@@ -390,7 +397,7 @@ impl CachedTactClient {
     }
 
     /// Get CDN configuration with parsed response and caching
-    /// 
+    ///
     /// **Important**: This returns CDN server configuration, NOT actual CDN content.
     /// See `get_cdns()` documentation for details.
     pub async fn get_cdns_parsed(&self, product: &str) -> Result<Vec<CdnEntry>> {
@@ -406,7 +413,11 @@ impl CachedTactClient {
         }
 
         // Cache miss - fetch from server
-        debug!("Cache miss for TACT {}/{}, fetching from server", product, endpoint.as_str());
+        debug!(
+            "Cache miss for TACT {}/{}, fetching from server",
+            product,
+            endpoint.as_str()
+        );
         let response = self.client.get_cdns(product).await?;
         let text = response.text().await?;
 
@@ -426,7 +437,10 @@ impl CachedTactClient {
     }
 
     /// Get BGDL with parsed response and caching
-    pub async fn get_bgdl_parsed(&self, product: &str) -> Result<Vec<tact_client::response_types::BgdlEntry>> {
+    pub async fn get_bgdl_parsed(
+        &self,
+        product: &str,
+    ) -> Result<Vec<tact_client::response_types::BgdlEntry>> {
         let endpoint = TactEndpoint::Bgdl;
 
         // Check cache first
@@ -439,7 +453,11 @@ impl CachedTactClient {
         }
 
         // Cache miss - fetch from server
-        debug!("Cache miss for TACT {}/{}, fetching from server", product, endpoint.as_str());
+        debug!(
+            "Cache miss for TACT {}/{}, fetching from server",
+            product,
+            endpoint.as_str()
+        );
         let response = self.client.get_bgdl(product).await?;
         let text = response.text().await?;
 
@@ -459,12 +477,17 @@ impl CachedTactClient {
     }
 
     /// Download a file from CDN (no caching for binary files)
-    /// 
+    ///
     /// **Note**: This method downloads actual game content from CDN servers and does NOT
     /// cache the response. CDN content caching should be implemented in a separate layer
     /// (e.g., in ngdp-cdn crate) to handle binary data efficiently with proper storage
     /// in ~/.cache/ngdp/cdn/ instead of the TACT metadata cache.
-    pub async fn download_file(&self, cdn_host: &str, path: &str, hash: &str) -> Result<reqwest::Response> {
+    pub async fn download_file(
+        &self,
+        cdn_host: &str,
+        path: &str,
+        hash: &str,
+    ) -> Result<reqwest::Response> {
         Ok(self.client.download_file(cdn_host, path, hash).await?)
     }
 
@@ -546,7 +569,7 @@ fn clear_expired_in_directory(
 
         while let Some(entry) = entries.next_entry().await? {
             let path = entry.path();
-            
+
             if path.is_dir() {
                 clear_expired_in_directory(&path).await?;
             } else if path.extension().and_then(|s| s.to_str()) == Some("meta") {
@@ -564,7 +587,7 @@ fn clear_expired_in_directory(
                 }
             }
         }
-        
+
         Ok(())
     })
 }
@@ -593,7 +616,10 @@ mod tests {
 
             // Test with sequence number
             let data_with_seqn = "Product!STRING:0|Seqn!DEC:4\n## seqn = 3020098\nwow|12345";
-            assert_eq!(client.extract_sequence_number(data_with_seqn), Some(3020098));
+            assert_eq!(
+                client.extract_sequence_number(data_with_seqn),
+                Some(3020098)
+            );
 
             // Test without sequence number
             let data_no_seqn = "Product!STRING:0|Seqn!DEC:4\nwow|12345";
@@ -613,10 +639,17 @@ mod tests {
                 .unwrap();
 
             let path = client.get_cache_path("wow", TactEndpoint::Versions, Some(12345));
-            assert!(path.to_string_lossy().contains("us/v1/wow/versions-12345.bpsv"));
+            assert!(
+                path.to_string_lossy()
+                    .contains("us/v1/wow/versions-12345.bpsv")
+            );
 
             let path_no_seq = client.get_cache_path("d3", TactEndpoint::Cdns, None);
-            assert!(path_no_seq.to_string_lossy().contains("us/v1/d3/cdns-0.bpsv"));
+            assert!(
+                path_no_seq
+                    .to_string_lossy()
+                    .contains("us/v1/d3/cdns-0.bpsv")
+            );
         });
     }
 

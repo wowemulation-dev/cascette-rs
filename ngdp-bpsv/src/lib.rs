@@ -1,7 +1,7 @@
 //! # ngdp-bpsv
 //!
 //! A comprehensive parser and writer for BPSV (Blizzard Pipe-Separated Values) format,
-//! used throughout Blizzard's NGDP (Next Generation Data Pipeline) system.
+//! used throughout Blizzard's NGDP (Next Generation Distribution Pipeline) system.
 //!
 //! BPSV is a structured data format with typed columns, sequence numbers, and pipe-separated values.
 //!

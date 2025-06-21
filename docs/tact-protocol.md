@@ -24,7 +24,7 @@
 ## Overview
 
 TACT (Trusted Application Content Transfer) is Blizzard's content transfer protocol
-used as part of NGDP (Next Generation Data Pipeline). TACT handles the distribution
+used as part of NGDP (Next Generation Distribution Pipeline). TACT handles the distribution
 and downloading of game content from CDN servers. It works alongside CASC (Content
 Addressable Storage Container) for local storage.
 

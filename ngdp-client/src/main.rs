@@ -14,7 +14,7 @@ use ngdp_client::{
     about = "NGDP client for interacting with Blizzard's content distribution system",
     version,
     author,
-    long_about = "A command-line tool for accessing NGDP (Next Generation Data Pipeline) services, including Ribbit for product information and TACT for content delivery."
+    long_about = "A command-line tool for accessing NGDP (Next Generation Distribution Pipeline) services, including Ribbit for product information and TACT for content delivery."
 )]
 struct Cli {
     /// Set the logging level

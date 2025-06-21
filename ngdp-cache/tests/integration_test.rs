@@ -148,9 +148,7 @@ async fn test_cdn_cache_streaming() {
     assert_eq!(buffer.len(), large_data.len());
 
     // Cleanup
-    tokio::fs::remove_file(cdn.data_path(data_hash))
-        .await
-        .ok();
+    tokio::fs::remove_file(cdn.data_path(data_hash)).await.ok();
 }
 
 #[tokio::test]
@@ -303,9 +301,7 @@ async fn test_large_file_handling() {
     assert_eq!(read_data[size - 1], 42);
 
     // Cleanup
-    tokio::fs::remove_file(cdn.data_path(large_hash))
-        .await
-        .ok();
+    tokio::fs::remove_file(cdn.data_path(large_hash)).await.ok();
 }
 
 #[tokio::test]

@@ -26,13 +26,10 @@ async fn test_cache_directory_structure() {
     let temp_dir = TempDir::new().unwrap();
     let cache_dir = temp_dir.path().to_path_buf();
 
-    let _client = CachedTactClient::with_cache_dir(
-        Region::US,
-        ProtocolVersion::V1,
-        cache_dir.clone(),
-    )
-    .await
-    .unwrap();
+    let _client =
+        CachedTactClient::with_cache_dir(Region::US, ProtocolVersion::V1, cache_dir.clone())
+            .await
+            .unwrap();
 
     // The cache directory should be created
     assert!(cache_dir.exists());
@@ -43,13 +40,9 @@ async fn test_cache_enable_disable() {
     let temp_dir = TempDir::new().unwrap();
     let cache_dir = temp_dir.path().to_path_buf();
 
-    let mut client = CachedTactClient::with_cache_dir(
-        Region::US,
-        ProtocolVersion::V1,
-        cache_dir,
-    )
-    .await
-    .unwrap();
+    let mut client = CachedTactClient::with_cache_dir(Region::US, ProtocolVersion::V1, cache_dir)
+        .await
+        .unwrap();
 
     // Caching should be enabled by default
     client.set_caching_enabled(false);
@@ -80,13 +73,10 @@ async fn test_cache_clear_operations() {
     let temp_dir = TempDir::new().unwrap();
     let cache_dir = temp_dir.path().to_path_buf();
 
-    let client = CachedTactClient::with_cache_dir(
-        Region::US,
-        ProtocolVersion::V1,
-        cache_dir.clone(),
-    )
-    .await
-    .unwrap();
+    let client =
+        CachedTactClient::with_cache_dir(Region::US, ProtocolVersion::V1, cache_dir.clone())
+            .await
+            .unwrap();
 
     // Clear cache should not fail even when empty
     client.clear_cache().await.unwrap();
@@ -99,21 +89,15 @@ async fn test_different_protocols_isolated() {
     let cache_dir = temp_dir.path().to_path_buf();
 
     // Create clients for both protocols
-    let client_v1 = CachedTactClient::with_cache_dir(
-        Region::US,
-        ProtocolVersion::V1,
-        cache_dir.clone(),
-    )
-    .await
-    .unwrap();
+    let client_v1 =
+        CachedTactClient::with_cache_dir(Region::US, ProtocolVersion::V1, cache_dir.clone())
+            .await
+            .unwrap();
 
-    let client_v2 = CachedTactClient::with_cache_dir(
-        Region::US,
-        ProtocolVersion::V2,
-        cache_dir.clone(),
-    )
-    .await
-    .unwrap();
+    let client_v2 =
+        CachedTactClient::with_cache_dir(Region::US, ProtocolVersion::V2, cache_dir.clone())
+            .await
+            .unwrap();
 
     // Clear both caches - they should be isolated
     client_v1.clear_cache().await.unwrap();
@@ -126,21 +110,15 @@ async fn test_different_regions_isolated() {
     let cache_dir = temp_dir.path().to_path_buf();
 
     // Create clients for different regions
-    let client_us = CachedTactClient::with_cache_dir(
-        Region::US,
-        ProtocolVersion::V1,
-        cache_dir.clone(),
-    )
-    .await
-    .unwrap();
+    let client_us =
+        CachedTactClient::with_cache_dir(Region::US, ProtocolVersion::V1, cache_dir.clone())
+            .await
+            .unwrap();
 
-    let client_eu = CachedTactClient::with_cache_dir(
-        Region::EU,
-        ProtocolVersion::V1,
-        cache_dir.clone(),
-    )
-    .await
-    .unwrap();
+    let client_eu =
+        CachedTactClient::with_cache_dir(Region::EU, ProtocolVersion::V1, cache_dir.clone())
+            .await
+            .unwrap();
 
     // Clear both caches - they should be isolated
     client_us.clear_cache().await.unwrap();

@@ -34,20 +34,17 @@ async fn test_cached_tact_client_mock_workflow() {
     let cache_dir = temp_dir.path().to_path_buf();
 
     // Create client with custom cache directory
-    let client = CachedTactClient::with_cache_dir(
-        Region::US,
-        ProtocolVersion::V1,
-        cache_dir.clone(),
-    )
-    .await
-    .unwrap();
+    let client =
+        CachedTactClient::with_cache_dir(Region::US, ProtocolVersion::V1, cache_dir.clone())
+            .await
+            .unwrap();
 
     // Since we can't make actual network requests in tests, we need to
     // manually write mock data to the cache and verify the caching behavior
-    
+
     // Test 1: Verify cache directory structure is created
     assert!(cache_dir.exists());
-    
+
     // Test 2: Write mock data directly to cache
     let product = "wow";
     let versions_path = cache_dir
@@ -55,17 +52,17 @@ async fn test_cached_tact_client_mock_workflow() {
         .join("v1")
         .join(product)
         .join("versions-3020098.bpsv");
-    
+
     // Ensure directory exists
     if let Some(parent) = versions_path.parent() {
         tokio::fs::create_dir_all(parent).await.unwrap();
     }
-    
+
     // Write mock versions data
     tokio::fs::write(&versions_path, mock_data::VERSIONS_RESPONSE)
         .await
         .unwrap();
-    
+
     // Write metadata
     let meta_path = versions_path.with_extension("meta");
     let metadata = serde_json::json!({
@@ -84,35 +81,40 @@ async fn test_cached_tact_client_mock_workflow() {
     tokio::fs::write(&meta_path, serde_json::to_string(&metadata).unwrap())
         .await
         .unwrap();
-    
+
     // Test 3: Verify cache structure
     let cache_structure = cache_dir.join("us").join("v1").join(product);
     assert!(cache_structure.exists());
-    
+
     // List files in cache
     let mut entries = tokio::fs::read_dir(&cache_structure).await.unwrap();
     let mut found_files = Vec::new();
     while let Some(entry) = entries.next_entry().await.unwrap() {
         found_files.push(entry.file_name().to_string_lossy().to_string());
     }
-    
+
     assert!(found_files.contains(&"versions-3020098.bpsv".to_string()));
     assert!(found_files.contains(&"versions-3020098.meta".to_string()));
-    
+
     // Test 4: Clear cache
     client.clear_cache().await.unwrap();
-    
+
     // Verify files are removed
-    let mut entries = tokio::fs::read_dir(&cache_structure).await.unwrap_or_else(|_| {
-        // Directory might not exist after clear
-        panic!("Cache directory should still exist after clear")
-    });
+    let mut entries = tokio::fs::read_dir(&cache_structure)
+        .await
+        .unwrap_or_else(|_| {
+            // Directory might not exist after clear
+            panic!("Cache directory should still exist after clear")
+        });
     let mut remaining_files = Vec::new();
     while let Some(entry) = entries.next_entry().await.unwrap() {
         remaining_files.push(entry.file_name().to_string_lossy().to_string());
     }
-    
-    assert!(remaining_files.is_empty(), "Cache should be empty after clear");
+
+    assert!(
+        remaining_files.is_empty(),
+        "Cache should be empty after clear"
+    );
 }
 
 #[tokio::test]
@@ -121,21 +123,15 @@ async fn test_cache_isolation_by_region() {
     let cache_dir = temp_dir.path().to_path_buf();
 
     // Create clients for different regions
-    let _us_client = CachedTactClient::with_cache_dir(
-        Region::US,
-        ProtocolVersion::V1,
-        cache_dir.clone(),
-    )
-    .await
-    .unwrap();
+    let _us_client =
+        CachedTactClient::with_cache_dir(Region::US, ProtocolVersion::V1, cache_dir.clone())
+            .await
+            .unwrap();
 
-    let _eu_client = CachedTactClient::with_cache_dir(
-        Region::EU,
-        ProtocolVersion::V1,
-        cache_dir.clone(),
-    )
-    .await
-    .unwrap();
+    let _eu_client =
+        CachedTactClient::with_cache_dir(Region::EU, ProtocolVersion::V1, cache_dir.clone())
+            .await
+            .unwrap();
 
     // Write mock data for each region
     for region in ["us", "eu"] {
@@ -144,11 +140,11 @@ async fn test_cache_isolation_by_region() {
             .join("v1")
             .join("wow")
             .join("versions-1000.bpsv");
-        
+
         if let Some(parent) = path.parent() {
             tokio::fs::create_dir_all(parent).await.unwrap();
         }
-        
+
         tokio::fs::write(&path, format!("{} data", region))
             .await
             .unwrap();
@@ -157,10 +153,10 @@ async fn test_cache_isolation_by_region() {
     // Verify both regions have separate caches
     let us_path = cache_dir.join("us").join("v1").join("wow");
     let eu_path = cache_dir.join("eu").join("v1").join("wow");
-    
+
     assert!(us_path.exists());
     assert!(eu_path.exists());
-    
+
     // Read and verify content is different
     let us_content = tokio::fs::read_to_string(us_path.join("versions-1000.bpsv"))
         .await
@@ -168,7 +164,7 @@ async fn test_cache_isolation_by_region() {
     let eu_content = tokio::fs::read_to_string(eu_path.join("versions-1000.bpsv"))
         .await
         .unwrap();
-    
+
     assert_eq!(us_content, "us data");
     assert_eq!(eu_content, "eu data");
 }
@@ -179,21 +175,15 @@ async fn test_cache_isolation_by_protocol() {
     let cache_dir = temp_dir.path().to_path_buf();
 
     // Create clients for different protocol versions
-    let _v1_client = CachedTactClient::with_cache_dir(
-        Region::US,
-        ProtocolVersion::V1,
-        cache_dir.clone(),
-    )
-    .await
-    .unwrap();
+    let _v1_client =
+        CachedTactClient::with_cache_dir(Region::US, ProtocolVersion::V1, cache_dir.clone())
+            .await
+            .unwrap();
 
-    let _v2_client = CachedTactClient::with_cache_dir(
-        Region::US,
-        ProtocolVersion::V2,
-        cache_dir.clone(),
-    )
-    .await
-    .unwrap();
+    let _v2_client =
+        CachedTactClient::with_cache_dir(Region::US, ProtocolVersion::V2, cache_dir.clone())
+            .await
+            .unwrap();
 
     // Write mock data for each protocol
     for protocol in ["v1", "v2"] {
@@ -202,11 +192,11 @@ async fn test_cache_isolation_by_protocol() {
             .join(protocol)
             .join("wow")
             .join("versions-2000.bpsv");
-        
+
         if let Some(parent) = path.parent() {
             tokio::fs::create_dir_all(parent).await.unwrap();
         }
-        
+
         tokio::fs::write(&path, format!("{} data", protocol))
             .await
             .unwrap();
@@ -214,17 +204,25 @@ async fn test_cache_isolation_by_protocol() {
 
     // Verify both protocols have separate caches
     let v1_content = tokio::fs::read_to_string(
-        cache_dir.join("us").join("v1").join("wow").join("versions-2000.bpsv")
+        cache_dir
+            .join("us")
+            .join("v1")
+            .join("wow")
+            .join("versions-2000.bpsv"),
     )
     .await
     .unwrap();
-    
+
     let v2_content = tokio::fs::read_to_string(
-        cache_dir.join("us").join("v2").join("wow").join("versions-2000.bpsv")
+        cache_dir
+            .join("us")
+            .join("v2")
+            .join("wow")
+            .join("versions-2000.bpsv"),
     )
     .await
     .unwrap();
-    
+
     assert_eq!(v1_content, "v1 data");
     assert_eq!(v2_content, "v2 data");
 }
@@ -234,13 +232,10 @@ async fn test_sequence_number_handling() {
     let temp_dir = TempDir::new().unwrap();
     let cache_dir = temp_dir.path().to_path_buf();
 
-    let client = CachedTactClient::with_cache_dir(
-        Region::US,
-        ProtocolVersion::V1,
-        cache_dir.clone(),
-    )
-    .await
-    .unwrap();
+    let client =
+        CachedTactClient::with_cache_dir(Region::US, ProtocolVersion::V1, cache_dir.clone())
+            .await
+            .unwrap();
 
     // Create cache directory
     let product_dir = cache_dir.join("us").join("v1").join("wow");
@@ -256,12 +251,12 @@ async fn test_sequence_number_handling() {
     for (i, seq) in sequences.iter().enumerate() {
         let data_path = product_dir.join(format!("versions-{}.bpsv", seq));
         let meta_path = product_dir.join(format!("versions-{}.meta", seq));
-        
+
         // Write data
         tokio::fs::write(&data_path, format!("## seqn = {}\ndata", seq))
             .await
             .unwrap();
-        
+
         // Write metadata with different timestamps
         let metadata = serde_json::json!({
             "timestamp": now - (60 * i as u64), // Older files have older timestamps
@@ -273,7 +268,7 @@ async fn test_sequence_number_handling() {
             "sequence": seq,
             "response_size": 20
         });
-        
+
         tokio::fs::write(&meta_path, serde_json::to_string(&metadata).unwrap())
             .await
             .unwrap();
@@ -281,7 +276,7 @@ async fn test_sequence_number_handling() {
 
     // The cache should prefer the highest sequence number
     // (In real usage, the client would check cache and find the highest valid sequence)
-    
+
     // Verify all files exist
     for seq in sequences {
         let path = product_dir.join(format!("versions-{}.bpsv", seq));
@@ -290,11 +285,15 @@ async fn test_sequence_number_handling() {
 
     // Clear expired entries (none should be expired yet)
     client.clear_expired().await.unwrap();
-    
+
     // All files should still exist
     for seq in sequences {
         let path = product_dir.join(format!("versions-{}.bpsv", seq));
-        assert!(path.exists(), "Sequence {} should still exist after clear_expired", seq);
+        assert!(
+            path.exists(),
+            "Sequence {} should still exist after clear_expired",
+            seq
+        );
     }
 }
 
@@ -303,13 +302,10 @@ async fn test_endpoint_differentiation() {
     let temp_dir = TempDir::new().unwrap();
     let cache_dir = temp_dir.path().to_path_buf();
 
-    let _client = CachedTactClient::with_cache_dir(
-        Region::US,
-        ProtocolVersion::V1,
-        cache_dir.clone(),
-    )
-    .await
-    .unwrap();
+    let _client =
+        CachedTactClient::with_cache_dir(Region::US, ProtocolVersion::V1, cache_dir.clone())
+            .await
+            .unwrap();
 
     // Create cache entries for different endpoints
     let product_dir = cache_dir.join("us").join("v1").join("wow");
@@ -318,7 +314,7 @@ async fn test_endpoint_differentiation() {
     // Write data for each endpoint type
     let endpoints = [
         ("versions", mock_data::VERSIONS_RESPONSE),
-        ("cdns", mock_data::CDNS_RESPONSE),  // This is CDN config, not CDN content!
+        ("cdns", mock_data::CDNS_RESPONSE), // This is CDN config, not CDN content!
         ("bgdl", mock_data::BGDL_RESPONSE),
     ];
 

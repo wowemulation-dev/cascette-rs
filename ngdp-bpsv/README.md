@@ -1,7 +1,7 @@
 # ngdp-bpsv
 
 A Rust parser and writer for BPSV (Blizzard Pipe-Separated Values) format, used
-throughout Blizzard's NGDP (Next Generation Data Pipeline) system.
+throughout Blizzard's NGDP (Next Generation Distribution Pipeline) system.
 
 ## Overview
 

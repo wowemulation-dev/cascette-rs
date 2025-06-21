@@ -22,12 +22,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // CDN cache example
     println!("\n2. CDN Cache:");
     let cdn = CdnCache::for_product("wow").await?;
-    
+
     // Cache config data
     let config_hash = "abcdef1234567890abcdef1234567890";
     cdn.write_config(config_hash, b"build-config-data").await?;
     println!("   Config cached at: {:?}", cdn.config_path(config_hash));
-    
+
     // Cache data/archive
     let data_hash = "1234567890abcdef1234567890abcdef";
     cdn.write_data(data_hash, b"archive-data").await?;

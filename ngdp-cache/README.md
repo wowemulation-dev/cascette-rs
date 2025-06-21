@@ -1,6 +1,6 @@
 # ngdp-cache
 
-Generic caching functionality for NGDP (Next Generation Data Pipeline) components.
+Generic caching functionality for NGDP (Next Generation Distribution Pipeline) components.
 
 ## Features
 

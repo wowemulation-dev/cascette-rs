@@ -1,6 +1,6 @@
 # ngdp-cdn
 
-CDN client for downloading NGDP (Next Generation Data Pipeline) content from
+CDN client for downloading NGDP (Next Generation Distribution Pipeline) content from
 Blizzard's CDN servers.
 
 ## Features

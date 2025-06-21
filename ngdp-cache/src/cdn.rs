@@ -57,7 +57,6 @@ impl CdnCache {
         self.base_dir.join("patch")
     }
 
-
     /// Construct a config cache path from a hash
     ///
     /// Follows CDN structure: config/{first2}/{next2}/{hash}
@@ -109,7 +108,6 @@ impl CdnCache {
         path
     }
 
-
     /// Check if a config exists in cache
     pub async fn has_config(&self, hash: &str) -> bool {
         self.config_path(hash).exists()
@@ -129,7 +127,6 @@ impl CdnCache {
     pub async fn has_index(&self, hash: &str) -> bool {
         self.index_path(hash).exists()
     }
-
 
     /// Write config data to cache
     pub async fn write_config(&self, hash: &str, data: &[u8]) -> Result<()> {
@@ -187,7 +184,6 @@ impl CdnCache {
         Ok(())
     }
 
-
     /// Read config from cache
     pub async fn read_config(&self, hash: &str) -> Result<Vec<u8>> {
         let path = self.config_path(hash);
@@ -216,7 +212,6 @@ impl CdnCache {
         Ok(tokio::fs::read(&path).await?)
     }
 
-
     /// Stream read data from cache
     ///
     /// Returns a file handle for efficient streaming
@@ -232,7 +227,6 @@ impl CdnCache {
         let metadata = tokio::fs::metadata(&path).await?;
         Ok(metadata.len())
     }
-
 
     /// Get the base directory of this cache
     pub fn base_dir(&self) -> &PathBuf {

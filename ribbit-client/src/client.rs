@@ -511,9 +511,8 @@ impl Response {
     pub fn as_bpsv(&self) -> Result<ngdp_bpsv::BpsvDocument> {
         match &self.data {
             Some(data) => {
-                // Use the same adjustment as TypedResponse
-                let adjusted_data = crate::response_types::adjust_hex_field_lengths(data);
-                ngdp_bpsv::BpsvDocument::parse(&adjusted_data)
+                // Parse directly - BPSV parser now correctly handles HEX:N as N bytes
+                ngdp_bpsv::BpsvDocument::parse(data)
                     .map_err(|e| crate::error::Error::ParseError(format!("BPSV parse error: {e}")))
             }
             None => Err(crate::error::Error::ParseError(

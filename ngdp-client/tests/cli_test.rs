@@ -10,7 +10,7 @@ fn test_help_command() {
         .assert()
         .success()
         .stdout(predicate::str::contains(
-            "NGDP (Next Generation Data Pipeline)",
+            "NGDP (Next Generation Distribution Pipeline)",
         ))
         .stdout(predicate::str::contains("Commands:"))
         .stdout(predicate::str::contains("products"))

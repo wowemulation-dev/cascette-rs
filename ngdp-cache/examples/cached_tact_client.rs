@@ -22,7 +22,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Test versions endpoint caching
     println!("\n1. Testing versions endpoint:");
     let product = "wow";
-    
+
     println!("   First request (cache miss):");
     let start = std::time::Instant::now();
     match client.get_versions_parsed(product).await {
@@ -63,11 +63,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     match client.get_cdns_parsed(product).await {
         Ok(cdns) => {
             let duration = start.elapsed();
-            println!(
-                "   ✓ Received {} CDN configs in {:?}",
-                cdns.len(),
-                duration
-            );
+            println!("   ✓ Received {} CDN configs in {:?}", cdns.len(), duration);
             if let Some(first) = cdns.first() {
                 println!("     First CDN: {} (Path: {})", first.name, first.path);
             }
@@ -131,7 +127,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             while let Some(entry) = products.next_entry().await? {
                 let product_name = entry.file_name();
                 println!("   Product: {}", product_name.to_string_lossy());
-                
+
                 let product_dir = entry.path();
                 if let Ok(mut files) = tokio::fs::read_dir(&product_dir).await {
                     while let Some(file) = files.next_entry().await? {

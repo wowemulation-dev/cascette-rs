@@ -1,6 +1,6 @@
 # ngdp-client
 
-Command-line interface for interacting with Blizzard's NGDP (Next Generation Data Pipeline) services.
+Command-line interface for interacting with Blizzard's NGDP (Next Generation Distribution Pipeline) services.
 
 ## Features
 
