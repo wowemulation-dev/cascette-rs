@@ -136,7 +136,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         filter: Some("wow".to_string()),
         region: "us".to_string(),
     };
-    
+
     handle_products(cmd, OutputFormat::Json).await?;
     Ok(())
 }
@@ -165,6 +165,11 @@ cargo bench
 Licensed under either of:
 
 - Apache License, Version 2.0 ([LICENSE-APACHE](../LICENSE-APACHE))
-- MIT license ([LICENSE-MIT](../LICENSE-MIT))
+- MIT License ([LICENSE-MIT](../LICENSE-MIT))
 
 at your option.
+
+## Acknowledgments
+
+This crate is part of the cascette-rs project, providing tools for World of Warcraft
+emulation development.

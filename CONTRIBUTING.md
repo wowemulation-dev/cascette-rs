@@ -72,7 +72,7 @@ git pull upstream main
 git checkout -b my-feature-branch
 ```
 
-Name your branch descriptively, e.g., `add-blp-support` or `fix-header-reading`.
+Name your branch descriptively, e.g., `add-casc-support` or `fix-ribbit-parsing`.
 
 ### Make Your Changes
 

@@ -1,6 +1,7 @@
 # ngdp-cdn
 
-CDN client for downloading NGDP (Next Generation Data Pipeline) content from Blizzard's CDN servers.
+CDN client for downloading NGDP (Next Generation Data Pipeline) content from
+Blizzard's CDN servers.
 
 ## Features
 
@@ -64,11 +65,12 @@ let client = CdnClient::builder()
 
 NGDP CDN URLs follow a specific pattern for content addressing:
 
-```
+```text
 http://{cdn_host}/{path}/{hash[0:2]}/{hash[2:4]}/{hash}
 ```
 
 For example:
+
 - Hash: `2e9c1e3b5f5a0c9d9e8f1234567890ab`
 - CDN Host: `blzddist1-a.akamaihd.net`
 - Path: `tpr/wow`
@@ -125,10 +127,21 @@ for host in cdns.hosts {
 ## Performance Considerations
 
 - **Connection pooling**: The client maintains a pool of connections to each host
-- **Concurrent downloads**: Use multiple client instances or clone the client for parallel downloads
+- **Concurrent downloads**: Use multiple client instances or clone the client for
+  parallel downloads
 - **Retry strategy**: Configure retry parameters based on your network conditions
 - **Timeouts**: Adjust timeouts based on file sizes and network speed
 
 ## License
 
-This project is licensed under the MIT OR Apache-2.0 license.
+Licensed under either of:
+
+- Apache License, Version 2.0 ([LICENSE-APACHE](../LICENSE-APACHE))
+- MIT License ([LICENSE-MIT](../LICENSE-MIT))
+
+at your option.
+
+## Acknowledgments
+
+This crate is part of the cascette-rs project, providing tools for World of Warcraft
+emulation development.

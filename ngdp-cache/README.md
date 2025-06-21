@@ -25,7 +25,7 @@ ngdp-cache = "0.1.0"
 
 ```rust
 use ngdp_cache::{
-    generic::GenericCache, 
+    generic::GenericCache,
     tact::TactCache,
     cached_ribbit_client::CachedRibbitClient
 };
@@ -45,15 +45,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Cached Ribbit client - a complete drop-in replacement for RibbitClient
     let client = CachedRibbitClient::new(Region::US).await?;
-    
+
     // All RibbitClient methods work with transparent caching:
     let summary = client.get_summary().await?;  // Cached for 5 minutes
     let versions = client.get_product_versions("wow").await?;  // Also cached
     let cert = client.request_raw(&Endpoint::Cert("abc123".to_string())).await?;  // Cached for 30 days
-    
+
     // Full Response objects are cached too
     let response = client.request(&Endpoint::ProductCdns("d4".to_string())).await?;
-    
+
     // Typed responses work seamlessly
     let typed_versions = client.request_typed::<ribbit_client::ProductVersionsResponse>(
         &Endpoint::ProductVersions("wow".to_string())
@@ -84,6 +84,11 @@ Each cache type has its own subdirectory:
 Licensed under either of:
 
 - Apache License, Version 2.0 ([LICENSE-APACHE](../LICENSE-APACHE))
-- MIT license ([LICENSE-MIT](../LICENSE-MIT))
+- MIT License ([LICENSE-MIT](../LICENSE-MIT))
 
 at your option.
+
+## Acknowledgments
+
+This crate is part of the cascette-rs project, providing tools for World of Warcraft
+emulation development.

@@ -40,139 +40,130 @@ We welcome contributions from the community! Here are some ways you can help:
 - **Improve documentation**: Help make our docs clearer and more comprehensive
 - **Add examples**: Create examples showing different use cases
 - **Performance improvements**: Profile and optimize the code
-- **Test with real game files**: Verify functionality with actual WoW data files
+- **Test with real NGDP/TACT data**: Verify functionality with actual Blizzard CDN data
 
 ### Areas Where Help is Needed
 
 Here are specific areas where contributions would be especially valuable:
 
-#### 🔧 MPQ Archive Format (wow-mpq)
+#### 🌐 NGDP Protocol Implementation
 
-1. **StormLib Feature Parity**
-   - Automatic encryption key detection (see [StormLib differences guide](docs/guides/stormlib-differences.md))
-   - Content-based key recovery for encrypted files
-   - LZMA compression support
-   - Sparse file compression (RLE algorithm)
-   - Weak signature verification
-   - Game-specific file type detection (AVI files, PE headers)
+1. **TACT Protocol Enhancement**
+   - Complete TACT v2 protocol support
+   - Implement missing endpoints (product configs, install manifests)
+   - Add support for patch files and differential updates
+   - Implement TACT file encoding/decoding
+   - Add support for archive indices
+
+2. **CASC Storage Format**
+   - Implement CASC container format reader/writer
+   - Support for all CASC encoding types
+   - Implement local CASC storage management
+   - Add CASC file extraction and verification
+   - Support for CASC root and encoding files
+
+3. **Ribbit Protocol Features**
+   - Add support for all Ribbit v2 endpoints
+   - Implement Ribbit command pipelining
+   - Add support for custom Ribbit queries
+   - Improve MIME parsing edge cases
+   - Add support for compressed Ribbit responses
+
+#### 📦 Cache System Improvements
+
+1. **Advanced Caching Features**
+   - Implement cache size limits and eviction policies
+   - Add cache compression support
+   - Implement distributed caching support
+   - Add cache statistics and monitoring
+   - Support for cache warming strategies
 
 2. **Performance Optimizations**
-   - Memory-mapped I/O support for large archives
-   - LRU sector caching implementation
-   - Bit-packed data structures for HET/BET tables
-   - Custom allocators for large table operations
+   - Implement zero-copy parsing where possible
+   - Add memory-mapped file support for large caches
+   - Optimize cache lookup performance
+   - Implement cache preloading
+   - Add async cache operations
 
-3. **Archive Protection Handling**
-   - BOBA protector support (negative table offsets)
-   - w3xMaster protector workarounds
-   - Malformed archive recovery mechanisms
-   - Starcraft Beta special case handling
+#### 🔧 Client Library Features
 
-#### 🎨 Graphics Formats
+1. **Enhanced Error Handling**
+   - Implement retry strategies for all client types
+   - Add circuit breaker patterns
+   - Improve error messages and diagnostics
+   - Add telemetry and metrics support
+   - Implement request/response interceptors
 
-1. **BLP Texture Format (wow-blp)**
-   - Full format parser implementation
-   - Mipmap support
-   - Conversion to/from standard image formats (PNG, JPEG)
-   - Direct3D/OpenGL texture loading helpers
+2. **Authentication & Security**
+   - Implement Blizzard authentication support
+   - Add certificate pinning
+   - Support for proxy authentication
+   - Implement request signing
+   - Add support for encrypted communications
 
-2. **M2 Model Format (wow-m2)**
-   - Complete format parser for all versions
-   - Animation system (.anim files)
-   - Skin/mesh data (.skin files)
-   - Physics data (.phys files)
-   - Bone data (.bone files)
-   - Skeleton data (.skel files)
+#### 🛠️ CLI Tool Enhancements
 
-3. **WMO World Objects (wow-wmo)**
-   - Full format specification implementation
-   - Group file support
-   - Portal and visibility system
-   - Liquid rendering support
-   - Doodad placement
+1. **Additional Commands**
+   - Implement `download` command for fetching game content
+   - Add `verify` command for checking file integrity
+   - Implement `extract` command for CASC archives
+   - Add `sync` command for keeping local content updated
+   - Implement `server` command for running a local CDN mirror
 
-#### 🗺️ World Data Formats
+2. **User Experience**
+   - Add interactive mode with command completion
+   - Implement progress bars for long operations
+   - Add support for configuration profiles
+   - Implement parallel downloads
+   - Add resume support for interrupted operations
 
-1. **ADT Terrain (wow-adt)**
-   - Complete chunk parser implementation
-   - Height map extraction
-   - Texture layer support
-   - Water/liquid data
-   - Shadow maps
-   - Area ID mapping
+#### 📊 Data Processing
 
-2. **WDT World Tables (wow-wdt)**
-   - Full format parser
-   - ADT existence flags
-   - Map bounds calculation
-   - MPHD flags support
+1. **File Format Support**
+   - Implement build configuration parsing
+   - Add CDN configuration processing
+   - Support for product configuration files
+   - Implement encoding/root file parsing
+   - Add support for install and download manifests
 
-3. **WDL Low-Res Maps (wow-wdl)**
-   - Format specification implementation
-   - Low-resolution height data
-   - Area table support
-
-#### 📊 Database Format
-
-1. **cDBC Client Database (wow-cdbc)**
-   - Generic DBC parser framework
-   - Schema definition system
-   - Common DBC file implementations:
-     - Item.dbc
-     - Spell.dbc
-     - Map.dbc
-     - AreaTable.dbc
-   - String block handling
-   - Localization support
-
-#### 🛠️ Tooling and CLI
-
-1. **Enhanced CLI Tools**
-   - Interactive mode for MPQ manipulation
-   - Batch processing capabilities
-   - Progress bars for long operations
-   - JSON/YAML output formats
-   - Shell completion scripts
-
-2. **Integration Tools**
-   - Unity/Unreal Engine plugins
-   - Blender import/export scripts
-   - 3ds Max support
-   - Web-based viewers
-
-#### 📚 Documentation and Examples
-
-1. **Format Documentation**
-   - Detailed binary format specifications
-   - Version differences documentation
-   - Visual diagrams of data structures
-   - Format evolution history
-
-2. **Usage Examples**
-   - Complete game asset extraction pipeline
-   - Model viewer implementation
-   - Map renderer example
-   - Asset conversion workflows
-
-3. **Tutorials**
-   - "Building a WoW model viewer" series
-   - "Extracting and using WoW textures"
-   - "Understanding WoW's coordinate system"
-   - "Working with WoW's patch system"
+2. **Content Analysis**
+   - Add tools for analyzing game patches
+   - Implement content diff generation
+   - Add support for content verification
+   - Implement manifest comparison tools
+   - Add content statistics generation
 
 #### 🧪 Testing and Quality
 
 1. **Test Coverage**
    - Increase test coverage to >90%
-   - Fuzzing harnesses for format parsers
-   - Cross-version compatibility tests
-   - Performance benchmarks
+   - Add property-based testing
+   - Implement integration tests with mock servers
+   - Add performance regression tests
+   - Create end-to-end test scenarios
 
-2. **Real-World Testing**
-   - Test with corrupted/malformed files
-   - Verify against all WoW versions (1.12.1 - 5.4.8)
-   - Cross-platform testing (Windows, macOS, Linux)
-   - Big-endian platform support
+2. **Documentation**
+   - Write comprehensive API documentation
+   - Create tutorials for common use cases
+   - Document the NGDP protocol details
+   - Add architecture documentation
+   - Create migration guides from other tools
+
+#### 🔌 Integrations
+
+1. **Language Bindings**
+   - Create Python bindings using PyO3
+   - Add C/C++ bindings
+   - Implement JavaScript/WASM support
+   - Create .NET bindings
+   - Add Ruby bindings
+
+2. **Tool Integration**
+   - Docker image with CLI tools
+   - GitHub Actions for automated downloads
+   - Jenkins plugin for CI/CD
+   - Kubernetes operators for content management
+   - Terraform providers for infrastructure
 
 ### Development Guidelines
 
@@ -180,7 +171,7 @@ Here are specific areas where contributions would be especially valuable:
 - **Documentation**: Document public APIs with examples
 - **Testing**: Write tests for new functionality
 - **Performance**: Profile before optimizing
-- **Compatibility**: Support WoW versions 1.12.1 through 5.4.8
+- **Compatibility**: Support all Blizzard regions and products
 - **Safety**: Prefer safe Rust, document and isolate unsafe code
 
 ### Getting Started with Contributing

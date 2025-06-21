@@ -89,6 +89,7 @@ Where `{product}` can be:
 ### Battle.net Products
 
 - `agent` - Battle.net Agent/Launcher
+- `bna` - Battle.net Application
 
 ### World of Warcraft Products
 
