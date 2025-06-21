@@ -2,6 +2,7 @@
 members = [
   "ngdp-bpsv",
   "ngdp-cache",
+  "ngdp-cdn",
   "ribbit-client",
   "tact-client",
   "ngdp-client",

@@ -1,0 +1,28 @@
+[package]
+name = "ngdp-cdn"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "CDN client for NGDP content delivery"
+
+[dependencies]
+rand.workspace = true
+reqwest = { version = "0.12", features = ["stream", "gzip", "deflate"] }
+thiserror.workspace = true
+tokio = { workspace = true, features = ["full"] }
+tracing.workspace = true
+bytes = "1.9"
+futures-util = "0.3"
+
+[dev-dependencies]
+criterion.workspace = true
+tracing-subscriber.workspace = true
+tokio-test = "0.4"
+
+[[bench]]
+name = "cdn_benchmark"
+harness = false
