@@ -74,7 +74,7 @@ impl BpsvBuilder {
     /// Add a field to the schema
     ///
     /// # Errors
-    /// 
+    ///
     /// Returns an error if the field name already exists in the schema.
     ///
     /// # Examples
@@ -205,7 +205,8 @@ impl BpsvBuilder {
     where
         T: Into<BpsvValue>,
     {
-        let typed_values: Vec<BpsvValue> = values.into_iter().map(std::convert::Into::into).collect();
+        let typed_values: Vec<BpsvValue> =
+            values.into_iter().map(std::convert::Into::into).collect();
         self.add_row(typed_values)
     }
 

@@ -41,6 +41,7 @@ pub struct HttpClient {
     max_backoff_ms: u64,
     backoff_multiplier: f64,
     jitter_factor: f64,
+    user_agent: Option<String>,
 }
 
 impl HttpClient {
@@ -57,6 +58,7 @@ impl HttpClient {
             max_backoff_ms: DEFAULT_MAX_BACKOFF_MS,
             backoff_multiplier: DEFAULT_BACKOFF_MULTIPLIER,
             jitter_factor: DEFAULT_JITTER_FACTOR,
+            user_agent: None,
         })
     }
 
@@ -71,6 +73,7 @@ impl HttpClient {
             max_backoff_ms: DEFAULT_MAX_BACKOFF_MS,
             backoff_multiplier: DEFAULT_BACKOFF_MULTIPLIER,
             jitter_factor: DEFAULT_JITTER_FACTOR,
+            user_agent: None,
         }
     }
 
@@ -112,6 +115,14 @@ impl HttpClient {
     /// Default is 0.1 (10% jitter). Adds randomness to prevent thundering herd.
     pub fn with_jitter_factor(mut self, jitter_factor: f64) -> Self {
         self.jitter_factor = jitter_factor.clamp(0.0, 1.0);
+        self
+    }
+
+    /// Set a custom user agent string
+    ///
+    /// If not set, reqwest's default user agent will be used.
+    pub fn with_user_agent(mut self, user_agent: impl Into<String>) -> Self {
+        self.user_agent = Some(user_agent.into());
         self
     }
 
@@ -175,7 +186,12 @@ impl HttpClient {
 
             debug!("HTTP request to {} (attempt {})", url, attempt + 1);
 
-            match self.client.get(url).send().await {
+            let mut request = self.client.get(url);
+            if let Some(ref user_agent) = self.user_agent {
+                request = request.header("User-Agent", user_agent);
+            }
+
+            match request.send().await {
                 Ok(response) => {
                     trace!("Response status: {}", response.status());
 
@@ -430,5 +446,20 @@ mod tests {
     fn test_default_retry_configuration() {
         let client = HttpClient::new(Region::US, ProtocolVersion::V1).unwrap();
         assert_eq!(client.max_retries, 0); // Default should be 0 for backward compatibility
+    }
+
+    #[test]
+    fn test_user_agent_configuration() {
+        let client = HttpClient::new(Region::US, ProtocolVersion::V1)
+            .unwrap()
+            .with_user_agent("MyCustomAgent/1.0");
+
+        assert_eq!(client.user_agent, Some("MyCustomAgent/1.0".to_string()));
+    }
+
+    #[test]
+    fn test_user_agent_default_none() {
+        let client = HttpClient::new(Region::US, ProtocolVersion::V1).unwrap();
+        assert!(client.user_agent.is_none());
     }
 }

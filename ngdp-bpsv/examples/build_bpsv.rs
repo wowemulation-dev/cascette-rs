@@ -48,21 +48,9 @@ fn main() -> Result<(), Error> {
         .add_field("Flags", BpsvFieldType::String(0))?;
 
     // Add data using raw string values (will be parsed)
-    builder2.add_raw_row(&[
-        "wow".to_string(),
-        "3016450".to_string(),
-        "cdn".to_string(),
-    ])?;
-    builder2.add_raw_row(&[
-        "agent".to_string(),
-        "3011139".to_string(),
-        "".to_string(),
-    ])?;
-    builder2.add_raw_row(&[
-        "d3".to_string(),
-        "2985234".to_string(),
-        "cdn".to_string(),
-    ])?;
+    builder2.add_raw_row(&["wow".to_string(), "3016450".to_string(), "cdn".to_string()])?;
+    builder2.add_raw_row(&["agent".to_string(), "3011139".to_string(), "".to_string()])?;
+    builder2.add_raw_row(&["d3".to_string(), "2985234".to_string(), "cdn".to_string()])?;
 
     let document2 = builder2.build()?;
     println!("   ✅ Created document with {} rows", document2.row_count());

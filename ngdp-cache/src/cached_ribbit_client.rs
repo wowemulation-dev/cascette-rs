@@ -54,7 +54,7 @@ impl CachedRibbitClient {
     /// Create a new cached Ribbit client
     pub async fn new(region: Region) -> Result<Self> {
         let client = RibbitClient::new(region);
-        let cache_dir = get_cache_dir()?.join("ribbit").join("cached");
+        let cache_dir = get_cache_dir()?.join("ribbit");
         ensure_dir(&cache_dir).await?;
 
         debug!("Initialized cached Ribbit client for region {:?}", region);

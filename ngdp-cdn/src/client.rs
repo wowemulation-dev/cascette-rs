@@ -42,6 +42,8 @@ pub struct CdnClient {
     backoff_multiplier: f64,
     /// Jitter factor (0.0 to 1.0)
     jitter_factor: f64,
+    /// Custom user agent string
+    user_agent: Option<String>,
 }
 
 impl CdnClient {
@@ -62,6 +64,7 @@ impl CdnClient {
             max_backoff_ms: DEFAULT_MAX_BACKOFF_MS,
             backoff_multiplier: DEFAULT_BACKOFF_MULTIPLIER,
             jitter_factor: DEFAULT_JITTER_FACTOR,
+            user_agent: None,
         })
     }
 
@@ -74,6 +77,7 @@ impl CdnClient {
             max_backoff_ms: DEFAULT_MAX_BACKOFF_MS,
             backoff_multiplier: DEFAULT_BACKOFF_MULTIPLIER,
             jitter_factor: DEFAULT_JITTER_FACTOR,
+            user_agent: None,
         }
     }
 
@@ -112,6 +116,12 @@ impl CdnClient {
         self
     }
 
+    /// Set a custom user agent string
+    pub fn with_user_agent(mut self, user_agent: impl Into<String>) -> Self {
+        self.user_agent = Some(user_agent.into());
+        self
+    }
+
     /// Calculate backoff duration with exponential backoff and jitter
     #[allow(
         clippy::cast_precision_loss,
@@ -145,7 +155,12 @@ impl CdnClient {
 
             debug!("CDN request to {} (attempt {})", url, attempt + 1);
 
-            match self.client.get(url).send().await {
+            let mut request = self.client.get(url);
+            if let Some(ref user_agent) = self.user_agent {
+                request = request.header("User-Agent", user_agent);
+            }
+
+            match request.send().await {
                 Ok(response) => {
                     trace!("Response status: {}", response.status());
 
@@ -282,6 +297,7 @@ pub struct CdnClientBuilder {
     max_backoff_ms: u64,
     backoff_multiplier: f64,
     jitter_factor: f64,
+    user_agent: Option<String>,
 }
 
 impl CdnClientBuilder {
@@ -296,6 +312,7 @@ impl CdnClientBuilder {
             max_backoff_ms: DEFAULT_MAX_BACKOFF_MS,
             backoff_multiplier: DEFAULT_BACKOFF_MULTIPLIER,
             jitter_factor: DEFAULT_JITTER_FACTOR,
+            user_agent: None,
         }
     }
 
@@ -347,6 +364,12 @@ impl CdnClientBuilder {
         self
     }
 
+    /// Set custom user agent string
+    pub fn user_agent(mut self, user_agent: impl Into<String>) -> Self {
+        self.user_agent = Some(user_agent.into());
+        self
+    }
+
     /// Build the CDN client
     pub fn build(self) -> Result<CdnClient> {
         let client = Client::builder()
@@ -364,6 +387,7 @@ impl CdnClientBuilder {
             max_backoff_ms: self.max_backoff_ms,
             backoff_multiplier: self.backoff_multiplier,
             jitter_factor: self.jitter_factor,
+            user_agent: self.user_agent,
         })
     }
 }
@@ -481,5 +505,30 @@ mod tests {
         // Empty hash
         let result = CdnClient::build_url("host", "path", "");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_user_agent_configuration() {
+        let client = CdnClient::new()
+            .unwrap()
+            .with_user_agent("MyNGDPClient/1.0");
+
+        assert_eq!(client.user_agent, Some("MyNGDPClient/1.0".to_string()));
+    }
+
+    #[test]
+    fn test_user_agent_via_builder() {
+        let client = CdnClient::builder()
+            .user_agent("MyNGDPClient/2.0")
+            .build()
+            .unwrap();
+
+        assert_eq!(client.user_agent, Some("MyNGDPClient/2.0".to_string()));
+    }
+
+    #[test]
+    fn test_user_agent_default_none() {
+        let client = CdnClient::new().unwrap();
+        assert!(client.user_agent.is_none());
     }
 }

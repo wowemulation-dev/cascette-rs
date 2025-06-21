@@ -101,7 +101,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap()
         .join("ngdp")
         .join("ribbit")
-        .join("cached")
         .join("us");
 
     if cache_dir.exists() {

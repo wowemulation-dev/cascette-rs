@@ -7,7 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+#### `tact-client` crate
+
+- **Added custom user agent support**:
+  - Added `with_user_agent()` method to set custom User-Agent headers
+  - User agent is applied to all HTTP requests including retries
+  - If not set, uses reqwest's default user agent
+  - Example usage: `client.with_user_agent("MyGameLauncher/1.0")`
+
+#### `ngdp-cdn` crate
+
+- **Added custom user agent support**:
+  - Added `with_user_agent()` method to `CdnClient`
+  - Added `user_agent()` method to `CdnClientBuilder`
+  - User agent is applied to all CDN download requests
+  - If not set, uses reqwest's default user agent
+  - Example usage via builder: `CdnClient::builder().user_agent("MyClient/1.0").build()`
+  - Example usage via method: `CdnClient::new()?.with_user_agent("MyClient/1.0")`
+
 ### Fixed
+
+#### `ngdp-cache` crate
+
+- **Fixed CachedRibbitClient cache directory structure**:
+  - Removed incorrect "cached" subdirectory from cache path
+  - Cache now correctly uses `~/.cache/ngdp/ribbit/{region}/` instead of `~/.cache/ngdp/ribbit/cached/{region}/`
+  - This aligns with the RibbitCache implementation for consistency
+  - Updated example to reflect correct cache path
 
 - Fixed example filename collisions across crates:
   - Renamed `basic_usage.rs` examples to unique names per crate
