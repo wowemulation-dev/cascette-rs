@@ -6,7 +6,7 @@ use ngdp_bpsv::{BpsvBuilder, BpsvDocument, BpsvFieldType, BpsvValue, Error};
 
 /// Test data representing actual NGDP data formats
 mod test_data {
-    pub const RIBBIT_VERSIONS: &str = r#"Region!STRING:0|BuildConfig!HEX:32|CDNConfig!HEX:32|KeyRing!HEX:32|BuildId!DEC:10|VersionsName!STRING:0|ProductConfig!HEX:32
+    pub const RIBBIT_VERSIONS: &str = r#"Region!STRING:0|BuildConfig!HEX:16|CDNConfig!HEX:16|KeyRing!HEX:16|BuildId!DEC:4|VersionsName!STRING:0|ProductConfig!HEX:16
 ## seqn = 3016450
 us|be2bb98dc28aee05bbee519393696cdb|fac77b9ca52c84ac28ad83a7dbe1c829|3ca57fe7319a297346440e4d2a03a0cd|61491|11.1.7.61491|53020d32e1a25648c8e1eafd5771935f
 eu|be2bb98dc28aee05bbee519393696cdb|fac77b9ca52c84ac28ad83a7dbe1c829|3ca57fe7319a297346440e4d2a03a0cd|61491|11.1.7.61491|53020d32e1a25648c8e1eafd5771935f
@@ -47,7 +47,7 @@ fn test_parse_real_ribbit_versions_data() {
     assert_eq!(region_field.field_type, BpsvFieldType::String(0));
 
     let build_id_field = doc.schema().get_field("BuildId").unwrap();
-    assert_eq!(build_id_field.field_type, BpsvFieldType::Decimal(10));
+    assert_eq!(build_id_field.field_type, BpsvFieldType::Decimal(4));
 
     // Verify data content
     let first_row = &doc.rows()[0];
@@ -148,7 +148,7 @@ fn test_build_and_parse_round_trip() {
         .add_field("Region", BpsvFieldType::String(0))
         .unwrap();
     builder
-        .add_field("BuildConfig", BpsvFieldType::Hex(32))
+        .add_field("BuildConfig", BpsvFieldType::Hex(16))
         .unwrap();
     builder
         .add_field("BuildId", BpsvFieldType::Decimal(10))
@@ -228,7 +228,10 @@ fn test_case_insensitive_field_types() {
     ];
 
     for header in test_cases {
-        let data = format!("{}\n## seqn = 100\nvalue|abcd1234abcd1234|42", header);
+        let data = format!(
+            "{}\n## seqn = 100\nvalue|abcd1234abcd1234abcd1234abcd1234|42",
+            header
+        );
         let doc = BpsvDocument::parse(&data).unwrap();
 
         assert_eq!(doc.schema().fields().len(), 3);
@@ -241,7 +244,7 @@ fn test_case_insensitive_field_types() {
         );
         assert_eq!(
             row.get_raw_by_name("Field2", doc.schema()).unwrap(),
-            "abcd1234abcd1234"
+            "abcd1234abcd1234abcd1234abcd1234"
         );
         assert_eq!(row.get_raw_by_name("Field3", doc.schema()).unwrap(), "42");
     }
@@ -333,7 +336,11 @@ fn test_large_documents() {
             match col_idx % 3 {
                 0 => values.push(BpsvValue::String(format!("row{}col{}", row_idx, col_idx))),
                 1 => values.push(BpsvValue::Decimal(row_idx as i64 * 100 + col_idx as i64)),
-                _ => values.push(BpsvValue::Hex(format!("{:016x}", row_idx * 1000 + col_idx))),
+                _ => values.push(BpsvValue::Hex(format!(
+                    "{:016x}{:016x}",
+                    row_idx * 1000 + col_idx,
+                    row_idx * 1000 + col_idx
+                ))),
             }
         }
         builder.add_row(values).unwrap();

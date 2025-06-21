@@ -261,8 +261,8 @@ mod tests {
     fn test_parse_complete_document() {
         let content = r"Region!STRING:0|BuildConfig!HEX:16|BuildId!DEC:4
 ## seqn = 12345
-us|abcd1234abcd1234|1234
-eu|1234abcd1234abcd|5678";
+us|abcd1234abcd1234abcd1234abcd1234|1234
+eu|1234abcd1234abcd1234abcd1234abcd|5678";
 
         let doc = BpsvParser::parse(content).unwrap();
 
@@ -272,7 +272,10 @@ eu|1234abcd1234abcd|5678";
 
         let first_row = doc.get_row(0).unwrap();
         assert_eq!(first_row.get_raw(0), Some("us"));
-        assert_eq!(first_row.get_raw(1), Some("abcd1234abcd1234"));
+        assert_eq!(
+            first_row.get_raw(1),
+            Some("abcd1234abcd1234abcd1234abcd1234")
+        );
         assert_eq!(first_row.get_raw(2), Some("1234"));
     }
 
@@ -340,7 +343,7 @@ eu||optional_value";
     fn test_parse_schema_only() {
         let content = r"Region!STRING:0|BuildConfig!HEX:16|BuildId!DEC:4
 ## seqn = 12345
-us|abcd1234abcd1234|1234";
+us|abcd1234abcd1234abcd1234abcd1234|1234";
 
         let schema = BpsvParser::parse_schema(content).unwrap();
 
@@ -370,8 +373,8 @@ kr|9999";
     fn test_get_stats() {
         let content = r"Region!STRING:0|BuildConfig!HEX:16|BuildId!DEC:4
 ## seqn = 12345
-us|abcd1234abcd1234|1234
-eu|1234abcd1234abcd|5678";
+us|abcd1234abcd1234abcd1234abcd1234|1234
+eu|1234abcd1234abcd1234abcd1234abcd|5678";
 
         let (field_count, row_count, has_seqn) = BpsvParser::get_stats(content).unwrap();
 

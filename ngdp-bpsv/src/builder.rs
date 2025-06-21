@@ -26,13 +26,13 @@ use crate::value::BpsvValue;
 /// // Add data rows
 /// builder.add_row(vec![
 ///     BpsvValue::String("us".to_string()),
-///     BpsvValue::Hex("abcd1234abcd1234".to_string()),
+///     BpsvValue::Hex("abcd1234abcd1234abcd1234abcd1234".to_string()),
 ///     BpsvValue::Decimal(1234),
 /// ])?;
 ///
 /// builder.add_row(vec![
 ///     BpsvValue::String("eu".to_string()),
-///     BpsvValue::Hex("1234abcd1234abcd".to_string()),
+///     BpsvValue::Hex("1234abcd1234abcd1234abcd1234abcd".to_string()),
 ///     BpsvValue::Decimal(5678),
 /// ])?;
 ///

@@ -346,7 +346,7 @@ mod tests {
         let schema = create_test_schema();
         let mut row = BpsvRow::new(vec![
             "us".to_string(),
-            "abcd1234abcd1234".to_string(),
+            "abcd1234abcd1234abcd1234abcd1234".to_string(),
             "1234".to_string(),
         ]);
 
@@ -359,7 +359,7 @@ mod tests {
         assert_eq!(typed_values[0], BpsvValue::String("us".to_string()));
         assert_eq!(
             typed_values[1],
-            BpsvValue::Hex("abcd1234abcd1234".to_string())
+            BpsvValue::Hex("abcd1234abcd1234abcd1234abcd1234".to_string())
         );
         assert_eq!(typed_values[2], BpsvValue::Decimal(1234));
     }
@@ -374,13 +374,13 @@ mod tests {
 
         doc.add_row(vec![
             "us".to_string(),
-            "abcd1234abcd1234".to_string(),
+            "abcd1234abcd1234abcd1234abcd1234".to_string(),
             "1234".to_string(),
         ])
         .unwrap();
         doc.add_row(vec![
             "eu".to_string(),
-            "1234abcd1234abcd".to_string(),
+            "1234abcd1234abcd1234abcd1234abcd".to_string(),
             "5678".to_string(),
         ])
         .unwrap();
@@ -396,19 +396,19 @@ mod tests {
 
         doc.add_row(vec![
             "us".to_string(),
-            "abcd1234abcd1234".to_string(),
+            "abcd1234abcd1234abcd1234abcd1234".to_string(),
             "1234".to_string(),
         ])
         .unwrap();
         doc.add_row(vec![
             "eu".to_string(),
-            "1234abcd1234abcd".to_string(),
+            "1234abcd1234abcd1234abcd1234abcd".to_string(),
             "5678".to_string(),
         ])
         .unwrap();
         doc.add_row(vec![
             "us".to_string(),
-            "deadbeefdeadbeef".to_string(),
+            "deadbeefdeadbeefdeadbeefdeadbeef".to_string(),
             "9999".to_string(),
         ])
         .unwrap();
@@ -427,13 +427,13 @@ mod tests {
 
         doc.add_row(vec![
             "us".to_string(),
-            "abcd1234abcd1234".to_string(),
+            "abcd1234abcd1234abcd1234abcd1234".to_string(),
             "1234".to_string(),
         ])
         .unwrap();
         doc.add_row(vec![
             "eu".to_string(),
-            "1234abcd1234abcd".to_string(),
+            "1234abcd1234abcd1234abcd1234abcd".to_string(),
             "5678".to_string(),
         ])
         .unwrap();
@@ -452,7 +452,7 @@ mod tests {
         doc.set_sequence_number(Some(12345));
         doc.add_row(vec![
             "us".to_string(),
-            "abcd1234abcd1234".to_string(),
+            "abcd1234abcd1234abcd1234abcd1234".to_string(),
             "1234".to_string(),
         ])
         .unwrap();
@@ -462,7 +462,7 @@ mod tests {
 
         assert_eq!(lines[0], "Region!STRING:0|BuildConfig!HEX:16|BuildId!DEC:4");
         assert_eq!(lines[1], "## seqn = 12345");
-        assert_eq!(lines[2], "us|abcd1234abcd1234|1234");
+        assert_eq!(lines[2], "us|abcd1234abcd1234abcd1234abcd1234|1234");
     }
 
     #[test]

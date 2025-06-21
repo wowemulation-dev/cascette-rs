@@ -9,9 +9,9 @@ use std::fmt;
 pub enum BpsvFieldType {
     /// String field with maximum length (0 = unlimited)
     String(u32),
-    /// Hexadecimal field with expected character count
+    /// Hexadecimal field with byte count (N bytes = N*2 hex characters)
     Hex(u32),
-    /// Decimal number field with precision
+    /// Decimal number field with storage size in bytes (e.g., 4 = uint32)
     Decimal(u32),
 }
 
@@ -88,11 +88,11 @@ impl BpsvFieldType {
     /// assert!(string_type.is_valid_value("hello"));
     /// assert!(!string_type.is_valid_value("too_long")); // > 5 chars
     ///
-    /// let hex_type = BpsvFieldType::Hex(4);
-    /// assert!(hex_type.is_valid_value("abcd"));
-    /// assert!(hex_type.is_valid_value("1234"));
+    /// let hex_type = BpsvFieldType::Hex(4);  // 4 bytes = 8 hex chars
+    /// assert!(hex_type.is_valid_value("abcd1234"));
+    /// assert!(hex_type.is_valid_value("12345678"));
     /// assert!(!hex_type.is_valid_value("xyz")); // invalid hex
-    /// assert!(!hex_type.is_valid_value("12345")); // wrong length
+    /// assert!(!hex_type.is_valid_value("1234")); // wrong length (need 8 chars)
     ///
     /// let dec_type = BpsvFieldType::Decimal(4);
     /// assert!(dec_type.is_valid_value("1234"));
@@ -103,11 +103,12 @@ impl BpsvFieldType {
     pub fn is_valid_value(&self, value: &str) -> bool {
         match self {
             BpsvFieldType::String(max_len) => *max_len == 0 || value.len() <= *max_len as usize,
-            BpsvFieldType::Hex(expected_len) => {
+            BpsvFieldType::Hex(byte_count) => {
                 if value.is_empty() {
                     return true; // Empty values are always valid
                 }
-                if *expected_len > 0 && value.len() != *expected_len as usize {
+                // HEX:N means N bytes, which is N*2 hex characters
+                if *byte_count > 0 && value.len() != (*byte_count as usize * 2) {
                     return false;
                 }
                 value.chars().all(|c| c.is_ascii_hexdigit())
@@ -214,13 +215,13 @@ mod tests {
         let string_unlimited = BpsvFieldType::String(0);
         assert!(string_unlimited.is_valid_value("any length string here"));
 
-        let hex_type = BpsvFieldType::Hex(4);
-        assert!(hex_type.is_valid_value("abcd"));
-        assert!(hex_type.is_valid_value("1234"));
-        assert!(hex_type.is_valid_value("ABCD"));
-        assert!(!hex_type.is_valid_value("xyz"));
-        assert!(!hex_type.is_valid_value("12345"));
-        assert!(!hex_type.is_valid_value("123"));
+        let hex_type = BpsvFieldType::Hex(4); // 4 bytes = 8 hex chars
+        assert!(hex_type.is_valid_value("abcd1234"));
+        assert!(hex_type.is_valid_value("12345678"));
+        assert!(hex_type.is_valid_value("ABCD1234"));
+        assert!(!hex_type.is_valid_value("xyz12345")); // invalid hex
+        assert!(!hex_type.is_valid_value("1234")); // too short (4 chars, need 8)
+        assert!(!hex_type.is_valid_value("123456789")); // too long (9 chars)
 
         let hex_unlimited = BpsvFieldType::Hex(0);
         assert!(hex_unlimited.is_valid_value("abc123"));
@@ -237,8 +238,8 @@ mod tests {
 
     #[test]
     fn test_normalize_values() {
-        let hex_type = BpsvFieldType::Hex(4);
-        assert_eq!(hex_type.validate_value("ABCD").unwrap(), "abcd");
+        let hex_type = BpsvFieldType::Hex(4); // 4 bytes = 8 hex chars
+        assert_eq!(hex_type.validate_value("ABCD1234").unwrap(), "abcd1234");
 
         let dec_type = BpsvFieldType::Decimal(4);
         assert_eq!(dec_type.validate_value("0123").unwrap(), "123");

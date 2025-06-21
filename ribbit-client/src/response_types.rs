@@ -6,40 +6,6 @@
 use crate::{Error, Response, error::Result};
 use ngdp_bpsv::BpsvDocument;
 
-/// Adjust HEX field lengths from Blizzard's byte-based format to character-based format
-///
-/// Blizzard uses HEX:16 to mean 16 bytes (32 hex characters), but ngdp-bpsv
-/// interprets it as 16 hex characters. This function doubles the HEX field lengths.
-pub(crate) fn adjust_hex_field_lengths(data: &str) -> String {
-    let mut lines = data.lines();
-
-    // Process the header line
-    if let Some(header) = lines.next() {
-        let adjusted_header = header
-            .split('|')
-            .map(|field| {
-                if let Some((name_type, length_str)) = field.split_once(':') {
-                    if name_type.contains("!HEX") {
-                        // Double the length for HEX fields
-                        if let Ok(length) = length_str.parse::<u32>() {
-                            return format!("{}:{}", name_type, length * 2);
-                        }
-                    }
-                }
-                field.to_string()
-            })
-            .collect::<Vec<_>>()
-            .join("|");
-
-        // Reconstruct the document with adjusted header
-        let mut result = vec![adjusted_header];
-        result.extend(lines.map(std::string::ToString::to_string));
-        result.join("\n")
-    } else {
-        data.to_string()
-    }
-}
-
 /// Trait for typed responses that can be parsed from BPSV documents
 pub trait TypedResponse: Sized {
     /// Parse the response from a BPSV document
@@ -55,10 +21,8 @@ pub trait TypedResponse: Sized {
     fn from_response(response: &Response) -> Result<Self> {
         match &response.data {
             Some(data) => {
-                // Blizzard uses HEX:16 to mean 16 bytes (32 hex chars), but ngdp-bpsv
-                // interprets it as 16 hex chars. We need to adjust the header.
-                let adjusted_data = adjust_hex_field_lengths(data);
-                let doc = BpsvDocument::parse(&adjusted_data)
+                // Parse directly - BPSV parser now correctly handles HEX:N as N bytes
+                let doc = BpsvDocument::parse(data)
                     .map_err(|e| Error::ParseError(format!("BPSV parse error: {e}")))?;
                 Self::from_bpsv(&doc)
             }
@@ -373,24 +337,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_adjust_hex_field_lengths() {
-        let input = concat!(
-            "Region!STRING:0|BuildConfig!HEX:16|CDNConfig!HEX:16\n",
-            "## seqn = 12345\n",
-            "us|e359107662e72559b4e1ab721b157cb0|48c7c7dfe4ea7df9dac22f6937ecbf47\n"
-        );
-
-        let adjusted = adjust_hex_field_lengths(input);
-        assert!(adjusted.contains("BuildConfig!HEX:32"));
-        assert!(adjusted.contains("CDNConfig!HEX:32"));
-        assert!(adjusted.contains("us|e359107662e72559b4e1ab721b157cb0"));
-    }
-
-    #[test]
     fn test_parse_product_versions() {
-        // Use already adjusted lengths for the test
+        // Use HEX:16 which expects 32 hex characters (16 bytes)
         let bpsv_data = concat!(
-            "Region!STRING:0|BuildConfig!HEX:32|CDNConfig!HEX:32|BuildId!DEC:4|VersionsName!STRING:0|ProductConfig!HEX:32\n",
+            "Region!STRING:0|BuildConfig!HEX:16|CDNConfig!HEX:16|BuildId!DEC:4|VersionsName!STRING:0|ProductConfig!HEX:16\n",
             "## seqn = 12345\n",
             "us|abcdef1234567890abcdef1234567890|fedcba0987654321fedcba0987654321|123456|10.2.5.53040|1234567890abcdef1234567890abcdef\n",
             "eu|abcdef1234567890abcdef1234567890|fedcba0987654321fedcba0987654321|123456|10.2.5.53040|1234567890abcdef1234567890abcdef\n"

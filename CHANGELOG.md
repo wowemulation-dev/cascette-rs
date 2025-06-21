@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+#### `ngdp-bpsv` crate
+
+- **Fixed HEX field length interpretation to match Blizzard's semantics**:
+  - HEX:N now correctly represents N bytes in binary format (N*2 hex characters)
+  - Previously interpreted HEX:16 as 16 characters, now correctly expects 32 characters
+  - This aligns with Blizzard's actual data format where HEX:16 = 16-byte MD5 hash
+  - Updated all tests to use correct hex string lengths
+  - Updated documentation to clarify field length semantics
+
+#### `ribbit-client` crate
+
+- **Removed HEX field length adjustment workaround**:
+  - Removed `adjust_hex_field_lengths` function that was compensating for BPSV parser issue
+  - Now parses BPSV responses directly without field manipulation
+  - Simplifies code and improves reliability
+
 ### Changed
 
 #### `tact-client` crate

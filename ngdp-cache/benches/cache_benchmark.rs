@@ -85,7 +85,6 @@ fn bench_generic_cache_read(c: &mut Criterion) {
     group.finish();
 }
 
-
 fn bench_cdn_cache_operations(c: &mut Criterion) {
     let runtime = Runtime::new().unwrap();
 
@@ -253,7 +252,7 @@ fn bench_path_operations(c: &mut Criterion) {
     let runtime = Runtime::new().unwrap();
 
     c.bench_function("hash_path_segmentation", |b| {
-        let tact = runtime.block_on(TactCache::new()).unwrap();
+        let cdn = runtime.block_on(CdnCache::new()).unwrap();
         let hashes = vec![
             "0123456789abcdef0123456789abcdef",
             "fedcba9876543210fedcba9876543210",
@@ -263,9 +262,9 @@ fn bench_path_operations(c: &mut Criterion) {
 
         b.iter(|| {
             for hash in &hashes {
-                let _config = black_box(tact.config_path(black_box(hash)));
-                let _data = black_box(tact.data_path(black_box(hash)));
-                let _index = black_box(tact.index_path(black_box(hash)));
+                let _config = black_box(cdn.config_path(black_box(hash)));
+                let _data = black_box(cdn.data_path(black_box(hash)));
+                let _index = black_box(cdn.index_path(black_box(hash)));
             }
         });
     });

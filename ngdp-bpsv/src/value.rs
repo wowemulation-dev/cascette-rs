@@ -29,8 +29,8 @@ impl BpsvValue {
     /// let string_val = BpsvValue::parse("hello", &BpsvFieldType::String(0))?;
     /// assert_eq!(string_val, BpsvValue::String("hello".to_string()));
     ///
-    /// let hex_val = BpsvValue::parse("ABCD", &BpsvFieldType::Hex(4))?;
-    /// assert_eq!(hex_val, BpsvValue::Hex("abcd".to_string()));
+    /// let hex_val = BpsvValue::parse("ABCD1234", &BpsvFieldType::Hex(4))?;
+    /// assert_eq!(hex_val, BpsvValue::Hex("abcd1234".to_string()));
     ///
     /// let dec_val = BpsvValue::parse("1234", &BpsvFieldType::Decimal(4))?;
     /// assert_eq!(dec_val, BpsvValue::Decimal(1234));
@@ -259,10 +259,10 @@ mod tests {
             BpsvValue::String("hello".to_string())
         );
 
-        let hex_type = BpsvFieldType::Hex(4);
+        let hex_type = BpsvFieldType::Hex(4); // 4 bytes = 8 hex chars
         assert_eq!(
-            BpsvValue::parse("ABCD", &hex_type).unwrap(),
-            BpsvValue::Hex("abcd".to_string())
+            BpsvValue::parse("ABCD1234", &hex_type).unwrap(),
+            BpsvValue::Hex("abcd1234".to_string())
         );
 
         let dec_type = BpsvFieldType::Decimal(4);

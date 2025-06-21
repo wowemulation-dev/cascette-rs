@@ -3,7 +3,7 @@
 ## Overview
 
 BPSV (Blizzard Pipe-Separated Values) is a structured data format used throughout
-Blizzard's NGDP (Next Generation Data Pipeline) system. It serves as the primary
+Blizzard's NGDP (Next Generation Distribution Pipeline) system. It serves as the primary
 data exchange format for:
 
 - 📦 Product version information
@@ -45,22 +45,24 @@ String field type for text data.
 Hexadecimal field type for hashes and binary data.
 
 - **Syntax**: `HEX:length` or `Hex:length` (case-insensitive)
-- **Length**: Expected number of hex characters
+- **Length**: Number of bytes in binary format (N bytes = N*2 hex characters)
 - **Valid characters**: `0-9`, `a-f`, `A-F`
 - **Examples**:
-  - `Hash!HEX:32` - 32-character hex string (MD5)
-  - `BuildConfig!HEX:64` - 64-character hex string (SHA256)
+  - `Hash!HEX:16` - 16-byte hash = 32 hex characters (MD5)
+  - `BuildConfig!HEX:32` - 32-byte hash = 64 hex characters (SHA256)
 
 ### DEC:length
 
 Decimal integer field type.
 
 - **Syntax**: `DEC:length`, `Decimal:length`, or `Dec:length` (case-insensitive)
-- **Length**: Maximum number of digits (not enforced, informational)
-- **Range**: Full signed 64-bit integer range
+- **Length**: Storage size in bytes (e.g., 4 = uint32, 8 = uint64)
+  - Not enforced during parsing - any valid integer is accepted
+  - Indicates the intended binary storage format
+- **Range**: Full signed 64-bit integer range for parsing
 - **Examples**:
-  - `BuildId!DEC:10` - Build number
-  - `Seqn!DEC:7` - Sequence number
+  - `BuildId!DEC:4` - Build number (uint32, up to ~4.3 billion)
+  - `Seqn!DEC:4` - Sequence number (uint32)
 
 ## Special Elements
 
@@ -92,7 +94,7 @@ kr|67890|
 ### Product Versions (wow)
 
 ```text
-Region!STRING:0|BuildConfig!HEX:32|CDNConfig!HEX:32|KeyRing!HEX:32|BuildId!DEC:10|VersionsName!STRING:0|ProductConfig!HEX:32
+Region!STRING:0|BuildConfig!HEX:16|CDNConfig!HEX:16|KeyRing!HEX:16|BuildId!DEC:4|VersionsName!STRING:0|ProductConfig!HEX:16
 ## seqn = 3016450
 us|be2bb98dc28aee05bbee519393696cdb|fac77b9ca52c84ac28ad83a7dbe1c829|3ca57fe7319a297346440e4d2a03a0cd|61491|11.1.7.61491|53020d32e1a25648c8e1eafd5771935f
 eu|be2bb98dc28aee05bbee519393696cdb|fac77b9ca52c84ac28ad83a7dbe1c829|3ca57fe7319a297346440e4d2a03a0cd|61491|11.1.7.61491|53020d32e1a25648c8e1eafd5771935f

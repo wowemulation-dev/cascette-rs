@@ -239,7 +239,7 @@ mod tests {
 
         let valid_row = vec![
             "us".to_string(),
-            "abcd1234abcd1234".to_string(),
+            "abcd1234abcd1234abcd1234abcd1234".to_string(),
             "1234".to_string(),
         ];
         let result = schema.validate_row(&valid_row);
