@@ -1,7 +1,7 @@
 # cascette-rs
 
-Open-source Rust implementation of Blizzard's NGDP (Next Generation Distribution Pipeline)
-for World of Warcraft emulation.
+Open-source Rust implementation of Blizzard's NGDP (Next Generation Distribution
+Pipeline) for World of Warcraft emulation.
 
 <div align="center">
 

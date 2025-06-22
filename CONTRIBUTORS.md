@@ -191,10 +191,18 @@ also be highlighted in:
 - Project README
 - Documentation credits
 
-## License
+## 📄 License
 
-By contributing to this project, you agree that your contributions will be licensed
-under the same terms as the project (MIT OR Apache-2.0).
+This project is dual-licensed under either:
+
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
+- MIT license ([LICENSE-MIT](LICENSE-MIT))
+
+at your option.
+
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in this project by you, as defined in the Apache-2.0 license, shall
+be dual licensed as above, without any additional terms or conditions.
 
 ## Code of Conduct
 

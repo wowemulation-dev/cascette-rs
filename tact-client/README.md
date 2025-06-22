@@ -82,10 +82,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 The TACT client supports two protocol versions:
 
 ### V1 Protocol
+
 - HTTP-based on port 1119 (`http://{region}.patch.battle.net:1119`)
 - Legacy format, still supported
 
 ### V2 Protocol - Default
+
 - HTTPS-based REST API (`https://{region}.version.battle.net/v2/products`)
 - Modern, secure protocol
 - **This is the default protocol as of v0.2.0**
@@ -122,16 +124,20 @@ Tested and working products:
 3. The actual file content is downloaded from CDN hosts listed in the CDN configuration
 4. File paths on CDN use hash-based directory structure: `/{hash[0:2]}/{hash[2:4]}/{hash}`
 
-## License
+## 📄 License
 
-Licensed under either of:
+This project is dual-licensed under either:
 
-- Apache License, Version 2.0 ([LICENSE-APACHE](../LICENSE-APACHE))
-- MIT License ([LICENSE-MIT](../LICENSE-MIT))
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
+- MIT license ([LICENSE-MIT](LICENSE-MIT))
 
 at your option.
 
-## Acknowledgments
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in this project by you, as defined in the Apache-2.0 license, shall
+be dual licensed as above, without any additional terms or conditions.
 
-This crate is part of the cascette-rs project, providing tools for World of Warcraft
+## 🫶 Acknowledgments
+
+This crate is part of the `cascette-rs` project, providing tools for World of Warcraft
 emulation development.

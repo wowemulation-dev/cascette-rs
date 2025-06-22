@@ -132,16 +132,20 @@ for host in cdns.hosts {
 - **Retry strategy**: Configure retry parameters based on your network conditions
 - **Timeouts**: Adjust timeouts based on file sizes and network speed
 
-## License
+## 📄 License
 
-Licensed under either of:
+This project is dual-licensed under either:
 
-- Apache License, Version 2.0 ([LICENSE-APACHE](../LICENSE-APACHE))
-- MIT License ([LICENSE-MIT](../LICENSE-MIT))
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
+- MIT license ([LICENSE-MIT](LICENSE-MIT))
 
 at your option.
 
-## Acknowledgments
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in this project by you, as defined in the Apache-2.0 license, shall
+be dual licensed as above, without any additional terms or conditions.
 
-This crate is part of the cascette-rs project, providing tools for World of Warcraft
+## 🫶 Acknowledgments
+
+This crate is part of the `cascette-rs` project, providing tools for World of Warcraft
 emulation development.

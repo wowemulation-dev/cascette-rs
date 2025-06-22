@@ -135,7 +135,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added comprehensive documentation explaining that TACT `/cdns` endpoint returns CDN configuration, not content
   - Documented that actual CDN content caching should use `~/.cache/ngdp/cdn/`
   - Added integration tests demonstrating proper cache isolation and structure
-  
+
 - **Merged TactCache into CdnCache**:
   - Removed separate TactCache module as it was duplicating CDN functionality
   - CdnCache now handles all CDN content types: config/, data/, patch/, and indices

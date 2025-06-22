@@ -3,8 +3,8 @@
 ## Overview
 
 BPSV (Blizzard Pipe-Separated Values) is a structured data format used throughout
-Blizzard's NGDP (Next Generation Distribution Pipeline) system. It serves as the primary
-data exchange format for:
+Blizzard's NGDP (Next Generation Distribution Pipeline) system. It serves as the
+primary data exchange format for:
 
 - 📦 Product version information
 - 🌐 CDN configuration data
