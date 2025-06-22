@@ -57,6 +57,7 @@ const DEFAULT_JITTER_FACTOR: f64 = 0.1;
 /// # Ok(())
 /// # }
 /// ```
+#[derive(Clone)]
 pub struct RibbitClient {
     region: Region,
     protocol_version: ProtocolVersion,
@@ -73,7 +74,7 @@ impl RibbitClient {
     pub fn new(region: Region) -> Self {
         Self {
             region,
-            protocol_version: ProtocolVersion::V1,
+            protocol_version: ProtocolVersion::V2,
             max_retries: DEFAULT_MAX_RETRIES,
             initial_backoff_ms: DEFAULT_INITIAL_BACKOFF_MS,
             max_backoff_ms: DEFAULT_MAX_BACKOFF_MS,
@@ -810,7 +811,7 @@ mod tests {
     fn test_client_creation() {
         let client = RibbitClient::new(Region::EU);
         assert_eq!(client.region(), Region::EU);
-        assert_eq!(client.protocol_version(), ProtocolVersion::V1);
+        assert_eq!(client.protocol_version(), ProtocolVersion::V2);
     }
 
     #[test]
@@ -835,7 +836,7 @@ mod tests {
     fn test_client_default() {
         let client = RibbitClient::default();
         assert_eq!(client.region(), Region::US);
-        assert_eq!(client.protocol_version(), ProtocolVersion::V1);
+        assert_eq!(client.protocol_version(), ProtocolVersion::V2);
     }
 
     #[tokio::test]

@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+#### Breaking Changes
+
+- **Changed default protocol version to V2 for both Ribbit and TACT clients**:
+  - `RibbitClient::new()` now defaults to `ProtocolVersion::V2` (was V1)
+  - `HttpClient::default()` now uses `ProtocolVersion::V2` (was V1)
+  - V2 provides better performance and is the modern protocol
+  - To use V1, explicitly set it: `.with_protocol_version(ProtocolVersion::V1)`
+  - Updated FallbackClient to use V2 for TACT fallback
+  - Certificate and OCSP endpoints automatically use V1 (V2 not supported for these)
+  - Added `Clone` trait to `RibbitClient` for protocol version switching
+
 ### Fixed
 
 #### `ngdp-bpsv` crate

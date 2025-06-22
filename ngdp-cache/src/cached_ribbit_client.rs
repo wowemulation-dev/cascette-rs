@@ -28,7 +28,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 use tracing::{debug, trace};
 
-use ribbit_client::{Endpoint, Region, RibbitClient, TypedResponse};
+use ribbit_client::{Endpoint, ProtocolVersion, Region, RibbitClient, TypedResponse};
 
 use crate::{Result, ensure_dir, get_cache_dir};
 
@@ -342,7 +342,20 @@ impl CachedRibbitClient {
             "Cache miss for endpoint: {:?}, fetching from server",
             endpoint
         );
-        let response = self.client.request(endpoint).await?;
+
+        // For certificate and OCSP endpoints, we need to use V1 protocol
+        let response = match endpoint {
+            Endpoint::Cert(_) | Endpoint::Ocsp(_) => {
+                // Create a V1 client for these endpoints
+                let mut v1_client = self.client.clone();
+                v1_client = v1_client.with_protocol_version(ProtocolVersion::V1);
+                v1_client.request(endpoint).await?
+            }
+            _ => {
+                // Use the default client for other endpoints
+                self.client.request(endpoint).await?
+            }
+        };
 
         // Cache the successful response
         if let Err(e) = self.write_to_cache(endpoint, &response.raw).await {
@@ -369,7 +382,20 @@ impl CachedRibbitClient {
             "Cache miss for raw endpoint: {:?}, fetching from server",
             endpoint
         );
-        let raw_data = self.client.request_raw(endpoint).await?;
+
+        // For certificate and OCSP endpoints, we need to use V1 protocol
+        let raw_data = match endpoint {
+            Endpoint::Cert(_) | Endpoint::Ocsp(_) => {
+                // Create a V1 client for these endpoints
+                let mut v1_client = self.client.clone();
+                v1_client = v1_client.with_protocol_version(ProtocolVersion::V1);
+                v1_client.request_raw(endpoint).await?
+            }
+            _ => {
+                // Use the default client for other endpoints
+                self.client.request_raw(endpoint).await?
+            }
+        };
 
         // Cache the successful response
         if let Err(e) = self.write_to_cache(endpoint, &raw_data).await {

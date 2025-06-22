@@ -59,8 +59,11 @@ use tact_client::{HttpClient, ProtocolVersion, Region};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Create client for v1 protocol
-    let client = HttpClient::new(Region::US, ProtocolVersion::V1)?;
+    // Create client (V2 is now the default)
+    let client = HttpClient::new(Region::US, ProtocolVersion::V2)?;
+
+    // Or use the Default implementation
+    let client = HttpClient::default();
 
     // Fetch versions
     let response = client.get_versions("wow").await?;
@@ -72,6 +75,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
+```
+
+## Protocol Versions
+
+The TACT client supports two protocol versions:
+
+### V1 Protocol
+- HTTP-based on port 1119 (`http://{region}.patch.battle.net:1119`)
+- Legacy format, still supported
+
+### V2 Protocol - Default
+- HTTPS-based REST API (`https://{region}.version.battle.net/v2/products`)
+- Modern, secure protocol
+- **This is the default protocol as of v0.2.0**
+
+```rust
+// V2 is now the default
+let client = HttpClient::new(Region::US, ProtocolVersion::V2)?;
+
+// Or explicitly use V1 if needed
+let client = HttpClient::new(Region::US, ProtocolVersion::V1)?;
 ```
 
 ## Supported Products

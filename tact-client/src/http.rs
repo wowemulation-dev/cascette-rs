@@ -346,7 +346,7 @@ impl HttpClient {
 
 impl Default for HttpClient {
     fn default() -> Self {
-        Self::new(Region::US, ProtocolVersion::V1).expect("Failed to create default HTTP client")
+        Self::new(Region::US, ProtocolVersion::V2).expect("Failed to create default HTTP client")
     }
 }
 

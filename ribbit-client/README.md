@@ -72,16 +72,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 - ASN.1 signature parsing for attached signatures
 - Automatic content type detection
 
-### V2 Protocol (Raw PSV)
+### V2 Protocol (Raw PSV) - Default
 
 - Direct PSV (Pipe-Separated Values) format
 - Lower overhead, faster parsing
 - No MIME wrapper or checksums
+- **This is the default protocol as of v0.2.0**
 
 ```rust
-// Use V2 protocol for better performance
+// V2 is now the default
+let client = RibbitClient::new(Region::EU);
+
+// Or explicitly use V1 if needed
 let client = RibbitClient::new(Region::EU)
-    .with_protocol_version(ProtocolVersion::V2);
+    .with_protocol_version(ProtocolVersion::V1);
 ```
 
 ## Examples

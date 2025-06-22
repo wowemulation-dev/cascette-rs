@@ -53,7 +53,7 @@ impl FallbackClient {
             }
         };
 
-        let tact_client = CachedTactClient::new(tact_region, tact_client::ProtocolVersion::V1)
+        let tact_client = CachedTactClient::new(tact_region, tact_client::ProtocolVersion::V2)
             .await
             .map_err(|e| FallbackError::ClientCreation(format!("TACT: {}", e)))?;
 

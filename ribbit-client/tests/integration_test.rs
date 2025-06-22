@@ -4,7 +4,7 @@ use ribbit_client::{Endpoint, ProtocolVersion, Region, RibbitClient};
 
 #[tokio::test]
 async fn test_ribbit_summary_v1() {
-    let client = RibbitClient::new(Region::US);
+    let client = RibbitClient::new(Region::US).with_protocol_version(ProtocolVersion::V1);
     let result = client.request(&Endpoint::Summary).await;
 
     // We expect either success or connection failure in tests
@@ -158,7 +158,7 @@ async fn test_ribbit_product_bgdl() {
 
 #[tokio::test]
 async fn test_ribbit_cert_endpoint() {
-    let client = RibbitClient::new(Region::US);
+    let client = RibbitClient::new(Region::US).with_protocol_version(ProtocolVersion::V1);
     let endpoint = Endpoint::Cert("5168ff90af0207753cccd9656462a212b859723b".to_string());
 
     let result = client.request_raw(&endpoint).await;
@@ -352,7 +352,7 @@ async fn test_ribbit_mixed_valid_invalid() {
 
 #[tokio::test]
 async fn test_ribbit_v1_mime_parsing() {
-    let client = RibbitClient::new(Region::US);
+    let client = RibbitClient::new(Region::US).with_protocol_version(ProtocolVersion::V1);
 
     // Test with a certificate endpoint which has a simple MIME structure
     let endpoint = Endpoint::Cert("5168ff90af0207753cccd9656462a212b859723b".to_string());
@@ -389,7 +389,7 @@ async fn test_ribbit_v1_mime_parsing() {
 
 #[tokio::test]
 async fn test_ribbit_v1_multipart_mime() {
-    let client = RibbitClient::new(Region::US);
+    let client = RibbitClient::new(Region::US).with_protocol_version(ProtocolVersion::V1);
 
     // Test with versions endpoint which has multipart MIME with signature
     let endpoint = Endpoint::ProductVersions("wow".to_string());
