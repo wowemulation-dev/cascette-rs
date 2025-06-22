@@ -7,6 +7,13 @@ pub mod commands;
 pub mod fallback_client;
 pub mod output;
 
+/// Common test constants
+pub mod test_constants {
+    /// Example certificate hash used throughout tests and examples
+    /// SKI: 5168ff90af0207753cccd9656462a212b859723b
+    pub const EXAMPLE_CERT_HASH: &str = "5168ff90af0207753cccd9656462a212b859723b";
+}
+
 // Re-export command handlers
 pub use crate::commands::{
     certs::handle as handle_certs, config::handle as handle_config,

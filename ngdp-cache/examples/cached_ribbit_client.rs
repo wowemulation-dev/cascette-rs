@@ -1,10 +1,13 @@
 //! Example demonstrating the cached Ribbit client
 //!
-//! This example shows how to use the CachedRibbitClient to cache certificate
-//! endpoint requests using the Blizzard MIME filename convention.
+//! This example shows how to use the CachedRibbitClient to:
+//! - Cache certificate endpoint requests using the Blizzard MIME filename convention
+//! - Cache full Response objects, not just raw bytes
+//! - Work as a drop-in replacement for RibbitClient
+//! - Parse responses as typed data (BPSV format)
 
 use ngdp_cache::cached_ribbit_client::CachedRibbitClient;
-use ribbit_client::{Endpoint, Region};
+use ribbit_client::{Endpoint, ProductVersionsResponse, Region, TypedResponse};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -112,6 +115,84 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("   - {}", filename.to_string_lossy());
             }
         }
+    }
+
+    // Test Response object caching (not just raw bytes)
+    println!("\n7. Testing Response object caching:");
+    let response = client.request(&versions_endpoint).await?;
+    println!("   Response object cached with:");
+    println!("     - Raw data: {} bytes", response.raw.len());
+    println!("     - Has parsed data: {}", response.data.is_some());
+    println!("     - Has MIME parts: {}", response.mime_parts.is_some());
+
+    // Test typed response parsing
+    println!("\n8. Testing typed response parsing:");
+    if let Ok(bpsv) = response.as_bpsv() {
+        println!("   ✓ Successfully parsed as BPSV");
+        println!("   Sequence number: {:?}", bpsv.sequence_number());
+        println!("   Row count: {}", bpsv.rows().len());
+
+        // Parse as typed response
+        let typed = ProductVersionsResponse::from_bpsv(&bpsv)?;
+        println!("   Found {} version entries", typed.entries.len());
+        if let Some(first) = typed.entries.first() {
+            println!(
+                "   First entry: {} - Build {}",
+                first.region, first.build_id
+            );
+        }
+    } else {
+        println!("   Note: V1 responses need additional parsing");
+    }
+
+    // Test with V2 protocol for immediate parsed data
+    println!("\n9. Testing with V2 protocol:");
+    let mut v2_client = CachedRibbitClient::new(Region::US).await?;
+    v2_client
+        .inner_mut()
+        .set_protocol_version(ribbit_client::ProtocolVersion::V2);
+
+    let v2_response = v2_client.request(&versions_endpoint).await?;
+    if let Some(data) = &v2_response.data {
+        println!("   ✓ V2 response has parsed data immediately");
+        println!(
+            "   Data preview: {}...",
+            &data.chars().take(50).collect::<String>()
+        );
+    }
+
+    // Compare cache performance
+    println!("\n10. Cache performance comparison:");
+    println!("   Testing multiple rapid requests...");
+    let mut total_cached = 0u128;
+    let mut total_fresh = 0u128;
+
+    // Cached requests
+    for i in 0..5 {
+        let start = std::time::Instant::now();
+        let _ = client.request(&versions_endpoint).await?;
+        let elapsed = start.elapsed().as_micros();
+        total_cached += elapsed;
+        println!("   Cached request {}: {:?}", i + 1, start.elapsed());
+    }
+
+    // Fresh requests (with caching disabled)
+    client.set_caching_enabled(false);
+    for i in 0..5 {
+        let start = std::time::Instant::now();
+        let _ = client.request(&versions_endpoint).await?;
+        let elapsed = start.elapsed().as_micros();
+        total_fresh += elapsed;
+        println!("   Fresh request {}: {:?}", i + 1, start.elapsed());
+    }
+
+    println!("\n   Average cached: {} µs", total_cached / 5);
+    println!("   Average fresh: {} µs", total_fresh / 5);
+    if total_fresh > 0 {
+        println!(
+            "   Cache speedup: {:.1}x faster",
+            total_fresh as f64 / total_cached as f64
+        );
     }
 
     Ok(())

@@ -12,7 +12,9 @@ keywords = ["ngdp", "cache", "blizzard", "tact", "cdn"]
 categories = ["caching", "filesystem", "games"]
 
 [dependencies]
+bytes = "1.8"
 dirs = { workspace = true }
+ngdp-cdn = { path = "../ngdp-cdn" }
 reqwest = "0.12"
 ribbit-client = { path = "../ribbit-client" }
 serde = { workspace = true, features = ["derive"] }
@@ -21,6 +23,7 @@ tact-client = { path = "../tact-client" }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["fs", "io-util"] }
 tracing = { workspace = true }
+walkdir = "2.5"
 
 [dev-dependencies]
 criterion = { workspace = true }
@@ -28,6 +31,7 @@ rand = "0.8"
 tempfile = "3.5"
 tokio = { workspace = true, features = ["full", "test-util"] }
 tracing-subscriber = { workspace = true }
+wiremock = "0.6"
 
 [[bench]]
 name = "cache_benchmark"

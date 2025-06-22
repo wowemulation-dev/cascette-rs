@@ -3,26 +3,13 @@
 use ngdp_cdn::{CdnClient, Error};
 
 #[tokio::test]
-async fn test_client_creation() {
-    let client = CdnClient::new().unwrap();
-    assert!(
-        client
-            .request("http://httpbin.org/status/200")
-            .await
-            .is_ok()
-    );
-}
-
-#[tokio::test]
-async fn test_404_error() {
+async fn test_content_not_found_errors() {
     let client = CdnClient::new().unwrap();
 
-    // Use a URL that will definitely return 404
+    // Test 1: Using request method with direct URL
     let response = client.request("http://httpbin.org/status/404").await;
-
     assert!(response.is_err());
 
-    // The execute_with_retry method extracts the last part of URL as hash for 404 errors
     match response.unwrap_err() {
         Error::ContentNotFound { hash } => {
             // The "hash" will be "404" from the URL
@@ -30,13 +17,8 @@ async fn test_404_error() {
         }
         e => panic!("Expected ContentNotFound error, got: {:?}", e),
     }
-}
 
-#[tokio::test]
-async fn test_content_not_found() {
-    let client = CdnClient::new().unwrap();
-
-    // The download method extracts hash from URL for ContentNotFound error
+    // Test 2: Using download method with hash
     let response = client
         .download(
             "httpbin.org",

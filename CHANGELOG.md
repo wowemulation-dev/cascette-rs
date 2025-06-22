@@ -7,6 +7,85 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+#### `ngdp-cache` crate
+
+- **New CachedCdnClient for transparent CDN content caching**:
+  - Implements caching wrapper around CdnClient for CDN content downloads
+  - Uses cache schema: `~/.cache/ngdp/cdn/{type}/{hash[0:2]}/{hash[2:4]}/{hash}`
+  - Supports all CDN content types: config, data, patch, indices
+  - Automatic hash-based directory structure following Blizzard CDN conventions
+  - TTL-based cache expiration with configurable policies
+  - Full async support with proper error handling
+
+- **Enhanced example collection**:
+  - Renamed `cache_basic_usage.rs` to `01_basic_cache_types.rs` for better organization
+  - Added `cached_cdn_client.rs` - Demonstrates CachedCdnClient usage patterns
+  - Added `cdn_cache_structure.rs` - Shows CDN cache directory organization
+  - Added `cdn_helper_methods.rs` - Utility methods for CDN operations
+  - Added `full_ngdp_pipeline.rs` - Complete NGDP workflow demonstration
+  - Added `ribbit_cdn_download.rs` - Integration between Ribbit and CDN caching
+  - Removed outdated examples: `cached_request_example.rs`, `test_cache_validity.rs`, `verify_cache_structure.rs`
+
+- **Comprehensive test suite expansion**:
+  - Added `cache_validity_test.rs` - Cache validation and expiration tests
+  - Added `cached_cdn_client_integration.rs` - Full CDN client integration tests
+  - Added `cached_cdn_helper_tests.rs` - Helper method functionality tests
+  - Added `ribbit_cache_structure_test.rs` - Ribbit cache organization validation
+  - Added `ribbit_cdn_integration.rs` - Cross-protocol integration tests
+
+#### `ngdp-cdn` crate
+
+- **Added unit test coverage**:
+  - New `client_test.rs` with comprehensive unit tests for CdnClient
+  - Tests for URL construction, error handling, and configuration validation
+  - Builder pattern testing with various configurations
+  - Proper test isolation and mocking support
+
+#### `ngdp-client` crate
+
+- **Reorganized example collection**:
+  - Replaced specific examples with grouped operations:
+    - `certificate_operations.rs` - All certificate-related functionality (replaces `cached_certificate_fetch.rs`, `download_certificate.rs`)
+    - `products_operations.rs` - All product query operations (replaces `products_info_demo.rs`, `query_products.rs`, `cdns_region_demo.rs`)
+  - Improved example organization for better discoverability
+
+#### Removed/Cleaned Examples
+
+- **Removed obsolete debugging examples**:
+  - `ribbit-client`: Removed `raw_debug.rs`, `test_signature_verification.rs`
+  - `tact-client`: Removed `test_certs_endpoint.rs`, `test_different_products.rs`, `test_v1_summary.rs`
+  - These were development/debugging tools not useful for end users
+
+### Changed
+
+#### `ngdp-cache` crate
+
+- **Updated Cargo.toml metadata**:
+  - Enhanced package description and documentation
+  - Added comprehensive keywords and categories for better discoverability
+  - Updated README with current functionality and examples
+
+- **Improved error handling and module organization**:
+  - Enhanced error types in `error.rs` for better debugging
+  - Updated `lib.rs` exports for cleaner public API
+  - Improved `cdn.rs` with better CDN content handling
+
+#### `ngdp-cdn` crate
+
+- **Enhanced client functionality**:
+  - Improved error handling in `client.rs`
+  - Better integration test coverage in `integration_test.rs`
+  - Enhanced public API exports in `lib.rs`
+
+#### `ngdp-client` crate
+
+- **Enhanced library exports**:
+  - Improved public API organization in `lib.rs`
+  - Better integration with caching functionality
+  - Enhanced certificate test coverage in `certs_test.rs`
+
 ### Fixed
 
 - Fixed benchmark HEX field validation in `ngdp-bpsv`:

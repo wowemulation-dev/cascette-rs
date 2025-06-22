@@ -1,10 +1,11 @@
 //! CDN content cache implementation
 //!
-//! This module caches all CDN content following the standard CDN path structure:
-//! - `config/{first2}/{next2}/{hash}` - Configuration files
-//! - `data/{first2}/{next2}/{hash}` - Data files and archives
-//! - `patch/{first2}/{next2}/{hash}` - Patch files
+//! This module caches all CDN content following the CDN path structure:
+//! - `{cdn_path}/config/{first2}/{next2}/{hash}` - Configuration files
+//! - `{cdn_path}/data/{first2}/{next2}/{hash}` - Data files and archives
+//! - `{cdn_path}/patch/{first2}/{next2}/{hash}` - Patch files
 //!
+//! Where `{cdn_path}` is the path provided by the CDN (e.g., "tpr/wow").
 //! Archives and indices are stored in the data directory with `.index` extension for indices.
 
 use std::path::PathBuf;
@@ -16,6 +17,8 @@ use crate::{Result, ensure_dir, get_cache_dir};
 pub struct CdnCache {
     /// Base directory for CDN cache
     base_dir: PathBuf,
+    /// CDN path prefix (e.g., "tpr/wow")
+    cdn_path: Option<String>,
 }
 
 impl CdnCache {
@@ -26,7 +29,10 @@ impl CdnCache {
 
         debug!("Initialized CDN cache at: {:?}", base_dir);
 
-        Ok(Self { base_dir })
+        Ok(Self {
+            base_dir,
+            cdn_path: None,
+        })
     }
 
     /// Create a CDN cache for a specific product
@@ -39,22 +45,80 @@ impl CdnCache {
             product, base_dir
         );
 
-        Ok(Self { base_dir })
+        Ok(Self {
+            base_dir,
+            cdn_path: None,
+        })
+    }
+
+    /// Create a CDN cache with a custom base directory
+    pub async fn with_base_dir(base_dir: PathBuf) -> Result<Self> {
+        ensure_dir(&base_dir).await?;
+
+        debug!("Initialized CDN cache at: {:?}", base_dir);
+
+        Ok(Self {
+            base_dir,
+            cdn_path: None,
+        })
+    }
+
+    /// Create a CDN cache with a specific CDN path
+    pub async fn with_cdn_path(cdn_path: &str) -> Result<Self> {
+        let base_dir = get_cache_dir()?.join("cdn");
+        ensure_dir(&base_dir).await?;
+
+        debug!(
+            "Initialized CDN cache with path '{}' at: {:?}",
+            cdn_path, base_dir
+        );
+
+        Ok(Self {
+            base_dir,
+            cdn_path: Some(cdn_path.to_string()),
+        })
+    }
+
+    /// Set the CDN path for this cache
+    pub fn set_cdn_path(&mut self, cdn_path: Option<String>) {
+        self.cdn_path = cdn_path;
+    }
+
+    /// Get the effective base directory including CDN path
+    fn effective_base_dir(&self) -> PathBuf {
+        if let Some(ref cdn_path) = self.cdn_path {
+            self.base_dir.join(cdn_path)
+        } else {
+            self.base_dir.clone()
+        }
     }
 
     /// Get the config cache directory
     pub fn config_dir(&self) -> PathBuf {
-        self.base_dir.join("config")
+        let base = self.effective_base_dir();
+        let path_str = base.to_string_lossy();
+
+        // Check if the path already ends with "config" or contains "configs"
+        if path_str.ends_with("/config") || path_str.ends_with("\\config") {
+            // Path already has /config suffix, don't add another
+            base
+        } else if path_str.contains("configs/") || path_str.contains("configs\\") {
+            // For paths like "tpr/configs/data", don't add "config"
+            base
+        } else {
+            // For paths like "tpr/wow", add "config"
+            base.join("config")
+        }
     }
 
     /// Get the data cache directory
     pub fn data_dir(&self) -> PathBuf {
-        self.base_dir.join("data")
+        self.effective_base_dir().join("data")
     }
 
     /// Get the patch cache directory
     pub fn patch_dir(&self) -> PathBuf {
-        self.base_dir.join("patch")
+        self.effective_base_dir().join("patch")
     }
 
     /// Construct a config cache path from a hash
@@ -232,6 +296,11 @@ impl CdnCache {
     pub fn base_dir(&self) -> &PathBuf {
         &self.base_dir
     }
+
+    /// Get the CDN path if set
+    pub fn cdn_path(&self) -> Option<&str> {
+        self.cdn_path.as_deref()
+    }
 }
 
 #[cfg(test)]
@@ -256,6 +325,27 @@ mod tests {
         let index_path = cache.index_path(hash);
         assert!(index_path.to_str().unwrap().contains("data/de/ad"));
         assert!(index_path.to_str().unwrap().ends_with(".index"));
+    }
+
+    #[tokio::test]
+    async fn test_cdn_cache_with_cdn_path() {
+        let cache = CdnCache::with_cdn_path("tpr/wow").await.unwrap();
+
+        let hash = "deadbeef1234567890abcdef12345678";
+
+        let config_path = cache.config_path(hash);
+        assert!(
+            config_path
+                .to_str()
+                .unwrap()
+                .contains("tpr/wow/config/de/ad")
+        );
+
+        let data_path = cache.data_path(hash);
+        assert!(data_path.to_str().unwrap().contains("tpr/wow/data/de/ad"));
+
+        let patch_path = cache.patch_path(hash);
+        assert!(patch_path.to_str().unwrap().contains("tpr/wow/patch/de/ad"));
     }
 
     #[tokio::test]

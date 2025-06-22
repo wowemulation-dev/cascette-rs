@@ -10,7 +10,10 @@ fn generate_simple_bpsv(rows: usize) -> String {
     lines.push("## seqn = 12345".to_string());
 
     for i in 0..rows {
-        lines.push(format!("us|{}|deadbeefcafebabedeadbeefcafebabedeadbeefcafebabedeadbeefcafebabe", 1000 + i));
+        lines.push(format!(
+            "us|{}|deadbeefcafebabedeadbeefcafebabedeadbeefcafebabedeadbeefcafebabe",
+            1000 + i
+        ));
     }
 
     lines.join("\n")
@@ -108,7 +111,10 @@ fn benchmark_building(c: &mut Criterion) {
                     .add_row(vec![
                         BpsvValue::String("us".to_string()),
                         BpsvValue::Decimal(1000 + i),
-                        BpsvValue::Hex("deadbeefcafebabedeadbeefcafebabedeadbeefcafebabedeadbeefcafebabe".to_string()),
+                        BpsvValue::Hex(
+                            "deadbeefcafebabedeadbeefcafebabedeadbeefcafebabedeadbeefcafebabe"
+                                .to_string(),
+                        ),
                     ])
                     .unwrap();
             }
@@ -136,7 +142,10 @@ fn benchmark_building(c: &mut Criterion) {
                     .add_row(vec![
                         BpsvValue::String("us".to_string()),
                         BpsvValue::Decimal(1000 + i),
-                        BpsvValue::Hex("deadbeefcafebabedeadbeefcafebabedeadbeefcafebabedeadbeefcafebabe".to_string()),
+                        BpsvValue::Hex(
+                            "deadbeefcafebabedeadbeefcafebabedeadbeefcafebabedeadbeefcafebabe"
+                                .to_string(),
+                        ),
                     ])
                     .unwrap();
             }

@@ -53,5 +53,8 @@
 mod client;
 mod error;
 
+#[cfg(test)]
+mod client_test;
+
 pub use client::{CdnClient, CdnClientBuilder};
 pub use error::{Error, Result};

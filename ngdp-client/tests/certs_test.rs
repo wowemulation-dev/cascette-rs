@@ -1,6 +1,7 @@
 //! Integration tests for certificate commands
 
 use assert_cmd::Command;
+use ngdp_client::test_constants::EXAMPLE_CERT_HASH;
 use predicates::prelude::*;
 
 #[test]
@@ -63,7 +64,7 @@ fn test_certs_download_with_json_output() {
     let mut cmd = Command::cargo_bin("ngdp").unwrap();
     cmd.arg("certs")
         .arg("download")
-        .arg("5168ff90af0207753cccd9656462a212b859723b")
+        .arg(EXAMPLE_CERT_HASH)
         .arg("--details")
         .arg("-o")
         .arg("json")
@@ -98,7 +99,7 @@ fn test_certs_download_output_file() {
     let mut cmd = Command::cargo_bin("ngdp").unwrap();
     cmd.arg("certs")
         .arg("download")
-        .arg("5168ff90af0207753cccd9656462a212b859723b")
+        .arg(EXAMPLE_CERT_HASH)
         .arg("--output")
         .arg(&output_path)
         .arg("--no-cache")
@@ -123,7 +124,7 @@ fn test_certs_download_der_format() {
     let mut cmd = Command::cargo_bin("ngdp").unwrap();
     cmd.arg("certs")
         .arg("download")
-        .arg("5168ff90af0207753cccd9656462a212b859723b")
+        .arg(EXAMPLE_CERT_HASH)
         .arg("--output")
         .arg(&output_path)
         .arg("--cert-format")

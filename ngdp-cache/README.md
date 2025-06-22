@@ -11,6 +11,8 @@ This crate provides specialized cache implementations for different NGDP compone
 - **CDN Cache**: For CDN content (archives, loose files)
 - **Ribbit Cache**: For Ribbit protocol responses with TTL support
 - **Cached Ribbit Client**: Wrapper around RibbitClient for transparent caching
+- **Cached TACT Client**: Wrapper around TactClient for transparent caching of metadata
+- **Cached CDN Client**: Wrapper around CdnClient for transparent caching of CDN content
 
 ## Usage
 
@@ -26,8 +28,9 @@ ngdp-cache = "0.1.0"
 ```rust
 use ngdp_cache::{
     generic::GenericCache,
-    tact::TactCache,
-    cached_ribbit_client::CachedRibbitClient
+    cdn::CdnCache,
+    cached_ribbit_client::CachedRibbitClient,
+    cached_cdn_client::CachedCdnClient,
 };
 use ribbit_client::{Endpoint, Region};
 
@@ -38,26 +41,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     cache.write("my_key", b"Hello, World!").await?;
     let data = cache.read("my_key").await?;
 
-    // TACT cache follows CDN directory structure
-    let tact = TactCache::new().await?;
+    // CDN cache follows CDN directory structure
+    let cdn_cache = CdnCache::new().await?;
     let hash = "abcdef1234567890abcdef1234567890";
-    tact.write_config(hash, b"config data").await?;
+    cdn_cache.write_config(hash, b"config data").await?;
 
     // Cached Ribbit client - a complete drop-in replacement for RibbitClient
-    let client = CachedRibbitClient::new(Region::US).await?;
+    let ribbit_client = CachedRibbitClient::new(Region::US).await?;
 
     // All RibbitClient methods work with transparent caching:
-    let summary = client.get_summary().await?;  // Cached for 5 minutes
-    let versions = client.get_product_versions("wow").await?;  // Also cached
-    let cert = client.request_raw(&Endpoint::Cert("abc123".to_string())).await?;  // Cached for 30 days
+    let summary = ribbit_client.get_summary().await?;  // Cached for 5 minutes
+    let versions = ribbit_client.get_product_versions("wow").await?;  // Also cached
+    let cert = ribbit_client.request_raw(&Endpoint::Cert("abc123".to_string())).await?;  // Cached for 30 days
 
-    // Full Response objects are cached too
-    let response = client.request(&Endpoint::ProductCdns("d4".to_string())).await?;
-
-    // Typed responses work seamlessly
-    let typed_versions = client.request_typed::<ribbit_client::ProductVersionsResponse>(
-        &Endpoint::ProductVersions("wow".to_string())
+    // Cached CDN client - transparent caching for CDN content
+    let cdn_client = CachedCdnClient::new().await?;
+    
+    // Download content with automatic caching
+    let response = cdn_client.download(
+        "blzddist1-a.akamaihd.net",
+        "tpr/wow",
+        "2e9c1e3b5f5a0c9d9e8f1234567890ab"
     ).await?;
+    
+    // Check if response came from cache
+    println!("From cache: {}", response.is_from_cache());
+    let data = response.bytes().await?;
 
     Ok(())
 }

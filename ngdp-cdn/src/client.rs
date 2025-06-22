@@ -278,6 +278,74 @@ impl CdnClient {
         let url = Self::build_url(cdn_host, path, hash)?;
         self.request(&url).await
     }
+
+    /// Download BuildConfig from CDN
+    ///
+    /// BuildConfig files are stored at `{path}/config/{hash}`
+    pub async fn download_build_config(
+        &self,
+        cdn_host: &str,
+        path: &str,
+        hash: &str,
+    ) -> Result<Response> {
+        let config_path = format!("{}/config", path.trim_end_matches('/'));
+        self.download(cdn_host, &config_path, hash).await
+    }
+
+    /// Download CDNConfig from CDN
+    ///
+    /// CDNConfig files are stored at `{path}/config/{hash}`
+    pub async fn download_cdn_config(
+        &self,
+        cdn_host: &str,
+        path: &str,
+        hash: &str,
+    ) -> Result<Response> {
+        let config_path = format!("{}/config", path.trim_end_matches('/'));
+        self.download(cdn_host, &config_path, hash).await
+    }
+
+    /// Download ProductConfig from CDN
+    ///
+    /// ProductConfig files are stored at `{config_path}/{hash}`
+    /// Note: This uses the config_path from CDN response, not the regular path
+    pub async fn download_product_config(
+        &self,
+        cdn_host: &str,
+        config_path: &str,
+        hash: &str,
+    ) -> Result<Response> {
+        self.download(cdn_host, config_path, hash).await
+    }
+
+    /// Download KeyRing from CDN
+    ///
+    /// KeyRing files are stored at `{path}/config/{hash}`
+    pub async fn download_key_ring(
+        &self,
+        cdn_host: &str,
+        path: &str,
+        hash: &str,
+    ) -> Result<Response> {
+        let config_path = format!("{}/config", path.trim_end_matches('/'));
+        self.download(cdn_host, &config_path, hash).await
+    }
+
+    /// Download data file from CDN
+    ///
+    /// Data files are stored at `{path}/data/{hash}`
+    pub async fn download_data(&self, cdn_host: &str, path: &str, hash: &str) -> Result<Response> {
+        let data_path = format!("{}/data", path.trim_end_matches('/'));
+        self.download(cdn_host, &data_path, hash).await
+    }
+
+    /// Download patch file from CDN
+    ///
+    /// Patch files are stored at `{path}/patch/{hash}`
+    pub async fn download_patch(&self, cdn_host: &str, path: &str, hash: &str) -> Result<Response> {
+        let patch_path = format!("{}/patch", path.trim_end_matches('/'));
+        self.download(cdn_host, &patch_path, hash).await
+    }
 }
 
 impl Default for CdnClient {
@@ -462,49 +530,6 @@ mod tests {
         // Test max backoff capping
         let backoff5 = client.calculate_backoff(5);
         assert_eq!(backoff5.as_millis(), 1000); // Would be 3200ms but capped at 1000ms
-    }
-
-    #[test]
-    fn test_build_url() {
-        let url = CdnClient::build_url(
-            "blzddist1-a.akamaihd.net",
-            "tpr/wow",
-            "2e9c1e3b5f5a0c9d9e8f1234567890ab",
-        )
-        .unwrap();
-
-        assert_eq!(
-            url,
-            "http://blzddist1-a.akamaihd.net/tpr/wow/2e/9c/2e9c1e3b5f5a0c9d9e8f1234567890ab"
-        );
-
-        // Test with trailing slash in path
-        let url2 = CdnClient::build_url(
-            "blzddist1-a.akamaihd.net",
-            "tpr/wow/",
-            "2e9c1e3b5f5a0c9d9e8f1234567890ab",
-        )
-        .unwrap();
-
-        assert_eq!(
-            url2,
-            "http://blzddist1-a.akamaihd.net/tpr/wow/2e/9c/2e9c1e3b5f5a0c9d9e8f1234567890ab"
-        );
-    }
-
-    #[test]
-    fn test_build_url_invalid_hash() {
-        // Too short
-        let result = CdnClient::build_url("host", "path", "abc");
-        assert!(result.is_err());
-
-        // Non-hex characters
-        let result = CdnClient::build_url("host", "path", "zzzz1234567890ab");
-        assert!(result.is_err());
-
-        // Empty hash
-        let result = CdnClient::build_url("host", "path", "");
-        assert!(result.is_err());
     }
 
     #[test]

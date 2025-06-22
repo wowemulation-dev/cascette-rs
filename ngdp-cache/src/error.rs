@@ -43,4 +43,12 @@ pub enum Error {
     /// HTTP request error
     #[error("HTTP request error: {0}")]
     Http(#[from] reqwest::Error),
+
+    /// CDN client error
+    #[error("CDN client error: {0}")]
+    CdnClient(#[from] ngdp_cdn::Error),
+
+    /// UTF-8 conversion error
+    #[error("UTF-8 conversion error: {0}")]
+    Utf8(#[from] std::string::FromUtf8Error),
 }
