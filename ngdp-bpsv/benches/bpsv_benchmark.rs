@@ -10,7 +10,7 @@ fn generate_simple_bpsv(rows: usize) -> String {
     lines.push("## seqn = 12345".to_string());
 
     for i in 0..rows {
-        lines.push(format!("us|{}|deadbeefcafebabedeadbeefcafebabe", 1000 + i));
+        lines.push(format!("us|{}|deadbeefcafebabedeadbeefcafebabedeadbeefcafebabedeadbeefcafebabe", 1000 + i));
     }
 
     lines.join("\n")
@@ -36,7 +36,7 @@ fn generate_complex_bpsv(rows: usize, cols: usize) -> String {
             match col % 3 {
                 0 => row_parts.push(format!("value{}", row)),
                 1 => row_parts.push(format!("{}", row * 100 + col)),
-                _ => row_parts.push("1234567890abcdef".to_string()),
+                _ => row_parts.push("1234567890abcdef1234567890abcdef".to_string()),
             }
         }
         lines.push(row_parts.join("|"));
@@ -108,7 +108,7 @@ fn benchmark_building(c: &mut Criterion) {
                     .add_row(vec![
                         BpsvValue::String("us".to_string()),
                         BpsvValue::Decimal(1000 + i),
-                        BpsvValue::Hex("deadbeefcafebabedeadbeefcafebabe".to_string()),
+                        BpsvValue::Hex("deadbeefcafebabedeadbeefcafebabedeadbeefcafebabedeadbeefcafebabe".to_string()),
                     ])
                     .unwrap();
             }
@@ -136,7 +136,7 @@ fn benchmark_building(c: &mut Criterion) {
                     .add_row(vec![
                         BpsvValue::String("us".to_string()),
                         BpsvValue::Decimal(1000 + i),
-                        BpsvValue::Hex("deadbeefcafebabedeadbeefcafebabe".to_string()),
+                        BpsvValue::Hex("deadbeefcafebabedeadbeefcafebabedeadbeefcafebabedeadbeefcafebabe".to_string()),
                     ])
                     .unwrap();
             }
@@ -214,7 +214,7 @@ fn benchmark_validation(c: &mut Criterion) {
     let mut group = c.benchmark_group("validation");
 
     // Valid hex values
-    let valid_hex = "deadbeefcafebabedeadbeefcafebabe";
+    let valid_hex = "deadbeefcafebabedeadbeefcafebabedeadbeefcafebabedeadbeefcafebabe";
     let hex_type = BpsvFieldType::Hex(32);
 
     group.bench_function("validate_hex_32", |b| {

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed benchmark HEX field validation in `ngdp-bpsv`:
+  - Corrected hex string lengths in benchmarks to match field byte requirements
+  - HEX:32 now correctly uses 64 hex characters (32 bytes)
+  - HEX:16 now correctly uses 32 hex characters (16 bytes)
+
 ### Changed
 
 #### Breaking Changes
