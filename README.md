@@ -15,11 +15,29 @@ Pipeline) for World of Warcraft emulation.
 
 ## 🎯 Project Status
 
-| Component       | Status      | Description                         |
-| --------------- | ----------- | ----------------------------------- |
-| `ngdp-bpsv`     | Ready       | BPSV parser/writer for NGDP formats |
-| `ribbit-client` | Ready       | Ribbit protocol client              |
-| `tact-client`   | Planned     | TACT content transfer protocol      |
+**Current Version**: 0.1.0 (Ready for Release)
+
+### Core Components
+
+| Component       | Version | Status      | Description                                        |
+| --------------- | ------- | ----------- | -------------------------------------------------- |
+| `ngdp-bpsv`     | 0.1.0   | ✅ Stable   | BPSV parser/writer for NGDP formats                |
+| `ribbit-client` | 0.1.0   | ✅ Stable   | Ribbit protocol client with signature verification |
+| `tact-client`   | 0.1.0   | ✅ Stable   | TACT HTTP client for version/CDN queries          |
+| `ngdp-cdn`      | 0.1.0   | ✅ Stable   | CDN content delivery with parallel downloads       |
+| `ngdp-cache`    | 0.1.0   | ✅ Stable   | Caching layer for NGDP operations                 |
+| `ngdp-client`   | 0.1.0   | ✅ Stable   | CLI tool for NGDP operations                      |
+
+### Implementation Progress
+
+- ✅ **Ribbit Protocol**: Full implementation including V1/V2, signature verification, all endpoints
+- ✅ **TACT Protocol**: HTTP/HTTPS clients for version and CDN queries  
+- ✅ **BPSV Format**: Complete parser and builder with zero-copy optimizations
+- ✅ **CDN Operations**: Parallel downloads, streaming, retry logic, rate limiting
+- ✅ **Caching**: Transparent caching for all protocols with TTL support
+- ✅ **CLI Tool**: Feature-complete command-line interface
+- 🚧 **CASC Storage**: Local storage implementation (planned for v0.2.0)
+- 🚧 **TVFS**: TACT Virtual File System (planned for v0.2.0)
 
 ## 🚀 Quick Start
 
@@ -36,29 +54,22 @@ ngdp-bpsv = "0.1"
 Basic example:
 
 ```rust
-use ribbit_client::{RibbitClient, Region, Endpoint};
-use ngdp_bpsv::BpsvDocument;
+use ribbit_client::{Region, RibbitClient};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Create client for US region
+    // Create a client for US region
     let client = RibbitClient::new(Region::US);
 
-    // Get WoW version information
-    let endpoint = Endpoint::ProductVersions("wow".to_string());
-    let response = client.request(&endpoint).await?;
-
-    // Parse the BPSV data
-    if let Some(data) = response.data {
-        let doc = BpsvDocument::parse(&data)?;
-        println!("Found {} versions", doc.rows().len());
-
-        // Access specific fields
-        for row in doc.rows() {
-            let region = row.get_raw_by_name("Region", doc.schema()).unwrap_or("");
-            let build_id = row.get_raw_by_name("BuildId", doc.schema()).unwrap_or("");
-            println!("{}: {}", region, build_id);
-        }
+    // Request WoW versions with typed API
+    let versions = client.get_product_versions("wow").await?;
+    
+    // Print version information
+    for entry in &versions.entries {
+        println!(
+            "{}: {} (build {})",
+            entry.region, entry.versions_name, entry.build_id
+        );
     }
 
     Ok(())
@@ -67,10 +78,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## 📦 Installation
 
-### From crates.io
+### CLI Tool
 
 ```bash
-cargo add ribbit-client ngdp-bpsv
+cargo install ngdp-client
+```
+
+### Library Usage
+
+```bash
+cargo add ribbit-client ngdp-bpsv tact-client ngdp-cdn ngdp-cache
 ```
 
 ### From source
@@ -79,6 +96,7 @@ cargo add ribbit-client ngdp-bpsv
 git clone https://github.com/wowemulation-dev/cascette-rs
 cd cascette-rs
 cargo build --release
+# CLI binary will be at target/release/ngdp
 ```
 
 ## 📚 Documentation
@@ -97,35 +115,51 @@ cargo build --release
 
 ## 🔧 Features
 
-### Current
+### Complete
 
-- **BPSV Parser/Writer**
-  - ✅ Complete BPSV format support
+- **BPSV Parser/Writer** (`ngdp-bpsv`)
+  - ✅ Complete BPSV format support with zero-copy parsing
   - ✅ Type-safe field definitions (STRING, HEX, DEC)
-  - ✅ Schema validation
-  - ✅ Sequence number handling
+  - ✅ Schema validation and sequence number handling
   - ✅ Builder pattern for document creation
   - ✅ Round-trip compatibility
-  - ✅ Empty value support
 
-- **Ribbit Protocol Client**
+- **Ribbit Protocol Client** (`ribbit-client`)
   - ✅ All Blizzard regions (US, EU, CN, KR, TW, SG)
-  - ✅ V1 (MIME) and V2 (PSV) protocol support
-  - ✅ Product version queries
-  - ✅ CDN configuration retrieval
-  - ✅ Certificate and OCSP endpoints
-  - ✅ SHA-256 checksum validation
-  - ✅ PKCS#7/CMS signature parsing
-  - ✅ Async/await with Tokio
+  - ✅ V1 (MIME) and V2 (raw) protocol support
+  - ✅ Typed API for all endpoints
+  - ✅ PKCS#7/CMS signature verification
+  - ✅ Certificate and OCSP support
+  - ✅ Automatic retry with exponential backoff
+  - ✅ DNS caching for performance
 
-### Planned
+- **TACT HTTP Client** (`tact-client`)
+  - ✅ Version and CDN configuration queries
+  - ✅ Support for V1 (port 1119) and V2 (HTTPS) protocols
+  - ✅ Typed response parsing
+  - ✅ Automatic retry handling
+  - ✅ All Blizzard regions supported
 
-- **TACT Implementation**
-  - Content manifest parsing
-  - Encoding tables
-  - Download manifests
-  - Install manifests
-  - Patch manifests
+- **CDN Content Delivery** (`ngdp-cdn`)
+  - ✅ Parallel downloads with progress tracking
+  - ✅ Streaming operations for large files
+  - ✅ Automatic retry with rate limit handling
+  - ✅ Content verification
+  - ✅ Configurable connection pooling
+
+- **Caching Layer** (`ngdp-cache`)
+  - ✅ Transparent caching for all NGDP operations
+  - ✅ TTL-based expiration policies
+  - ✅ Streaming I/O for memory efficiency
+  - ✅ CDN-compatible directory structure
+  - ✅ Batch operations for performance
+
+- **CLI Tool** (`ngdp-client`)
+  - ✅ Product queries and version information
+  - ✅ Certificate operations
+  - ✅ BPSV inspection
+  - ✅ Multiple output formats (text, JSON, BPSV)
+  - ✅ Beautiful terminal formatting
 
 ## 🤝 Contributing
 

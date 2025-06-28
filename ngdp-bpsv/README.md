@@ -62,7 +62,7 @@ let output = builder.build()?;
 ### Field Types
 
 - **STRING:length** - String field (length 0 = unlimited)
-- **HEX:length** - Hexadecimal field (length in chars)
+- **HEX:length** - Hexadecimal field (length in bytes, N bytes = N*2 hex chars)
 - **DEC:length** - Decimal integer field
 
 ### Structure

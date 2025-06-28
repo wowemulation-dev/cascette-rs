@@ -31,20 +31,22 @@ tokio = { version = "1", features = ["full"] }
 Basic usage:
 
 ```rust
-use ribbit_client::{RibbitClient, Region, Endpoint};
+use ribbit_client::{RibbitClient, Region};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create a client for the US region
     let client = RibbitClient::new(Region::US);
 
-    // Request WoW version information
-    let endpoint = Endpoint::ProductVersions("wow".to_string());
-    let response = client.request(&endpoint).await?;
-
-    // Access the parsed data
-    if let Some(data) = response.data {
-        println!("WoW Versions:\n{}", data);
+    // Request WoW version information using typed API
+    let versions = client.get_product_versions("wow").await?;
+    
+    // Access typed fields directly
+    for entry in &versions.entries {
+        println!(
+            "{}: {} (build {})",
+            entry.region, entry.versions_name, entry.build_id
+        );
     }
 
     Ok(())
@@ -77,13 +79,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 - Direct PSV (Pipe-Separated Values) format
 - Lower overhead, faster parsing
 - No MIME wrapper or checksums
-- **This is the default protocol as of v0.2.0**
+- **This is the default protocol**
 
 ```rust
-// V2 is now the default
+// V2 is the default
 let client = RibbitClient::new(Region::EU);
 
 // Or explicitly use V1 if needed
+use ribbit_client::ProtocolVersion;
 let client = RibbitClient::new(Region::EU)
     .with_protocol_version(ProtocolVersion::V1);
 ```
@@ -94,7 +97,7 @@ The crate includes several examples demonstrating different use cases:
 
 ```bash
 # Basic client usage
-cargo run --example basic_usage
+cargo run --example ribbit_basic_usage
 
 # Parse version data into structured format
 cargo run --example parse_versions
@@ -104,6 +107,12 @@ cargo run --example wow_products
 
 # Debug MIME structure (V1 protocol)
 cargo run --example mime_parsing
+
+# Typed API showcase
+cargo run --example typed_api_showcase
+
+# Retry handling demonstration
+cargo run --example retry_handling
 ```
 
 ## Response Structure
@@ -137,12 +146,39 @@ pub struct MimeParts {
 }
 ```
 
-## PSV Data Format
+## Typed API (Recommended)
 
-Ribbit returns data in PSV (Pipe-Separated Values) format with typed columns:
+The client provides a typed API that automatically parses responses into strongly-typed structs:
 
 ```rust
-// Example: Parse WoW version data
+// Get product versions with automatic parsing
+let versions = client.get_product_versions("wow").await?;
+
+// Direct access to typed fields
+for entry in &versions.entries {
+    println!("Region: {}", entry.region);
+    println!("Build: {} ({})", entry.build_id, entry.versions_name);
+    println!("Build Config: {}", entry.build_config);
+    println!("CDN Config: {}", entry.cdn_config);
+}
+
+// Convenience methods
+if let Some(us_version) = versions.get_region("us") {
+    println!("US version: {}", us_version.versions_name);
+}
+
+// Other typed endpoints
+let summary = client.get_summary().await?;
+let cdns = client.get_product_cdns("wow").await?;
+let bgdl = client.get_product_bgdl("wow").await?;
+```
+
+## Manual PSV Parsing (Advanced)
+
+For custom endpoints or manual parsing, Ribbit returns data in PSV (Pipe-Separated Values) format:
+
+```rust
+// Manual parsing of raw response
 let endpoint = Endpoint::ProductVersions("wow".to_string());
 let response = client.request(&endpoint).await?;
 
@@ -206,7 +242,9 @@ println!("Received {} bytes", raw_data.len());
 ### V1 Protocol with Signature Verification
 
 ```rust
-let client = RibbitClient::new(Region::US);  // V1 is default
+use ribbit_client::ProtocolVersion;
+let client = RibbitClient::new(Region::US)
+    .with_protocol_version(ProtocolVersion::V1);
 
 let response = client.request(&endpoint).await?;
 if let Some(mime_parts) = response.mime_parts {

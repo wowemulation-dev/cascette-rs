@@ -24,7 +24,7 @@ const DEFAULT_JITTER_FACTOR: f64 = 0.1;
 /// TACT protocol version
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProtocolVersion {
-    /// Version 1: TCP-based protocol on port 1119
+    /// Version 1: HTTP-based protocol on port 1119
     V1,
     /// Version 2: HTTPS-based REST API
     V2,

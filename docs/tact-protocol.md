@@ -1,12 +1,15 @@
 # TACT Protocol Documentation
 
+**Note**: Protocol Version 2 (HTTPS) is now the default and recommended version
+for better performance and security.
+
 ## Table of Contents
 
 - [Overview](#overview)
 - [Key Features](#key-features)
 - [HTTP Communication (Protocol Version 1)](#http-communication-protocol-version-1)
   - [Version Server Endpoints (v1)](#version-server-endpoints-v1)
-- [HTTPS Communication (Protocol Version 2)](#https-communication-protocol-version-2)
+- [HTTPS Communication (Protocol Version 2 - Recommended)](#https-communication-protocol-version-2-recommended)
   - [Version Server Endpoints (v2)](#version-server-endpoints-v2)
 - [CDN Content URLs](#cdn-content-urls)
 - [Data Formats](#data-formats)
@@ -116,7 +119,7 @@ Available endpoints:
 | `/blob/game` | ❌ Non-functional - returns "Not Found" |
 | `/blob/install` | ❌ Non-functional - returns "Not Found" |
 
-## HTTPS Communication (Protocol Version 2)
+## HTTPS Communication (Protocol Version 2 - Recommended)
 
 Since 2024, version 2 of the protocol uses HTTPS with a new base URL structure.
 

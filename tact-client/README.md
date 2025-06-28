@@ -54,12 +54,14 @@ us|tpr/wow|blzddist1-a.akamaihd.net level3.blizzard.com us.cdn.blizzard.com|http
 
 ## Usage Example
 
+### Basic Usage (Raw Responses)
+
 ```rust
 use tact_client::{HttpClient, ProtocolVersion, Region};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Create client (V2 is now the default)
+    // Create client (V2 is the default)
     let client = HttpClient::new(Region::US, ProtocolVersion::V2)?;
 
     // Or use the Default implementation
@@ -72,6 +74,44 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Fetch CDN configuration
     let response = client.get_cdns("wow").await?;
     let cdn_data = response.text().await?;
+
+    Ok(())
+}
+```
+
+### Typed Responses (Recommended)
+
+The client provides typed parsing functions for structured data access:
+
+```rust
+use tact_client::{HttpClient, parse_versions, parse_cdns, Region};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = HttpClient::default();
+
+    // Fetch and parse versions
+    let response = client.get_versions("wow").await?;
+    let versions_data = response.text().await?;
+    let versions = parse_versions(&versions_data)?;
+    
+    // Access typed fields
+    for version in &versions {
+        println!("Region: {}", version.region);
+        println!("Build: {} ({})", version.build_id, version.versions_name);
+        println!("Build Config: {}", version.build_config);
+    }
+
+    // Fetch and parse CDN configuration
+    let response = client.get_cdns("wow").await?;
+    let cdn_data = response.text().await?;
+    let cdns = parse_cdns(&cdn_data)?;
+    
+    for cdn in &cdns {
+        println!("Region: {}", cdn.name);
+        println!("CDN Hosts: {:?}", cdn.hosts);
+        println!("CDN Servers: {:?}", cdn.servers);
+    }
 
     Ok(())
 }
@@ -90,10 +130,10 @@ The TACT client supports two protocol versions:
 
 - HTTPS-based REST API (`https://{region}.version.battle.net/v2/products`)
 - Modern, secure protocol
-- **This is the default protocol as of v0.2.0**
+- **This is the default protocol**
 
 ```rust
-// V2 is now the default
+// V2 is the default
 let client = HttpClient::new(Region::US, ProtocolVersion::V2)?;
 
 // Or explicitly use V1 if needed

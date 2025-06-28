@@ -217,4 +217,4 @@ All TACT configuration endpoints return BPSV data:
 
 - [NGDP Overview](https://wowdev.wiki/NGDP)
 - [TACT Protocol](https://wowdev.wiki/TACT)
-- [Ribbit API Documentation](https://wago.tools/api/ribbit)
+- [Ribbit API Documentation](https://wowdev.wiki/Ribbit)
