@@ -35,7 +35,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ];
 
     for (name, endpoint) in &endpoints_to_test {
-        println!("🔍 Testing: {}", name);
+        println!("🔍 Testing: {name}");
         println!("   Endpoint: {}", endpoint.as_path());
 
         match client.request(endpoint).await {
@@ -60,7 +60,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             if let Some(seqn_line) =
                                 data.lines().find(|line| line.starts_with("## seqn"))
                             {
-                                println!("   📈 {}", seqn_line);
+                                println!("   📈 {seqn_line}");
                             }
                         }
 
@@ -70,7 +70,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 .split('|')
                                 .map(|h| h.split('!').next().unwrap_or(h))
                                 .collect();
-                            println!("   📋 Headers: {:?}", headers);
+                            println!("   📋 Headers: {headers:?}");
                         }
 
                         // Count data rows (non-header, non-comment lines)
@@ -82,7 +82,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     && !line.contains('!')
                             })
                             .count();
-                        println!("   📊 Data rows: {}", data_rows);
+                        println!("   📊 Data rows: {data_rows}");
                     } else {
                         println!("   📄 Format: Unknown/Plain text");
                     }
@@ -96,7 +96,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
             Err(e) => {
-                println!("   Status: ❌ Error: {}", e);
+                println!("   Status: ❌ Error: {e}");
             }
         }
         println!();

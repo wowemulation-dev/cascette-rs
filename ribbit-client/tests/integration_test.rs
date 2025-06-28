@@ -29,7 +29,7 @@ async fn test_ribbit_summary_v1() {
         }
         Err(e) => {
             // In CI/test environments, connection might fail
-            eprintln!("Connection failed (expected in offline tests): {}", e);
+            eprintln!("Connection failed (expected in offline tests): {e}");
         }
     }
 }
@@ -48,7 +48,7 @@ async fn test_ribbit_summary_v2() {
             assert!(!response_str.contains("MIME-Version"));
         }
         Err(e) => {
-            eprintln!("Connection failed (expected in offline tests): {}", e);
+            eprintln!("Connection failed (expected in offline tests): {e}");
         }
     }
 }
@@ -59,7 +59,7 @@ async fn test_ribbit_product_versions() {
     let client = RibbitClient::new(Region::US);
 
     for product in products {
-        println!("Testing product: {}", product);
+        println!("Testing product: {product}");
         let endpoint = Endpoint::ProductVersions(product.to_string());
 
         let result = client.request_raw(&endpoint).await;
@@ -74,8 +74,7 @@ async fn test_ribbit_product_versions() {
             }
             Err(e) => {
                 eprintln!(
-                    "  Product {} failed (expected in offline tests): {}",
-                    product, e
+                    "  Product {product} failed (expected in offline tests): {e}"
                 );
             }
         }
@@ -94,8 +93,7 @@ async fn test_ribbit_different_regions() {
         match result {
             Ok(data) => assert!(!data.is_empty()),
             Err(e) => eprintln!(
-                "Region {} failed (expected in offline tests): {}",
-                region, e
+                "Region {region} failed (expected in offline tests): {e}"
             ),
         }
     }
@@ -107,7 +105,7 @@ async fn test_ribbit_product_cdns() {
     let client = RibbitClient::new(Region::US);
 
     for product in products {
-        println!("Testing CDN for product: {}", product);
+        println!("Testing CDN for product: {product}");
         let endpoint = Endpoint::ProductCdns(product.to_string());
 
         let result = client.request_raw(&endpoint).await;
@@ -122,8 +120,7 @@ async fn test_ribbit_product_cdns() {
             }
             Err(e) => {
                 eprintln!(
-                    "  Product {} CDN failed (expected in offline tests): {}",
-                    product, e
+                    "  Product {product} CDN failed (expected in offline tests): {e}"
                 );
             }
         }
@@ -136,7 +133,7 @@ async fn test_ribbit_product_bgdl() {
     let client = RibbitClient::new(Region::US).with_protocol_version(ProtocolVersion::V2);
 
     for product in products {
-        println!("Testing BGDL for product: {}", product);
+        println!("Testing BGDL for product: {product}");
         let endpoint = Endpoint::ProductBgdl(product.to_string());
 
         let result = client.request_raw(&endpoint).await;
@@ -148,8 +145,7 @@ async fn test_ribbit_product_bgdl() {
             }
             Err(e) => {
                 eprintln!(
-                    "  Product {} BGDL failed (expected in offline tests): {}",
-                    product, e
+                    "  Product {product} BGDL failed (expected in offline tests): {e}"
                 );
             }
         }
@@ -171,7 +167,7 @@ async fn test_ribbit_cert_endpoint() {
             assert!(response_str.contains("-----BEGIN CERTIFICATE-----"));
         }
         Err(e) => {
-            eprintln!("Connection failed (expected in offline tests): {}", e);
+            eprintln!("Connection failed (expected in offline tests): {e}");
         }
     }
 }
@@ -182,7 +178,7 @@ async fn test_ribbit_invalid_product() {
     let client = RibbitClient::new(Region::US);
 
     for product in invalid_products {
-        println!("Testing invalid product: {}", product);
+        println!("Testing invalid product: {product}");
         let endpoint = Endpoint::ProductVersions(product.to_string());
 
         let result = client.request_raw(&endpoint).await;
@@ -198,12 +194,11 @@ async fn test_ribbit_invalid_product() {
                         || response_str.contains("error")
                         || response_str.contains("404")
                         || data.is_empty(),
-                    "Expected error response for invalid product {}",
-                    product
+                    "Expected error response for invalid product {product}"
                 );
             }
             Err(e) => {
-                println!("  Expected failure for {}: {}", product, e);
+                println!("  Expected failure for {product}: {e}");
             }
         }
     }
@@ -219,7 +214,7 @@ async fn test_ribbit_invalid_endpoints() {
     ];
 
     for endpoint in invalid_endpoints {
-        println!("Testing invalid endpoint: {:?}", endpoint);
+        println!("Testing invalid endpoint: {endpoint:?}");
 
         let result = client.request_raw(&endpoint).await;
 
@@ -237,7 +232,7 @@ async fn test_ribbit_invalid_endpoints() {
                 );
             }
             Err(e) => {
-                println!("  Expected failure: {}", e);
+                println!("  Expected failure: {e}");
             }
         }
     }
@@ -253,7 +248,7 @@ async fn test_ribbit_invalid_cert_hash() {
     ];
 
     for hash in invalid_hashes {
-        println!("Testing invalid cert hash: {}", hash);
+        println!("Testing invalid cert hash: {hash}");
         let endpoint = Endpoint::Cert(hash.to_string());
 
         let result = client.request_raw(&endpoint).await;
@@ -271,7 +266,7 @@ async fn test_ribbit_invalid_cert_hash() {
                 );
             }
             Err(e) => {
-                println!("  Expected failure: {}", e);
+                println!("  Expected failure: {e}");
             }
         }
     }
@@ -325,25 +320,22 @@ async fn test_ribbit_mixed_valid_invalid() {
                 if should_have_data {
                     assert!(
                         !data.is_empty(),
-                        "Expected data for valid product {}",
-                        product
+                        "Expected data for valid product {product}"
                     );
                     let response = String::from_utf8_lossy(&data);
                     assert!(
                         response.contains("|"),
-                        "Expected PSV format for {}",
-                        product
+                        "Expected PSV format for {product}"
                     );
                 } else {
                     assert!(
                         data.is_empty(),
-                        "Expected empty response for invalid product {}",
-                        product
+                        "Expected empty response for invalid product {product}"
                     );
                 }
             }
             Err(e) => {
-                println!("Unexpected error for {}: {}", product, e);
+                println!("Unexpected error for {product}: {e}");
                 // Connection errors are acceptable in CI
             }
         }
@@ -382,7 +374,7 @@ async fn test_ribbit_v1_mime_parsing() {
             );
         }
         Err(e) => {
-            eprintln!("Connection failed (expected in offline tests): {}", e);
+            eprintln!("Connection failed (expected in offline tests): {e}");
         }
     }
 }
@@ -411,7 +403,7 @@ async fn test_ribbit_v1_multipart_mime() {
             assert!(mime_parts.checksum.is_some());
         }
         Err(e) => {
-            eprintln!("Connection failed (expected in offline tests): {}", e);
+            eprintln!("Connection failed (expected in offline tests): {e}");
         }
     }
 }

@@ -79,7 +79,7 @@ impl BpsvSchema {
             let parts: Vec<&str> = field_spec.split('!').collect();
             if parts.len() != 2 {
                 return Err(Error::InvalidHeader {
-                    reason: format!("Invalid field specification: {}", field_spec),
+                    reason: format!("Invalid field specification: {field_spec}"),
                 });
             }
 
@@ -165,6 +165,30 @@ impl BpsvSchema {
         }
 
         Ok(validated)
+    }
+
+    /// Validate a row of string references against this schema (zero-copy)
+    pub fn validate_row_refs<'a>(&self, values: &[&'a str]) -> Result<Vec<&'a str>> {
+        if values.len() != self.fields.len() {
+            return Err(Error::SchemaMismatch {
+                expected: self.fields.len(),
+                actual: values.len(),
+            });
+        }
+
+        // For zero-copy validation, we just verify the format is correct
+        // without allocating new strings
+        for (field, value) in self.fields.iter().zip(values.iter()) {
+            // Validate without normalization to avoid allocation
+            field.field_type.validate_value(value).map_err(|mut err| {
+                if let Error::InvalidValue { field: field_name, .. } = &mut err {
+                    *field_name = field.name.clone();
+                }
+                err
+            })?;
+        }
+
+        Ok(values.to_vec())
     }
 
     /// Generate the header line for this schema

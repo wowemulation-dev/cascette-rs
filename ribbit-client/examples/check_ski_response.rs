@@ -17,7 +17,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // The SKI we found from signatures
     let ski = "782a8a710b950421127250a3e91b751ca356e202";
-    println!("Testing SKI: {}\n", ski);
+    println!("Testing SKI: {ski}\n");
 
     // Make raw request to see what we get
     let endpoint = Endpoint::Cert(ski.to_string());
@@ -37,7 +37,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if let Some(subject_start) = response_str.find("Subject:") {
                     if let Some(subject_end) = response_str[subject_start..].find('\n') {
                         let subject = &response_str[subject_start..subject_start + subject_end];
-                        println!("  {}", subject);
+                        println!("  {subject}");
                     }
                 }
             } else if response_str.contains("Region") || response_str.contains("BuildConfig") {
@@ -65,7 +65,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 for (i, fingerprint) in matches.iter().enumerate() {
                     if i < 5 {
                         // Show first 5
-                        println!("  - {}", fingerprint);
+                        println!("  - {fingerprint}");
                     }
                 }
 
@@ -78,21 +78,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             if let Some(data) = &cert_response.data {
                                 if data.contains("-----BEGIN CERTIFICATE-----") {
                                     println!(
-                                        "✓ {} is a valid certificate endpoint!",
-                                        first_fingerprint
+                                        "✓ {first_fingerprint} is a valid certificate endpoint!"
                                     );
                                 }
                             }
                         }
                         Err(e) => {
-                            println!("✗ Failed to fetch {}: {}", first_fingerprint, e);
+                            println!("✗ Failed to fetch {first_fingerprint}: {e}");
                         }
                     }
                 }
             }
         }
         Err(e) => {
-            println!("✗ Request failed: {}", e);
+            println!("✗ Request failed: {e}");
         }
     }
 

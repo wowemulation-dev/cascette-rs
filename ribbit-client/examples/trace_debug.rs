@@ -40,11 +40,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 );
 
                 if let Some(sig_info) = &mime_parts.signature_info {
-                    println!("\nSignature info: {:?}", sig_info);
+                    println!("\nSignature info: {sig_info:?}");
                 }
             }
         }
-        Err(e) => println!("Error: {}", e),
+        Err(e) => println!("Error: {e}"),
     }
 
     Ok(())

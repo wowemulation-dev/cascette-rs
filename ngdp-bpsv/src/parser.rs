@@ -1,14 +1,14 @@
-//! BPSV parser implementation
+//! BPSV document parser
 
 use crate::document::BpsvDocument;
 use crate::error::{Error, Result};
 use crate::schema::BpsvSchema;
 
-/// Parser for BPSV format data
+/// Parser for BPSV documents
 pub struct BpsvParser;
 
 impl BpsvParser {
-    /// Parse BPSV content into a document
+    /// Parse a complete BPSV document
     ///
     /// # Examples
     ///
@@ -22,18 +22,16 @@ impl BpsvParser {
     /// assert_eq!(doc.rows().len(), 2);
     /// # Ok::<(), ngdp_bpsv::Error>(())
     /// ```
-    pub fn parse(content: &str) -> Result<BpsvDocument> {
-        let lines: Vec<&str> = content.lines().collect();
-
-        if lines.is_empty() {
+    pub fn parse(content: &str) -> Result<BpsvDocument<'_>> {
+        if content.is_empty() {
             return Err(Error::EmptyDocument);
         }
 
-        let mut line_index = 0;
+        let mut lines = content.lines();
 
-        // Find and parse the header line
-        let header_line = lines.get(line_index).ok_or(Error::MissingHeader)?;
-
+        // Parse header
+        let header_line = lines.next().ok_or(Error::MissingHeader)?;
+        
         if !header_line.contains('!') {
             return Err(Error::InvalidHeader {
                 reason: "Header line must contain field type specifications with '!'".to_string(),
@@ -41,87 +39,64 @@ impl BpsvParser {
         }
 
         let schema = BpsvSchema::parse_header(header_line)?;
-        line_index += 1;
-
-        let mut document = BpsvDocument::new(schema);
-        let mut sequence_number = None;
+        let mut doc = BpsvDocument::new(content, schema);
 
         // Process remaining lines
-        while line_index < lines.len() {
-            let line = lines[line_index].trim();
-            line_index += 1;
+        for line in lines {
+            let trimmed = line.trim();
 
             // Skip empty lines
-            if line.is_empty() {
+            if trimmed.is_empty() {
                 continue;
             }
 
-            // Parse sequence number line
-            if line.starts_with("## seqn") {
-                sequence_number = Self::parse_sequence_line(line)?;
+            // Check for sequence number line
+            if trimmed.starts_with("## seqn") {
+                let seqn = Self::parse_sequence_line(trimmed)?;
+                doc.set_sequence_number(seqn);
                 continue;
             }
 
-            // Parse data row
-            let values = Self::parse_data_line(line)?;
-            document.add_row(values).map_err(|e| match e {
-                Error::SchemaMismatch { expected, actual } => Error::RowValidation {
-                    row_index: document.row_count(),
-                    reason: format!("Expected {} fields, got {}", expected, actual),
-                },
-                Error::InvalidValue {
-                    field,
-                    field_type,
-                    value,
-                } => Error::RowValidation {
-                    row_index: document.row_count(),
-                    reason: format!(
-                        "Invalid value for field '{}' of type {}: {}",
-                        field, field_type, value
-                    ),
-                },
-                other => other,
-            })?;
+            // Skip other comment lines
+            if trimmed.starts_with('#') {
+                continue;
+            }
+
+            // Parse data line
+            let values = Self::parse_data_line(trimmed);
+            doc.add_row(values)?;
         }
 
-        document.set_sequence_number(sequence_number);
-        Ok(document)
+        Ok(doc)
     }
 
-    /// Parse a sequence number line like "## seqn = 12345"
+    /// Parse a sequence number line
+    ///
+    /// Handles formats:
+    /// - `## seqn = 12345`
+    /// - `## seqn: 12345`
+    /// - `## seqn 12345`
     fn parse_sequence_line(line: &str) -> Result<Option<u32>> {
-        // Handle various formats:
-        // "## seqn = 12345"
-        // "##seqn=12345"
-        // "## seqn= 12345"
-        // etc.
+        // Start after "## seqn"
+        let after_seqn = &line[7..].trim_start();
 
-        let line = line.trim();
-        if !line.starts_with("##") {
+        if after_seqn.is_empty() {
             return Err(Error::InvalidSequenceNumber {
                 line: line.to_string(),
             });
         }
 
-        let after_hash = &line[2..].trim();
+        // Handle different separators
+        let number_str = if let Some(eq_pos) = after_seqn.find('=') {
+            after_seqn[eq_pos + 1..].trim()
+        } else if let Some(colon_pos) = after_seqn.find(':') {
+            after_seqn[colon_pos + 1..].trim()
+        } else {
+            // No separator, just whitespace
+            after_seqn
+        };
 
-        if !after_hash.starts_with("seqn") {
-            return Err(Error::InvalidSequenceNumber {
-                line: line.to_string(),
-            });
-        }
-
-        let after_seqn = &after_hash[4..].trim();
-
-        if !after_seqn.starts_with('=') {
-            return Err(Error::InvalidSequenceNumber {
-                line: line.to_string(),
-            });
-        }
-
-        let number_part = &after_seqn[1..].trim();
-
-        let seqn = number_part
+        let seqn = number_str
             .parse::<u32>()
             .map_err(|_| Error::InvalidSequenceNumber {
                 line: line.to_string(),
@@ -130,11 +105,9 @@ impl BpsvParser {
         Ok(Some(seqn))
     }
 
-    /// Parse a data line into field values
-    fn parse_data_line(line: &str) -> Result<Vec<String>> {
-        // Split on pipe, but handle empty fields correctly
-        let values: Vec<String> = line.split('|').map(|s| s.to_string()).collect();
-        Ok(values)
+    /// Parse a data line into field values (zero-copy)
+    fn parse_data_line(line: &str) -> Vec<&str> {
+        line.split('|').collect()
     }
 
     /// Parse just the header to get schema information
@@ -153,21 +126,18 @@ impl BpsvParser {
     /// # Ok::<(), ngdp_bpsv::Error>(())
     /// ```
     pub fn parse_schema(content: &str) -> Result<BpsvSchema> {
-        let lines: Vec<&str> = content.lines().collect();
+        let first_line = content
+            .lines()
+            .next()
+            .ok_or(Error::EmptyDocument)?;
 
-        if lines.is_empty() {
-            return Err(Error::EmptyDocument);
-        }
-
-        let header_line = lines.first().ok_or(Error::MissingHeader)?;
-
-        if !header_line.contains('!') {
+        if !first_line.contains('!') {
             return Err(Error::InvalidHeader {
                 reason: "Header line must contain field type specifications with '!'".to_string(),
             });
         }
 
-        BpsvSchema::parse_header(header_line)
+        BpsvSchema::parse_header(first_line)
     }
 
     /// Parse and extract only the sequence number
@@ -196,60 +166,98 @@ impl BpsvParser {
     /// Parse only the data rows (skip header and sequence)
     ///
     /// Returns raw rows without validation against schema.
-    pub fn parse_raw_rows(content: &str) -> Result<Vec<Vec<String>>> {
-        let lines: Vec<&str> = content.lines().collect();
+    pub fn parse_raw_rows(content: &str) -> Result<Vec<Vec<&str>>> {
         let mut rows = Vec::new();
-        let mut found_header = false;
+        let mut past_header = false;
 
-        for line in lines {
-            let line = line.trim();
+        for line in content.lines() {
+            let trimmed = line.trim();
 
             // Skip empty lines
-            if line.is_empty() {
+            if trimmed.is_empty() {
                 continue;
             }
 
-            // Skip header line
-            if line.contains('!') && !found_header {
-                found_header = true;
-                continue;
-            }
-
-            // Skip sequence number line
-            if line.starts_with("## seqn") {
+            // First non-empty line should be header
+            if !past_header {
+                if !trimmed.contains('!') {
+                    return Err(Error::InvalidHeader {
+                        reason: "First line must be header".to_string(),
+                    });
+                }
+                past_header = true;
                 continue;
             }
 
             // Skip comment lines
-            if line.starts_with("##") {
+            if trimmed.starts_with('#') {
                 continue;
             }
 
             // Parse data line
-            let values = Self::parse_data_line(line)?;
-            rows.push(values);
+            rows.push(Self::parse_data_line(trimmed));
         }
 
         Ok(rows)
     }
 
-    /// Validate BPSV content without full parsing
+    /// Get basic statistics about a BPSV document without full parsing
     ///
-    /// Returns Ok(()) if the content is valid BPSV format, Err otherwise.
-    pub fn validate(content: &str) -> Result<()> {
-        let _document = Self::parse(content)?;
-        Ok(())
-    }
-
-    /// Get basic statistics about BPSV content
+    /// # Examples
     ///
-    /// Returns (field_count, row_count, has_sequence_number)
+    /// ```
+    /// use ngdp_bpsv::BpsvParser;
+    ///
+    /// let content = "Region!STRING:0|BuildId!DEC:4\n## seqn = 12345\nus|1234\neu|5678";
+    ///
+    /// let (field_count, row_count, has_seqn) = BpsvParser::get_stats(content)?;
+    /// assert_eq!(field_count, 2);
+    /// assert_eq!(row_count, 2);
+    /// assert!(has_seqn);
+    /// # Ok::<(), ngdp_bpsv::Error>(())
+    /// ```
     pub fn get_stats(content: &str) -> Result<(usize, usize, bool)> {
-        let schema = Self::parse_schema(content)?;
-        let raw_rows = Self::parse_raw_rows(content)?;
-        let has_seqn = Self::parse_sequence_number(content)?.is_some();
+        let mut field_count = 0;
+        let mut row_count = 0;
+        let mut has_seqn = false;
+        let mut past_header = false;
 
-        Ok((schema.field_count(), raw_rows.len(), has_seqn))
+        for line in content.lines() {
+            let trimmed = line.trim();
+
+            // Skip empty lines
+            if trimmed.is_empty() {
+                continue;
+            }
+
+            // First non-empty line should be header
+            if !past_header {
+                if !trimmed.contains('!') {
+                    return Err(Error::InvalidHeader {
+                        reason: "First line must be header".to_string(),
+                    });
+                }
+                field_count = trimmed.split('|').count();
+                past_header = true;
+                continue;
+            }
+
+            // Check for sequence number
+            if trimmed.starts_with("## seqn") {
+                has_seqn = true;
+                continue;
+            }
+
+            // Skip other comment lines
+            if trimmed.starts_with('#') {
+                continue;
+            }
+
+            // Count data row
+            row_count += 1;
+        }
+
+        Ok((field_count, row_count, has_seqn))
     }
 }
 
@@ -259,10 +267,7 @@ mod tests {
 
     #[test]
     fn test_parse_complete_document() {
-        let content = r"Region!STRING:0|BuildConfig!HEX:16|BuildId!DEC:4
-## seqn = 12345
-us|abcd1234abcd1234abcd1234abcd1234|1234
-eu|1234abcd1234abcd1234abcd1234abcd|5678";
+        let content = "Region!STRING:0|BuildConfig!HEX:16|BuildId!DEC:4\n## seqn = 12345\nus|abcd1234abcd1234abcd1234abcd1234|1234\neu|1234abcd1234abcd1234abcd1234abcd|5678";
 
         let doc = BpsvParser::parse(content).unwrap();
 
@@ -270,20 +275,15 @@ eu|1234abcd1234abcd1234abcd1234abcd|5678";
         assert_eq!(doc.row_count(), 2);
         assert_eq!(doc.schema().field_count(), 3);
 
-        let first_row = doc.get_row(0).unwrap();
-        assert_eq!(first_row.get_raw(0), Some("us"));
-        assert_eq!(
-            first_row.get_raw(1),
-            Some("abcd1234abcd1234abcd1234abcd1234")
-        );
-        assert_eq!(first_row.get_raw(2), Some("1234"));
+        let row1 = doc.get_row(0).unwrap();
+        assert_eq!(row1.get_raw(0), Some("us"));
+        assert_eq!(row1.get_raw(1), Some("abcd1234abcd1234abcd1234abcd1234"));
+        assert_eq!(row1.get_raw(2), Some("1234"));
     }
 
     #[test]
     fn test_parse_without_sequence() {
-        let content = r"Region!STRING:0|BuildId!DEC:4
-us|1234
-eu|5678";
+        let content = "Region!STRING:0|BuildId!DEC:4\nus|1234\neu|5678";
 
         let doc = BpsvParser::parse(content).unwrap();
 
@@ -293,57 +293,58 @@ eu|5678";
 
     #[test]
     fn test_parse_empty_fields() {
-        let content = r"Region!STRING:0|BuildId!DEC:4|Optional!STRING:0
-us|1234|
-eu||optional_value";
+        let content = "Field1!STRING:0|Field2!STRING:0|Field3!STRING:0\na||c\n|b|";
 
         let doc = BpsvParser::parse(content).unwrap();
 
-        assert_eq!(doc.row_count(), 2);
+        let row1 = doc.get_row(0).unwrap();
+        assert_eq!(row1.get_raw(0), Some("a"));
+        assert_eq!(row1.get_raw(1), Some(""));
+        assert_eq!(row1.get_raw(2), Some("c"));
 
-        let first_row = doc.get_row(0).unwrap();
-        assert_eq!(first_row.get_raw(2), Some(""));
-
-        let second_row = doc.get_row(1).unwrap();
-        assert_eq!(second_row.get_raw(1), Some(""));
-        assert_eq!(second_row.get_raw(2), Some("optional_value"));
+        let row2 = doc.get_row(1).unwrap();
+        assert_eq!(row2.get_raw(0), Some(""));
+        assert_eq!(row2.get_raw(1), Some("b"));
+        assert_eq!(row2.get_raw(2), Some(""));
     }
 
     #[test]
     fn test_parse_sequence_variations() {
-        let variations = [
-            "## seqn = 12345",
-            "##seqn=12345",
-            "## seqn= 12345",
-            "##  seqn  =  12345  ",
-        ];
+        // Test with equals sign
+        let result = BpsvParser::parse_sequence_line("## seqn = 12345").unwrap();
+        assert_eq!(result, Some(12345));
 
-        for variation in &variations {
-            let result = BpsvParser::parse_sequence_line(variation);
-            assert_eq!(result.unwrap(), Some(12345), "Failed for: {variation}");
-        }
+        // Test with colon
+        let result = BpsvParser::parse_sequence_line("## seqn: 67890").unwrap();
+        assert_eq!(result, Some(67890));
+
+        // Test with just space
+        let result = BpsvParser::parse_sequence_line("## seqn 11111").unwrap();
+        assert_eq!(result, Some(11111));
+
+        // Test with extra spaces
+        let result = BpsvParser::parse_sequence_line("## seqn   =   99999").unwrap();
+        assert_eq!(result, Some(99999));
     }
 
     #[test]
     fn test_invalid_sequence_lines() {
-        let invalid = [
-            "# seqn = 12345", // Single hash
-            "## seq = 12345", // Wrong keyword
-            "## seqn 12345",  // Missing equals
-            "## seqn = abc",  // Invalid number
-        ];
+        // No number
+        let result = BpsvParser::parse_sequence_line("## seqn = ");
+        assert!(result.is_err());
 
-        for invalid_line in &invalid {
-            let result = BpsvParser::parse_sequence_line(invalid_line);
-            assert!(result.is_err(), "Should have failed for: {invalid_line}");
-        }
+        // Invalid number
+        let result = BpsvParser::parse_sequence_line("## seqn = abc");
+        assert!(result.is_err());
+
+        // Just the prefix
+        let result = BpsvParser::parse_sequence_line("## seqn");
+        assert!(result.is_err());
     }
 
     #[test]
     fn test_parse_schema_only() {
-        let content = r"Region!STRING:0|BuildConfig!HEX:16|BuildId!DEC:4
-## seqn = 12345
-us|abcd1234abcd1234abcd1234abcd1234|1234";
+        let content = "Region!STRING:0|BuildConfig!HEX:16|BuildId!DEC:4\n## seqn = 12345\nus|abcd|1234";
 
         let schema = BpsvParser::parse_schema(content).unwrap();
 
@@ -355,61 +356,65 @@ us|abcd1234abcd1234abcd1234abcd1234|1234";
 
     #[test]
     fn test_parse_raw_rows() {
-        let content = r"Region!STRING:0|BuildId!DEC:4
-## seqn = 12345
-us|1234
-eu|5678
-kr|9999";
+        let content = "Region!STRING:0|BuildId!DEC:4\n## seqn = 12345\nus|1234\neu|5678\n# comment\ncn|9999";
 
         let rows = BpsvParser::parse_raw_rows(content).unwrap();
 
         assert_eq!(rows.len(), 3);
         assert_eq!(rows[0], vec!["us", "1234"]);
         assert_eq!(rows[1], vec!["eu", "5678"]);
-        assert_eq!(rows[2], vec!["kr", "9999"]);
+        assert_eq!(rows[2], vec!["cn", "9999"]);
     }
 
     #[test]
     fn test_get_stats() {
-        let content = r"Region!STRING:0|BuildConfig!HEX:16|BuildId!DEC:4
-## seqn = 12345
-us|abcd1234abcd1234abcd1234abcd1234|1234
-eu|1234abcd1234abcd1234abcd1234abcd|5678";
+        let content = "Region!STRING:0|BuildConfig!HEX:16|BuildId!DEC:4\n## seqn = 12345\nus|abcd|1234\neu|efgh|5678\n# comment\ncn|ijkl|9999";
 
         let (field_count, row_count, has_seqn) = BpsvParser::get_stats(content).unwrap();
 
         assert_eq!(field_count, 3);
-        assert_eq!(row_count, 2);
+        assert_eq!(row_count, 3);
         assert!(has_seqn);
     }
 
     #[test]
+    fn test_empty_document() {
+        let result = BpsvParser::parse("");
+        assert!(matches!(result, Err(Error::EmptyDocument)));
+    }
+
+    #[test]
     fn test_invalid_documents() {
-        // Empty document
-        assert!(BpsvParser::parse("").is_err());
+        // No header
+        let result = BpsvParser::parse("us|1234");
+        assert!(matches!(result, Err(Error::InvalidHeader { .. })));
 
-        // Missing header
-        assert!(BpsvParser::parse("us|1234").is_err());
-
-        // Invalid header format
-        assert!(BpsvParser::parse("RegionBuildId\nus|1234").is_err());
+        // Header without field types
+        let result = BpsvParser::parse("Region|BuildId\nus|1234");
+        assert!(matches!(result, Err(Error::InvalidHeader { .. })));
     }
 
     #[test]
     fn test_schema_mismatch_in_parsing() {
-        let content = r"Region!STRING:0|BuildId!DEC:4
-us|1234|extra_field"; // Too many fields
+        let content = "Region!STRING:0|BuildId!DEC:4\nus|1234|extra\neu";
 
+        // Parser should reject rows with wrong number of fields
         let result = BpsvParser::parse(content);
-        assert!(matches!(result, Err(Error::RowValidation { .. })));
+        assert!(result.is_err());
+        
+        // Ensure the error is about schema mismatch
+        if let Err(e) = result {
+            assert!(matches!(e, Error::SchemaMismatch { .. }));
+        }
     }
 
     #[test]
     fn test_case_insensitive_types() {
-        let content = r"Region!string:0|BuildId!dec:4
-us|1234";
+        let content = "Region!string:0|BuildId!DEC:4|Config!hex:16\nus|1234|abcdabcdabcdabcdabcdabcdabcdabcd";
 
         let doc = BpsvParser::parse(content).unwrap();
-        assert_eq!(doc.schema().field_count(), 2);
+
+        assert_eq!(doc.row_count(), 1);
+        assert_eq!(doc.schema().field_count(), 3);
     }
 }

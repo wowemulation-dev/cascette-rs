@@ -129,7 +129,7 @@ pub struct ProductSummary {
 
 /// Helper struct for accessing BPSV row data by field name
 struct FieldAccessor<'a> {
-    row: &'a ngdp_bpsv::document::BpsvRow,
+    row: &'a ngdp_bpsv::document::BpsvRow<'a>,
     schema: &'a ngdp_bpsv::BpsvSchema,
 }
 

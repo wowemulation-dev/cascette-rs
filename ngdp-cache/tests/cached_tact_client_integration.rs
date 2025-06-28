@@ -145,7 +145,7 @@ async fn test_cache_isolation_by_region() {
             tokio::fs::create_dir_all(parent).await.unwrap();
         }
 
-        tokio::fs::write(&path, format!("{} data", region))
+        tokio::fs::write(&path, format!("{region} data"))
             .await
             .unwrap();
     }
@@ -197,7 +197,7 @@ async fn test_cache_isolation_by_protocol() {
             tokio::fs::create_dir_all(parent).await.unwrap();
         }
 
-        tokio::fs::write(&path, format!("{} data", protocol))
+        tokio::fs::write(&path, format!("{protocol} data"))
             .await
             .unwrap();
     }
@@ -249,11 +249,11 @@ async fn test_sequence_number_handling() {
         .as_secs();
 
     for (i, seq) in sequences.iter().enumerate() {
-        let data_path = product_dir.join(format!("versions-{}.bpsv", seq));
-        let meta_path = product_dir.join(format!("versions-{}.meta", seq));
+        let data_path = product_dir.join(format!("versions-{seq}.bpsv"));
+        let meta_path = product_dir.join(format!("versions-{seq}.meta"));
 
         // Write data
-        tokio::fs::write(&data_path, format!("## seqn = {}\ndata", seq))
+        tokio::fs::write(&data_path, format!("## seqn = {seq}\ndata"))
             .await
             .unwrap();
 
@@ -279,8 +279,8 @@ async fn test_sequence_number_handling() {
 
     // Verify all files exist
     for seq in sequences {
-        let path = product_dir.join(format!("versions-{}.bpsv", seq));
-        assert!(path.exists(), "Sequence {} should exist", seq);
+        let path = product_dir.join(format!("versions-{seq}.bpsv"));
+        assert!(path.exists(), "Sequence {seq} should exist");
     }
 
     // Clear expired entries (none should be expired yet)
@@ -288,11 +288,10 @@ async fn test_sequence_number_handling() {
 
     // All files should still exist
     for seq in sequences {
-        let path = product_dir.join(format!("versions-{}.bpsv", seq));
+        let path = product_dir.join(format!("versions-{seq}.bpsv"));
         assert!(
             path.exists(),
-            "Sequence {} should still exist after clear_expired",
-            seq
+            "Sequence {seq} should still exist after clear_expired"
         );
     }
 }
@@ -319,14 +318,14 @@ async fn test_endpoint_differentiation() {
     ];
 
     for (endpoint, data) in endpoints {
-        let path = product_dir.join(format!("{}-1000.bpsv", endpoint));
+        let path = product_dir.join(format!("{endpoint}-1000.bpsv"));
         tokio::fs::write(&path, data).await.unwrap();
     }
 
     // Verify all endpoint types have separate cache files
     for (endpoint, _) in endpoints {
-        let path = product_dir.join(format!("{}-1000.bpsv", endpoint));
-        assert!(path.exists(), "{} cache should exist", endpoint);
+        let path = product_dir.join(format!("{endpoint}-1000.bpsv"));
+        assert!(path.exists(), "{endpoint} cache should exist");
     }
 
     // Read and verify each has correct content

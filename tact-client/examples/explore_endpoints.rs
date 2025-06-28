@@ -40,7 +40,7 @@ async fn test_endpoint(client: &HttpClient, path: &str) -> EndpointResult {
                         text
                     }
                 }
-                Err(e) => format!("Error reading body: {}", e),
+                Err(e) => format!("Error reading body: {e}"),
             };
 
             EndpointResult {
@@ -56,7 +56,7 @@ async fn test_endpoint(client: &HttpClient, path: &str) -> EndpointResult {
             status: 0,
             content_type: None,
             content_length: None,
-            first_bytes: format!("Request failed: {}", e),
+            first_bytes: format!("Request failed: {e}"),
         },
     }
 }
@@ -111,15 +111,15 @@ async fn explore_v1_endpoints(product: &str) {
     }
 
     // Print summary
-    println!("\n=== V1 Results Summary for {} ===", product);
+    println!("\n=== V1 Results Summary for {product} ===");
     for result in results {
         println!("\nEndpoint: {}", result.endpoint);
         println!("Status: {}", result.status);
         if let Some(ct) = &result.content_type {
-            println!("Content-Type: {}", ct);
+            println!("Content-Type: {ct}");
         }
         if let Some(cl) = result.content_length {
-            println!("Content-Length: {}", cl);
+            println!("Content-Length: {cl}");
         }
         if result.status == 200 {
             let preview = if result.first_bytes.len() > 300 {
@@ -127,7 +127,7 @@ async fn explore_v1_endpoints(product: &str) {
             } else {
                 result.first_bytes.clone()
             };
-            println!("Response preview:\n{}", preview);
+            println!("Response preview:\n{preview}");
         }
         println!("{}", "-".repeat(60));
     }
@@ -171,15 +171,15 @@ async fn explore_v2_endpoints(product: &str) {
     }
 
     // Print summary
-    println!("\n=== V2 Results Summary for {} ===", product);
+    println!("\n=== V2 Results Summary for {product} ===");
     for result in results {
         println!("\nEndpoint: {}", result.endpoint);
         println!("Status: {}", result.status);
         if let Some(ct) = &result.content_type {
-            println!("Content-Type: {}", ct);
+            println!("Content-Type: {ct}");
         }
         if let Some(cl) = result.content_length {
-            println!("Content-Length: {}", cl);
+            println!("Content-Length: {cl}");
         }
         if result.status == 200 {
             let preview = if result.first_bytes.len() > 300 {
@@ -187,7 +187,7 @@ async fn explore_v2_endpoints(product: &str) {
             } else {
                 result.first_bytes.clone()
             };
-            println!("Response preview:\n{}", preview);
+            println!("Response preview:\n{preview}");
         }
         println!("{}", "-".repeat(60));
     }
@@ -351,7 +351,7 @@ fn print_result_summary(result: &EndpointResult) {
 
     if result.status == 200 {
         if let Some(ct) = &result.content_type {
-            println!("  Content-Type: {}", ct);
+            println!("  Content-Type: {ct}");
         }
 
         let preview = if result.first_bytes.len() > 200 {
@@ -361,7 +361,7 @@ fn print_result_summary(result: &EndpointResult) {
         };
 
         if !preview.trim().is_empty() {
-            println!("  Response preview: {}", preview);
+            println!("  Response preview: {preview}");
         }
     }
 }

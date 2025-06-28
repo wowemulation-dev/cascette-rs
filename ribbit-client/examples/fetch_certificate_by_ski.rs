@@ -34,7 +34,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     .starts_with("SubjectKeyIdentifier:")
                                 {
                                     let ski = &first_signer.identifier.serial_number;
-                                    println!("✓ Found SKI: {}", ski);
+                                    println!("✓ Found SKI: {ski}");
                                     Some(ski.clone())
                                 } else {
                                     println!("✗ Signer doesn't use SKI");
@@ -46,7 +46,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             }
                         }
                         Err(e) => {
-                            println!("✗ Failed to parse signature: {}", e);
+                            println!("✗ Failed to parse signature: {e}");
                             None
                         }
                     }
@@ -60,15 +60,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         Err(e) => {
-            println!("✗ Request failed: {}", e);
+            println!("✗ Request failed: {e}");
             None
         }
     };
 
     if let Some(ski) = ski {
         println!(
-            "\n2. Testing different certificate endpoint formats with SKI: {}\n",
-            ski
+            "\n2. Testing different certificate endpoint formats with SKI: {ski}\n"
         );
 
         // Test different possible endpoint formats
@@ -135,8 +134,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                                 let ski_hex =
                                                                     hex::encode(&ski_bytes[2..]);
                                                                 println!(
-                                                                    "  Certificate SKI: {}",
-                                                                    ski_hex
+                                                                    "  Certificate SKI: {ski_hex}"
                                                                 );
 
                                                                 if ski_hex == ski {
@@ -150,7 +148,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                 }
                                             }
                                             Err(e) => {
-                                                println!("  Failed to parse certificate: {}", e);
+                                                println!("  Failed to parse certificate: {e}");
                                             }
                                         }
                                     }
@@ -169,7 +167,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
                 Err(e) => {
-                    println!("✗ Request failed: {}", e);
+                    println!("✗ Request failed: {e}");
                 }
             }
             println!();
@@ -185,7 +183,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ];
 
         for cert_hash in known_certs {
-            println!("Fetching known cert: {}", cert_hash);
+            println!("Fetching known cert: {cert_hash}");
             let cert_endpoint = Endpoint::Cert(cert_hash.to_string());
 
             if let Ok(response) = client.request(&cert_endpoint).await {
@@ -199,8 +197,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         println!("\nConclusion: The certs endpoint likely expects SHA-1 fingerprints, not SKIs");
         println!(
-            "The SKI {} cannot be directly used with the certs endpoint",
-            ski
+            "The SKI {ski} cannot be directly used with the certs endpoint"
         );
     }
 

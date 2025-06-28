@@ -41,8 +41,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     println!("Manual parsing results:");
-    println!("  US Version: {:?}", us_version);
-    println!("  US Build: {:?}", us_build);
+    println!("  US Version: {us_version:?}");
+    println!("  US Build: {us_build:?}");
     println!("  ❌ Lots of boilerplate code");
     println!("  ❌ Error-prone string parsing");
     println!("  ❌ No type safety");
@@ -74,7 +74,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 1. Convenience methods
     let builds = versions.build_ids();
     println!("1. Convenience methods:");
-    println!("   Unique builds: {:?}", builds);
+    println!("   Unique builds: {builds:?}");
 
     // 2. All fields are accessible
     if let Some(entry) = versions.entries.first() {
@@ -97,8 +97,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .filter(|e| e.versions_name == versions.entries[0].versions_name)
         .count();
     println!(
-        "   {} regions, {} with same version",
-        region_count, same_version_count
+        "   {region_count} regions, {same_version_count} with same version"
     );
 
     // ========================================================================
@@ -121,7 +120,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Access as BPSV (works with V2 protocol)
     match response.as_bpsv() {
         Ok(bpsv) => println!("2. BPSV access: {} rows", bpsv.row_count()),
-        Err(e) => println!("2. BPSV access: {}", e),
+        Err(e) => println!("2. BPSV access: {e}"),
     }
 
     // Or use Display (ToString equivalent)

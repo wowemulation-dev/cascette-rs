@@ -211,8 +211,8 @@ async fn test_concurrent_cache_access() {
     for i in 0..10 {
         let cache_clone = GenericCache::new().await.unwrap();
         let handle = tokio::spawn(async move {
-            let key = format!("concurrent_key_{}", i);
-            let data = format!("data_{}", i);
+            let key = format!("concurrent_key_{i}");
+            let data = format!("data_{i}");
             cache_clone.write(&key, data.as_bytes()).await.unwrap();
 
             // Read it back
@@ -266,7 +266,7 @@ async fn test_cache_key_validation() {
     ];
 
     for key in test_keys {
-        let data = format!("data for {}", key).into_bytes();
+        let data = format!("data for {key}").into_bytes();
 
         // Should handle all keys
         cache.write(key, &data).await.unwrap();
@@ -310,13 +310,13 @@ async fn test_cache_clear_operations() {
 
     // Write multiple entries
     for i in 0..5 {
-        let key = format!("clear_key_{}", i);
+        let key = format!("clear_key_{i}");
         cache.write(&key, b"data").await.unwrap();
     }
 
     // Verify all exist
     for i in 0..5 {
-        let key = format!("clear_key_{}", i);
+        let key = format!("clear_key_{i}");
         assert!(cache.exists(&key).await);
     }
 
@@ -325,7 +325,7 @@ async fn test_cache_clear_operations() {
 
     // Verify all are gone
     for i in 0..5 {
-        let key = format!("clear_key_{}", i);
+        let key = format!("clear_key_{i}");
         assert!(!cache.exists(&key).await);
     }
 }

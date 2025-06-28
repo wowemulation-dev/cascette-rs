@@ -37,14 +37,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut field_examples = Vec::new();
 
     for (name, endpoint) in &endpoints {
-        println!("📊 Analyzing: {}", name);
+        println!("📊 Analyzing: {name}");
 
         match client.request(endpoint).await {
             Ok(response) => {
                 if let Some(data) = &response.data {
                     // Find the header line (contains !)
                     if let Some(header_line) = data.lines().find(|line| line.contains('!')) {
-                        println!("   Header: {}", header_line);
+                        println!("   Header: {header_line}");
 
                         // Parse each field definition
                         let fields: Vec<&str> = header_line.split('|').collect();
@@ -55,7 +55,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 let field_name = &field[..exclamation_pos];
                                 let type_def = &field[exclamation_pos + 1..];
 
-                                println!("     {} -> {}", field_name, type_def);
+                                println!("     {field_name} -> {type_def}");
                                 all_field_types.insert(type_def.to_string());
                                 field_examples.push((field_name.to_string(), type_def.to_string()));
                             }
@@ -64,11 +64,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                     // Extract sequence number
                     if let Some(seqn_line) = data.lines().find(|line| line.starts_with("## seqn")) {
-                        println!("   {}", seqn_line);
+                        println!("   {seqn_line}");
                     }
                 }
             }
-            Err(e) => println!("   Error: {}", e),
+            Err(e) => println!("   Error: {e}"),
         }
         println!();
     }
@@ -79,7 +79,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut sorted_types: Vec<_> = all_field_types.iter().collect();
     sorted_types.sort();
     for field_type in sorted_types {
-        println!("   • {}", field_type);
+        println!("   • {field_type}");
     }
 
     println!("\n📋 **Field Type Patterns:**");
@@ -105,16 +105,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     if !string_types.is_empty() {
-        println!("   🔤 String Types: {:?}", string_types);
+        println!("   🔤 String Types: {string_types:?}");
     }
     if !hex_types.is_empty() {
-        println!("   🔢 Hex Types: {:?}", hex_types);
+        println!("   🔢 Hex Types: {hex_types:?}");
     }
     if !dec_types.is_empty() {
-        println!("   🔢 Decimal Types: {:?}", dec_types);
+        println!("   🔢 Decimal Types: {dec_types:?}");
     }
     if !other_types.is_empty() {
-        println!("   ❓ Other Types: {:?}", other_types);
+        println!("   ❓ Other Types: {other_types:?}");
     }
 
     println!("\n🏗️ **Suggested Rust Type System:**");

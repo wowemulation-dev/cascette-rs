@@ -38,7 +38,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let response = match client.request(&endpoint).await {
             Ok(resp) => resp,
             Err(e) => {
-                println!("❌ Failed to fetch: {}", e);
+                println!("❌ Failed to fetch: {e}");
                 continue;
             }
         };
@@ -49,7 +49,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let cms_info = match parse_cms_signature(sig_bytes) {
                     Ok(info) => info,
                     Err(e) => {
-                        println!("❌ Failed to parse signature: {}", e);
+                        println!("❌ Failed to parse signature: {e}");
                         continue;
                     }
                 };
@@ -61,7 +61,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 // Process each signer
                 for (i, signer) in cms_info.signers.iter().enumerate() {
-                    println!("\n  Signer #{}:", i);
+                    println!("\n  Signer #{i}:");
                     println!(
                         "    Algorithm: {} with {}",
                         signer.signature_algorithm, signer.digest_algorithm
@@ -74,7 +74,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         .starts_with("SubjectKeyIdentifier:")
                     {
                         let ski = &signer.identifier.serial_number;
-                        println!("    SKI: {}", ski);
+                        println!("    SKI: {ski}");
 
                         // Fetch certificate
                         match fetch_signer_certificate(&client, ski).await {
@@ -126,7 +126,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         println!("    ❌ Signature verification failed");
                                     }
                                     Err(e) => {
-                                        println!("    ⚠️  Verification error: {}", e);
+                                        println!("    ⚠️  Verification error: {e}");
                                     }
                                 }
 
@@ -137,12 +137,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         println!("    ✓ Certificate status checked (OCSP)");
                                     }
                                     Err(e) => {
-                                        println!("    ⚠️  OCSP check failed: {}", e);
+                                        println!("    ⚠️  OCSP check failed: {e}");
                                     }
                                 }
                             }
                             Err(e) => {
-                                println!("    ❌ Failed to fetch certificate: {}", e);
+                                println!("    ❌ Failed to fetch certificate: {e}");
                             }
                         }
                     } else {

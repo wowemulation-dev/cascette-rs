@@ -52,10 +52,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .starts_with("SubjectKeyIdentifier:")
                 {
                     let ski = &first_signer.identifier.serial_number;
-                    println!("  SKI: {}", ski);
+                    println!("  SKI: {ski}");
 
                     // Step 3: Fetch certificate using SKI
-                    println!("\n3. Fetching certificate for SKI: {}", ski);
+                    println!("\n3. Fetching certificate for SKI: {ski}");
                     match fetch_signer_certificate(&client, ski).await {
                         Ok((cert, public_key)) => {
                             println!("✓ Certificate fetched successfully!");
@@ -91,7 +91,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             println!("  4. Compare computed hash with signature hash");
                         }
                         Err(e) => {
-                            println!("✗ Failed to fetch certificate: {}", e);
+                            println!("✗ Failed to fetch certificate: {e}");
                         }
                     }
                 } else {

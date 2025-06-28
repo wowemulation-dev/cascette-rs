@@ -73,7 +73,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             let key_preview: Vec<String> = pk.key_bytes
                                                 [..preview_len]
                                                 .iter()
-                                                .map(|b| format!("{:02x}", b))
+                                                .map(|b| format!("{b:02x}"))
                                                 .collect();
                                             println!(
                                                 "      Key Preview: {}...",
@@ -108,7 +108,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     }
                                 }
                                 Err(e) => {
-                                    println!("  ✗ CMS parsing failed: {}", e);
+                                    println!("  ✗ CMS parsing failed: {e}");
                                 }
                             }
                         }
@@ -123,7 +123,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         Err(e) => {
-            eprintln!("✗ Request failed: {}", e);
+            eprintln!("✗ Request failed: {e}");
         }
     }
 

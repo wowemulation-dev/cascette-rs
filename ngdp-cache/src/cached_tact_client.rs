@@ -222,7 +222,7 @@ impl CachedTactClient {
         };
 
         let cache_subdir = self.cache_dir.join(&region).join(protocol).join(product);
-        if !cache_subdir.exists() {
+        if tokio::fs::metadata(&cache_subdir).await.is_err() {
             return None;
         }
 
@@ -512,7 +512,7 @@ impl CachedTactClient {
         };
 
         let cache_subdir = self.cache_dir.join(region).join(protocol);
-        if cache_subdir.exists() {
+        if tokio::fs::metadata(&cache_subdir).await.is_ok() {
             clear_directory_recursively(&cache_subdir).await?;
         }
 
@@ -530,7 +530,7 @@ impl CachedTactClient {
         };
 
         let cache_subdir = self.cache_dir.join(region).join(protocol);
-        if cache_subdir.exists() {
+        if tokio::fs::metadata(&cache_subdir).await.is_ok() {
             clear_expired_in_directory(&cache_subdir).await?;
         }
 
@@ -546,10 +546,12 @@ fn clear_directory_recursively(
         let mut entries = tokio::fs::read_dir(dir).await?;
         while let Some(entry) = entries.next_entry().await? {
             let path = entry.path();
-            if path.is_dir() {
-                clear_directory_recursively(&path).await?;
-            } else {
-                tokio::fs::remove_file(&path).await?;
+            if let Ok(metadata) = tokio::fs::metadata(&path).await {
+                if metadata.is_dir() {
+                    clear_directory_recursively(&path).await?;
+                } else {
+                    tokio::fs::remove_file(&path).await?;
+                }
             }
         }
         Ok(())

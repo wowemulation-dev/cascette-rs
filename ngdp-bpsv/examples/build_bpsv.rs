@@ -152,13 +152,13 @@ eu|5678"#;
     // This should succeed
     match error_builder.add_raw_row(&["abcd".to_string()]) {
         Ok(_) => println!("   ✅ Valid hex value accepted"),
-        Err(e) => println!("   ❌ Unexpected error: {}", e),
+        Err(e) => println!("   ❌ Unexpected error: {e}"),
     }
 
     // This should fail - invalid hex
     match error_builder.add_raw_row(&["xyz".to_string()]) {
         Ok(_) => println!("   ❌ Invalid hex should have been rejected!"),
-        Err(e) => println!("   ✅ Invalid hex correctly rejected: {}", e),
+        Err(e) => println!("   ✅ Invalid hex correctly rejected: {e}"),
     }
 
     println!("\n✅ All building examples completed successfully!");

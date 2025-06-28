@@ -1,7 +1,7 @@
 //! Response types for TACT HTTP endpoints using ngdp-bpsv
 
 use crate::{Error, Result};
-use ngdp_bpsv::{BpsvDocument, BpsvSchema};
+use ngdp_bpsv::BpsvDocument;
 
 /// Version configuration entry (from /versions endpoint)
 #[derive(Debug, Clone, PartialEq)]
@@ -52,76 +52,65 @@ pub struct BgdlEntry {
     pub game_bgdl_config: Option<String>,
 }
 
-/// Helper struct for accessing BPSV row data by field name
-struct FieldAccessor<'a> {
-    row: &'a ngdp_bpsv::document::BpsvRow,
-    schema: &'a BpsvSchema,
-}
-
-impl<'a> FieldAccessor<'a> {
-    fn new(row: &'a ngdp_bpsv::document::BpsvRow, schema: &'a BpsvSchema) -> Self {
-        Self { row, schema }
-    }
-
-    fn get_string(&self, field: &str) -> Result<String> {
-        self.row
-            .get_raw_by_name(field, self.schema)
-            .map(std::string::ToString::to_string)
-            .ok_or_else(|| Error::InvalidManifest {
-                line: 0,
-                reason: format!("Missing field: {field}"),
-            })
-    }
-
-    fn get_string_optional(&self, field: &str) -> Option<String> {
-        self.row.get_raw_by_name(field, self.schema).and_then(|s| {
-            if s.is_empty() {
-                None
-            } else {
-                Some(s.to_string())
-            }
-        })
-    }
-
-    fn get_u32(&self, field: &str) -> Result<u32> {
-        let value = self.get_string(field)?;
-        value.parse().map_err(|_| Error::InvalidManifest {
-            line: 0,
-            reason: format!("Invalid u32 for {field}: {value}"),
-        })
-    }
-
-    fn get_string_list(&self, field: &str, separator: char) -> Result<Vec<String>> {
-        let value = self.get_string(field)?;
-        if value.is_empty() {
-            Ok(Vec::new())
-        } else {
-            Ok(value
-                .split(separator)
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty())
-                .collect())
-        }
-    }
-}
 
 /// Parse versions manifest into typed entries
 pub fn parse_versions(content: &str) -> Result<Vec<VersionEntry>> {
     let doc = BpsvDocument::parse(content)?;
     let schema = doc.schema();
-    let mut entries = Vec::new();
+    
+    // Pre-compute field indices for direct access
+    let region_idx = schema.get_field("Region")
+        .ok_or_else(|| Error::InvalidManifest {
+            line: 0,
+            reason: "Missing Region field".to_string(),
+        })?.index;
+    let build_config_idx = schema.get_field("BuildConfig")
+        .ok_or_else(|| Error::InvalidManifest {
+            line: 0,
+            reason: "Missing BuildConfig field".to_string(),
+        })?.index;
+    let cdn_config_idx = schema.get_field("CDNConfig")
+        .ok_or_else(|| Error::InvalidManifest {
+            line: 0,
+            reason: "Missing CDNConfig field".to_string(),
+        })?.index;
+    let key_ring_idx = schema.get_field("KeyRing").map(|f| f.index);
+    let build_id_idx = schema.get_field("BuildId")
+        .ok_or_else(|| Error::InvalidManifest {
+            line: 0,
+            reason: "Missing BuildId field".to_string(),
+        })?.index;
+    let versions_name_idx = schema.get_field("VersionsName")
+        .ok_or_else(|| Error::InvalidManifest {
+            line: 0,
+            reason: "Missing VersionsName field".to_string(),
+        })?.index;
+    let product_config_idx = schema.get_field("ProductConfig")
+        .ok_or_else(|| Error::InvalidManifest {
+            line: 0,
+            reason: "Missing ProductConfig field".to_string(),
+        })?.index;
+    
+    let mut entries = Vec::with_capacity(doc.rows().len());
 
     for row in doc.rows() {
-        let accessor = FieldAccessor::new(row, schema);
-
         entries.push(VersionEntry {
-            region: accessor.get_string("Region")?,
-            build_config: accessor.get_string("BuildConfig")?,
-            cdn_config: accessor.get_string("CDNConfig")?,
-            key_ring: accessor.get_string_optional("KeyRing"),
-            build_id: accessor.get_u32("BuildId")?,
-            versions_name: accessor.get_string("VersionsName")?,
-            product_config: accessor.get_string("ProductConfig")?,
+            region: row.get_raw(region_idx).unwrap().to_string(),
+            build_config: row.get_raw(build_config_idx).unwrap().to_string(),
+            cdn_config: row.get_raw(cdn_config_idx).unwrap().to_string(),
+            key_ring: key_ring_idx.and_then(|idx| {
+                row.get_raw(idx).and_then(|s| {
+                    if s.is_empty() { None } else { Some(s.to_string()) }
+                })
+            }),
+            build_id: row.get_raw(build_id_idx).unwrap()
+                .parse()
+                .map_err(|_| Error::InvalidManifest {
+                    line: 0,
+                    reason: format!("Invalid BuildId: {}", row.get_raw(build_id_idx).unwrap()),
+                })?,
+            versions_name: row.get_raw(versions_name_idx).unwrap().to_string(),
+            product_config: row.get_raw(product_config_idx).unwrap().to_string(),
         });
     }
 
@@ -132,15 +121,46 @@ pub fn parse_versions(content: &str) -> Result<Vec<VersionEntry>> {
 pub fn parse_cdns(content: &str) -> Result<Vec<CdnEntry>> {
     let doc = BpsvDocument::parse(content)?;
     let schema = doc.schema();
-    let mut entries = Vec::new();
+    
+    // Pre-compute field indices for direct access
+    let name_idx = schema.get_field("Name")
+        .ok_or_else(|| Error::InvalidManifest {
+            line: 0,
+            reason: "Missing Name field".to_string(),
+        })?.index;
+    let path_idx = schema.get_field("Path")
+        .ok_or_else(|| Error::InvalidManifest {
+            line: 0,
+            reason: "Missing Path field".to_string(),
+        })?.index;
+    let hosts_idx = schema.get_field("Hosts")
+        .ok_or_else(|| Error::InvalidManifest {
+            line: 0,
+            reason: "Missing Hosts field".to_string(),
+        })?.index;
+    let servers_idx = schema.get_field("Servers").map(|f| f.index);
+    let config_path_idx = schema.get_field("ConfigPath")
+        .ok_or_else(|| Error::InvalidManifest {
+            line: 0,
+            reason: "Missing ConfigPath field".to_string(),
+        })?.index;
+    
+    let mut entries = Vec::with_capacity(doc.rows().len());
 
     for row in doc.rows() {
-        let accessor = FieldAccessor::new(row, schema);
-
-        // Both hosts and servers are space-separated lists
-        let hosts = accessor.get_string_list("Hosts", ' ')?;
-        let servers = accessor
-            .get_string_optional("Servers")
+        // Parse hosts as space-separated list
+        let hosts_str = row.get_raw(hosts_idx).unwrap();
+        let hosts = if hosts_str.is_empty() {
+            Vec::new()
+        } else {
+            hosts_str.split_whitespace()
+                .map(|s| s.to_string())
+                .collect()
+        };
+        
+        // Parse servers as optional space-separated list
+        let servers = servers_idx.and_then(|idx| row.get_raw(idx))
+            .filter(|s| !s.is_empty())
             .map(|s| {
                 s.split_whitespace()
                     .map(|s| s.to_string())
@@ -149,11 +169,11 @@ pub fn parse_cdns(content: &str) -> Result<Vec<CdnEntry>> {
             .unwrap_or_default();
 
         entries.push(CdnEntry {
-            name: accessor.get_string("Name")?,
-            path: accessor.get_string("Path")?,
+            name: row.get_raw(name_idx).unwrap().to_string(),
+            path: row.get_raw(path_idx).unwrap().to_string(),
             hosts,
             servers,
-            config_path: accessor.get_string("ConfigPath")?,
+            config_path: row.get_raw(config_path_idx).unwrap().to_string(),
         });
     }
 
@@ -164,17 +184,43 @@ pub fn parse_cdns(content: &str) -> Result<Vec<CdnEntry>> {
 pub fn parse_bgdl(content: &str) -> Result<Vec<BgdlEntry>> {
     let doc = BpsvDocument::parse(content)?;
     let schema = doc.schema();
-    let mut entries = Vec::new();
+    
+    // Pre-compute field indices for direct access
+    let region_idx = schema.get_field("Region")
+        .ok_or_else(|| Error::InvalidManifest {
+            line: 0,
+            reason: "Missing Region field".to_string(),
+        })?.index;
+    let build_config_idx = schema.get_field("BuildConfig")
+        .ok_or_else(|| Error::InvalidManifest {
+            line: 0,
+            reason: "Missing BuildConfig field".to_string(),
+        })?.index;
+    let cdn_config_idx = schema.get_field("CDNConfig")
+        .ok_or_else(|| Error::InvalidManifest {
+            line: 0,
+            reason: "Missing CDNConfig field".to_string(),
+        })?.index;
+    let install_bgdl_idx = schema.get_field("InstallBGDLConfig").map(|f| f.index);
+    let game_bgdl_idx = schema.get_field("GameBGDLConfig").map(|f| f.index);
+    
+    let mut entries = Vec::with_capacity(doc.rows().len());
 
     for row in doc.rows() {
-        let accessor = FieldAccessor::new(row, schema);
-
         entries.push(BgdlEntry {
-            region: accessor.get_string("Region")?,
-            build_config: accessor.get_string("BuildConfig")?,
-            cdn_config: accessor.get_string("CDNConfig")?,
-            install_bgdl_config: accessor.get_string_optional("InstallBGDLConfig"),
-            game_bgdl_config: accessor.get_string_optional("GameBGDLConfig"),
+            region: row.get_raw(region_idx).unwrap().to_string(),
+            build_config: row.get_raw(build_config_idx).unwrap().to_string(),
+            cdn_config: row.get_raw(cdn_config_idx).unwrap().to_string(),
+            install_bgdl_config: install_bgdl_idx.and_then(|idx| {
+                row.get_raw(idx).and_then(|s| {
+                    if s.is_empty() { None } else { Some(s.to_string()) }
+                })
+            }),
+            game_bgdl_config: game_bgdl_idx.and_then(|idx| {
+                row.get_raw(idx).and_then(|s| {
+                    if s.is_empty() { None } else { Some(s.to_string()) }
+                })
+            }),
         });
     }
 

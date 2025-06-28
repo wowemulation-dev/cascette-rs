@@ -37,7 +37,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("  Signers: {}", signed_data.signer_infos.0.len());
 
             for (i, signer) in signed_data.signer_infos.0.iter().enumerate() {
-                println!("\nSigner #{}:", i);
+                println!("\nSigner #{i}:");
 
                 // Check for signed attributes
                 if let Some(signed_attrs) = &signer.signed_attrs {

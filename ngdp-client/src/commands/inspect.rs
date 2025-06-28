@@ -19,19 +19,19 @@ pub async fn handle(
             region,
         } => {
             println!("Build config inspection not yet implemented");
-            println!("Product: {}", product);
-            println!("Build: {}", build);
-            println!("Region: {}", region);
+            println!("Product: {product}");
+            println!("Build: {build}");
+            println!("Region: {region}");
         }
         InspectCommands::CdnConfig { product, region } => {
             println!("CDN config inspection not yet implemented");
-            println!("Product: {}", product);
-            println!("Region: {}", region);
+            println!("Product: {product}");
+            println!("Region: {region}");
         }
         InspectCommands::Encoding { file, stats } => {
             println!("Encoding inspection not yet implemented");
-            println!("File: {:?}", file);
-            println!("Stats: {}", stats);
+            println!("File: {file:?}");
+            println!("Stats: {stats}");
         }
     }
     Ok(())
@@ -53,7 +53,7 @@ async fn inspect_bpsv(
     };
 
     if raw {
-        println!("{}", data);
+        println!("{data}");
         return Ok(());
     }
 
@@ -79,7 +79,7 @@ async fn inspect_bpsv(
             } else {
                 serde_json::to_string(&json_data)?
             };
-            println!("{}", output);
+            println!("{output}");
         }
         OutputFormat::Bpsv => {
             println!("{}", doc.to_bpsv_string());
@@ -104,7 +104,7 @@ async fn inspect_bpsv(
                     regular_cell(&field.field_type.to_string()),
                 ]);
             }
-            println!("{}", schema_table);
+            println!("{schema_table}");
 
             if let Some(seq) = doc.sequence_number() {
                 println!();
@@ -127,7 +127,7 @@ async fn inspect_bpsv(
                 let preview_count = std::cmp::min(5, doc.rows().len());
                 println!(
                     "\n{}",
-                    format_header(&format!("Preview (first {} rows)", preview_count), &style)
+                    format_header(&format!("Preview (first {preview_count} rows)"), &style)
                 );
 
                 let mut data_table = create_table(&style);
@@ -149,7 +149,7 @@ async fn inspect_bpsv(
                     data_table.add_row(cells);
                 }
 
-                println!("{}", data_table);
+                println!("{data_table}");
 
                 if doc.rows().len() > preview_count {
                     println!(

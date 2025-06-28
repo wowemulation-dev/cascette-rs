@@ -89,8 +89,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let _response = client.request_raw(&versions_endpoint).await?;
     let duration = start.elapsed();
     println!(
-        "   Request completed in {:?} (caching disabled, always fetches)",
-        duration
+        "   Request completed in {duration:?} (caching disabled, always fetches)"
     );
 
     // Re-enable and test expiration cleanup

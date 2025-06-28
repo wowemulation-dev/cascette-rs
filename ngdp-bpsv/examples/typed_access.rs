@@ -50,13 +50,13 @@ cn|deadbeefcafebabedeadbeefcafebabe|61494|"#;
         // Access specific fields by name
         if let Ok(Some(region_value)) = row.get_typed_by_name("Region", &schema) {
             if let Some(region_str) = region_value.as_string() {
-                println!("     → Region as string: '{}'", region_str);
+                println!("     → Region as string: '{region_str}'");
             }
         }
 
         if let Ok(Some(build_id_value)) = row.get_typed_by_name("BuildId", &schema) {
             if let Some(build_id) = build_id_value.as_decimal() {
-                println!("     → Build ID as number: {}", build_id);
+                println!("     → Build ID as number: {build_id}");
             }
         }
 
@@ -87,16 +87,16 @@ cn|deadbeefcafebabedeadbeefcafebabe|61494|"#;
 
         println!("   Row {} as typed map:", i + 1);
         for (field_name, value) in &typed_map {
-            println!("     {}: {:?}", field_name, value);
+            println!("     {field_name}: {value:?}");
         }
 
         // Type-safe access
         if let Some(BpsvValue::String(region)) = typed_map.get("Region") {
-            println!("     → Type-safe region access: '{}'", region);
+            println!("     → Type-safe region access: '{region}'");
         }
 
         if let Some(BpsvValue::Decimal(build_id)) = typed_map.get("BuildId") {
-            println!("     → Type-safe build ID access: {}", build_id);
+            println!("     → Type-safe build ID access: {build_id}");
         }
 
         println!();
@@ -110,30 +110,30 @@ cn|deadbeefcafebabedeadbeefcafebabe|61494|"#;
     let hex_value = BpsvValue::Hex("deadbeef".to_string());
     let empty_value = BpsvValue::Empty;
 
-    println!("   String value: {}", string_value);
-    println!("   Decimal value: {}", decimal_value);
-    println!("   Hex value: {}", hex_value);
-    println!("   Empty value: '{}'", empty_value);
+    println!("   String value: {string_value}");
+    println!("   Decimal value: {decimal_value}");
+    println!("   Hex value: {hex_value}");
+    println!("   Empty value: '{empty_value}'");
 
     // Try to convert values to Rust types
     println!("\n   Conversion attempts:");
 
     // String to String
     match String::try_from(string_value.clone()) {
-        Ok(s) => println!("     String → String: '{}'", s),
-        Err(e) => println!("     String → String failed: {}", e),
+        Ok(s) => println!("     String → String: '{s}'"),
+        Err(e) => println!("     String → String failed: {e}"),
     }
 
     // Decimal to i64
     match i64::try_from(decimal_value.clone()) {
-        Ok(n) => println!("     Decimal → i64: {}", n),
-        Err(e) => println!("     Decimal → i64 failed: {}", e),
+        Ok(n) => println!("     Decimal → i64: {n}"),
+        Err(e) => println!("     Decimal → i64 failed: {e}"),
     }
 
     // Try invalid conversion
     match i64::try_from(string_value.clone()) {
-        Ok(n) => println!("     String → i64: {} (unexpected!)", n),
-        Err(e) => println!("     String → i64 correctly failed: {}", e),
+        Ok(n) => println!("     String → i64: {n} (unexpected!)"),
+        Err(e) => println!("     String → i64 correctly failed: {e}"),
     }
 
     // Example 5: Working with different field types
@@ -155,7 +155,7 @@ cn|deadbeefcafebabedeadbeefcafebabe|61494|"#;
         "1234".to_string(),
     ]) {
         Ok(_) => println!("     ✅ Valid row accepted"),
-        Err(e) => println!("     ❌ Error: {}", e),
+        Err(e) => println!("     ❌ Error: {e}"),
     }
 
     // Test string length validation
@@ -165,12 +165,12 @@ cn|deadbeefcafebabedeadbeefcafebabe|61494|"#;
 
     match builder2.add_raw_row(&["ok".to_string()]) {
         Ok(_) => println!("     ✅ Short string accepted"),
-        Err(e) => println!("     ❌ Error: {}", e),
+        Err(e) => println!("     ❌ Error: {e}"),
     }
 
     match builder2.add_raw_row(&["toolong".to_string()]) {
         Ok(_) => println!("     ❌ Long string should have been rejected!"),
-        Err(e) => println!("     ✅ Long string correctly rejected: {}", e),
+        Err(e) => println!("     ✅ Long string correctly rejected: {e}"),
     }
 
     // Test hex validation
@@ -180,12 +180,12 @@ cn|deadbeefcafebabedeadbeefcafebabe|61494|"#;
 
     match builder3.add_raw_row(&["abcd".to_string()]) {
         Ok(_) => println!("     ✅ Valid hex accepted"),
-        Err(e) => println!("     ❌ Error: {}", e),
+        Err(e) => println!("     ❌ Error: {e}"),
     }
 
     match builder3.add_raw_row(&["xyz".to_string()]) {
         Ok(_) => println!("     ❌ Invalid hex should have been rejected!"),
-        Err(e) => println!("     ✅ Invalid hex correctly rejected: {}", e),
+        Err(e) => println!("     ✅ Invalid hex correctly rejected: {e}"),
     }
 
     // Example 6: Empty values handling
@@ -209,7 +209,7 @@ value|456|abcd1234"#;
         for (j, value) in typed_values.iter().enumerate() {
             if value.is_empty() {
                 let field_name = &empty_schema.fields()[j].name;
-                println!("       Field '{}' is empty", field_name);
+                println!("       Field '{field_name}' is empty");
             }
         }
     }

@@ -14,7 +14,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("=== Debugging Certificate Checksum Issue ===\n");
 
     let ski = "782a8a710b950421127250a3e91b751ca356e202";
-    println!("Requesting certificate for SKI: {}", ski);
+    println!("Requesting certificate for SKI: {ski}");
 
     // Make raw request to see actual data
     match client.request_raw(&Endpoint::Cert(ski.to_string())).await {
@@ -29,7 +29,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let checksum_line = &data_str[checksum_start..];
                 if let Some(end) = checksum_line.find('\n') {
                     let checksum = checksum_line[10..end].trim();
-                    println!("Expected checksum from epilogue: {}", checksum);
+                    println!("Expected checksum from epilogue: {checksum}");
 
                     // Get the byte position of the checksum line start
                     let checksum_byte_pos = checksum_start;
@@ -40,8 +40,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     hasher.update(message_without_checksum);
                     let computed = format!("{:x}", hasher.finalize());
                     println!(
-                        "Computed checksum of message without checksum line: {}",
-                        computed
+                        "Computed checksum of message without checksum line: {computed}"
                     );
 
                     if computed == checksum {
@@ -67,7 +66,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let mut hasher = Sha256::new();
                     hasher.update(cert_content.as_bytes());
                     let checksum1 = format!("{:x}", hasher.finalize());
-                    println!("Checksum of certificate with headers: {}", checksum1);
+                    println!("Checksum of certificate with headers: {checksum1}");
 
                     // Method 2: Checksum of certificate content with trailing newline
                     let mut hasher = Sha256::new();
@@ -75,8 +74,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     hasher.update(b"\n");
                     let checksum2 = format!("{:x}", hasher.finalize());
                     println!(
-                        "Checksum of certificate with trailing newline: {}",
-                        checksum2
+                        "Checksum of certificate with trailing newline: {checksum2}"
                     );
 
                     // Method 3: Checksum of entire MIME part body (from Content-Disposition to boundary)
@@ -90,7 +88,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 let mut hasher = Sha256::new();
                                 hasher.update(body.as_bytes());
                                 let checksum3 = format!("{:x}", hasher.finalize());
-                                println!("Checksum of MIME part body: {}", checksum3);
+                                println!("Checksum of MIME part body: {checksum3}");
                             }
                         }
                     }
@@ -98,7 +96,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     // Print first few lines of certificate
                     println!("\nCertificate preview:");
                     for (i, line) in cert_content.lines().take(5).enumerate() {
-                        println!("  {}: {}", i, line);
+                        println!("  {i}: {line}");
                     }
                 } else {
                     println!("Could not find certificate end marker");
@@ -112,7 +110,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("\nRaw response saved to debug_cert_response.txt");
         }
         Err(e) => {
-            println!("Error: {}", e);
+            println!("Error: {e}");
         }
     }
 

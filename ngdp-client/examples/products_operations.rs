@@ -44,7 +44,7 @@ async fn product_listing_demo() -> Result<(), Box<dyn std::error::Error>> {
     };
     match handle_products(cmd, OutputFormat::Text).await {
         Ok(_) => println!("\n✓ Success"),
-        Err(e) => eprintln!("\n✗ Error: {}", e),
+        Err(e) => eprintln!("\n✗ Error: {e}"),
     }
 
     Ok(())
@@ -68,7 +68,7 @@ async fn product_info_demo() -> Result<(), Box<dyn std::error::Error>> {
     .await
     {
         Ok(_) => println!("\n✓ Success"),
-        Err(e) => eprintln!("\n✗ Error: {}", e),
+        Err(e) => eprintln!("\n✗ Error: {e}"),
     }
 
     // Example 2: Info for all regions (no region specified)
@@ -85,7 +85,7 @@ async fn product_info_demo() -> Result<(), Box<dyn std::error::Error>> {
     .await
     {
         Ok(_) => println!("\n✓ Success"),
-        Err(e) => eprintln!("\n✗ Error: {}", e),
+        Err(e) => eprintln!("\n✗ Error: {e}"),
     }
 
     // Example 3: JSON output for specific region
@@ -102,7 +102,7 @@ async fn product_info_demo() -> Result<(), Box<dyn std::error::Error>> {
     .await
     {
         Ok(_) => println!("\n✓ Success (JSON output shown above)"),
-        Err(e) => eprintln!("\n✗ Error: {}", e),
+        Err(e) => eprintln!("\n✗ Error: {e}"),
     }
 
     Ok(())
@@ -126,7 +126,7 @@ async fn cdn_configuration_demo() -> Result<(), Box<dyn std::error::Error>> {
     .await
     {
         Ok(_) => println!("\n✓ Success"),
-        Err(e) => eprintln!("\n✗ Error: {}", e),
+        Err(e) => eprintln!("\n✗ Error: {e}"),
     }
 
     // Example 2: CDN config for EU region
@@ -143,7 +143,7 @@ async fn cdn_configuration_demo() -> Result<(), Box<dyn std::error::Error>> {
     .await
     {
         Ok(_) => println!("\n✓ Success"),
-        Err(e) => eprintln!("\n✗ Error: {}", e),
+        Err(e) => eprintln!("\n✗ Error: {e}"),
     }
 
     // Example 3: CDN config for CN region in JSON format
@@ -160,7 +160,7 @@ async fn cdn_configuration_demo() -> Result<(), Box<dyn std::error::Error>> {
     .await
     {
         Ok(_) => println!("\n✓ Success (JSON output shown above)"),
-        Err(e) => eprintln!("\n✗ Error: {}", e),
+        Err(e) => eprintln!("\n✗ Error: {e}"),
     }
 
     Ok(())
@@ -174,15 +174,13 @@ async fn cross_region_demo() -> Result<(), Box<dyn std::error::Error>> {
     let product = "wow";
 
     println!(
-        "Comparing CDN configurations across regions for {}:",
-        product
+        "Comparing CDN configurations across regions for {product}:"
     );
 
     for (i, region) in regions.iter().enumerate() {
         println!("\n{}. {} region:", i + 1, region.to_uppercase());
         println!(
-            "   Command: ngdp products cdns {} --region {}",
-            product, region
+            "   Command: ngdp products cdns {product} --region {region}"
         );
 
         match handle_products(
@@ -195,7 +193,7 @@ async fn cross_region_demo() -> Result<(), Box<dyn std::error::Error>> {
         .await
         {
             Ok(_) => println!("   ✓ Success"),
-            Err(e) => eprintln!("   ✗ Error: {}", e),
+            Err(e) => eprintln!("   ✗ Error: {e}"),
         }
     }
 
@@ -212,8 +210,7 @@ async fn output_format_demo() -> Result<(), Box<dyn std::error::Error>> {
     // Text format
     println!("1. Text format output:");
     println!(
-        "   Command: ngdp products info {} --region {}",
-        product, region
+        "   Command: ngdp products info {product} --region {region}"
     );
     match handle_products(
         ProductsCommands::Info {
@@ -225,14 +222,13 @@ async fn output_format_demo() -> Result<(), Box<dyn std::error::Error>> {
     .await
     {
         Ok(_) => println!("   ✓ Text format success"),
-        Err(e) => eprintln!("   ✗ Text format error: {}", e),
+        Err(e) => eprintln!("   ✗ Text format error: {e}"),
     }
 
     // JSON format
     println!("\n2. JSON format output:");
     println!(
-        "   Command: ngdp products info {} --region {} --output json",
-        product, region
+        "   Command: ngdp products info {product} --region {region} --output json"
     );
     match handle_products(
         ProductsCommands::Info {
@@ -244,7 +240,7 @@ async fn output_format_demo() -> Result<(), Box<dyn std::error::Error>> {
     .await
     {
         Ok(_) => println!("   ✓ JSON format success"),
-        Err(e) => eprintln!("   ✗ JSON format error: {}", e),
+        Err(e) => eprintln!("   ✗ JSON format error: {e}"),
     }
 
     Ok(())

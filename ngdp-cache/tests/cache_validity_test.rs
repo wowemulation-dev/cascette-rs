@@ -33,8 +33,7 @@ async fn test_cache_ttl_and_validity() -> Result<(), Box<dyn std::error::Error>>
     // File system reads should be very fast
     assert!(
         duration.as_millis() < 10,
-        "Cache read should be very fast, but took {:?}",
-        duration
+        "Cache read should be very fast, but took {duration:?}"
     );
     assert_eq!(data2, test_data);
 
@@ -71,8 +70,7 @@ async fn test_generic_cache_performance() -> Result<(), Box<dyn std::error::Erro
     let avg_time = total_time / 5;
     assert!(
         avg_time.as_millis() < 5,
-        "Average cache read should be under 5ms, but was {:?}",
-        avg_time
+        "Average cache read should be under 5ms, but was {avg_time:?}"
     );
 
     unsafe {

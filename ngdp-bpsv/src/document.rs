@@ -5,19 +5,18 @@ use crate::schema::BpsvSchema;
 use crate::value::BpsvValue;
 use std::collections::HashMap;
 
-/// A single row in a BPSV document
+/// A single row in a BPSV document with borrowed data
 #[derive(Debug, Clone, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct BpsvRow {
-    /// Raw string values as they appear in the BPSV
-    raw_values: Vec<String>,
+pub struct BpsvRow<'a> {
+    /// Raw string values as they appear in the BPSV (borrowed)
+    raw_values: Vec<&'a str>,
     /// Typed values (lazy-loaded)
     typed_values: Option<Vec<BpsvValue>>,
 }
 
-impl BpsvRow {
-    /// Create a new row from raw string values
-    pub fn new(values: Vec<String>) -> Self {
+impl<'a> BpsvRow<'a> {
+    /// Create a new row from raw string slices
+    pub fn new(values: Vec<&'a str>) -> Self {
         Self {
             raw_values: values,
             typed_values: None,
@@ -25,27 +24,31 @@ impl BpsvRow {
     }
 
     /// Create a new row from typed values
-    pub fn from_typed_values(values: Vec<BpsvValue>) -> Self {
-        let raw_values = values.iter().map(|v| v.to_bpsv_string()).collect();
-        Self {
-            raw_values,
+    pub fn from_typed_values(values: Vec<BpsvValue>) -> BpsvRow<'static> {
+        // For typed values, we need to allocate since we're creating new data
+        BpsvRow {
+            raw_values: vec![],
             typed_values: Some(values),
         }
     }
 
     /// Get the number of values in this row
     pub fn len(&self) -> usize {
-        self.raw_values.len()
+        if let Some(typed) = &self.typed_values {
+            typed.len()
+        } else {
+            self.raw_values.len()
+        }
     }
 
     /// Check if the row is empty
     pub fn is_empty(&self) -> bool {
-        self.raw_values.is_empty()
+        self.len() == 0
     }
 
     /// Get a raw string value by index
     pub fn get_raw(&self, index: usize) -> Option<&str> {
-        self.raw_values.get(index).map(|s| s.as_str())
+        self.raw_values.get(index).copied()
     }
 
     /// Get a raw string value by field name using the schema
@@ -56,7 +59,7 @@ impl BpsvRow {
     }
 
     /// Get all raw values
-    pub fn raw_values(&self) -> &[String] {
+    pub fn raw_values(&self) -> &[&'a str] {
         &self.raw_values
     }
 
@@ -113,7 +116,7 @@ impl BpsvRow {
 
         let mut map = HashMap::new();
         for (field, value) in schema.fields().iter().zip(self.raw_values.iter()) {
-            map.insert(field.name.clone(), value.clone());
+            map.insert(field.name.clone(), value.to_string());
         }
         Ok(map)
     }
@@ -131,26 +134,71 @@ impl BpsvRow {
 
     /// Convert to BPSV line format
     pub fn to_bpsv_line(&self) -> String {
-        self.raw_values.join("|")
+        if let Some(typed) = &self.typed_values {
+            typed.iter()
+                .map(|v| v.to_bpsv_string())
+                .collect::<Vec<_>>()
+                .join("|")
+        } else {
+            self.raw_values.join("|")
+        }
     }
 }
 
-/// Represents a complete BPSV document
+/// An owned version of BpsvRow for when we need to store data
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct BpsvDocument {
+pub struct OwnedBpsvRow {
+    /// Raw string values as they appear in the BPSV
+    raw_values: Vec<String>,
+    /// Typed values (lazy-loaded)
+    typed_values: Option<Vec<BpsvValue>>,
+}
+
+impl OwnedBpsvRow {
+    /// Create a new row from owned string values
+    pub fn new(values: Vec<String>) -> Self {
+        Self {
+            raw_values: values,
+            typed_values: None,
+        }
+    }
+
+    /// Create from a borrowed row
+    pub fn from_borrowed(row: &BpsvRow<'_>) -> Self {
+        Self {
+            raw_values: row.raw_values.iter().map(|&s| s.to_string()).collect(),
+            typed_values: row.typed_values.clone(),
+        }
+    }
+
+    /// Convert to borrowed row
+    pub fn as_borrowed(&self) -> BpsvRow<'_> {
+        BpsvRow {
+            raw_values: self.raw_values.iter().map(|s| s.as_str()).collect(),
+            typed_values: self.typed_values.clone(),
+        }
+    }
+}
+
+/// Represents a complete BPSV document with borrowed data
+#[derive(Debug, Clone, PartialEq)]
+pub struct BpsvDocument<'a> {
+    /// The original content (for zero-copy)
+    content: &'a str,
     /// The schema defining field structure
     schema: BpsvSchema,
     /// Sequence number (optional)
     sequence_number: Option<u32>,
     /// All data rows
-    rows: Vec<BpsvRow>,
+    rows: Vec<BpsvRow<'a>>,
 }
 
-impl BpsvDocument {
+impl<'a> BpsvDocument<'a> {
     /// Create a new BPSV document
-    pub fn new(schema: BpsvSchema) -> Self {
+    pub fn new(content: &'a str, schema: BpsvSchema) -> Self {
         Self {
+            content,
             schema,
             sequence_number: None,
             rows: Vec::new(),
@@ -171,7 +219,7 @@ impl BpsvDocument {
     /// assert_eq!(doc.rows().len(), 2);
     /// # Ok::<(), ngdp_bpsv::Error>(())
     /// ```
-    pub fn parse(content: &str) -> Result<Self> {
+    pub fn parse(content: &'a str) -> Result<Self> {
         crate::parser::BpsvParser::parse(content)
     }
 
@@ -191,12 +239,12 @@ impl BpsvDocument {
     }
 
     /// Get all rows
-    pub fn rows(&self) -> &[BpsvRow] {
+    pub fn rows(&self) -> &[BpsvRow<'a>] {
         &self.rows
     }
 
     /// Get a mutable reference to all rows
-    pub fn rows_mut(&mut self) -> &mut [BpsvRow] {
+    pub fn rows_mut(&mut self) -> &mut [BpsvRow<'a>] {
         &mut self.rows
     }
 
@@ -210,10 +258,10 @@ impl BpsvDocument {
         self.rows.is_empty()
     }
 
-    /// Add a row from raw string values
-    pub fn add_row(&mut self, values: Vec<String>) -> Result<()> {
+    /// Add a row from raw string slices
+    pub fn add_row(&mut self, values: Vec<&'a str>) -> Result<()> {
         // Validate against schema
-        let validated = self.schema.validate_row(&values)?;
+        let validated = self.schema.validate_row_refs(&values)?;
         self.rows.push(BpsvRow::new(validated));
         Ok(())
     }
@@ -243,12 +291,12 @@ impl BpsvDocument {
     }
 
     /// Get a row by index
-    pub fn get_row(&self, index: usize) -> Option<&BpsvRow> {
+    pub fn get_row(&self, index: usize) -> Option<&BpsvRow<'a>> {
         self.rows.get(index)
     }
 
     /// Get a mutable row by index
-    pub fn get_row_mut(&mut self, index: usize) -> Option<&mut BpsvRow> {
+    pub fn get_row_mut(&mut self, index: usize) -> Option<&mut BpsvRow<'a>> {
         self.rows.get_mut(index)
     }
 
@@ -282,7 +330,7 @@ impl BpsvDocument {
 
         // Sequence number line
         if let Some(seqn) = self.sequence_number {
-            lines.push(format!("## seqn = {}", seqn));
+            lines.push(format!("## seqn = {seqn}"));
         }
 
         // Data rows
@@ -322,6 +370,88 @@ impl BpsvDocument {
     }
 }
 
+/// An owned version of BpsvDocument for serialization
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct OwnedBpsvDocument {
+    /// The schema defining field structure
+    schema: BpsvSchema,
+    /// Sequence number (optional)
+    sequence_number: Option<u32>,
+    /// All data rows
+    rows: Vec<OwnedBpsvRow>,
+}
+
+impl OwnedBpsvDocument {
+    /// Create a new owned document
+    pub fn new(schema: BpsvSchema) -> Self {
+        Self {
+            schema,
+            sequence_number: None,
+            rows: Vec::new(),
+        }
+    }
+
+    /// Set the sequence number
+    pub fn set_sequence_number(&mut self, seqn: Option<u32>) {
+        self.sequence_number = seqn;
+    }
+
+    /// Add a row to the document
+    pub fn add_row(&mut self, row: OwnedBpsvRow) {
+        self.rows.push(row);
+    }
+
+    /// Get the schema
+    pub fn schema(&self) -> &BpsvSchema {
+        &self.schema
+    }
+
+    /// Get the sequence number
+    pub fn sequence_number(&self) -> Option<u32> {
+        self.sequence_number
+    }
+
+    /// Get the number of rows
+    pub fn row_count(&self) -> usize {
+        self.rows.len()
+    }
+
+    /// Get all rows
+    pub fn rows(&self) -> &[OwnedBpsvRow] {
+        &self.rows
+    }
+
+    /// Create from a borrowed document
+    pub fn from_borrowed(doc: &BpsvDocument<'_>) -> Self {
+        Self {
+            schema: doc.schema.clone(),
+            sequence_number: doc.sequence_number,
+            rows: doc.rows.iter().map(OwnedBpsvRow::from_borrowed).collect(),
+        }
+    }
+
+    /// Convert to BPSV string
+    pub fn to_bpsv_string(&self) -> String {
+        let mut lines = Vec::new();
+
+        // Header line
+        lines.push(self.schema.to_header_line());
+
+        // Sequence number line
+        if let Some(seqn) = self.sequence_number {
+            lines.push(format!("## seqn = {seqn}"));
+        }
+
+        // Data rows
+        for row in &self.rows {
+            lines.push(row.as_borrowed().to_bpsv_line());
+        }
+
+        lines.join("\n")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -345,9 +475,9 @@ mod tests {
     fn test_row_operations() {
         let schema = create_test_schema();
         let mut row = BpsvRow::new(vec![
-            "us".to_string(),
-            "abcd1234abcd1234abcd1234abcd1234".to_string(),
-            "1234".to_string(),
+            "us",
+            "abcd1234abcd1234abcd1234abcd1234",
+            "1234",
         ]);
 
         assert_eq!(row.len(), 3);
@@ -366,22 +496,23 @@ mod tests {
 
     #[test]
     fn test_document_creation() {
+        let content = "";
         let schema = create_test_schema();
-        let mut doc = BpsvDocument::new(schema);
+        let mut doc = BpsvDocument::new(content, schema);
 
         doc.set_sequence_number(Some(12345));
         assert_eq!(doc.sequence_number(), Some(12345));
 
         doc.add_row(vec![
-            "us".to_string(),
-            "abcd1234abcd1234abcd1234abcd1234".to_string(),
-            "1234".to_string(),
+            "us",
+            "abcd1234abcd1234abcd1234abcd1234",
+            "1234",
         ])
         .unwrap();
         doc.add_row(vec![
-            "eu".to_string(),
-            "1234abcd1234abcd1234abcd1234abcd".to_string(),
-            "5678".to_string(),
+            "eu",
+            "1234abcd1234abcd1234abcd1234abcd",
+            "5678",
         ])
         .unwrap();
 
@@ -391,25 +522,26 @@ mod tests {
 
     #[test]
     fn test_find_rows() {
+        let content = "";
         let schema = create_test_schema();
-        let mut doc = BpsvDocument::new(schema);
+        let mut doc = BpsvDocument::new(content, schema);
 
         doc.add_row(vec![
-            "us".to_string(),
-            "abcd1234abcd1234abcd1234abcd1234".to_string(),
-            "1234".to_string(),
+            "us",
+            "abcd1234abcd1234abcd1234abcd1234",
+            "1234",
         ])
         .unwrap();
         doc.add_row(vec![
-            "eu".to_string(),
-            "1234abcd1234abcd1234abcd1234abcd".to_string(),
-            "5678".to_string(),
+            "eu",
+            "1234abcd1234abcd1234abcd1234abcd",
+            "5678",
         ])
         .unwrap();
         doc.add_row(vec![
-            "us".to_string(),
-            "deadbeefdeadbeefdeadbeefdeadbeef".to_string(),
-            "9999".to_string(),
+            "us",
+            "deadbeefdeadbeefdeadbeefdeadbeef",
+            "9999",
         ])
         .unwrap();
 
@@ -422,19 +554,20 @@ mod tests {
 
     #[test]
     fn test_column_access() {
+        let content = "";
         let schema = create_test_schema();
-        let mut doc = BpsvDocument::new(schema);
+        let mut doc = BpsvDocument::new(content, schema);
 
         doc.add_row(vec![
-            "us".to_string(),
-            "abcd1234abcd1234abcd1234abcd1234".to_string(),
-            "1234".to_string(),
+            "us",
+            "abcd1234abcd1234abcd1234abcd1234",
+            "1234",
         ])
         .unwrap();
         doc.add_row(vec![
-            "eu".to_string(),
-            "1234abcd1234abcd1234abcd1234abcd".to_string(),
-            "5678".to_string(),
+            "eu",
+            "1234abcd1234abcd1234abcd1234abcd",
+            "5678",
         ])
         .unwrap();
 
@@ -447,13 +580,14 @@ mod tests {
 
     #[test]
     fn test_to_bpsv_string() {
+        let content = "";
         let schema = create_test_schema();
-        let mut doc = BpsvDocument::new(schema);
+        let mut doc = BpsvDocument::new(content, schema);
         doc.set_sequence_number(Some(12345));
         doc.add_row(vec![
-            "us".to_string(),
-            "abcd1234abcd1234abcd1234abcd1234".to_string(),
-            "1234".to_string(),
+            "us",
+            "abcd1234abcd1234abcd1234abcd1234",
+            "1234",
         ])
         .unwrap();
 
@@ -467,19 +601,20 @@ mod tests {
 
     #[test]
     fn test_schema_mismatch() {
+        let content = "";
         let schema = create_test_schema();
-        let mut doc = BpsvDocument::new(schema);
+        let mut doc = BpsvDocument::new(content, schema);
 
         // Too few values
-        let result = doc.add_row(vec!["us".to_string()]);
+        let result = doc.add_row(vec!["us"]);
         assert!(matches!(result, Err(Error::SchemaMismatch { .. })));
 
         // Too many values
         let result = doc.add_row(vec![
-            "us".to_string(),
-            "hex".to_string(),
-            "123".to_string(),
-            "extra".to_string(),
+            "us",
+            "hex",
+            "123",
+            "extra",
         ]);
         assert!(matches!(result, Err(Error::SchemaMismatch { .. })));
     }

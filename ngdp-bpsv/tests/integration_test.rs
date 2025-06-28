@@ -229,8 +229,7 @@ fn test_case_insensitive_field_types() {
 
     for header in test_cases {
         let data = format!(
-            "{}\n## seqn = 100\nvalue|abcd1234abcd1234abcd1234abcd1234|42",
-            header
+            "{header}\n## seqn = 100\nvalue|abcd1234abcd1234abcd1234abcd1234|42"
         );
         let doc = BpsvDocument::parse(&data).unwrap();
 
@@ -258,7 +257,7 @@ fn test_error_handling() {
 
     // Test mismatched columns
     let result = BpsvDocument::parse("Field1!STRING:0|Field2!DEC:4\nvalue1|value2|extra");
-    assert!(matches!(result, Err(Error::RowValidation { .. })));
+    assert!(matches!(result, Err(Error::SchemaMismatch { .. })));
 
     // Test invalid field type
     let result = BpsvDocument::parse("Field1!INVALID:0");
@@ -316,13 +315,13 @@ fn test_large_documents() {
     for i in 0..20 {
         match i % 3 {
             0 => builder
-                .add_field(&format!("StringField{}", i), BpsvFieldType::String(0))
+                .add_field(&format!("StringField{i}"), BpsvFieldType::String(0))
                 .unwrap(),
             1 => builder
-                .add_field(&format!("DecField{}", i), BpsvFieldType::Decimal(10))
+                .add_field(&format!("DecField{i}"), BpsvFieldType::Decimal(10))
                 .unwrap(),
             _ => builder
-                .add_field(&format!("HexField{}", i), BpsvFieldType::Hex(16))
+                .add_field(&format!("HexField{i}"), BpsvFieldType::Hex(16))
                 .unwrap(),
         };
     }
@@ -334,7 +333,7 @@ fn test_large_documents() {
         let mut values = Vec::new();
         for col_idx in 0..20 {
             match col_idx % 3 {
-                0 => values.push(BpsvValue::String(format!("row{}col{}", row_idx, col_idx))),
+                0 => values.push(BpsvValue::String(format!("row{row_idx}col{col_idx}"))),
                 1 => values.push(BpsvValue::Decimal(row_idx as i64 * 100 + col_idx as i64)),
                 _ => values.push(BpsvValue::Hex(format!(
                     "{:016x}{:016x}",
@@ -506,6 +505,6 @@ fn test_malformed_data_handling() {
 
     for (input, description) in test_cases {
         let result = BpsvDocument::parse(input);
-        assert!(result.is_err(), "Should fail for: {}", description);
+        assert!(result.is_err(), "Should fail for: {description}");
     }
 }

@@ -1348,6 +1348,7 @@ dependencies = [
  "bytes",
  "criterion",
  "dirs",
+ "futures",
  "ngdp-cdn",
  "rand 0.8.5",
  "reqwest",

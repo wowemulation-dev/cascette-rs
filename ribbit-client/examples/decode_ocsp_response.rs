@@ -56,7 +56,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 analyze_ocsp_response(&ocsp_der, ski)?;
                             }
                             Err(e) => {
-                                println!("✗ Failed to decode base64: {}", e);
+                                println!("✗ Failed to decode base64: {e}");
                             }
                         }
                     } else {
@@ -66,7 +66,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         Err(e) => {
-            println!("✗ OCSP request failed: {}", e);
+            println!("✗ OCSP request failed: {e}");
         }
     }
 
@@ -104,7 +104,7 @@ fn analyze_ocsp_response(ocsp_der: &[u8], ski: &str) -> Result<(), Box<dyn std::
         // Look for certificate ID (the SKI we queried)
         let ski_bytes = hex::decode(ski)?;
         if let Some(pos) = find_bytes(ocsp_der, &ski_bytes) {
-            println!("  ✓ Found SKI in response at position {}", pos);
+            println!("  ✓ Found SKI in response at position {pos}");
         }
 
         // Look for certificate status
@@ -126,7 +126,7 @@ fn analyze_ocsp_response(ocsp_der: &[u8], ski: &str) -> Result<(), Box<dyn std::
         println!("\nFirst 100 bytes (hex):");
         let hex_preview: Vec<String> = ocsp_der[..ocsp_der.len().min(100)]
             .iter()
-            .map(|b| format!("{:02x}", b))
+            .map(|b| format!("{b:02x}"))
             .collect();
         for chunk in hex_preview.chunks(16) {
             println!("  {}", chunk.join(" "));
@@ -150,7 +150,7 @@ fn find_timestamps(data: &[u8]) {
             let timestamp = &data[i + 2..i + 17];
             if let Ok(ts_str) = std::str::from_utf8(timestamp) {
                 if ts_str.ends_with('Z') {
-                    println!("  Timestamp found: {}", ts_str);
+                    println!("  Timestamp found: {ts_str}");
                 }
             }
         }

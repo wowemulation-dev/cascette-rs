@@ -106,8 +106,7 @@ impl RibbitCache {
     pub async fn read(&self, region: &str, product: &str, endpoint: &str) -> Result<Vec<u8>> {
         if !self.is_valid(region, product, endpoint).await {
             return Err(Error::CacheEntryNotFound(format!(
-                "{}/{}/{}",
-                region, product, endpoint
+                "{region}/{product}/{endpoint}"
             )));
         }
 

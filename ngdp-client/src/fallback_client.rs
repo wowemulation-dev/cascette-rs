@@ -38,7 +38,7 @@ impl FallbackClient {
     pub async fn new(region: Region) -> Result<Self, FallbackError> {
         let ribbit_client = CachedRibbitClient::new(region)
             .await
-            .map_err(|e| FallbackError::ClientCreation(format!("Ribbit: {}", e)))?;
+            .map_err(|e| FallbackError::ClientCreation(format!("Ribbit: {e}")))?;
 
         // Convert Ribbit region to TACT region if possible
         let tact_region = match region {
@@ -55,7 +55,7 @@ impl FallbackClient {
 
         let tact_client = CachedTactClient::new(tact_region, tact_client::ProtocolVersion::V2)
             .await
-            .map_err(|e| FallbackError::ClientCreation(format!("TACT: {}", e)))?;
+            .map_err(|e| FallbackError::ClientCreation(format!("TACT: {e}")))?;
 
         Ok(Self {
             ribbit_client,
@@ -85,9 +85,9 @@ impl FallbackClient {
                 // TACT doesn't have a summary endpoint
                 return self.ribbit_request(endpoint).await;
             }
-            Endpoint::ProductVersions(product) => format!("{}/versions", product),
-            Endpoint::ProductCdns(product) => format!("{}/cdns", product),
-            Endpoint::ProductBgdl(product) => format!("{}/bgdl", product),
+            Endpoint::ProductVersions(product) => format!("{product}/versions"),
+            Endpoint::ProductCdns(product) => format!("{product}/cdns"),
+            Endpoint::ProductBgdl(product) => format!("{product}/bgdl"),
             Endpoint::Cert(_) | Endpoint::Ocsp(_) => {
                 // TACT doesn't support certificates
                 return self.ribbit_request(endpoint).await;
@@ -143,7 +143,7 @@ impl FallbackClient {
     ) -> Result<T, FallbackError> {
         let response = self.request(endpoint).await?;
         T::from_response(&response).map_err(|e| FallbackError::BothFailed {
-            ribbit_error: format!("Failed to parse response: {}", e),
+            ribbit_error: format!("Failed to parse response: {e}"),
             tact_error: "Not attempted".to_string(),
         })
     }
@@ -169,7 +169,7 @@ impl FallbackClient {
         if parts.len() != 2 {
             return Err(Box::new(TactError::InvalidManifest {
                 line: 0,
-                reason: format!("Invalid endpoint format: {}", endpoint),
+                reason: format!("Invalid endpoint format: {endpoint}"),
             }));
         }
 
@@ -184,7 +184,7 @@ impl FallbackClient {
             _ => {
                 return Err(Box::new(TactError::InvalidManifest {
                     line: 0,
-                    reason: format!("Unknown endpoint type: {}", endpoint_type),
+                    reason: format!("Unknown endpoint type: {endpoint_type}"),
                 }));
             }
         };

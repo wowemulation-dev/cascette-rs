@@ -26,9 +26,9 @@ async fn fetch_certificate_cached(hash: &str) -> Result<String, Box<dyn std::err
 
 /// Demonstrate certificate verification workflow with caching
 async fn verify_signature_with_cache(ski: &str) -> Result<(), Box<dyn std::error::Error>> {
-    println!("Verifying signature with SKI: {}", ski);
+    println!("Verifying signature with SKI: {ski}");
 
-    println!("Fetching certificate: {}", EXAMPLE_CERT_HASH);
+    println!("Fetching certificate: {EXAMPLE_CERT_HASH}");
     let cert_pem = fetch_certificate_cached(EXAMPLE_CERT_HASH).await?;
 
     if cert_pem.contains("-----BEGIN CERTIFICATE-----") {
@@ -167,7 +167,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
 
     println!("=== Comprehensive Certificate Operations Example ===\n");
-    println!("Using certificate hash: {}\n", EXAMPLE_CERT_HASH);
+    println!("Using certificate hash: {EXAMPLE_CERT_HASH}\n");
 
     // Demonstrate different aspects of certificate operations
     certificate_access_patterns().await?;

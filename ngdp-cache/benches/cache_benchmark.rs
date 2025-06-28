@@ -233,7 +233,7 @@ fn bench_concurrent_operations(c: &mut Criterion) {
                 for i in 0..10 {
                     let cache_clone = GenericCache::new().await.unwrap();
                     let handle = tokio::spawn(async move {
-                        let key = format!("concurrent_{}", i);
+                        let key = format!("concurrent_{i}");
                         cache_clone.write(&key, SMALL_DATA).await.unwrap();
                         cache_clone.delete(&key).await.unwrap();
                     });
@@ -432,10 +432,10 @@ fn bench_cached_ribbit_client(c: &mut Criterion) {
                             now - (6 * 60) // Expired regular
                         };
 
-                        let cache_file = cache_dir.join(format!("{}-test{}-0.bmime", prefix, i));
-                        let meta_file = cache_dir.join(format!("{}-test{}-0.meta", prefix, i));
+                        let cache_file = cache_dir.join(format!("{prefix}-test{i}-0.bmime"));
+                        let meta_file = cache_dir.join(format!("{prefix}-test{i}-0.meta"));
 
-                        tokio::fs::write(&cache_file, format!("data {}", i))
+                        tokio::fs::write(&cache_file, format!("data {i}"))
                             .await
                             .unwrap();
                         tokio::fs::write(&meta_file, timestamp.to_string())
@@ -461,10 +461,222 @@ fn bench_cached_ribbit_client(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_streaming_operations(c: &mut Criterion) {
+    let runtime = Runtime::new().unwrap();
+
+    let mut group = c.benchmark_group("streaming_operations");
+
+    // Test data sizes for streaming benchmarks
+    let test_sizes = [
+        ("1MB", 1024 * 1024),
+        ("10MB", 10 * 1024 * 1024),
+        ("50MB", 50 * 1024 * 1024),
+    ];
+
+    for (name, size) in &test_sizes {
+        // Benchmark streaming write vs regular write
+        group.bench_with_input(
+            BenchmarkId::new("write_streaming", name),
+            size,
+            |b, &size| {
+                b.iter_batched(
+                    || {
+                        let cache = runtime.block_on(GenericCache::new()).unwrap();
+                        let key = format!("stream_write_{}", rand::random::<u32>());
+                        let data = vec![42u8; size];
+                        (cache, key, data)
+                    },
+                    |(cache, key, data)| {
+                        runtime.block_on(async move {
+                            let mut reader = std::io::Cursor::new(data);
+                            cache.write_streaming(&key, &mut reader).await.unwrap();
+                            // Cleanup
+                            cache.delete(&key).await.unwrap();
+                        });
+                    },
+                    BatchSize::SmallInput,
+                );
+            },
+        );
+
+        group.bench_with_input(
+            BenchmarkId::new("write_regular", name),
+            size,
+            |b, &size| {
+                b.iter_batched(
+                    || {
+                        let cache = runtime.block_on(GenericCache::new()).unwrap();
+                        let key = format!("regular_write_{}", rand::random::<u32>());
+                        let data = vec![42u8; size];
+                        (cache, key, data)
+                    },
+                    |(cache, key, data)| {
+                        runtime.block_on(async move {
+                            cache.write(&key, &data).await.unwrap();
+                            // Cleanup
+                            cache.delete(&key).await.unwrap();
+                        });
+                    },
+                    BatchSize::SmallInput,
+                );
+            },
+        );
+
+        // Benchmark streaming read vs regular read
+        group.bench_with_input(
+            BenchmarkId::new("read_streaming", name),
+            size,
+            |b, &size| {
+                b.iter_batched(
+                    || {
+                        let cache = runtime.block_on(GenericCache::new()).unwrap();
+                        let key = format!("stream_read_{}", rand::random::<u32>());
+                        let data = vec![42u8; size];
+                        runtime.block_on(cache.write(&key, &data)).unwrap();
+                        (cache, key)
+                    },
+                    |(cache, key)| {
+                        runtime.block_on(async move {
+                            let mut output = Vec::new();
+                            cache.read_streaming(&key, &mut output).await.unwrap();
+                            black_box(output);
+                            // Cleanup
+                            cache.delete(&key).await.unwrap();
+                        });
+                    },
+                    BatchSize::SmallInput,
+                );
+            },
+        );
+
+        group.bench_with_input(
+            BenchmarkId::new("read_regular", name),
+            size,
+            |b, &size| {
+                b.iter_batched(
+                    || {
+                        let cache = runtime.block_on(GenericCache::new()).unwrap();
+                        let key = format!("regular_read_{}", rand::random::<u32>());
+                        let data = vec![42u8; size];
+                        runtime.block_on(cache.write(&key, &data)).unwrap();
+                        (cache, key)
+                    },
+                    |(cache, key)| {
+                        runtime.block_on(async move {
+                            let data = cache.read(&key).await.unwrap();
+                            black_box(data);
+                            // Cleanup
+                            cache.delete(&key).await.unwrap();
+                        });
+                    },
+                    BatchSize::SmallInput,
+                );
+            },
+        );
+    }
+
+    // Benchmark chunked operations
+    group.bench_function("chunked_write_1MB", |b| {
+        b.iter_batched(
+            || {
+                let cache = runtime.block_on(GenericCache::new()).unwrap();
+                let key = format!("chunked_{}", rand::random::<u32>());
+                // Create 1MB in 8KB chunks
+                let chunks: Vec<Result<Vec<u8>, ngdp_cache::Error>> = (0..128)
+                    .map(|i| Ok(vec![(i % 256) as u8; 8192]))
+                    .collect();
+                (cache, key, chunks)
+            },
+            |(cache, key, chunks)| {
+                runtime.block_on(async move {
+                    cache.write_chunked(&key, chunks).await.unwrap();
+                    // Cleanup
+                    cache.delete(&key).await.unwrap();
+                });
+            },
+            BatchSize::SmallInput,
+        );
+    });
+
+    group.bench_function("chunked_read_1MB", |b| {
+        b.iter_batched(
+            || {
+                let cache = runtime.block_on(GenericCache::new()).unwrap();
+                let key = format!("chunked_read_{}", rand::random::<u32>());
+                let data = vec![42u8; 1024 * 1024]; // 1MB
+                runtime.block_on(cache.write(&key, &data)).unwrap();
+                (cache, key)
+            },
+            |(cache, key)| {
+                runtime.block_on(async move {
+                    let mut total_bytes = 0u64;
+                    cache.read_chunked(&key, |chunk| {
+                        total_bytes += chunk.len() as u64;
+                        Ok(())
+                    }).await.unwrap();
+                    black_box(total_bytes);
+                    // Cleanup
+                    cache.delete(&key).await.unwrap();
+                });
+            },
+            BatchSize::SmallInput,
+        );
+    });
+
+    // Benchmark copy operation
+    group.bench_function("copy_operation_10MB", |b| {
+        b.iter_batched(
+            || {
+                let cache = runtime.block_on(GenericCache::new()).unwrap();
+                let source_key = format!("source_{}", rand::random::<u32>());
+                let dest_key = format!("dest_{}", rand::random::<u32>());
+                let data = vec![42u8; 10 * 1024 * 1024]; // 10MB
+                runtime.block_on(cache.write(&source_key, &data)).unwrap();
+                (cache, source_key, dest_key)
+            },
+            |(cache, source_key, dest_key)| {
+                runtime.block_on(async move {
+                    cache.copy(&source_key, &dest_key).await.unwrap();
+                    // Cleanup
+                    cache.delete(&source_key).await.unwrap();
+                    cache.delete(&dest_key).await.unwrap();
+                });
+            },
+            BatchSize::SmallInput,
+        );
+    });
+
+    // Benchmark buffered streaming
+    group.bench_function("buffered_streaming_1MB", |b| {
+        b.iter_batched(
+            || {
+                let cache = runtime.block_on(GenericCache::new()).unwrap();
+                let key = format!("buffered_{}", rand::random::<u32>());
+                let data = vec![42u8; 1024 * 1024]; // 1MB
+                runtime.block_on(cache.write(&key, &data)).unwrap();
+                (cache, key)
+            },
+            |(cache, key)| {
+                runtime.block_on(async move {
+                    let mut output = Vec::new();
+                    cache.read_streaming_buffered(&key, &mut output, 64 * 1024).await.unwrap(); // 64KB buffer
+                    black_box(output);
+                    // Cleanup
+                    cache.delete(&key).await.unwrap();
+                });
+            },
+            BatchSize::SmallInput,
+        );
+    });
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_generic_cache_write,
     bench_generic_cache_read,
+    bench_streaming_operations,
     bench_cdn_cache_operations,
     bench_ribbit_cache_operations,
     bench_concurrent_operations,

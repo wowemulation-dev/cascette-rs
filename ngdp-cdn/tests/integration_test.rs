@@ -15,7 +15,7 @@ async fn test_content_not_found_errors() {
             // The "hash" will be "404" from the URL
             assert_eq!(hash, "404");
         }
-        e => panic!("Expected ContentNotFound error, got: {:?}", e),
+        e => panic!("Expected ContentNotFound error, got: {e:?}"),
     }
 
     // Test 2: Using download method with hash
@@ -33,7 +33,7 @@ async fn test_content_not_found_errors() {
             // The hash should be extracted from the URL
             assert!(hash.contains("abcdef") || hash == "404");
         }
-        e => panic!("Expected ContentNotFound error, got: {:?}", e),
+        e => panic!("Expected ContentNotFound error, got: {e:?}"),
     }
 }
 

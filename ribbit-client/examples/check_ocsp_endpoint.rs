@@ -18,7 +18,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // The SKI we found from signatures
     let ski = "782a8a710b950421127250a3e91b751ca356e202";
-    println!("Testing SKI with OCSP endpoint: {}\n", ski);
+    println!("Testing SKI with OCSP endpoint: {ski}\n");
 
     // Create OCSP endpoint
     let ocsp_endpoint = Endpoint::Ocsp(ski.to_string());
@@ -42,7 +42,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("\n  First 32 bytes (hex):");
                 let hex_preview: Vec<String> = raw_response[..raw_response.len().min(32)]
                     .iter()
-                    .map(|b| format!("{:02x}", b))
+                    .map(|b| format!("{b:02x}"))
                     .collect();
                 println!("  {}", hex_preview.join(" "));
 
@@ -74,7 +74,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         Err(e) => {
-            println!("✗ Raw request failed: {}", e);
+            println!("✗ Raw request failed: {e}");
         }
     }
 
@@ -88,7 +88,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         Err(e) => {
-            println!("✗ Request failed: {}", e);
+            println!("✗ Request failed: {e}");
         }
     }
 
@@ -110,7 +110,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         Err(e) => {
-            println!("✗ Request failed: {}", e);
+            println!("✗ Request failed: {e}");
         }
     }
 

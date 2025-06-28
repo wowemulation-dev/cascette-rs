@@ -87,7 +87,7 @@ pub fn format_key_value(key: &str, value: &str, style: &OutputStyle) -> String {
     if style.use_color {
         format!("{}: {}", key.cyan(), value)
     } else {
-        format!("{}: {}", key, value)
+        format!("{key}: {value}")
     }
 }
 
@@ -184,7 +184,7 @@ pub fn print_section_header(title: &str, style: &OutputStyle) {
         println!("\n{}", title.bold().bright_blue());
         println!("{}", "═".repeat(title.len()).bright_blue());
     } else {
-        println!("\n{}", title);
+        println!("\n{title}");
         println!("{}", "=".repeat(title.len()));
     }
 }
@@ -195,7 +195,7 @@ pub fn print_subsection_header(title: &str, style: &OutputStyle) {
         println!("\n{}", title.cyan());
         println!("{}", "─".repeat(title.len()).cyan());
     } else {
-        println!("\n{}", title);
+        println!("\n{title}");
         println!("{}", "-".repeat(title.len()));
     }
 }
@@ -203,9 +203,9 @@ pub fn print_subsection_header(title: &str, style: &OutputStyle) {
 /// Format a count badge (e.g., "(42 items)")
 pub fn format_count_badge(count: usize, item_name: &str, style: &OutputStyle) -> String {
     let text = if count == 1 {
-        format!("({} {})", count, item_name)
+        format!("({count} {item_name})")
     } else {
-        format!("({} {}s)", count, item_name)
+        format!("({count} {item_name}s)")
     };
 
     if style.use_color {

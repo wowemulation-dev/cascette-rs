@@ -30,6 +30,7 @@
 pub mod certificate_fetcher;
 pub mod client;
 pub mod cms_parser;
+pub mod dns_cache;
 pub mod error;
 pub mod response_types;
 pub mod signature;

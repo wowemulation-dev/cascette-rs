@@ -108,7 +108,7 @@ impl CachedRibbitClient {
         };
 
         let seq = sequence_number.unwrap_or(0);
-        format!("{}-{}-{}.bmime", command, arguments, seq)
+        format!("{command}-{arguments}-{seq}.bmime")
     }
 
     /// Get the cache path for an endpoint
@@ -157,7 +157,7 @@ impl CachedRibbitClient {
         }
 
         let region_dir = self.cache_dir.join(self.region.to_string());
-        if !region_dir.exists() {
+        if tokio::fs::metadata(&region_dir).await.is_err() {
             return None;
         }
 
@@ -180,11 +180,11 @@ impl CachedRibbitClient {
                 let path = entry.path();
                 if let Some(filename) = path.file_name().and_then(|n| n.to_str()) {
                     // Check if this file matches our endpoint pattern
-                    if filename.starts_with(&format!("{}-", prefix)) && filename.ends_with(".bmime")
+                    if filename.starts_with(&format!("{prefix}-")) && filename.ends_with(".bmime")
                     {
                         // Extract sequence number from filename
                         if let Some(seqn_part) = filename
-                            .strip_prefix(&format!("{}-", prefix))
+                            .strip_prefix(&format!("{prefix}-"))
                             .and_then(|s| s.strip_suffix(".bmime"))
                         {
                             if let Ok(seqn) = seqn_part.parse::<u64>() {
@@ -257,8 +257,7 @@ impl CachedRibbitClient {
             Ok(tokio::fs::read(&cache_path).await?)
         } else {
             Err(crate::Error::CacheEntryNotFound(format!(
-                "No valid cache for endpoint: {:?}",
-                endpoint
+                "No valid cache for endpoint: {endpoint:?}"
             )))
         }
     }
@@ -294,7 +293,7 @@ impl CachedRibbitClient {
                             if let Some(boundary_end) = data_str[boundary_start + 10..].find('"') {
                                 let boundary = &data_str
                                     [boundary_start + 10..boundary_start + 10 + boundary_end];
-                                let delimiter = format!("--{}", boundary);
+                                let delimiter = format!("--{boundary}");
 
                                 // Find the data part (usually first part after content type)
                                 let parts: Vec<&str> = data_str.split(&delimiter).collect();
@@ -312,8 +311,8 @@ impl CachedRibbitClient {
                                             let body = &part[start + offset..];
                                             // Remove any trailing boundary markers
                                             if let Some(end) = body
-                                                .find(&format!("\r\n--{}", boundary))
-                                                .or_else(|| body.find(&format!("\n--{}", boundary)))
+                                                .find(&format!("\r\n--{boundary}"))
+                                                .or_else(|| body.find(&format!("\n--{boundary}")))
                                             {
                                                 data_content = Some(body[..end].trim().to_string());
                                             } else {
@@ -469,7 +468,7 @@ impl CachedRibbitClient {
         debug!("Clearing all cached responses");
 
         let region_dir = self.cache_dir.join(self.region.to_string());
-        if region_dir.exists() {
+        if tokio::fs::metadata(&region_dir).await.is_ok() {
             let mut entries = tokio::fs::read_dir(&region_dir).await?;
             while let Some(entry) = entries.next_entry().await? {
                 let path = entry.path();
@@ -489,7 +488,7 @@ impl CachedRibbitClient {
         debug!("Clearing expired cache entries");
 
         let region_dir = self.cache_dir.join(self.region.to_string());
-        if !region_dir.exists() {
+        if tokio::fs::metadata(&region_dir).await.is_err() {
             return Ok(());
         }
 

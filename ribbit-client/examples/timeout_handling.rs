@@ -39,7 +39,7 @@ async fn test_region(region: Region) {
                 let lines: Vec<_> = data.lines().take(3).collect();
                 println!("  First few lines of response:");
                 for line in lines {
-                    println!("    {}", line);
+                    println!("    {line}");
                 }
             }
         }
@@ -48,16 +48,16 @@ async fn test_region(region: Region) {
             port,
             timeout_secs,
         }) => {
-            println!("✗ Connection timed out after {}s", timeout_secs);
-            println!("  Failed to connect to {}:{}", host, port);
+            println!("✗ Connection timed out after {timeout_secs}s");
+            println!("  Failed to connect to {host}:{port}");
             println!("  This server may be region-restricted or unavailable");
         }
         Err(Error::ConnectionFailed { host, port }) => {
             println!("✗ Connection failed");
-            println!("  Failed to connect to {}:{}", host, port);
+            println!("  Failed to connect to {host}:{port}");
         }
         Err(e) => {
-            println!("✗ Error: {}", e);
+            println!("✗ Error: {e}");
         }
     }
 }

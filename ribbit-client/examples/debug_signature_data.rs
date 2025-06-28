@@ -30,17 +30,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(boundary_start) = response_str.find("boundary=\"") {
         let boundary_end = response_str[boundary_start + 10..].find('"').unwrap_or(0);
         let boundary = &response_str[boundary_start + 10..boundary_start + 10 + boundary_end];
-        println!("MIME boundary: {}", boundary);
+        println!("MIME boundary: {boundary}");
 
         // Find the data part
-        let data_marker = format!("--{}\r\nContent-Type: text/plain", boundary);
+        let data_marker = format!("--{boundary}\r\nContent-Type: text/plain");
         if let Some(data_start) = response_str.find(&data_marker) {
             // Find where data content starts (after headers)
             if let Some(content_start) = response_str[data_start..].find("\r\n\r\n") {
                 let content_start_pos = data_start + content_start + 4;
 
                 // Find where data content ends
-                let next_boundary = format!("\r\n--{}", boundary);
+                let next_boundary = format!("\r\n--{boundary}");
                 if let Some(content_end) = response_str[content_start_pos..].find(&next_boundary) {
                     let data_content =
                         &response_str[content_start_pos..content_start_pos + content_end];
@@ -53,7 +53,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                     // Compute SHA-256 of just the data content
                     let data_hash = Sha256::digest(data_content.as_bytes());
-                    println!("\nSHA-256 of data content: {:x}", data_hash);
+                    println!("\nSHA-256 of data content: {data_hash:x}");
 
                     // Now let's check what the signature actually contains
                     let response = client.request(&endpoint).await?;
@@ -75,7 +75,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                                 // Test 1: Just the PSV content
                                 let test1_hash = Sha256::digest(data_content.as_bytes());
-                                println!("1. PSV content only: {:x}", test1_hash);
+                                println!("1. PSV content only: {test1_hash:x}");
 
                                 // Test 2: The entire data MIME part
                                 if let Some(part_end) =
@@ -84,14 +84,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     let mime_part =
                                         &response_str[data_start..data_start + part_end];
                                     let test2_hash = Sha256::digest(mime_part.as_bytes());
-                                    println!("2. Entire MIME part: {:x}", test2_hash);
+                                    println!("2. Entire MIME part: {test2_hash:x}");
                                 }
 
                                 // Test 3: Everything before the checksum
                                 if let Some(checksum_pos) = response_str.rfind("\nChecksum:") {
                                     let before_checksum = &raw_bytes[..checksum_pos];
                                     let test3_hash = Sha256::digest(before_checksum);
-                                    println!("3. Everything before checksum: {:x}", test3_hash);
+                                    println!("3. Everything before checksum: {test3_hash:x}");
                                 }
                             }
                         }

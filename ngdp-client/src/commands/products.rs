@@ -70,11 +70,11 @@ async fn list_products(
             } else {
                 serde_json::to_string(&json_data)?
             };
-            println!("{}", output);
+            println!("{output}");
         }
         OutputFormat::Bpsv => {
             if let Some(data) = response.as_text() {
-                println!("{}", data);
+                println!("{data}");
             }
         }
         OutputFormat::Text => {
@@ -104,7 +104,7 @@ async fn list_products(
                 ]);
             }
 
-            println!("{}", table);
+            println!("{table}");
 
             // Add a note about flags if any products have flags
             if products.iter().any(|p| p.flags.is_some()) {
@@ -184,17 +184,17 @@ async fn show_versions(
             } else {
                 serde_json::to_string(&json_data)?
             };
-            println!("{}", output);
+            println!("{output}");
         }
         OutputFormat::Bpsv => {
             if let Some(data) = response.as_text() {
-                println!("{}", data);
+                println!("{data}");
             }
         }
         OutputFormat::Text => {
             let style = OutputStyle::new();
 
-            print_section_header(&format!("Product: {}", product), &style);
+            print_section_header(&format!("Product: {product}"), &style);
             if let Some(seqn) = versions.sequence_number {
                 println!(
                     "{}",
@@ -248,12 +248,12 @@ async fn show_versions(
                             regular_cell(""),
                             regular_cell(""),
                             regular_cell(""),
-                            hash_cell(&format!("Key Ring:       {}", key_ring), &style),
+                            hash_cell(&format!("Key Ring:       {key_ring}"), &style),
                         ]);
                     }
                 }
 
-                println!("{}", table);
+                println!("{table}");
             } else if let Some(entry) = versions.get_region(region.as_str()) {
                 println!();
 
@@ -295,7 +295,7 @@ async fn show_versions(
                     table.add_row(vec![regular_cell("Key Ring"), hash_cell(key_ring, &style)]);
                 }
 
-                println!("{}", table);
+                println!("{table}");
             } else {
                 println!();
                 println!(
@@ -351,18 +351,18 @@ async fn show_cdns(
             } else {
                 serde_json::to_string(&json_data)?
             };
-            println!("{}", output);
+            println!("{output}");
         }
         OutputFormat::Bpsv => {
             if let Some(data) = response.as_text() {
-                println!("{}", data);
+                println!("{data}");
             }
         }
         OutputFormat::Text => {
             let style = OutputStyle::new();
 
             print_section_header(
-                &format!("CDN Configuration for {} ({})", product, region),
+                &format!("CDN Configuration for {product} ({region})"),
                 &style,
             );
             if let Some(seqn) = cdns.sequence_number {
@@ -378,7 +378,7 @@ async fn show_cdns(
                 println!(
                     "{}",
                     format_warning(
-                        &format!("No CDN configuration found for region '{}'", region),
+                        &format!("No CDN configuration found for region '{region}'"),
                         &style
                     )
                 );
@@ -425,7 +425,7 @@ async fn show_cdns(
                         }
                     }
 
-                    println!("{}", table);
+                    println!("{table}");
                 }
             }
         }
@@ -519,25 +519,25 @@ async fn show_info(
             } else {
                 serde_json::to_string(&info)?
             };
-            println!("{}", output);
+            println!("{output}");
         }
         OutputFormat::Bpsv => {
             println!("# Versions");
             if let Some(data) = versions_response.as_text() {
-                println!("{}", data);
+                println!("{data}");
             }
             println!("\n# CDNs");
             if let Some(data) = cdns_response.as_text() {
-                println!("{}", data);
+                println!("{data}");
             }
         }
         OutputFormat::Text => {
             let style = OutputStyle::new();
 
             let header = if let Some(ref r) = region {
-                format!("Product Information: {} ({})", product, r)
+                format!("Product Information: {product} ({r})")
             } else {
-                format!("Product Information: {}", product)
+                format!("Product Information: {product}")
             };
             print_section_header(&header, &style);
 
@@ -619,7 +619,7 @@ async fn show_info(
                         numeric_cell(&version.build_id.to_string()),
                     ]);
                 }
-                println!("{}", table);
+                println!("{table}");
             }
 
             // CDN hosts - filter based on region

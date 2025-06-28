@@ -40,7 +40,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 );
             }
         }
-        Err(e) => println!("   ✗ Failed to get versions: {}", e),
+        Err(e) => println!("   ✗ Failed to get versions: {e}"),
     }
 
     println!("\n   Second request (cache hit):");
@@ -54,7 +54,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 duration
             );
         }
-        Err(e) => println!("   ✗ Failed to get versions: {}", e),
+        Err(e) => println!("   ✗ Failed to get versions: {e}"),
     }
 
     // Test CDN endpoint caching
@@ -68,7 +68,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("     First CDN: {} (Path: {})", first.name, first.path);
             }
         }
-        Err(e) => println!("   ✗ Failed to get CDNs: {}", e),
+        Err(e) => println!("   ✗ Failed to get CDNs: {e}"),
     }
 
     // Test with V2 protocol
@@ -78,7 +78,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Ok(versions) => {
             println!("   ✓ V2 protocol: Found {} versions", versions.len());
         }
-        Err(e) => println!("   ✗ V2 protocol failed: {}", e),
+        Err(e) => println!("   ✗ V2 protocol failed: {e}"),
     }
 
     // Test different products
@@ -89,7 +89,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("   ✓ {}: {} versions", product, versions.len());
             }
             Err(e) => {
-                println!("   ✗ {}: {}", product, e);
+                println!("   ✗ {product}: {e}");
             }
         }
     }
@@ -103,8 +103,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let _result = client.get_versions_parsed(product).await;
     let duration = start.elapsed();
     println!(
-        "   Request completed in {:?} (caching disabled, always fetches)",
-        duration
+        "   Request completed in {duration:?} (caching disabled, always fetches)"
     );
 
     // Clear expired entries

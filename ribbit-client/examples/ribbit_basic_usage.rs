@@ -28,7 +28,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("  - {} (seqn: {})", product.product, product.seqn);
             }
         }
-        Err(e) => println!("Error: {}", e),
+        Err(e) => println!("Error: {e}"),
     }
 
     // Example 2: Get WoW version information (typed response)
@@ -43,7 +43,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 );
             }
         }
-        Err(e) => println!("Error: {}", e),
+        Err(e) => println!("Error: {e}"),
     }
 
     // Example 3: Get version info for different products
@@ -51,7 +51,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let products = ["agent", "wow", "wow_classic", "wow_classic_era"];
 
     for product in products {
-        println!("\n  Product: {}", product);
+        println!("\n  Product: {product}");
 
         match client.get_product_versions(product).await {
             Ok(versions) => {
@@ -60,11 +60,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     versions.entries.iter().map(|e| &e.versions_name).collect();
 
                 if let Some(version) = unique_versions.iter().next() {
-                    println!("    Latest version: {}", version);
+                    println!("    Latest version: {version}");
                     println!("    Available in {} regions", versions.entries.len());
                 }
             }
-            Err(e) => println!("    Error: {}", e),
+            Err(e) => println!("    Error: {e}"),
         }
     }
 
@@ -81,10 +81,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let all_hosts = cdns.all_hosts();
             println!("\nUnique CDN hosts ({} total):", all_hosts.len());
             for host in all_hosts.iter().take(3) {
-                println!("  - {}", host);
+                println!("  - {host}");
             }
         }
-        Err(e) => println!("Error: {}", e),
+        Err(e) => println!("Error: {e}"),
     }
 
     // Example 5: Raw response access (for certificates or custom endpoints)
@@ -94,12 +94,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Ok(response) => {
             if let Some(text) = response.as_text() {
                 if text.contains("BEGIN CERTIFICATE") {
-                    println!("Successfully retrieved certificate for hash: {}", cert_hash);
+                    println!("Successfully retrieved certificate for hash: {cert_hash}");
                     println!("Certificate size: {} bytes", text.len());
                 }
             }
         }
-        Err(e) => println!("Error: {}", e),
+        Err(e) => println!("Error: {e}"),
     }
 
     Ok(())

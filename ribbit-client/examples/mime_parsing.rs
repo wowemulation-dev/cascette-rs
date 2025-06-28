@@ -49,12 +49,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             .or_else(|| mime_parts.data[cn_start..].find('\n'))
                             .unwrap_or(30);
                         let cn = &mime_parts.data[cn_start..cn_start + cn_end];
-                        println!("  Subject: {}", cn);
+                        println!("  Subject: {cn}");
                     }
                 }
             }
         }
-        Err(e) => println!("✗ Error: {}", e),
+        Err(e) => println!("✗ Error: {e}"),
     }
 
     // Example 2: Product versions (multipart MIME with signature)
@@ -87,12 +87,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let lines: Vec<&str> = mime_parts.data.lines().take(3).collect();
                     println!("  Data preview:");
                     for line in lines {
-                        println!("    {}", line);
+                        println!("    {line}");
                     }
                 }
             }
         }
-        Err(e) => println!("✗ Error: {}", e),
+        Err(e) => println!("✗ Error: {e}"),
     }
 
     // Example 3: Summary endpoint
@@ -112,7 +112,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .lines()
                     .filter(|line| line.contains('|') && !line.starts_with('#'))
                     .count();
-                println!("  Products found: {}", product_count);
+                println!("  Products found: {product_count}");
 
                 // Show WoW-related products
                 println!("  WoW products:");
@@ -126,7 +126,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
         }
-        Err(e) => println!("✗ Error: {}", e),
+        Err(e) => println!("✗ Error: {e}"),
     }
 
     // Example 4: Demonstrate raw vs parsed access
@@ -155,7 +155,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("  Signature present: {}", mime_parts.signature.is_some());
             }
         }
-        Err(e) => println!("✗ Error: {}", e),
+        Err(e) => println!("✗ Error: {e}"),
     }
 
     println!("\n{:=<60}", "");

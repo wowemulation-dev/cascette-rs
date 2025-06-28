@@ -33,7 +33,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Get unique builds
     let builds = versions.build_ids();
-    println!("  Unique builds: {:?}", builds);
+    println!("  Unique builds: {builds:?}");
 
     // 3. Get CDN information with convenience methods
     println!("\n🌐 WoW CDN Servers:");
@@ -43,7 +43,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let all_hosts = cdns.all_hosts();
     println!("  Total unique hosts: {}", all_hosts.len());
     for host in all_hosts.iter().take(3) {
-        println!("    - {}", host);
+        println!("    - {host}");
     }
 
     // 4. Raw response access still available
@@ -53,7 +53,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Simple text access like Ribbit.NET's ToString()
     if let Some(text) = response.as_text() {
         let preview = text.lines().take(3).collect::<Vec<_>>().join("\n");
-        println!("  Preview: {}", preview);
+        println!("  Preview: {preview}");
     }
 
     // Or parse as BPSV for advanced usage

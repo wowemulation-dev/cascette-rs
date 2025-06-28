@@ -34,7 +34,7 @@ async fn show_config(format: OutputFormat) -> Result<(), Box<dyn std::error::Err
             } else {
                 serde_json::to_string(&config)?
             };
-            println!("{}", output);
+            println!("{output}");
         }
         _ => {
             let style = OutputStyle::new();
@@ -54,7 +54,7 @@ async fn show_config(format: OutputFormat) -> Result<(), Box<dyn std::error::Err
                 table.add_row(vec![regular_cell(key), regular_cell(value)]);
             }
 
-            println!("{}", table);
+            println!("{table}");
         }
     }
 
@@ -80,7 +80,7 @@ async fn set_config(
             let style = OutputStyle::new();
             println!(
                 "{}",
-                format_success(&format!("✓ Set {} = {}", key, value), &style)
+                format_success(&format!("✓ Set {key} = {value}"), &style)
             );
         }
     }
@@ -108,11 +108,11 @@ async fn get_config(key: String, format: OutputFormat) -> Result<(), Box<dyn std
         _ => {
             let style = OutputStyle::new();
             if let Some(value) = value {
-                println!("{}", value);
+                println!("{value}");
             } else {
                 eprintln!(
                     "{}",
-                    format_error(&format!("Configuration key '{}' not found", key), &style)
+                    format_error(&format!("Configuration key '{key}' not found"), &style)
                 );
                 std::process::exit(1);
             }

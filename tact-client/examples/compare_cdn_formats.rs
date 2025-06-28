@@ -26,7 +26,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         println!("\nHosts ({}):", entry.hosts.len());
         for host in &entry.hosts {
-            println!("  - {}", host);
+            println!("  - {host}");
         }
 
         println!("\nServers ({}):", entry.servers.len());
@@ -34,7 +34,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("  (none - legacy CDN entry)");
         } else {
             for server in &entry.servers {
-                println!("  - {}", server);
+                println!("  - {server}");
             }
         }
 

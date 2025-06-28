@@ -35,12 +35,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             );
                         }
                     }
-                    Err(e) => eprintln!("Failed to parse versions: {}", e),
+                    Err(e) => eprintln!("Failed to parse versions: {e}"),
                 }
             }
         }
         Err(e) => {
-            eprintln!("✗ Both Ribbit and TACT failed: {}", e);
+            eprintln!("✗ Both Ribbit and TACT failed: {e}");
         }
     }
 
@@ -52,13 +52,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Making another request (bypassing cache)...");
     match client.request(&endpoint).await {
         Ok(_) => println!("✓ Request succeeded without cache"),
-        Err(e) => eprintln!("✗ Request failed: {}", e),
+        Err(e) => eprintln!("✗ Request failed: {e}"),
     }
 
     // Clear expired cache entries
     println!("\nCleaning up expired cache entries...");
     if let Err(e) = client.clear_expired().await {
-        eprintln!("Failed to clear expired entries: {}", e);
+        eprintln!("Failed to clear expired entries: {e}");
     } else {
         println!("✓ Expired cache entries cleared");
     }

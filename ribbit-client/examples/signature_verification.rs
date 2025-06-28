@@ -53,7 +53,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     if !sig_verify.verification_errors.is_empty() {
                         println!("  ⚠️  Errors:");
                         for error in &sig_verify.verification_errors {
-                            println!("    - {}", error);
+                            println!("    - {error}");
                         }
                     }
 
@@ -80,10 +80,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     if let Some(ts_info) = &sig_verify.timestamp_info {
                         println!("\n⏰ Timestamp Information:");
                         if let Some(signing_time) = &ts_info.signing_time {
-                            println!("  Signing Time: {}", signing_time);
+                            println!("  Signing Time: {signing_time}");
                         }
                         if let Some(tsa) = &ts_info.timestamp_authority {
-                            println!("  Timestamp Authority: {}", tsa);
+                            println!("  Timestamp Authority: {tsa}");
                         }
                         println!(
                             "  Timestamp Verified: {}",
@@ -100,14 +100,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 // Checksum info
                 if let Some(checksum) = &mime_parts.checksum {
-                    println!("\n✓ Checksum: {} (verified)", checksum);
+                    println!("\n✓ Checksum: {checksum} (verified)");
                 }
             } else {
                 println!("\n⚠️  No MIME parts found (V2 protocol?)");
             }
         }
         Err(e) => {
-            eprintln!("✗ Request failed: {}", e);
+            eprintln!("✗ Request failed: {e}");
         }
     }
 
@@ -132,7 +132,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         Err(e) => {
-            eprintln!("✗ Certificate request failed: {}", e);
+            eprintln!("✗ Certificate request failed: {e}");
         }
     }
 

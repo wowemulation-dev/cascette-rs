@@ -20,7 +20,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Display sequence number
     if let Some(seqn) = versions.sequence_number {
-        println!("Sequence number: {}\n", seqn);
+        println!("Sequence number: {seqn}\n");
     }
 
     // Display version information by region
@@ -58,7 +58,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Get unique builds
     let builds = versions.build_ids();
-    println!("\nUnique build IDs: {:?}", builds);
+    println!("\nUnique build IDs: {builds:?}");
 
     // Check if all regions have the same build
     let all_same_build = versions
@@ -66,7 +66,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .iter()
         .all(|e| e.build_id == versions.entries[0].build_id);
 
-    println!("\nAll regions on same build: {}", all_same_build);
+    println!("\nAll regions on same build: {all_same_build}");
 
     // Count regions with specific version name
     let version_name = &versions.entries[0].versions_name;

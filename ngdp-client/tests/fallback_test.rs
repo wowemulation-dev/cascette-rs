@@ -10,13 +10,12 @@ async fn test_fallback_client_creation() {
         match FallbackClient::new(region).await {
             Ok(_client) => {
                 println!(
-                    "Successfully created fallback client for region: {:?}",
-                    region
+                    "Successfully created fallback client for region: {region:?}"
                 );
                 // Client created successfully
             }
             Err(e) => {
-                eprintln!("Failed to create client for region {:?}: {}", region, e);
+                eprintln!("Failed to create client for region {region:?}: {e}");
                 // Don't fail the test - network issues may occur
             }
         }
@@ -40,7 +39,7 @@ async fn test_fallback_with_summary_endpoint() {
             println!("Summary request succeeded through Ribbit");
         }
         Err(e) => {
-            eprintln!("Summary request failed: {}", e);
+            eprintln!("Summary request failed: {e}");
             // Network issues may occur
         }
     }
@@ -87,7 +86,7 @@ async fn test_typed_request() {
             assert!(!versions.entries.is_empty());
         }
         Err(e) => {
-            eprintln!("Typed request failed: {}", e);
+            eprintln!("Typed request failed: {e}");
             // Network issues may occur
         }
     }

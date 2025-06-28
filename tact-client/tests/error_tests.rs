@@ -60,7 +60,7 @@ fn test_error_variants() {
 #[test]
 fn test_error_debug() {
     let err = Error::missing_field("test");
-    let debug_str = format!("{:?}", err);
+    let debug_str = format!("{err:?}");
     assert!(debug_str.contains("MissingField"));
     assert!(debug_str.contains("test"));
 }

@@ -38,11 +38,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!("      🔐 Signature: {} bytes", sig.len());
                 }
                 if let Some(checksum) = &mime_parts.checksum {
-                    println!("      ✅ Checksum: {}", checksum);
+                    println!("      ✅ Checksum: {checksum}");
                 }
             }
         }
-        Err(e) => println!("   ❌ Error: {}", e),
+        Err(e) => println!("   ❌ Error: {e}"),
     }
 
     println!();
@@ -71,7 +71,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("   🔐 Signature: None (V2 doesn't include signatures)");
             println!("   ✅ Checksum: None (V2 doesn't include checksums)");
         }
-        Err(e) => println!("   ❌ Error: {}", e),
+        Err(e) => println!("   ❌ Error: {e}"),
     }
 
     println!("\n📋 Key Findings:");

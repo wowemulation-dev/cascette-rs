@@ -285,7 +285,7 @@ impl CachedCdnClient {
     /// This removes all cached CDN content from disk.
     /// Use with caution as it will require re-downloading all content.
     pub async fn clear_cache(&self) -> Result<()> {
-        if self.cache_base_dir.exists() {
+        if tokio::fs::metadata(&self.cache_base_dir).await.is_ok() {
             tokio::fs::remove_dir_all(&self.cache_base_dir).await?;
         }
         Ok(())

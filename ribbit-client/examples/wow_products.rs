@@ -64,7 +64,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
             }
-            Err(e) => eprintln!("Failed to fetch versions for {}: {}", product_id, e),
+            Err(e) => eprintln!("Failed to fetch versions for {product_id}: {e}"),
         }
     }
 
@@ -79,7 +79,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     info.cdn_hosts = all_hosts.into_iter().take(2).collect();
                 }
             }
-            Err(e) => eprintln!("Failed to fetch CDNs for {}: {}", product_id, e),
+            Err(e) => eprintln!("Failed to fetch CDNs for {product_id}: {e}"),
         }
     }
 
@@ -122,7 +122,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         if !info.cdn_hosts.is_empty() {
             println!("  CDN Hosts:");
             for host in &info.cdn_hosts {
-                println!("    - {}", host);
+                println!("    - {host}");
             }
         } else {
             println!("  CDN Hosts: N/A");
@@ -148,7 +148,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Build ID Comparison:");
     for (product_id, info) in &product_infos {
         if let Some(build_id) = info.build_id {
-            println!("  {}: {}", product_id, build_id);
+            println!("  {product_id}: {build_id}");
         }
     }
 

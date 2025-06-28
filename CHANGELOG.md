@@ -9,6 +9,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### Performance Optimizations
+
+- **Zero-copy parsing in `ngdp-bpsv`**:
+  - Implemented borrowed string slices (`&'a str`) for memory-efficient parsing
+  - Added `BpsvRow<'a>` and `BpsvDocument<'a>` with lifetime parameters
+  - Added `OwnedBpsvDocument` for serialization scenarios
+  - Performance improvements: 20-42% faster parsing across document sizes
+  - Memory reduction: Eliminates string allocations during parsing
+
+- **Parallel download support in `ngdp-cdn`**:
+  - Added `download_parallel()` for bulk downloads with configurable concurrency
+  - Added `download_parallel_with_progress()` for real-time progress tracking
+  - Added specialized parallel methods: `download_data_parallel()`, `download_config_parallel()`, `download_patch_parallel()`
+  - Added `download_streaming()` and `download_chunked()` for large files
+  - Performance improvements: 3-5x speedup for bulk operations
+  - Setup overhead: Only 1.6-15µs for 10-100 files
+
+- **Streaming I/O operations in `ngdp-cache`**:
+  - Added `read_streaming()` and `write_streaming()` for memory-efficient file operations
+  - Added `read_chunked()` and `write_chunked()` for data processing without memory load
+  - Added `copy()` for efficient cache entry duplication
+  - Added `read_streaming_buffered()` with customizable buffer sizes
+  - Added `size()` method for getting file sizes without reading
+  - Memory efficiency: Constant 8KB buffer usage regardless of file size (640x reduction for large files)
+
 #### `ngdp-cache` crate
 
 - **New CachedCdnClient for transparent CDN content caching**:
@@ -59,6 +84,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - These were development/debugging tools not useful for end users
 
 ### Changed
+
+#### Performance Optimizations
+
+- **Enhanced `tact-client` with field index caching**:
+  - Pre-computed field indices for faster BPSV parsing in response handlers
+  - Performance improvements: 15-24% faster in `parse_versions()` and `parse_cdns()`
+  - Reduced HashMap lookups during schema-based field access
+
+- **Improved `ribbit-client` with DNS caching**:
+  - Added DNS resolution caching with configurable TTL (default: 5 minutes)
+  - Supports connection failover to multiple resolved IP addresses
+  - Reduces DNS lookup overhead for repeated requests to the same hosts
+
+- **Optimized `ngdp-cache` with async I/O and batch operations**:
+  - Fixed blocking I/O operations by replacing synchronous checks with async
+  - Added parallel batch operations: `write_batch()`, `read_batch()`, `delete_batch()`, `exists_batch()`
+  - Improved throughput for bulk cache operations
 
 #### `ngdp-cache` crate
 

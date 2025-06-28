@@ -35,7 +35,7 @@ xx|be2bb98dc28aee05bbee519393696cdb|fac77b9ca52c84ac28ad83a7dbe1c829|3ca57fe7319
 
     // Display sequence number
     if let Some(seqn) = document.sequence_number() {
-        println!("\n3. Sequence Number: {}", seqn);
+        println!("\n3. Sequence Number: {seqn}");
     }
 
     // Display first few rows
@@ -62,7 +62,7 @@ xx|be2bb98dc28aee05bbee519393696cdb|fac77b9ca52c84ac28ad83a7dbe1c829|3ca57fe7319
     // Demonstrate column access
     println!("\n5. All regions:");
     let regions = document.get_column("Region")?;
-    println!("   {:?}", regions);
+    println!("   {regions:?}");
 
     // Demonstrate searching
     println!("\n6. Finding rows for region 'us':");
@@ -77,8 +77,7 @@ xx|be2bb98dc28aee05bbee519393696cdb|fac77b9ca52c84ac28ad83a7dbe1c829|3ca57fe7319
     println!("\n7. Document statistics:");
     let (field_count, row_count, has_seqn) = BpsvParser::get_stats(bpsv_data)?;
     println!(
-        "   Fields: {}, Rows: {}, Has sequence: {}",
-        field_count, row_count, has_seqn
+        "   Fields: {field_count}, Rows: {row_count}, Has sequence: {has_seqn}"
     );
 
     // Demonstrate round-trip conversion

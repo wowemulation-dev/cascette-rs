@@ -20,7 +20,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // The SKI from the signature
     let ski_from_signature = "782a8a710b950421127250a3e91b751ca356e202";
-    println!("SKI from signature: {}\n", ski_from_signature);
+    println!("SKI from signature: {ski_from_signature}\n");
 
     // Fetch the certificate using the SKI
     let endpoint = Endpoint::Cert(ski_from_signature.to_string());
@@ -72,7 +72,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     }
 
                                     if let Some(cert_ski) = found_ski {
-                                        println!("  SKI in certificate: {}", cert_ski);
+                                        println!("  SKI in certificate: {cert_ski}");
 
                                         if cert_ski == ski_from_signature {
                                             println!("\n✅ SUCCESS! The SKI matches!");
@@ -96,15 +96,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             );
                                         } else {
                                             println!("\n❌ SKI mismatch!");
-                                            println!("  Expected: {}", ski_from_signature);
-                                            println!("  Found: {}", cert_ski);
+                                            println!("  Expected: {ski_from_signature}");
+                                            println!("  Found: {cert_ski}");
                                         }
                                     } else {
                                         println!("\n⚠️  No SKI found in certificate extensions");
                                     }
                                 }
                                 Err(e) => {
-                                    println!("✗ Failed to parse certificate: {}", e);
+                                    println!("✗ Failed to parse certificate: {e}");
                                 }
                             }
                         }
@@ -115,7 +115,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         Err(e) => {
-            println!("✗ Request failed: {}", e);
+            println!("✗ Request failed: {e}");
         }
     }
 
@@ -127,7 +127,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("✓ Normal request succeeded (checksum validated)");
         }
         Err(e) => {
-            println!("✗ Normal request failed: {}", e);
+            println!("✗ Normal request failed: {e}");
             println!(
                 "This might be due to the certificate response format differing from expected"
             );

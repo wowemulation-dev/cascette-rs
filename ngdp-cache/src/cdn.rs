@@ -174,22 +174,22 @@ impl CdnCache {
 
     /// Check if a config exists in cache
     pub async fn has_config(&self, hash: &str) -> bool {
-        self.config_path(hash).exists()
+        tokio::fs::metadata(self.config_path(hash)).await.is_ok()
     }
 
     /// Check if data exists in cache
     pub async fn has_data(&self, hash: &str) -> bool {
-        self.data_path(hash).exists()
+        tokio::fs::metadata(self.data_path(hash)).await.is_ok()
     }
 
     /// Check if a patch exists in cache
     pub async fn has_patch(&self, hash: &str) -> bool {
-        self.patch_path(hash).exists()
+        tokio::fs::metadata(self.patch_path(hash)).await.is_ok()
     }
 
     /// Check if an index exists in cache
     pub async fn has_index(&self, hash: &str) -> bool {
-        self.index_path(hash).exists()
+        tokio::fs::metadata(self.index_path(hash)).await.is_ok()
     }
 
     /// Write config data to cache
@@ -300,6 +300,70 @@ impl CdnCache {
     /// Get the CDN path if set
     pub fn cdn_path(&self) -> Option<&str> {
         self.cdn_path.as_deref()
+    }
+
+    /// Write multiple config files in parallel
+    pub async fn write_configs_batch(&self, entries: &[(String, Vec<u8>)]) -> Result<()> {
+        use futures::future::try_join_all;
+        
+        let futures = entries.iter().map(|(hash, data)| {
+            self.write_config(hash, data)
+        });
+        
+        try_join_all(futures).await?;
+        Ok(())
+    }
+
+    /// Write multiple data files in parallel
+    pub async fn write_data_batch(&self, entries: &[(String, Vec<u8>)]) -> Result<()> {
+        use futures::future::try_join_all;
+        
+        let futures = entries.iter().map(|(hash, data)| {
+            self.write_data(hash, data)
+        });
+        
+        try_join_all(futures).await?;
+        Ok(())
+    }
+
+    /// Read multiple config files in parallel
+    pub async fn read_configs_batch(&self, hashes: &[String]) -> Vec<Result<Vec<u8>>> {
+        use futures::future::join_all;
+        
+        let futures = hashes.iter().map(|hash| self.read_config(hash));
+        join_all(futures).await
+    }
+
+    /// Read multiple data files in parallel
+    pub async fn read_data_batch(&self, hashes: &[String]) -> Vec<Result<Vec<u8>>> {
+        use futures::future::join_all;
+        
+        let futures = hashes.iter().map(|hash| self.read_data(hash));
+        join_all(futures).await
+    }
+
+    /// Check existence of multiple configs in parallel
+    pub async fn has_configs_batch(&self, hashes: &[String]) -> Vec<bool> {
+        use futures::future::join_all;
+        
+        let futures = hashes.iter().map(|hash| self.has_config(hash));
+        join_all(futures).await
+    }
+
+    /// Check existence of multiple data files in parallel
+    pub async fn has_data_batch(&self, hashes: &[String]) -> Vec<bool> {
+        use futures::future::join_all;
+        
+        let futures = hashes.iter().map(|hash| self.has_data(hash));
+        join_all(futures).await
+    }
+
+    /// Get sizes of multiple data files in parallel
+    pub async fn data_sizes_batch(&self, hashes: &[String]) -> Vec<Result<u64>> {
+        use futures::future::join_all;
+        
+        let futures = hashes.iter().map(|hash| self.data_size(hash));
+        join_all(futures).await
     }
 }
 

@@ -43,18 +43,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     // Show hex dump of first few bytes
                     println!("\n  Signature bytes (first 32):");
                     let preview = &signature[..signature.len().min(32)];
-                    println!("    {:02x?}", preview);
+                    println!("    {preview:02x?}");
                 } else {
                     println!("✗ No signature found in response");
                 }
 
                 // Also show checksum if present
                 if let Some(checksum) = mime_parts.checksum {
-                    println!("\n  SHA-256 Checksum: {}", checksum);
+                    println!("\n  SHA-256 Checksum: {checksum}");
                 }
             }
         }
-        Err(e) => println!("✗ Error: {}", e),
+        Err(e) => println!("✗ Error: {e}"),
     }
 
     // Example 2: CDN configuration (may or may not have signature)
@@ -77,7 +77,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
         }
-        Err(e) => println!("✗ Error: {}", e),
+        Err(e) => println!("✗ Error: {e}"),
     }
 
     // Example 3: Summary endpoint
@@ -100,10 +100,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .lines()
                     .filter(|line| line.contains('|') && !line.starts_with('#'))
                     .count();
-                println!("  Products listed: {}", product_count);
+                println!("  Products listed: {product_count}");
             }
         }
-        Err(e) => println!("✗ Error: {}", e),
+        Err(e) => println!("✗ Error: {e}"),
     }
 
     // Example 4: Certificate endpoint (typically no signature)
@@ -125,7 +125,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
         }
-        Err(e) => println!("✗ Error: {}", e),
+        Err(e) => println!("✗ Error: {e}"),
     }
 
     println!("\n{:=<60}", "");

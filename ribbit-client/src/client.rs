@@ -1,6 +1,7 @@
 //! Ribbit TCP client implementation
 
 use crate::{
+    dns_cache::DnsCache,
     error::Result,
     response_types::{
         ProductBgdlResponse, ProductCdnsResponse, ProductVersionsResponse, SummaryResponse,
@@ -66,6 +67,7 @@ pub struct RibbitClient {
     max_backoff_ms: u64,
     backoff_multiplier: f64,
     jitter_factor: f64,
+    dns_cache: DnsCache,
 }
 
 impl RibbitClient {
@@ -80,6 +82,7 @@ impl RibbitClient {
             max_backoff_ms: DEFAULT_MAX_BACKOFF_MS,
             backoff_multiplier: DEFAULT_BACKOFF_MULTIPLIER,
             jitter_factor: DEFAULT_JITTER_FACTOR,
+            dns_cache: DnsCache::new(),
         }
     }
 
@@ -133,6 +136,15 @@ impl RibbitClient {
     #[must_use]
     pub fn with_jitter_factor(mut self, jitter_factor: f64) -> Self {
         self.jitter_factor = jitter_factor.clamp(0.0, 1.0);
+        self
+    }
+
+    /// Set the DNS cache TTL
+    ///
+    /// Default is 300 seconds (5 minutes).
+    #[must_use]
+    pub fn with_dns_cache_ttl(mut self, ttl: Duration) -> Self {
+        self.dns_cache = DnsCache::with_ttl(ttl);
         self
     }
 
@@ -274,52 +286,73 @@ impl RibbitClient {
     }
 
     /// Attempt a single request (helper for retry logic)
-    async fn attempt_request(&self, address: &str, command: &str) -> Result<Vec<u8>> {
+    async fn attempt_request(&self, _address: &str, command: &str) -> Result<Vec<u8>> {
         let host = self.region.hostname();
 
-        // Connect to the TCP socket with timeout
-        let connect_future = TcpStream::connect(address);
+        // Resolve hostname using DNS cache
+        let socket_addrs = self.dns_cache.resolve(host, RIBBIT_PORT).await
+            .map_err(|_| crate::error::Error::ConnectionFailed {
+                host: host.to_string(),
+                port: RIBBIT_PORT,
+            })?;
+
+        // Try connecting to resolved addresses
         let timeout_duration = Duration::from_secs(DEFAULT_CONNECT_TIMEOUT_SECS);
+        let mut last_error = None;
+        
+        for socket_addr in &socket_addrs {
+            debug!("Trying to connect to {:?}", socket_addr);
+            let connect_future = TcpStream::connect(socket_addr);
+            
+            match timeout(timeout_duration, connect_future).await {
+                Ok(Ok(mut stream)) => {
+                    // Successfully connected
+                    let trimmed = command.trim();
+                    trace!("Sending command: {trimmed}");
 
-        let mut stream = match timeout(timeout_duration, connect_future).await {
-            Ok(Ok(stream)) => stream,
-            Ok(Err(e)) => {
-                debug!("Connection failed to {address}: {e}");
-                return Err(crate::error::Error::ConnectionFailed {
-                    host: host.to_string(),
-                    port: RIBBIT_PORT,
-                });
+                    // Send the command
+                    stream
+                        .write_all(command.as_bytes())
+                        .await
+                        .map_err(|_| crate::error::Error::SendFailed)?;
+
+                    // Read the response until EOF (server closes connection)
+                    let mut response = Vec::new();
+                    stream
+                        .read_to_end(&mut response)
+                        .await
+                        .map_err(|_| crate::error::Error::ReceiveFailed)?;
+
+                    return Ok(response);
+                }
+                Ok(Err(e)) => {
+                    debug!("Connection failed to {:?}: {}", socket_addr, e);
+                    last_error = Some(crate::error::Error::ConnectionFailed {
+                        host: host.to_string(),
+                        port: RIBBIT_PORT,
+                    });
+                    // Try next address
+                }
+                Err(_) => {
+                    debug!(
+                        "Connection timed out after {} seconds to {:?}",
+                        DEFAULT_CONNECT_TIMEOUT_SECS, socket_addr
+                    );
+                    last_error = Some(crate::error::Error::ConnectionTimeout {
+                        host: host.to_string(),
+                        port: RIBBIT_PORT,
+                        timeout_secs: DEFAULT_CONNECT_TIMEOUT_SECS,
+                    });
+                    // Try next address
+                }
             }
-            Err(_) => {
-                debug!(
-                    "Connection timed out after {} seconds to {address}",
-                    DEFAULT_CONNECT_TIMEOUT_SECS
-                );
-                return Err(crate::error::Error::ConnectionTimeout {
-                    host: host.to_string(),
-                    port: RIBBIT_PORT,
-                    timeout_secs: DEFAULT_CONNECT_TIMEOUT_SECS,
-                });
-            }
-        };
+        }
 
-        let trimmed = command.trim();
-        trace!("Sending command: {trimmed}");
-
-        // Send the command
-        stream
-            .write_all(command.as_bytes())
-            .await
-            .map_err(|_| crate::error::Error::SendFailed)?;
-
-        // Read the response until EOF (server closes connection)
-        let mut response = Vec::new();
-        stream
-            .read_to_end(&mut response)
-            .await
-            .map_err(|_| crate::error::Error::ReceiveFailed)?;
-
-        Ok(response)
+        // All addresses failed, return the last error
+        Err(last_error.unwrap_or_else(|| crate::error::Error::ConnectionFailed {
+            host: host.to_string(),
+            port: RIBBIT_PORT,
+        }))
     }
 
     /// Send a request to the Ribbit service and parse the response

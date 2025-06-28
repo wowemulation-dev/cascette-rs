@@ -22,8 +22,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Build config path
     let build_config_path = cdn.config_path(build_config);
     println!("Build Config:");
-    println!("  Hash: {}", build_config);
-    println!("  Cache path: {:?}", build_config_path);
+    println!("  Hash: {build_config}");
+    println!("  Cache path: {build_config_path:?}");
     println!(
         "  CDN URL: http://{{cdn_host}}/{{product_path}}/config/{}/{}/{}",
         &build_config[0..2],
@@ -38,9 +38,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     println!("\nCDN Config:");
-    println!("  Hash: {}", cdn_config);
+    println!("  Hash: {cdn_config}");
     let cdn_config_path = cdn.config_path(cdn_config);
-    println!("  Cache path: {:?}", cdn_config_path);
+    println!("  Cache path: {cdn_config_path:?}");
     println!(
         "  CDN URL: http://{{cdn_host}}/{{product_path}}/config/{}/{}/{}",
         &cdn_config[0..2],
@@ -55,9 +55,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     println!("\nProduct Config (uses different path!):");
-    println!("  Hash: {}", product_config);
+    println!("  Hash: {product_config}");
     let product_config_path = cdn.config_path(product_config);
-    println!("  Cache path: {:?}", product_config_path);
+    println!("  Cache path: {product_config_path:?}");
     println!(
         "  CDN URL: http://{{cdn_host}}/{{config_path}}/{}/{}/{}",
         &product_config[0..2],
@@ -80,7 +80,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "cdn.blizzard.com",
     ];
 
-    println!("Build Config ({}):", build_config);
+    println!("Build Config ({build_config}):");
     for host in &cdn_hosts {
         println!(
             "  http://{}/tpr/wow/config/{}/{}/{}",
@@ -91,7 +91,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
     }
 
-    println!("\nCDN Config ({}):", cdn_config);
+    println!("\nCDN Config ({cdn_config}):");
     for host in &cdn_hosts {
         println!(
             "  http://{}/tpr/wow/config/{}/{}/{}",
@@ -102,7 +102,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
     }
 
-    println!("\nProduct Config ({}) - uses config_path:", product_config);
+    println!("\nProduct Config ({product_config}) - uses config_path:");
     for host in &cdn_hosts {
         println!(
             "  http://{}/tpr/configs/data/{}/{}/{}",
@@ -117,13 +117,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!(
         "Pattern: http://{{cdn_host}}/{{product_path}}/{{content_type}}/{{hash[0:2]}}/{{hash[2:4]}}/{{hash}}"
     );
-    println!("\nFor build config {}:", build_config);
+    println!("\nFor build config {build_config}:");
     println!("  cdn_host: level3.blizzard.com (or other CDN servers)");
     println!("  product_path: tpr/wow");
     println!("  content_type: config");
     println!("  hash[0:2]: {}", &build_config[0..2]);
     println!("  hash[2:4]: {}", &build_config[2..4]);
-    println!("  full hash: {}", build_config);
+    println!("  full hash: {build_config}");
 
     Ok(())
 }

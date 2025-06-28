@@ -44,7 +44,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .starts_with("SubjectKeyIdentifier:")
                 {
                     let ski = &first_signer.identifier.serial_number;
-                    println!("   ✓ Found SKI: {}", ski);
+                    println!("   ✓ Found SKI: {ski}");
                     println!("   Digest Algorithm: {}", first_signer.digest_algorithm);
                     println!(
                         "   Signature Algorithm: {}",
@@ -104,7 +104,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                     break;
                                                 }
                                             }
-                                            println!("   Certificate Status: {}", status);
+                                            println!("   Certificate Status: {status}");
 
                                             // Extract timestamps
                                             for i in 0..ocsp_der.len() - 15 {
@@ -116,7 +116,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                         if ts_str.ends_with('Z')
                                                             && ts_str.starts_with("202")
                                                         {
-                                                            println!("   Update Time: {}", ts_str);
+                                                            println!("   Update Time: {ts_str}");
                                                             break;
                                                         }
                                                     }
@@ -126,7 +126,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     }
                                 }
                                 Err(e) => {
-                                    println!("   ⚠️  OCSP check failed: {}", e);
+                                    println!("   ⚠️  OCSP check failed: {e}");
                                 }
                             }
 
@@ -140,7 +140,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             println!("\n   Next step would be RSA signature verification");
                         }
                         Err(e) => {
-                            println!("   ✗ Failed to fetch certificate: {}", e);
+                            println!("   ✗ Failed to fetch certificate: {e}");
                         }
                     }
                 }

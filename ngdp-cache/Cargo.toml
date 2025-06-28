@@ -14,6 +14,7 @@ categories = ["caching", "filesystem", "games"]
 [dependencies]
 bytes = "1.8"
 dirs = { workspace = true }
+futures = "0.3"
 ngdp-cdn = { path = "../ngdp-cdn" }
 reqwest = "0.12"
 ribbit-client = { path = "../ribbit-client" }

@@ -15,7 +15,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let default_client = RibbitClient::new(Region::US);
     match default_client.request_raw(&Endpoint::Summary).await {
         Ok(data) => println!("  Success! Received {} bytes", data.len()),
-        Err(e) => println!("  Failed: {}", e),
+        Err(e) => println!("  Failed: {e}"),
     }
 
     println!();
@@ -25,7 +25,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let retry_client = RibbitClient::new(Region::US).with_max_retries(3);
     match retry_client.request_raw(&Endpoint::Summary).await {
         Ok(data) => println!("  Success! Received {} bytes", data.len()),
-        Err(e) => println!("  Failed after retries: {}", e),
+        Err(e) => println!("  Failed after retries: {e}"),
     }
 
     println!();
@@ -41,7 +41,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     match custom_client.request_raw(&Endpoint::Summary).await {
         Ok(data) => println!("  Success! Received {} bytes", data.len()),
-        Err(e) => println!("  Failed after custom retries: {}", e),
+        Err(e) => println!("  Failed after custom retries: {e}"),
     }
 
     println!();
@@ -56,7 +56,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     match cn_client.request_raw(&Endpoint::Summary).await {
         Ok(data) => println!("  Success! Received {} bytes", data.len()),
         Err(e) => {
-            println!("  Expected failure: {}", e);
+            println!("  Expected failure: {e}");
             println!("  (CN region is often unreachable from outside China)");
         }
     }

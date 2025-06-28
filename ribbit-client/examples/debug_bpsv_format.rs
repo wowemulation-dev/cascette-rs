@@ -16,7 +16,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Show first few lines
         let lines: Vec<&str> = data.lines().take(5).collect();
         for (i, line) in lines.iter().enumerate() {
-            println!("Line {}: {}", i, line);
+            println!("Line {i}: {line}");
 
             // For the first data line after header and seqn, show field lengths
             if i == 2 && !line.starts_with("#") {

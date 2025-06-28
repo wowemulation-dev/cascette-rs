@@ -31,7 +31,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 if let Some(data) = &response.data {
                     println!("\nData content:");
-                    println!("{}", data);
+                    println!("{data}");
 
                     // Parse the response content
                     if data.contains("HTTP/1.1 200 OK") {
@@ -48,13 +48,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                         // Look for timestamps
                         if let Some(this_update) = find_field(data, "This Update:") {
-                            println!("  This Update: {}", this_update);
+                            println!("  This Update: {this_update}");
                         }
                         if let Some(next_update) = find_field(data, "Next Update:") {
-                            println!("  Next Update: {}", next_update);
+                            println!("  Next Update: {next_update}");
                         }
                         if let Some(produced_at) = find_field(data, "Produced At:") {
-                            println!("  Produced At: {}", produced_at);
+                            println!("  Produced At: {produced_at}");
                         }
                     }
                 }
@@ -66,7 +66,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 // Check for checksum
                 if let Some(checksum) = &mime_parts.checksum {
-                    println!("✓ Response has checksum: {}", checksum);
+                    println!("✓ Response has checksum: {checksum}");
                 }
             } else {
                 println!("Response is not MIME formatted");
@@ -76,7 +76,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         Err(e) => {
-            println!("✗ OCSP request failed: {}", e);
+            println!("✗ OCSP request failed: {e}");
         }
     }
 
@@ -98,7 +98,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         Err(e) => {
-            println!("Certificate request failed: {}", e);
+            println!("Certificate request failed: {e}");
         }
     }
 

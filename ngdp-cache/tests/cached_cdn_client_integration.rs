@@ -102,7 +102,7 @@ async fn test_cached_cdn_client_content_types() {
         // Set up mock for this content type
         let first_two = &hash[..2];
         let next_two = &hash[2..4];
-        let mock_path = format!("^/{}/{}/{}/{}$", path, first_two, next_two, hash);
+        let mock_path = format!("^/{path}/{first_two}/{next_two}/{hash}$");
 
         Mock::given(method("GET"))
             .and(path_regex(&mock_path))

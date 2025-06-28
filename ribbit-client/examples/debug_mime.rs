@@ -28,7 +28,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ];
 
     for (name, endpoint) in endpoints {
-        println!("Fetching {}...", name);
+        println!("Fetching {name}...");
 
         match client.request(&endpoint).await {
             Ok(response) => {
@@ -46,12 +46,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         let boundary_end = raw_str[boundary_start + 10..].find('"').unwrap_or(0);
                         let boundary =
                             &raw_str[boundary_start + 10..boundary_start + 10 + boundary_end];
-                        println!("  Boundary: {}", boundary);
+                        println!("  Boundary: {boundary}");
                     }
 
                     // Count parts
                     let part_count = raw_str.matches("Content-Type:").count();
-                    println!("  Parts found: {}", part_count);
+                    println!("  Parts found: {part_count}");
 
                     // Check for signature indicators
                     if raw_str.contains("Content-Disposition: signature") {
@@ -65,7 +65,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             if let Some(start) = content_start {
                                 let next_boundary = raw_str[start..].find("--").unwrap_or(100);
                                 let sig_preview = &raw_str[start..start + next_boundary.min(100)];
-                                println!("  Signature preview: {:?}", sig_preview);
+                                println!("  Signature preview: {sig_preview:?}");
                             }
                         }
                     }
@@ -98,12 +98,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         println!("    First 32 bytes: {:02x?}", &sig[..sig.len().min(32)]);
 
                         if let Some(info) = &mime_parts.signature_info {
-                            println!("    Parsed info: {:?}", info);
+                            println!("    Parsed info: {info:?}");
                         }
                     }
                 }
             }
-            Err(e) => println!("✗ Error: {}", e),
+            Err(e) => println!("✗ Error: {e}"),
         }
 
         println!("\n{:-<60}\n", "");

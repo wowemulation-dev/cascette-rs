@@ -110,7 +110,7 @@ async fn download(
                     if !cert_info.subject_alt_names.is_empty() {
                         println!("\nSubject Alternative Names:");
                         for san in &cert_info.subject_alt_names {
-                            println!("  - {}", san);
+                            println!("  - {san}");
                         }
                     }
                     println!();
@@ -133,7 +133,7 @@ async fn download(
             } else {
                 // Write to stdout
                 if cert_format == CertFormat::Pem {
-                    print!("{}", cert_data);
+                    print!("{cert_data}");
                 } else {
                     // For DER format, write binary to stdout
                     use std::io::Write;

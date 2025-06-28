@@ -1,6 +1,6 @@
 //! BPSV document builder for creating BPSV content programmatically
 
-use crate::document::BpsvDocument;
+use crate::document::OwnedBpsvDocument;
 use crate::error::{Error, Result};
 use crate::field_type::BpsvFieldType;
 use crate::schema::BpsvSchema;
@@ -256,23 +256,27 @@ impl BpsvBuilder {
 
     /// Build the final BPSV document
     ///
-    /// This consumes the builder and returns a `BpsvDocument`.
+    /// This consumes the builder and returns an `OwnedBpsvDocument`.
     ///
     /// # Errors
     ///
     /// Returns an error if no fields have been defined in the schema.
-    pub fn build(self) -> Result<BpsvDocument> {
+    pub fn build(self) -> Result<OwnedBpsvDocument> {
         if self.schema.field_count() == 0 {
             return Err(Error::InvalidHeader {
                 reason: "No fields defined in schema".to_string(),
             });
         }
 
-        let mut document = BpsvDocument::new(self.schema);
+        let mut document = OwnedBpsvDocument::new(self.schema);
         document.set_sequence_number(self.sequence_number);
 
         for row in self.rows {
-            document.add_typed_row(row)?;
+            // Convert BpsvValue vec to OwnedBpsvRow
+            let raw_values: Vec<String> = row.iter()
+                .map(|v| v.to_bpsv_string())
+                .collect();
+            document.add_row(crate::document::OwnedBpsvRow::new(raw_values));
         }
 
         Ok(document)
@@ -359,7 +363,7 @@ impl BpsvBuilder {
     /// # Ok::<(), ngdp_bpsv::Error>(())
     /// ```
     pub fn from_bpsv(content: &str) -> Result<Self> {
-        let document = BpsvDocument::parse(content)?;
+        let document = crate::parser::BpsvParser::parse(content)?;
 
         let mut builder = Self::from_schema(document.schema().clone());
         builder.sequence_number = document.sequence_number();
@@ -506,8 +510,8 @@ eu|5678";
         let rebuilt = builder.build_string().unwrap();
 
         // Parse both and compare structure (order might differ)
-        let original_doc = BpsvDocument::parse(content).unwrap();
-        let rebuilt_doc = BpsvDocument::parse(&rebuilt).unwrap();
+        let original_doc = crate::parser::BpsvParser::parse(content).unwrap();
+        let rebuilt_doc = crate::parser::BpsvParser::parse(&rebuilt).unwrap();
 
         assert_eq!(
             original_doc.sequence_number(),

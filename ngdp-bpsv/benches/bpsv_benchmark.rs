@@ -24,9 +24,9 @@ fn generate_complex_bpsv(rows: usize, cols: usize) -> String {
     let mut header_parts = Vec::new();
     for i in 0..cols {
         match i % 3 {
-            0 => header_parts.push(format!("Field{}!STRING:0", i)),
-            1 => header_parts.push(format!("Field{}!DEC:4", i)),
-            _ => header_parts.push(format!("Field{}!HEX:16", i)),
+            0 => header_parts.push(format!("Field{i}!STRING:0")),
+            1 => header_parts.push(format!("Field{i}!DEC:4")),
+            _ => header_parts.push(format!("Field{i}!HEX:16")),
         }
     }
 
@@ -37,7 +37,7 @@ fn generate_complex_bpsv(rows: usize, cols: usize) -> String {
         let mut row_parts = Vec::new();
         for col in 0..cols {
             match col % 3 {
-                0 => row_parts.push(format!("value{}", row)),
+                0 => row_parts.push(format!("value{row}")),
                 1 => row_parts.push(format!("{}", row * 100 + col)),
                 _ => row_parts.push("1234567890abcdef1234567890abcdef".to_string()),
             }
