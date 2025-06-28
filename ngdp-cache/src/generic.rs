@@ -106,11 +106,9 @@ impl GenericCache {
     /// This is more efficient than calling write() multiple times sequentially.
     pub async fn write_batch(&self, entries: &[(String, Vec<u8>)]) -> Result<()> {
         use futures::future::try_join_all;
-        
-        let futures = entries.iter().map(|(key, data)| {
-            self.write(key, data)
-        });
-        
+
+        let futures = entries.iter().map(|(key, data)| self.write(key, data));
+
         try_join_all(futures).await?;
         Ok(())
     }
@@ -121,7 +119,7 @@ impl GenericCache {
     /// Failed reads will be represented as Err values in the vector.
     pub async fn read_batch(&self, keys: &[String]) -> Vec<Result<Vec<u8>>> {
         use futures::future::join_all;
-        
+
         let futures = keys.iter().map(|key| self.read(key));
         join_all(futures).await
     }
@@ -131,7 +129,7 @@ impl GenericCache {
     /// This is more efficient than calling delete() multiple times sequentially.
     pub async fn delete_batch(&self, keys: &[String]) -> Result<()> {
         use futures::future::try_join_all;
-        
+
         let futures = keys.iter().map(|key| self.delete(key));
         try_join_all(futures).await?;
         Ok(())
@@ -142,7 +140,7 @@ impl GenericCache {
     /// Returns a vector of booleans in the same order as the input keys.
     pub async fn exists_batch(&self, keys: &[String]) -> Vec<bool> {
         use futures::future::join_all;
-        
+
         let futures = keys.iter().map(|key| self.exists(key));
         join_all(futures).await
     }
@@ -155,14 +153,14 @@ impl GenericCache {
         W: tokio::io::AsyncWrite + Unpin,
     {
         use tokio::io::AsyncWriteExt;
-        
+
         let path = self.get_path(key);
         trace!("Streaming from cache key: {}", key);
-        
+
         let mut file = tokio::fs::File::open(&path).await?;
         let bytes_copied = tokio::io::copy(&mut file, &mut writer).await?;
         writer.flush().await?;
-        
+
         Ok(bytes_copied)
     }
 
@@ -174,7 +172,7 @@ impl GenericCache {
         R: tokio::io::AsyncRead + Unpin,
     {
         use tokio::io::AsyncWriteExt;
-        
+
         let path = self.get_path(key);
 
         // Ensure parent directory exists
@@ -183,11 +181,11 @@ impl GenericCache {
         }
 
         trace!("Streaming to cache key: {}", key);
-        
+
         let mut file = tokio::fs::File::create(&path).await?;
         let bytes_copied = tokio::io::copy(&mut reader, &mut file).await?;
         file.flush().await?;
-        
+
         Ok(bytes_copied)
     }
 
@@ -199,24 +197,24 @@ impl GenericCache {
         F: FnMut(&[u8]) -> Result<()>,
     {
         use tokio::io::AsyncReadExt;
-        
+
         let path = self.get_path(key);
         trace!("Reading cache key in chunks: {}", key);
-        
+
         let mut file = tokio::fs::File::open(&path).await?;
         let mut buffer = vec![0u8; 8192]; // 8KB chunks
         let mut total_bytes = 0u64;
-        
+
         loop {
             let bytes_read = file.read(&mut buffer).await?;
             if bytes_read == 0 {
                 break; // EOF
             }
-            
+
             callback(&buffer[..bytes_read])?;
             total_bytes += bytes_read as u64;
         }
-        
+
         Ok(total_bytes)
     }
 
@@ -228,7 +226,7 @@ impl GenericCache {
         I: IntoIterator<Item = Result<Vec<u8>>>,
     {
         use tokio::io::AsyncWriteExt;
-        
+
         let path = self.get_path(key);
 
         // Ensure parent directory exists
@@ -237,16 +235,16 @@ impl GenericCache {
         }
 
         trace!("Writing cache key in chunks: {}", key);
-        
+
         let mut file = tokio::fs::File::create(&path).await?;
         let mut total_bytes = 0u64;
-        
+
         for chunk_result in chunks {
             let chunk = chunk_result?;
             file.write_all(&chunk).await?;
             total_bytes += chunk.len() as u64;
         }
-        
+
         file.flush().await?;
         Ok(total_bytes)
     }
@@ -256,7 +254,7 @@ impl GenericCache {
     /// This is more efficient than read + write for large files.
     pub async fn copy(&self, from_key: &str, to_key: &str) -> Result<u64> {
         use tokio::io::AsyncWriteExt;
-        
+
         let from_path = self.get_path(from_key);
         let to_path = self.get_path(to_key);
 
@@ -266,13 +264,13 @@ impl GenericCache {
         }
 
         trace!("Copying cache from {} to {}", from_key, to_key);
-        
+
         let mut from_file = tokio::fs::File::open(&from_path).await?;
         let mut to_file = tokio::fs::File::create(&to_path).await?;
-        
+
         let bytes_copied = tokio::io::copy(&mut from_file, &mut to_file).await?;
         to_file.flush().await?;
-        
+
         Ok(bytes_copied)
     }
 
@@ -287,26 +285,29 @@ impl GenericCache {
     ///
     /// Useful for optimizing I/O based on expected data size.
     pub async fn read_streaming_buffered<W>(
-        &self, 
-        key: &str, 
-        writer: W, 
-        buffer_size: usize
+        &self,
+        key: &str,
+        writer: W,
+        buffer_size: usize,
     ) -> Result<u64>
     where
         W: tokio::io::AsyncWrite + Unpin,
     {
         use tokio::io::{AsyncWriteExt, BufWriter};
-        
+
         let path = self.get_path(key);
-        trace!("Streaming from cache key with {}B buffer: {}", buffer_size, key);
-        
+        trace!(
+            "Streaming from cache key with {}B buffer: {}",
+            buffer_size, key
+        );
+
         let file = tokio::fs::File::open(&path).await?;
         let mut reader = tokio::io::BufReader::with_capacity(buffer_size, file);
         let mut writer = BufWriter::with_capacity(buffer_size, writer);
-        
+
         let bytes_copied = tokio::io::copy(&mut reader, &mut writer).await?;
         writer.flush().await?;
-        
+
         Ok(bytes_copied)
     }
 }
@@ -347,11 +348,16 @@ mod tests {
             ("key2".to_string(), b"data2".to_vec()),
             ("key3".to_string(), b"data3".to_vec()),
         ];
-        
+
         cache.write_batch(&entries).await.unwrap();
 
         // Test batch exists
-        let keys = vec!["key1".to_string(), "key2".to_string(), "key3".to_string(), "key4".to_string()];
+        let keys = vec![
+            "key1".to_string(),
+            "key2".to_string(),
+            "key3".to_string(),
+            "key4".to_string(),
+        ];
         let exists = cache.exists_batch(&keys).await;
         assert_eq!(exists, vec![true, true, true, false]);
 
@@ -376,13 +382,15 @@ mod tests {
 
     #[tokio::test]
     async fn test_streaming_operations() {
-        let cache = GenericCache::with_subdirectory("test_streaming").await.unwrap();
+        let cache = GenericCache::with_subdirectory("test_streaming")
+            .await
+            .unwrap();
 
         // Test streaming write
         let key = "streaming_test";
         let test_data = b"Hello, streaming world! This is a test of streaming I/O operations.";
         let mut reader = std::io::Cursor::new(test_data);
-        
+
         let bytes_written = cache.write_streaming(key, &mut reader).await.unwrap();
         assert_eq!(bytes_written, test_data.len() as u64);
         assert!(cache.exists(key).await);
@@ -403,7 +411,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_chunked_operations() {
-        let cache = GenericCache::with_subdirectory("test_chunked").await.unwrap();
+        let cache = GenericCache::with_subdirectory("test_chunked")
+            .await
+            .unwrap();
 
         // Test chunked write
         let key = "chunked_test";
@@ -412,18 +422,21 @@ mod tests {
             Ok(b"chunk2".to_vec()),
             Ok(b"chunk3".to_vec()),
         ];
-        
+
         let bytes_written = cache.write_chunked(key, chunks).await.unwrap();
         assert_eq!(bytes_written, 18); // 6 + 6 + 6 bytes
         assert!(cache.exists(key).await);
 
         // Test chunked read
         let mut collected_data = Vec::new();
-        let bytes_read = cache.read_chunked(key, |chunk| {
-            collected_data.extend_from_slice(chunk);
-            Ok(())
-        }).await.unwrap();
-        
+        let bytes_read = cache
+            .read_chunked(key, |chunk| {
+                collected_data.extend_from_slice(chunk);
+                Ok(())
+            })
+            .await
+            .unwrap();
+
         assert_eq!(bytes_read, 18);
         assert_eq!(collected_data, b"chunk1chunk2chunk3");
 
@@ -439,17 +452,17 @@ mod tests {
         let source_key = "source";
         let dest_key = "destination";
         let test_data = b"This data will be copied between cache entries";
-        
+
         cache.write(source_key, test_data).await.unwrap();
-        
+
         // Test copy
         let bytes_copied = cache.copy(source_key, dest_key).await.unwrap();
         assert_eq!(bytes_copied, test_data.len() as u64);
-        
+
         // Verify both entries exist and have same content
         assert!(cache.exists(source_key).await);
         assert!(cache.exists(dest_key).await);
-        
+
         let source_data = cache.read(source_key).await.unwrap();
         let dest_data = cache.read(dest_key).await.unwrap();
         assert_eq!(source_data, dest_data);
@@ -461,18 +474,23 @@ mod tests {
 
     #[tokio::test]
     async fn test_buffered_streaming() {
-        let cache = GenericCache::with_subdirectory("test_buffered").await.unwrap();
+        let cache = GenericCache::with_subdirectory("test_buffered")
+            .await
+            .unwrap();
 
         // Create test data
         let key = "buffered_test";
         let test_data = vec![42u8; 16384]; // 16KB of data
-        
+
         cache.write(key, &test_data).await.unwrap();
-        
+
         // Test buffered streaming with custom buffer size
         let mut output = Vec::new();
-        let bytes_read = cache.read_streaming_buffered(key, &mut output, 4096).await.unwrap();
-        
+        let bytes_read = cache
+            .read_streaming_buffered(key, &mut output, 4096)
+            .await
+            .unwrap();
+
         assert_eq!(bytes_read, test_data.len() as u64);
         assert_eq!(output, test_data);
 
@@ -488,25 +506,28 @@ mod tests {
         let key = "large_test";
         let chunk_size = 8192;
         let num_chunks = 128; // 128 * 8192 = 1MB
-        
+
         // Write in chunks
         let chunks: Vec<Result<Vec<u8>>> = (0..num_chunks)
             .map(|i| Ok(vec![(i % 256) as u8; chunk_size]))
             .collect();
-        
+
         let bytes_written = cache.write_chunked(key, chunks).await.unwrap();
         assert_eq!(bytes_written, (chunk_size * num_chunks) as u64);
-        
+
         // Read back in chunks and verify
         let mut total_read = 0u64;
         let mut chunk_count = 0;
-        
-        cache.read_chunked(key, |chunk| {
-            total_read += chunk.len() as u64;
-            chunk_count += 1;
-            Ok(())
-        }).await.unwrap();
-        
+
+        cache
+            .read_chunked(key, |chunk| {
+                total_read += chunk.len() as u64;
+                chunk_count += 1;
+                Ok(())
+            })
+            .await
+            .unwrap();
+
         assert_eq!(total_read, bytes_written);
         assert!(chunk_count > 0); // Should be multiple chunks due to 8KB buffer
 

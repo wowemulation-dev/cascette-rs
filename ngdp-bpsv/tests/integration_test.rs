@@ -228,9 +228,7 @@ fn test_case_insensitive_field_types() {
     ];
 
     for header in test_cases {
-        let data = format!(
-            "{header}\n## seqn = 100\nvalue|abcd1234abcd1234abcd1234abcd1234|42"
-        );
+        let data = format!("{header}\n## seqn = 100\nvalue|abcd1234abcd1234abcd1234abcd1234|42");
         let doc = BpsvDocument::parse(&data).unwrap();
 
         assert_eq!(doc.schema().fields().len(), 3);

@@ -9,9 +9,7 @@ async fn test_fallback_client_creation() {
     for region in [Region::US, Region::EU] {
         match FallbackClient::new(region).await {
             Ok(_client) => {
-                println!(
-                    "Successfully created fallback client for region: {region:?}"
-                );
+                println!("Successfully created fallback client for region: {region:?}");
                 // Client created successfully
             }
             Err(e) => {

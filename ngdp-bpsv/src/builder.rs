@@ -273,9 +273,7 @@ impl BpsvBuilder {
 
         for row in self.rows {
             // Convert BpsvValue vec to OwnedBpsvRow
-            let raw_values: Vec<String> = row.iter()
-                .map(|v| v.to_bpsv_string())
-                .collect();
+            let raw_values: Vec<String> = row.iter().map(|v| v.to_bpsv_string()).collect();
             document.add_row(crate::document::OwnedBpsvRow::new(raw_values));
         }
 

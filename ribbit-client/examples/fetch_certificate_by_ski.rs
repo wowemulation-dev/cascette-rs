@@ -66,9 +66,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     if let Some(ski) = ski {
-        println!(
-            "\n2. Testing different certificate endpoint formats with SKI: {ski}\n"
-        );
+        println!("\n2. Testing different certificate endpoint formats with SKI: {ski}\n");
 
         // Test different possible endpoint formats
         let test_endpoints = [
@@ -196,9 +194,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         println!("\nConclusion: The certs endpoint likely expects SHA-1 fingerprints, not SKIs");
-        println!(
-            "The SKI {ski} cannot be directly used with the certs endpoint"
-        );
+        println!("The SKI {ski} cannot be directly used with the certs endpoint");
     }
 
     Ok(())

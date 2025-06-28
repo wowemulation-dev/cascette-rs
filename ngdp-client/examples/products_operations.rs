@@ -173,15 +173,11 @@ async fn cross_region_demo() -> Result<(), Box<dyn std::error::Error>> {
     let regions = ["us", "eu", "kr"];
     let product = "wow";
 
-    println!(
-        "Comparing CDN configurations across regions for {product}:"
-    );
+    println!("Comparing CDN configurations across regions for {product}:");
 
     for (i, region) in regions.iter().enumerate() {
         println!("\n{}. {} region:", i + 1, region.to_uppercase());
-        println!(
-            "   Command: ngdp products cdns {product} --region {region}"
-        );
+        println!("   Command: ngdp products cdns {product} --region {region}");
 
         match handle_products(
             ProductsCommands::Cdns {
@@ -209,9 +205,7 @@ async fn output_format_demo() -> Result<(), Box<dyn std::error::Error>> {
 
     // Text format
     println!("1. Text format output:");
-    println!(
-        "   Command: ngdp products info {product} --region {region}"
-    );
+    println!("   Command: ngdp products info {product} --region {region}");
     match handle_products(
         ProductsCommands::Info {
             product: product.to_string(),
@@ -227,9 +221,7 @@ async fn output_format_demo() -> Result<(), Box<dyn std::error::Error>> {
 
     // JSON format
     println!("\n2. JSON format output:");
-    println!(
-        "   Command: ngdp products info {product} --region {region} --output json"
-    );
+    println!("   Command: ngdp products info {product} --region {region} --output json");
     match handle_products(
         ProductsCommands::Info {
             product: product.to_string(),

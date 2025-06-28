@@ -102,9 +102,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let start = std::time::Instant::now();
     let _result = client.get_versions_parsed(product).await;
     let duration = start.elapsed();
-    println!(
-        "   Request completed in {duration:?} (caching disabled, always fetches)"
-    );
+    println!("   Request completed in {duration:?} (caching disabled, always fetches)");
 
     // Clear expired entries
     client.set_caching_enabled(true);

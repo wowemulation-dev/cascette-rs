@@ -180,8 +180,7 @@ impl CachedRibbitClient {
                 let path = entry.path();
                 if let Some(filename) = path.file_name().and_then(|n| n.to_str()) {
                     // Check if this file matches our endpoint pattern
-                    if filename.starts_with(&format!("{prefix}-")) && filename.ends_with(".bmime")
-                    {
+                    if filename.starts_with(&format!("{prefix}-")) && filename.ends_with(".bmime") {
                         // Extract sequence number from filename
                         if let Some(seqn_part) = filename
                             .strip_prefix(&format!("{prefix}-"))

@@ -290,7 +290,10 @@ impl RibbitClient {
         let host = self.region.hostname();
 
         // Resolve hostname using DNS cache
-        let socket_addrs = self.dns_cache.resolve(host, RIBBIT_PORT).await
+        let socket_addrs = self
+            .dns_cache
+            .resolve(host, RIBBIT_PORT)
+            .await
             .map_err(|_| crate::error::Error::ConnectionFailed {
                 host: host.to_string(),
                 port: RIBBIT_PORT,
@@ -299,11 +302,11 @@ impl RibbitClient {
         // Try connecting to resolved addresses
         let timeout_duration = Duration::from_secs(DEFAULT_CONNECT_TIMEOUT_SECS);
         let mut last_error = None;
-        
+
         for socket_addr in &socket_addrs {
             debug!("Trying to connect to {:?}", socket_addr);
             let connect_future = TcpStream::connect(socket_addr);
-            
+
             match timeout(timeout_duration, connect_future).await {
                 Ok(Ok(mut stream)) => {
                     // Successfully connected
@@ -349,10 +352,12 @@ impl RibbitClient {
         }
 
         // All addresses failed, return the last error
-        Err(last_error.unwrap_or_else(|| crate::error::Error::ConnectionFailed {
-            host: host.to_string(),
-            port: RIBBIT_PORT,
-        }))
+        Err(
+            last_error.unwrap_or_else(|| crate::error::Error::ConnectionFailed {
+                host: host.to_string(),
+                port: RIBBIT_PORT,
+            }),
+        )
     }
 
     /// Send a request to the Ribbit service and parse the response

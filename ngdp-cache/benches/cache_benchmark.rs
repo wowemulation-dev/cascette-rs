@@ -499,28 +499,24 @@ fn bench_streaming_operations(c: &mut Criterion) {
             },
         );
 
-        group.bench_with_input(
-            BenchmarkId::new("write_regular", name),
-            size,
-            |b, &size| {
-                b.iter_batched(
-                    || {
-                        let cache = runtime.block_on(GenericCache::new()).unwrap();
-                        let key = format!("regular_write_{}", rand::random::<u32>());
-                        let data = vec![42u8; size];
-                        (cache, key, data)
-                    },
-                    |(cache, key, data)| {
-                        runtime.block_on(async move {
-                            cache.write(&key, &data).await.unwrap();
-                            // Cleanup
-                            cache.delete(&key).await.unwrap();
-                        });
-                    },
-                    BatchSize::SmallInput,
-                );
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("write_regular", name), size, |b, &size| {
+            b.iter_batched(
+                || {
+                    let cache = runtime.block_on(GenericCache::new()).unwrap();
+                    let key = format!("regular_write_{}", rand::random::<u32>());
+                    let data = vec![42u8; size];
+                    (cache, key, data)
+                },
+                |(cache, key, data)| {
+                    runtime.block_on(async move {
+                        cache.write(&key, &data).await.unwrap();
+                        // Cleanup
+                        cache.delete(&key).await.unwrap();
+                    });
+                },
+                BatchSize::SmallInput,
+            );
+        });
 
         // Benchmark streaming read vs regular read
         group.bench_with_input(
@@ -549,30 +545,26 @@ fn bench_streaming_operations(c: &mut Criterion) {
             },
         );
 
-        group.bench_with_input(
-            BenchmarkId::new("read_regular", name),
-            size,
-            |b, &size| {
-                b.iter_batched(
-                    || {
-                        let cache = runtime.block_on(GenericCache::new()).unwrap();
-                        let key = format!("regular_read_{}", rand::random::<u32>());
-                        let data = vec![42u8; size];
-                        runtime.block_on(cache.write(&key, &data)).unwrap();
-                        (cache, key)
-                    },
-                    |(cache, key)| {
-                        runtime.block_on(async move {
-                            let data = cache.read(&key).await.unwrap();
-                            black_box(data);
-                            // Cleanup
-                            cache.delete(&key).await.unwrap();
-                        });
-                    },
-                    BatchSize::SmallInput,
-                );
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("read_regular", name), size, |b, &size| {
+            b.iter_batched(
+                || {
+                    let cache = runtime.block_on(GenericCache::new()).unwrap();
+                    let key = format!("regular_read_{}", rand::random::<u32>());
+                    let data = vec![42u8; size];
+                    runtime.block_on(cache.write(&key, &data)).unwrap();
+                    (cache, key)
+                },
+                |(cache, key)| {
+                    runtime.block_on(async move {
+                        let data = cache.read(&key).await.unwrap();
+                        black_box(data);
+                        // Cleanup
+                        cache.delete(&key).await.unwrap();
+                    });
+                },
+                BatchSize::SmallInput,
+            );
+        });
     }
 
     // Benchmark chunked operations
@@ -582,9 +574,8 @@ fn bench_streaming_operations(c: &mut Criterion) {
                 let cache = runtime.block_on(GenericCache::new()).unwrap();
                 let key = format!("chunked_{}", rand::random::<u32>());
                 // Create 1MB in 8KB chunks
-                let chunks: Vec<Result<Vec<u8>, ngdp_cache::Error>> = (0..128)
-                    .map(|i| Ok(vec![(i % 256) as u8; 8192]))
-                    .collect();
+                let chunks: Vec<Result<Vec<u8>, ngdp_cache::Error>> =
+                    (0..128).map(|i| Ok(vec![(i % 256) as u8; 8192])).collect();
                 (cache, key, chunks)
             },
             |(cache, key, chunks)| {
@@ -610,10 +601,13 @@ fn bench_streaming_operations(c: &mut Criterion) {
             |(cache, key)| {
                 runtime.block_on(async move {
                     let mut total_bytes = 0u64;
-                    cache.read_chunked(&key, |chunk| {
-                        total_bytes += chunk.len() as u64;
-                        Ok(())
-                    }).await.unwrap();
+                    cache
+                        .read_chunked(&key, |chunk| {
+                            total_bytes += chunk.len() as u64;
+                            Ok(())
+                        })
+                        .await
+                        .unwrap();
                     black_box(total_bytes);
                     // Cleanup
                     cache.delete(&key).await.unwrap();
@@ -659,7 +653,10 @@ fn bench_streaming_operations(c: &mut Criterion) {
             |(cache, key)| {
                 runtime.block_on(async move {
                     let mut output = Vec::new();
-                    cache.read_streaming_buffered(&key, &mut output, 64 * 1024).await.unwrap(); // 64KB buffer
+                    cache
+                        .read_streaming_buffered(&key, &mut output, 64 * 1024)
+                        .await
+                        .unwrap(); // 64KB buffer
                     black_box(output);
                     // Cleanup
                     cache.delete(&key).await.unwrap();

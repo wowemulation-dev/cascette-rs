@@ -146,14 +146,14 @@ mod tests {
     #[tokio::test]
     async fn test_dns_resolution() {
         let cache = DnsCache::new();
-        
+
         // Resolve localhost - should always work
         let addrs = cache.resolve("localhost", 80).await.unwrap();
         assert!(!addrs.is_empty());
-        
+
         // Cache should now contain the entry
         assert_eq!(cache.size().await, 1);
-        
+
         // Second resolution should use cache
         let addrs2 = cache.resolve("localhost", 80).await.unwrap();
         assert_eq!(addrs, addrs2);
@@ -162,14 +162,14 @@ mod tests {
     #[tokio::test]
     async fn test_cache_expiration() {
         let cache = DnsCache::with_ttl(Duration::from_millis(10));
-        
+
         // Resolve and cache
         let _addrs = cache.resolve("localhost", 80).await.unwrap();
         assert_eq!(cache.size().await, 1);
-        
+
         // Wait for expiration
         tokio::time::sleep(Duration::from_millis(20)).await;
-        
+
         // Remove expired entries
         cache.remove_expired().await;
         assert_eq!(cache.size().await, 0);
@@ -178,12 +178,12 @@ mod tests {
     #[tokio::test]
     async fn test_clear_cache() {
         let cache = DnsCache::new();
-        
+
         // Add some entries
         let _addrs1 = cache.resolve("localhost", 80).await.unwrap();
         let _addrs2 = cache.resolve("127.0.0.1", 80).await.unwrap();
         assert!(cache.size().await >= 1);
-        
+
         // Clear cache
         cache.clear().await;
         assert_eq!(cache.size().await, 0);

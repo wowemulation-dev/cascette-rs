@@ -365,24 +365,26 @@ impl CdnClient {
         max_concurrent: Option<usize>,
     ) -> Vec<Result<Vec<u8>>> {
         use futures_util::stream::{self, StreamExt};
-        
+
         let max_concurrent = max_concurrent.unwrap_or(10); // Default to 10 concurrent downloads
-        
+
         let futures = hashes.iter().map(|hash| {
             let cdn_host = cdn_host.to_string();
             let path = path.to_string();
             let hash = hash.clone();
-            
+
             async move {
                 match self.download(&cdn_host, &path, &hash).await {
-                    Ok(response) => response.bytes().await
+                    Ok(response) => response
+                        .bytes()
+                        .await
                         .map(|b| b.to_vec())
                         .map_err(Into::into),
                     Err(e) => Err(e),
                 }
             }
         });
-        
+
         stream::iter(futures)
             .buffer_unordered(max_concurrent)
             .collect()
@@ -412,46 +414,48 @@ impl CdnClient {
         F: FnMut(usize, usize),
     {
         use futures_util::stream::{self, StreamExt};
-        use std::sync::atomic::{AtomicUsize, Ordering};
         use std::sync::Arc;
-        
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
         let max_concurrent = max_concurrent.unwrap_or(10);
         let total = hashes.len();
         let completed = Arc::new(AtomicUsize::new(0));
-        
+
         let futures = hashes.iter().enumerate().map(|(idx, hash)| {
             let cdn_host = cdn_host.to_string();
             let path = path.to_string();
             let hash = hash.clone();
             let completed = Arc::clone(&completed);
-            
+
             async move {
                 let result = match self.download(&cdn_host, &path, &hash).await {
-                    Ok(response) => response.bytes().await
+                    Ok(response) => response
+                        .bytes()
+                        .await
                         .map(|b| b.to_vec())
                         .map_err(Into::into),
                     Err(e) => Err(e),
                 };
-                
+
                 // Update progress
                 let count = completed.fetch_add(1, Ordering::SeqCst) + 1;
-                
+
                 (idx, result, count)
             }
         });
-        
+
         let mut results: Vec<Result<Vec<u8>>> = Vec::with_capacity(total);
         for _ in 0..total {
             results.push(Err(Error::invalid_response("Not downloaded")));
         }
-        
+
         let mut download_stream = stream::iter(futures).buffer_unordered(max_concurrent);
-        
+
         while let Some((idx, result, count)) = download_stream.next().await {
             results[idx] = result;
             progress(count, total);
         }
-        
+
         results
     }
 
@@ -464,7 +468,8 @@ impl CdnClient {
         max_concurrent: Option<usize>,
     ) -> Vec<Result<Vec<u8>>> {
         let data_path = format!("{}/data", path.trim_end_matches('/'));
-        self.download_parallel(cdn_host, &data_path, hashes, max_concurrent).await
+        self.download_parallel(cdn_host, &data_path, hashes, max_concurrent)
+            .await
     }
 
     /// Download multiple config files in parallel
@@ -476,7 +481,8 @@ impl CdnClient {
         max_concurrent: Option<usize>,
     ) -> Vec<Result<Vec<u8>>> {
         let config_path = format!("{}/config", path.trim_end_matches('/'));
-        self.download_parallel(cdn_host, &config_path, hashes, max_concurrent).await
+        self.download_parallel(cdn_host, &config_path, hashes, max_concurrent)
+            .await
     }
 
     /// Download multiple patch files in parallel
@@ -488,7 +494,8 @@ impl CdnClient {
         max_concurrent: Option<usize>,
     ) -> Vec<Result<Vec<u8>>> {
         let patch_path = format!("{}/patch", path.trim_end_matches('/'));
-        self.download_parallel(cdn_host, &patch_path, hashes, max_concurrent).await
+        self.download_parallel(cdn_host, &patch_path, hashes, max_concurrent)
+            .await
     }
 
     /// Download content and stream it to a writer
@@ -506,19 +513,24 @@ impl CdnClient {
     {
         use futures_util::StreamExt;
         use tokio::io::AsyncWriteExt;
-        
+
         let response = self.download(cdn_host, path, hash).await?;
         let mut stream = response.bytes_stream();
         let mut total_bytes = 0u64;
-        
+
         while let Some(chunk) = stream.next().await {
             let chunk = chunk?;
-            writer.write_all(&chunk).await
+            writer
+                .write_all(&chunk)
+                .await
                 .map_err(|e| Error::invalid_response(format!("Write error: {e}")))?;
             total_bytes += chunk.len() as u64;
         }
-        
-        writer.flush().await.map_err(|e| Error::invalid_response(format!("Write error: {e}")))?;
+
+        writer
+            .flush()
+            .await
+            .map_err(|e| Error::invalid_response(format!("Write error: {e}")))?;
         Ok(total_bytes)
     }
 
@@ -537,17 +549,17 @@ impl CdnClient {
         F: FnMut(&[u8]) -> Result<()>,
     {
         use futures_util::StreamExt;
-        
+
         let response = self.download(cdn_host, path, hash).await?;
         let mut stream = response.bytes_stream();
         let mut total_bytes = 0u64;
-        
+
         while let Some(chunk) = stream.next().await {
             let chunk = chunk?;
             callback(&chunk)?;
             total_bytes += chunk.len() as u64;
         }
-        
+
         Ok(total_bytes)
     }
 }
@@ -772,10 +784,12 @@ mod tests {
             "hash2".to_string(),
             "hash3".to_string(),
         ];
-        
+
         // This will fail since we don't have a real CDN, but we're testing the API
-        let results = client.download_parallel(cdn_host, path, &hashes, Some(2)).await;
-        
+        let results = client
+            .download_parallel(cdn_host, path, &hashes, Some(2))
+            .await;
+
         // Should get 3 results in the same order
         assert_eq!(results.len(), 3);
     }

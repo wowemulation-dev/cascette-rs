@@ -96,9 +96,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .iter()
         .filter(|e| e.versions_name == versions.entries[0].versions_name)
         .count();
-    println!(
-        "   {region_count} regions, {same_version_count} with same version"
-    );
+    println!("   {region_count} regions, {same_version_count} with same version");
 
     // ========================================================================
     // BOTH APIS COEXIST

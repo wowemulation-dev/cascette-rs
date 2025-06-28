@@ -31,7 +31,7 @@ impl BpsvParser {
 
         // Parse header
         let header_line = lines.next().ok_or(Error::MissingHeader)?;
-        
+
         if !header_line.contains('!') {
             return Err(Error::InvalidHeader {
                 reason: "Header line must contain field type specifications with '!'".to_string(),
@@ -126,10 +126,7 @@ impl BpsvParser {
     /// # Ok::<(), ngdp_bpsv::Error>(())
     /// ```
     pub fn parse_schema(content: &str) -> Result<BpsvSchema> {
-        let first_line = content
-            .lines()
-            .next()
-            .ok_or(Error::EmptyDocument)?;
+        let first_line = content.lines().next().ok_or(Error::EmptyDocument)?;
 
         if !first_line.contains('!') {
             return Err(Error::InvalidHeader {
@@ -344,7 +341,8 @@ mod tests {
 
     #[test]
     fn test_parse_schema_only() {
-        let content = "Region!STRING:0|BuildConfig!HEX:16|BuildId!DEC:4\n## seqn = 12345\nus|abcd|1234";
+        let content =
+            "Region!STRING:0|BuildConfig!HEX:16|BuildId!DEC:4\n## seqn = 12345\nus|abcd|1234";
 
         let schema = BpsvParser::parse_schema(content).unwrap();
 
@@ -356,7 +354,8 @@ mod tests {
 
     #[test]
     fn test_parse_raw_rows() {
-        let content = "Region!STRING:0|BuildId!DEC:4\n## seqn = 12345\nus|1234\neu|5678\n# comment\ncn|9999";
+        let content =
+            "Region!STRING:0|BuildId!DEC:4\n## seqn = 12345\nus|1234\neu|5678\n# comment\ncn|9999";
 
         let rows = BpsvParser::parse_raw_rows(content).unwrap();
 
@@ -401,7 +400,7 @@ mod tests {
         // Parser should reject rows with wrong number of fields
         let result = BpsvParser::parse(content);
         assert!(result.is_err());
-        
+
         // Ensure the error is about schema mismatch
         if let Err(e) = result {
             assert!(matches!(e, Error::SchemaMismatch { .. }));
@@ -410,7 +409,8 @@ mod tests {
 
     #[test]
     fn test_case_insensitive_types() {
-        let content = "Region!string:0|BuildId!DEC:4|Config!hex:16\nus|1234|abcdabcdabcdabcdabcdabcdabcdabcd";
+        let content =
+            "Region!string:0|BuildId!DEC:4|Config!hex:16\nus|1234|abcdabcdabcdabcdabcdabcdabcdabcd";
 
         let doc = BpsvParser::parse(content).unwrap();
 

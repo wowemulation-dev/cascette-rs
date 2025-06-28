@@ -181,7 +181,10 @@ impl BpsvSchema {
         for (field, value) in self.fields.iter().zip(values.iter()) {
             // Validate without normalization to avoid allocation
             field.field_type.validate_value(value).map_err(|mut err| {
-                if let Error::InvalidValue { field: field_name, .. } = &mut err {
+                if let Error::InvalidValue {
+                    field: field_name, ..
+                } = &mut err
+                {
                     *field_name = field.name.clone();
                 }
                 err

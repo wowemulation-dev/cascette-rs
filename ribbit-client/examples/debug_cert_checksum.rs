@@ -39,9 +39,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let mut hasher = Sha256::new();
                     hasher.update(message_without_checksum);
                     let computed = format!("{:x}", hasher.finalize());
-                    println!(
-                        "Computed checksum of message without checksum line: {computed}"
-                    );
+                    println!("Computed checksum of message without checksum line: {computed}");
 
                     if computed == checksum {
                         println!("✓ Checksum matches!");
@@ -73,9 +71,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     hasher.update(cert_content.as_bytes());
                     hasher.update(b"\n");
                     let checksum2 = format!("{:x}", hasher.finalize());
-                    println!(
-                        "Checksum of certificate with trailing newline: {checksum2}"
-                    );
+                    println!("Checksum of certificate with trailing newline: {checksum2}");
 
                     // Method 3: Checksum of entire MIME part body (from Content-Disposition to boundary)
                     if let Some(content_disp) = data_str.find("Content-Disposition: cert") {

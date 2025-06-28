@@ -135,7 +135,8 @@ impl<'a> BpsvRow<'a> {
     /// Convert to BPSV line format
     pub fn to_bpsv_line(&self) -> String {
         if let Some(typed) = &self.typed_values {
-            typed.iter()
+            typed
+                .iter()
                 .map(|v| v.to_bpsv_string())
                 .collect::<Vec<_>>()
                 .join("|")
@@ -474,11 +475,7 @@ mod tests {
     #[test]
     fn test_row_operations() {
         let schema = create_test_schema();
-        let mut row = BpsvRow::new(vec![
-            "us",
-            "abcd1234abcd1234abcd1234abcd1234",
-            "1234",
-        ]);
+        let mut row = BpsvRow::new(vec!["us", "abcd1234abcd1234abcd1234abcd1234", "1234"]);
 
         assert_eq!(row.len(), 3);
         assert_eq!(row.get_raw(0), Some("us"));
@@ -503,18 +500,10 @@ mod tests {
         doc.set_sequence_number(Some(12345));
         assert_eq!(doc.sequence_number(), Some(12345));
 
-        doc.add_row(vec![
-            "us",
-            "abcd1234abcd1234abcd1234abcd1234",
-            "1234",
-        ])
-        .unwrap();
-        doc.add_row(vec![
-            "eu",
-            "1234abcd1234abcd1234abcd1234abcd",
-            "5678",
-        ])
-        .unwrap();
+        doc.add_row(vec!["us", "abcd1234abcd1234abcd1234abcd1234", "1234"])
+            .unwrap();
+        doc.add_row(vec!["eu", "1234abcd1234abcd1234abcd1234abcd", "5678"])
+            .unwrap();
 
         assert_eq!(doc.row_count(), 2);
         assert!(!doc.is_empty());
@@ -526,24 +515,12 @@ mod tests {
         let schema = create_test_schema();
         let mut doc = BpsvDocument::new(content, schema);
 
-        doc.add_row(vec![
-            "us",
-            "abcd1234abcd1234abcd1234abcd1234",
-            "1234",
-        ])
-        .unwrap();
-        doc.add_row(vec![
-            "eu",
-            "1234abcd1234abcd1234abcd1234abcd",
-            "5678",
-        ])
-        .unwrap();
-        doc.add_row(vec![
-            "us",
-            "deadbeefdeadbeefdeadbeefdeadbeef",
-            "9999",
-        ])
-        .unwrap();
+        doc.add_row(vec!["us", "abcd1234abcd1234abcd1234abcd1234", "1234"])
+            .unwrap();
+        doc.add_row(vec!["eu", "1234abcd1234abcd1234abcd1234abcd", "5678"])
+            .unwrap();
+        doc.add_row(vec!["us", "deadbeefdeadbeefdeadbeefdeadbeef", "9999"])
+            .unwrap();
 
         let us_rows = doc.find_rows_by_field("Region", "us").unwrap();
         assert_eq!(us_rows, vec![0, 2]);
@@ -558,18 +535,10 @@ mod tests {
         let schema = create_test_schema();
         let mut doc = BpsvDocument::new(content, schema);
 
-        doc.add_row(vec![
-            "us",
-            "abcd1234abcd1234abcd1234abcd1234",
-            "1234",
-        ])
-        .unwrap();
-        doc.add_row(vec![
-            "eu",
-            "1234abcd1234abcd1234abcd1234abcd",
-            "5678",
-        ])
-        .unwrap();
+        doc.add_row(vec!["us", "abcd1234abcd1234abcd1234abcd1234", "1234"])
+            .unwrap();
+        doc.add_row(vec!["eu", "1234abcd1234abcd1234abcd1234abcd", "5678"])
+            .unwrap();
 
         let regions = doc.get_column("Region").unwrap();
         assert_eq!(regions, vec!["us", "eu"]);
@@ -584,12 +553,8 @@ mod tests {
         let schema = create_test_schema();
         let mut doc = BpsvDocument::new(content, schema);
         doc.set_sequence_number(Some(12345));
-        doc.add_row(vec![
-            "us",
-            "abcd1234abcd1234abcd1234abcd1234",
-            "1234",
-        ])
-        .unwrap();
+        doc.add_row(vec!["us", "abcd1234abcd1234abcd1234abcd1234", "1234"])
+            .unwrap();
 
         let bpsv_string = doc.to_bpsv_string();
         let lines: Vec<&str> = bpsv_string.lines().collect();
@@ -610,12 +575,7 @@ mod tests {
         assert!(matches!(result, Err(Error::SchemaMismatch { .. })));
 
         // Too many values
-        let result = doc.add_row(vec![
-            "us",
-            "hex",
-            "123",
-            "extra",
-        ]);
+        let result = doc.add_row(vec!["us", "hex", "123", "extra"]);
         assert!(matches!(result, Err(Error::SchemaMismatch { .. })));
     }
 }

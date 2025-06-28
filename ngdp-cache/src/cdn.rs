@@ -305,11 +305,11 @@ impl CdnCache {
     /// Write multiple config files in parallel
     pub async fn write_configs_batch(&self, entries: &[(String, Vec<u8>)]) -> Result<()> {
         use futures::future::try_join_all;
-        
-        let futures = entries.iter().map(|(hash, data)| {
-            self.write_config(hash, data)
-        });
-        
+
+        let futures = entries
+            .iter()
+            .map(|(hash, data)| self.write_config(hash, data));
+
         try_join_all(futures).await?;
         Ok(())
     }
@@ -317,11 +317,11 @@ impl CdnCache {
     /// Write multiple data files in parallel
     pub async fn write_data_batch(&self, entries: &[(String, Vec<u8>)]) -> Result<()> {
         use futures::future::try_join_all;
-        
-        let futures = entries.iter().map(|(hash, data)| {
-            self.write_data(hash, data)
-        });
-        
+
+        let futures = entries
+            .iter()
+            .map(|(hash, data)| self.write_data(hash, data));
+
         try_join_all(futures).await?;
         Ok(())
     }
@@ -329,7 +329,7 @@ impl CdnCache {
     /// Read multiple config files in parallel
     pub async fn read_configs_batch(&self, hashes: &[String]) -> Vec<Result<Vec<u8>>> {
         use futures::future::join_all;
-        
+
         let futures = hashes.iter().map(|hash| self.read_config(hash));
         join_all(futures).await
     }
@@ -337,7 +337,7 @@ impl CdnCache {
     /// Read multiple data files in parallel
     pub async fn read_data_batch(&self, hashes: &[String]) -> Vec<Result<Vec<u8>>> {
         use futures::future::join_all;
-        
+
         let futures = hashes.iter().map(|hash| self.read_data(hash));
         join_all(futures).await
     }
@@ -345,7 +345,7 @@ impl CdnCache {
     /// Check existence of multiple configs in parallel
     pub async fn has_configs_batch(&self, hashes: &[String]) -> Vec<bool> {
         use futures::future::join_all;
-        
+
         let futures = hashes.iter().map(|hash| self.has_config(hash));
         join_all(futures).await
     }
@@ -353,7 +353,7 @@ impl CdnCache {
     /// Check existence of multiple data files in parallel
     pub async fn has_data_batch(&self, hashes: &[String]) -> Vec<bool> {
         use futures::future::join_all;
-        
+
         let futures = hashes.iter().map(|hash| self.has_data(hash));
         join_all(futures).await
     }
@@ -361,7 +361,7 @@ impl CdnCache {
     /// Get sizes of multiple data files in parallel
     pub async fn data_sizes_batch(&self, hashes: &[String]) -> Vec<Result<u64>> {
         use futures::future::join_all;
-        
+
         let futures = hashes.iter().map(|hash| self.data_size(hash));
         join_all(futures).await
     }

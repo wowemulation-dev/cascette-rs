@@ -73,9 +73,7 @@ async fn test_ribbit_product_versions() {
                 println!("  Product {} returned {} bytes", product, data.len());
             }
             Err(e) => {
-                eprintln!(
-                    "  Product {product} failed (expected in offline tests): {e}"
-                );
+                eprintln!("  Product {product} failed (expected in offline tests): {e}");
             }
         }
     }
@@ -92,9 +90,7 @@ async fn test_ribbit_different_regions() {
         // Just verify we can attempt connection to different regions
         match result {
             Ok(data) => assert!(!data.is_empty()),
-            Err(e) => eprintln!(
-                "Region {region} failed (expected in offline tests): {e}"
-            ),
+            Err(e) => eprintln!("Region {region} failed (expected in offline tests): {e}"),
         }
     }
 }
@@ -119,9 +115,7 @@ async fn test_ribbit_product_cdns() {
                 println!("  Product {} CDN returned {} bytes", product, data.len());
             }
             Err(e) => {
-                eprintln!(
-                    "  Product {product} CDN failed (expected in offline tests): {e}"
-                );
+                eprintln!("  Product {product} CDN failed (expected in offline tests): {e}");
             }
         }
     }
@@ -144,9 +138,7 @@ async fn test_ribbit_product_bgdl() {
                 println!("  Product {} BGDL returned {} bytes", product, data.len());
             }
             Err(e) => {
-                eprintln!(
-                    "  Product {product} BGDL failed (expected in offline tests): {e}"
-                );
+                eprintln!("  Product {product} BGDL failed (expected in offline tests): {e}");
             }
         }
     }
@@ -323,10 +315,7 @@ async fn test_ribbit_mixed_valid_invalid() {
                         "Expected data for valid product {product}"
                     );
                     let response = String::from_utf8_lossy(&data);
-                    assert!(
-                        response.contains("|"),
-                        "Expected PSV format for {product}"
-                    );
+                    assert!(response.contains("|"), "Expected PSV format for {product}");
                 } else {
                     assert!(
                         data.is_empty(),
