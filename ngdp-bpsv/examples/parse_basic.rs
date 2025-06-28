@@ -8,7 +8,7 @@ fn main() -> Result<(), Error> {
     println!("=== Basic BPSV Parsing Example ===\n");
 
     // Example BPSV data similar to what Ribbit returns
-    let bpsv_data = r#"Region!STRING:0|BuildConfig!HEX:32|CDNConfig!HEX:32|KeyRing!HEX:32|BuildId!DEC:4|VersionsName!String:0|ProductConfig!HEX:32
+    let bpsv_data = r#"Region!STRING:0|BuildConfig!HEX:16|CDNConfig!HEX:16|KeyRing!HEX:16|BuildId!DEC:4|VersionsName!String:0|ProductConfig!HEX:16
 ## seqn = 3016450
 us|be2bb98dc28aee05bbee519393696cdb|fac77b9ca52c84ac28ad83a7dbe1c829|3ca57fe7319a297346440e4d2a03a0cd|61491|11.1.7.61491|53020d32e1a25648c8e1eafd5771935f
 eu|be2bb98dc28aee05bbee519393696cdb|fac77b9ca52c84ac28ad83a7dbe1c829|3ca57fe7319a297346440e4d2a03a0cd|61491|11.1.7.61491|53020d32e1a25648c8e1eafd5771935f
@@ -76,9 +76,7 @@ xx|be2bb98dc28aee05bbee519393696cdb|fac77b9ca52c84ac28ad83a7dbe1c829|3ca57fe7319
     // Display statistics using parser utility
     println!("\n7. Document statistics:");
     let (field_count, row_count, has_seqn) = BpsvParser::get_stats(bpsv_data)?;
-    println!(
-        "   Fields: {field_count}, Rows: {row_count}, Has sequence: {has_seqn}"
-    );
+    println!("   Fields: {field_count}, Rows: {row_count}, Has sequence: {has_seqn}");
 
     // Demonstrate round-trip conversion
     println!("\n8. Round-trip test:");
