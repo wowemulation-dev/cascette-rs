@@ -83,6 +83,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `tact-client`: Removed `test_certs_endpoint.rs`, `test_different_products.rs`, `test_v1_summary.rs`
   - These were development/debugging tools not useful for end users
 
+#### Project Infrastructure
+
+- **Comprehensive GitHub Actions CI/CD pipeline**:
+  - CI workflow with platform matrix testing, documentation checks, and code coverage
+  - Cross-platform build verification for multiple architectures (x86_64, aarch64, armv7)
+  - Automated dependency updates via Dependabot
+  - Release automation with release-plz for version management
+  - Binary release workflow for ngdp-client CLI with minisign signatures
+  - Install script with automatic platform detection and signature verification
+  - Cache management and cleanup workflows
+  - Support for both library releases to crates.io and CLI binary releases
+
 ### Changed
 
 #### Performance Optimizations

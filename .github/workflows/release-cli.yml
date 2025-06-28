@@ -1,0 +1,260 @@
+---
+name: Release CLI
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: 'Version to release'
+        required: true
+        type: string
+      dry-run:
+        description: 'Dry run (no actual release)'
+        required: false
+        type: boolean
+        default: false
+
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 0.1.0)'
+        required: true
+        type: string
+      dry-run:
+        description: 'Dry run (no actual release)'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  RUSTFLAGS: -D warnings
+  CARGO_INCREMENTAL: 0
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  generate-keypair:
+    name: Generate Signing Keypair
+    runs-on: ubuntu-latest
+    outputs:
+      public-key: ${{ steps.generate.outputs.public-key }}
+    steps:
+      - name: Install minisign for binary signing
+        run: cargo install minisign
+
+      - name: Generate ephemeral keypair
+        id: generate
+        run: |
+          # Generate keypair
+          echo "${{ secrets.MINISIGN_PASSWORD }}" | minisign -G -p minisign.pub -s minisign.key -W
+
+          # Output public key
+          echo "public-key<<EOF" >> $GITHUB_OUTPUT
+          cat minisign.pub >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - uses: actions/upload-artifact@v4
+        name: Upload keypair artifact
+        with:
+          name: minisign-keypair
+          path: |
+            minisign.pub
+            minisign.key
+          retention-days: 1
+
+  build-binaries:
+    name: Build ${{ matrix.target }}
+    needs: [generate-keypair]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            use_cross: true
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            use_cross: true
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            use_cross: true
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-latest
+            use_cross: true
+          - target: armv7-unknown-linux-musleabihf
+            os: ubuntu-latest
+            use_cross: true
+
+          # Windows
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            use_cross: false
+          - target: aarch64-pc-windows-msvc
+            os: windows-latest
+            use_cross: false
+
+          # macOS
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            use_cross: false
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            use_cross: false
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: stable
+          targets: ${{ matrix.target }}
+
+      - name: Install cross for cross-compilation
+        if: matrix.use_cross
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cross
+
+      - name: Download keypair
+        uses: actions/download-artifact@v4
+        with:
+          name: minisign-keypair
+
+      - name: Build binary
+        run: |
+          if [ "${{ matrix.use_cross }}" = "true" ]; then
+            cross build --release --package ngdp-client --bin ngdp --target ${{ matrix.target }}
+          else
+            cargo build --release --package ngdp-client --bin ngdp --target ${{ matrix.target }}
+          fi
+
+      - name: Package binary (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          cd target/${{ matrix.target }}/release
+          tar -czf ngdp-${{ inputs.version }}-${{ matrix.target }}.tar.gz ngdp
+          mv ngdp-${{ inputs.version }}-${{ matrix.target }}.tar.gz ../../../
+          cd ../../../
+          echo "${{ secrets.MINISIGN_PASSWORD }}" | minisign -S -s minisign.key -m ngdp-${{ inputs.version }}-${{ matrix.target }}.tar.gz -t "ngdp-${{ inputs.version }}-${{ matrix.target }}.tar.gz"
+
+      - name: Package binary (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cd target/${{ matrix.target }}/release
+          Compress-Archive -Path ngdp.exe -DestinationPath ../../../ngdp-${{ inputs.version }}-${{ matrix.target }}.zip
+          cd ../../../
+
+      - name: Sign Windows binary
+        if: runner.os == 'Windows'
+        run: |
+          cargo install minisign
+          echo "${{ secrets.MINISIGN_PASSWORD }}" | minisign -S -s minisign.key -m ngdp-${{ inputs.version }}-${{ matrix.target }}.zip -t "ngdp-${{ inputs.version }}-${{ matrix.target }}.zip"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: binaries-${{ matrix.target }}
+          path: |
+            ngdp-${{ inputs.version }}-${{ matrix.target }}.tar.gz*
+            ngdp-${{ inputs.version }}-${{ matrix.target }}.zip*
+          retention-days: 7
+
+  create-release:
+    name: Create Release
+    needs: [build-binaries, generate-keypair]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release files
+        run: |
+          mkdir -p release
+          mv artifacts/binaries-*/* release/
+          
+          # Create release notes
+          cat > release/RELEASE_NOTES.md << EOF
+          # ngdp-client v${{ inputs.version }}
+          
+          ## Installation
+          
+          ### Using install script (Unix-like systems)
+          \`\`\`bash
+          curl -fsSL https://raw.githubusercontent.com/wowemulation-dev/cascette-rs/main/install.sh | bash
+          \`\`\`
+          
+          ### Manual installation
+          1. Download the appropriate binary for your platform
+          2. Extract the archive
+          3. Add the binary to your PATH
+          
+          ## Verifying binaries
+          
+          All binaries are signed with minisign. To verify:
+          
+          \`\`\`bash
+          minisign -V -p minisign.pub -m <binary-archive>
+          \`\`\`
+          
+          Public key:
+          \`\`\`
+          ${{ needs.generate-keypair.outputs.public-key }}
+          \`\`\`
+          
+          ## Supported platforms
+          
+          - Linux: x86_64, aarch64, armv7 (GNU and musl)
+          - Windows: x86_64, aarch64 (MSVC)
+          - macOS: x86_64, aarch64
+          
+          ## Checksums
+          
+          \`\`\`
+          $(cd release && sha256sum ngdp-*.{tar.gz,zip} 2>/dev/null || true)
+          \`\`\`
+          EOF
+          
+          # Copy the public key to release folder
+          cp artifacts/minisign-keypair/minisign.pub release/
+
+      - name: Create GitHub Release
+        if: ${{ !inputs.dry-run }}
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ngdp-client-v${{ inputs.version }}
+          name: ngdp-client v${{ inputs.version }}
+          body_path: release/RELEASE_NOTES.md
+          draft: false
+          prerelease: false
+          files: |
+            release/ngdp-*.tar.gz
+            release/ngdp-*.tar.gz.minisig
+            release/ngdp-*.zip
+            release/ngdp-*.zip.minisig
+            release/minisign.pub
+
+      - name: Dry run summary
+        if: ${{ inputs.dry-run }}
+        run: |
+          echo "=== DRY RUN SUMMARY ==="
+          echo "Would have created release: ngdp-client v${{ inputs.version }}"
+          echo ""
+          echo "Files that would be uploaded:"
+          ls -la release/
+          echo ""
+          echo "Release notes:"
+          cat release/RELEASE_NOTES.md
