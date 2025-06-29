@@ -1278,7 +1278,7 @@ dependencies = [
 
 [[package]]
 name = "ngdp-bpsv"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "criterion",
  "serde",
@@ -1288,7 +1288,7 @@ dependencies = [
 
 [[package]]
 name = "ngdp-cache"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "bytes",
  "criterion",
@@ -1312,7 +1312,7 @@ dependencies = [
 
 [[package]]
 name = "ngdp-cdn"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "bytes",
  "criterion",
@@ -1328,7 +1328,7 @@ dependencies = [
 
 [[package]]
 name = "ngdp-client"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "assert_cmd",
  "base64",
@@ -1873,7 +1873,7 @@ dependencies = [
 
 [[package]]
 name = "ribbit-client"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "asn1",
  "base64",
@@ -2229,7 +2229,7 @@ dependencies = [
 
 [[package]]
 name = "tact-client"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "criterion",
  "ngdp-bpsv",
