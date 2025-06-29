@@ -9,10 +9,14 @@ repository.workspace = true
 homepage.workspace = true
 description = "TACT protocol client for Cascette"
 keywords = ["ngdp", "tact", "blizzard", "wow", "http"]
-categories = ["network-programming", "game-development", "web-programming::http-client"]
+categories = [
+  "network-programming",
+  "game-development",
+  "web-programming::http-client",
+]
 
 [dependencies]
-ngdp-bpsv = { path = "../ngdp-bpsv" }
+ngdp-bpsv = { path = "../ngdp-bpsv", version = "0.1.0" }
 rand.workspace = true
 reqwest = { version = "0.12", features = ["json", "stream"] }
 thiserror.workspace = true

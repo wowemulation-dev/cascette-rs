@@ -9,7 +9,11 @@ repository.workspace = true
 homepage.workspace = true
 description = "Ribbit protocol client for Cascette"
 keywords = ["ngdp", "ribbit", "blizzard", "wow", "tcp"]
-categories = ["network-programming", "game-development", "parser-implementations"]
+categories = [
+  "network-programming",
+  "game-development",
+  "parser-implementations",
+]
 
 [dependencies]
 asn1 = "0.21"
@@ -20,7 +24,7 @@ digest = "0.10"
 dirs.workspace = true
 hex = "0.4"
 mail-parser = "0.11"
-ngdp-bpsv = { path = "../ngdp-bpsv" }
+ngdp-bpsv = { path = "../ngdp-bpsv", version = "0.1.0" }
 rand.workspace = true
 rsa = { version = "0.9", features = ["sha2"] }
 sha2 = "0.10"
