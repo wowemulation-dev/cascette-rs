@@ -1,6 +1,6 @@
 [package]
 name = "ngdp-client"
-version = "0.1.0"
+version = "0.1.1"
 authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -23,10 +23,10 @@ path = "src/main.rs"
 clap = { workspace = true, features = ["derive", "cargo", "env"] }
 comfy-table = "7.1.1"
 owo-colors = { version = "4.2.1", features = ["supports-colors"] }
-ribbit-client = { path = "../ribbit-client", version = "0.1.0" }
-tact-client = { path = "../tact-client", version = "0.1.0" }
-ngdp-bpsv = { path = "../ngdp-bpsv", version = "0.1.0" }
-ngdp-cache = { path = "../ngdp-cache", version = "0.1.0" }
+ribbit-client = { path = "../ribbit-client", version = "0.1.1" }
+tact-client = { path = "../tact-client", version = "0.1.1" }
+ngdp-bpsv = { path = "../ngdp-bpsv", version = "0.1.1" }
+ngdp-cache = { path = "../ngdp-cache", version = "0.1.1" }
 tokio = { workspace = true, features = ["full"] }
 tracing.workspace = true
 tracing-subscriber.workspace = true

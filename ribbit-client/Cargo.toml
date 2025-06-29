@@ -1,6 +1,6 @@
 [package]
 name = "ribbit-client"
-version = "0.1.0"
+version = "0.1.1"
 authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -24,7 +24,7 @@ digest = "0.10"
 dirs.workspace = true
 hex = "0.4"
 mail-parser = "0.11"
-ngdp-bpsv = { path = "../ngdp-bpsv", version = "0.1.0" }
+ngdp-bpsv = { path = "../ngdp-bpsv", version = "0.1.1" }
 rand.workspace = true
 rsa = { version = "0.9", features = ["sha2"] }
 sha2 = "0.10"
