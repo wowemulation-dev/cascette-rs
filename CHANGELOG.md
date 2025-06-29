@@ -13,6 +13,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Corrected HEX field declarations from HEX:32 to HEX:16 to match actual data
   - Example now runs successfully without validation errors
 
+- Fixed GitHub Actions workflow failures:
+  - Replaced OpenSSL dependency with rustls for cross-platform builds
+  - Updated all `reqwest` dependencies to use `rustls-tls` feature
+  - Removed `native-tls` dependency that prevented cross-compilation
+  - Fixed cross-compilation for targets: `aarch64-unknown-linux-musl`, `armv7-unknown-linux-gnueabihf`
+
+- Fixed Release-plz workflow permissions issue:
+  - Updated workflow to support Personal Access Token (PAT) via `RELEASE_PLZ_TOKEN` secret
+  - Added documentation for PAT setup in `.github/WORKFLOW_SETUP.md`
+  - Workflow now falls back to `GITHUB_TOKEN` if PAT is not configured
+
 ## [0.1.0] - 2025-06-28
 
 ### Added
