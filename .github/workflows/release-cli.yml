@@ -233,7 +233,7 @@ jobs:
 
       - name: Create GitHub Release
         if: ${{ !inputs.dry-run }}
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ngdp-client-v${{ inputs.version }}
           name: ngdp-client v${{ inputs.version }}
