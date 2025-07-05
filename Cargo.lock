@@ -1317,6 +1317,7 @@ dependencies = [
  "bytes",
  "criterion",
  "futures-util",
+ "parking_lot",
  "rand 0.9.1",
  "reqwest",
  "thiserror",
@@ -1324,6 +1325,7 @@ dependencies = [
  "tokio-test",
  "tracing",
  "tracing-subscriber",
+ "wiremock",
 ]
 
 [[package]]

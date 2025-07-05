@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Automatic CDN fallback support in `ngdp-cdn`**:
+  - Added `CdnClientWithFallback` for automatic failover between multiple CDN hosts
+  - Built-in support for community backup CDNs: `cdn.arctium.tools` and `tact.mirror.reliquaryhq.com`
+  - Prioritizes all Blizzard CDN servers first before trying community mirrors
+  - Configurable backup CDN behavior with `use_default_backups` option
+  - Full API compatibility with base `CdnClient` for easy migration
+
 ### Fixed
 
 - Fixed parse_basic example in `ngdp-bpsv`:

@@ -100,9 +100,16 @@ pub type Result<T> = std::result::Result<T, Error>;
 // Helper methods for common error construction
 impl Error {
     /// Create a CDN exhausted error
-    pub fn cdn_exhausted(resource: impl Into<String>) -> Self {
+    pub fn cdn_exhausted_with_resource(resource: impl Into<String>) -> Self {
         Self::CdnExhausted {
             resource: resource.into(),
+        }
+    }
+
+    /// Create a CDN exhausted error with generic message
+    pub fn cdn_exhausted() -> Self {
+        Self::CdnExhausted {
+            resource: "requested content".to_string(),
         }
     }
 

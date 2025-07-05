@@ -52,9 +52,11 @@
 
 mod client;
 mod error;
+mod fallback;
 
 #[cfg(test)]
 mod client_test;
 
 pub use client::{CdnClient, CdnClientBuilder};
 pub use error::{Error, Result};
+pub use fallback::{CdnClientWithFallback, CdnClientWithFallbackBuilder};

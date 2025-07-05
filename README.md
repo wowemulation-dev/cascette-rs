@@ -146,6 +146,8 @@ cargo build --release
   - ✅ Automatic retry with rate limit handling
   - ✅ Content verification
   - ✅ Configurable connection pooling
+  - ✅ Automatic fallback to backup CDN servers
+  - ✅ Built-in support for community mirrors (arctium.tools, reliquaryhq.com)
 
 - **Caching Layer** (`ngdp-cache`)
   - ✅ Transparent caching for all NGDP operations

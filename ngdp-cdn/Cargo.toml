@@ -19,11 +19,13 @@ tokio = { workspace = true, features = ["full"] }
 tracing.workspace = true
 bytes = "1.9"
 futures-util = "0.3"
+parking_lot = "0.12"
 
 [dev-dependencies]
 criterion.workspace = true
 tracing-subscriber.workspace = true
 tokio-test = "0.4"
+wiremock = "0.6"
 
 [[bench]]
 name = "cdn_benchmark"

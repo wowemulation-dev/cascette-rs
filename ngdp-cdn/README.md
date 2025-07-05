@@ -12,6 +12,7 @@ Blizzard's CDN servers.
 - ⚡ **Concurrent downloads** - Download multiple files in parallel
 - 🛡️ **Error handling** - Comprehensive error types for CDN operations
 - ⏱️ **Configurable timeouts** - Separate connection and request timeouts
+- 🔀 **Automatic fallback** - Built-in backup CDN support with configurable hosts
 
 ## Usage
 
@@ -58,6 +59,70 @@ let client = CdnClient::builder()
     .connect_timeout(60)
     .request_timeout(300)
     .pool_max_idle_per_host(50)
+    .build()?;
+```
+
+### CDN Fallback Support
+
+The crate provides `CdnClientWithFallback` which automatically tries multiple CDN hosts
+when downloads fail. It prioritizes Blizzard's official CDN servers first, then falls
+back to community mirrors only if all primary servers fail.
+
+```rust
+use ngdp_cdn::CdnClientWithFallback;
+
+// Create with default backup CDNs (arctium.tools and reliquaryhq.com)
+let client = CdnClientWithFallback::new()?;
+
+// Add Blizzard CDNs from Ribbit response (these are tried first)
+client.add_primary_cdns(vec![
+    "blzddist1-a.akamaihd.net",
+    "level3.blizzard.com",
+    "blzddist2-a.akamaihd.net",
+]);
+
+// Download process:
+// 1. Try blzddist1-a.akamaihd.net
+// 2. Try level3.blizzard.com
+// 3. Try blzddist2-a.akamaihd.net
+// 4. Try cdn.arctium.tools (community backup)
+// 5. Try tact.mirror.reliquaryhq.com (community backup)
+let response = client.download("tpr/wow", "content_hash").await?;
+```
+
+#### Default Backup CDNs
+
+By default, the fallback client includes two backup CDN servers that are only
+used after all Blizzard CDNs have been exhausted:
+- `http://cdn.arctium.tools/`
+- `https://tact.mirror.reliquaryhq.com/`
+
+These are community-maintained mirrors that provide access to game content when
+official servers are unavailable.
+
+#### Contributing Community CDN Changes
+
+If you'd like to suggest changes to the default community backup CDNs (add new ones,
+update existing ones, or remove inactive ones), please file a ticket on our
+[GitHub Issues](https://github.com/wowemulation-dev/cascette-rs/issues) page.
+
+When suggesting a community CDN, please include:
+- The CDN URL and confirmation it supports NGDP/TACT protocols
+- Information about who maintains it and its reliability
+- Any regional restrictions or limitations
+
+#### Custom Configuration
+
+```rust
+let client = CdnClientWithFallback::builder()
+    .add_primary_cdn("primary.example.com")
+    .add_primary_cdn("secondary.example.com")
+    .use_default_backups(false)  // Disable default backup CDNs
+    .configure_base_client(|builder| {
+        builder
+            .max_retries(5)
+            .initial_backoff_ms(200)
+    })
     .build()?;
 ```
 
@@ -108,20 +173,23 @@ This crate is designed to work with other NGDP components:
 3. Use `ngdp-cdn` to download the actual content
 
 ```rust
-// Example workflow (simplified)
+// Example workflow with automatic fallback
 let ribbit = ribbit_client::RibbitClient::new(Region::US);
 let cdns = ribbit.get_product_cdns("wow").await?;
 
 let tact = tact_client::HttpClient::new(Region::US)?;
 let versions = tact.get_versions_parsed("wow").await?;
 
-let cdn_client = ngdp_cdn::CdnClient::new()?;
-for host in cdns.hosts {
-    if let Ok(content) = cdn_client.download(&host, &cdns.path, &content_hash).await {
-        // Successfully downloaded from this CDN
-        break;
-    }
+// Use fallback client for automatic CDN failover
+let cdn_client = ngdp_cdn::CdnClientWithFallback::new()?;
+
+// Add all CDN hosts from Ribbit response as primary
+for cdn_entry in &cdns {
+    cdn_client.add_primary_cdns(&cdn_entry.hosts);
 }
+
+// Download will automatically try all CDNs (primary + backup)
+let content = cdn_client.download(&cdns[0].path, &content_hash).await?;
 ```
 
 ## Performance Considerations
