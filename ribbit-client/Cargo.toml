@@ -16,7 +16,7 @@ categories = [
 ]
 
 [dependencies]
-asn1 = "0.21"
+asn1 = "0.22"
 base64 = "0.22"
 cms = "0.2"
 der = "0.7"
