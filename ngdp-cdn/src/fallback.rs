@@ -172,7 +172,7 @@ impl CdnClientWithFallback {
         }
 
         // All CDNs failed
-        Err(last_error.unwrap_or_else(|| Error::cdn_exhausted()))
+        Err(last_error.unwrap_or_else(Error::cdn_exhausted))
     }
 
     /// Download BuildConfig from CDN
