@@ -5,6 +5,7 @@ members = [
   "ngdp-cdn",
   "ribbit-client",
   "tact-client",
+  "tact-parser",
   "ngdp-client",
 ]
 resolver = "2"
