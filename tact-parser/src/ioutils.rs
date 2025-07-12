@@ -3,7 +3,6 @@
 use std::io::{Error, Read};
 
 /// Generic trait for reading integer types from a buffer.
-#[allow(dead_code, reason = "big endian functions will be used later")]
 pub trait ReadInt {
     /// Error type which can be returned on read failures.
     type Error;
