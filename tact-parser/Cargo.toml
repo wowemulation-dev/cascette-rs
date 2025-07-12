@@ -1,0 +1,24 @@
+[package]
+name = "tact-parser"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[dependencies]
+modular-bitfield = "0.12.0"
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+clap = { workspace = true, features = ["derive", "cargo", "env"] }
+criterion = { workspace = true }
+hex = "0.4.3"
+tracing-subscriber.workspace = true
+
+[[bench]]
+name = "jenkins3"
+harness = false
