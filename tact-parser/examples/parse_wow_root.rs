@@ -1,7 +1,7 @@
 use clap::Parser;
-use tracing::info;
 use std::{fs::OpenOptions, path::PathBuf};
 use tact_parser::wow_root::{LocaleFlags, WowRoot};
+use tracing::info;
 
 #[derive(Parser)]
 #[command(name = "parse_wow_root")]
