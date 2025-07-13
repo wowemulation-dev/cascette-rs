@@ -8,7 +8,6 @@ const SMALL_DATA: &[u8] = b"Small test data - 16 bytes";
 const MEDIUM_DATA: &[u8] = &[0xf0u8; 1024]; // 1KB
 const LARGE_DATA: &[u8] = &[0x0fu8; 1024 * 1024]; // 1MB
 
-
 fn bench_jenkins3(c: &mut Criterion) {
     let mut group = c.benchmark_group("jenkins3");
 
@@ -20,7 +19,7 @@ fn bench_jenkins3(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::from_parameter(name), data, |b, &data| {
             b.iter_batched(
                 || {
-                    // No setup 
+                    // No setup
                     ()
                 },
                 |_| {
@@ -36,9 +35,6 @@ fn bench_jenkins3(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(
-    benches,
-    bench_jenkins3,
-);
+criterion_group!(benches, bench_jenkins3,);
 
 criterion_main!(benches);
