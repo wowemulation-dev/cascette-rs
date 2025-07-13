@@ -1,6 +1,6 @@
 //! Port of [Bob Jenkins' `lookup3.c`][0] to Rust.
 //!
-//! These are not intended for cryptographic purposes.
+//! These functions are not intended for cryptographic purposes.
 //!
 //! [0]: https://www.burtleburtle.net/bob/c/lookup3.c
 
