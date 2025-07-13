@@ -1,5 +1,5 @@
 use clap::Parser;
-use std::{fs::OpenOptions, path::PathBuf};
+use std::{fs::OpenOptions, io::BufReader, path::PathBuf};
 use tact_parser::wow_root::{LocaleFlags, WowRoot};
 use tracing::info;
 
@@ -22,7 +22,7 @@ fn main() {
     tracing_subscriber::fmt::init();
     let args = Cli::parse();
 
-    let mut rf = OpenOptions::new().read(true).open(args.root).unwrap();
+    let mut rf = BufReader::new(OpenOptions::new().read(true).open(args.root).unwrap());
     let locale = if args.any_locale {
         LocaleFlags::any_locale()
     } else {
