@@ -209,6 +209,7 @@ pub struct LocaleContentFlags {
     pub content: ContentFlags,
 }
 
+/// Bitmask of locales the content should be used for.
 #[bitfield(bytes = 4)]
 #[derive(PartialEq, Eq, Debug, Copy, Clone, Hash, PartialOrd, Ord)]
 #[repr(u32)]
@@ -248,7 +249,7 @@ impl LocaleFlags {
 
     /// `true` if the flags indicate all locales.
     pub fn all(&self) -> bool {
-        self == &LocaleFlags::from(0xffffffff)
+        self == &Self::any_locale()
     }
 
     /// `true` if there is at least one locale flag set.
@@ -313,6 +314,9 @@ pub struct ContentFlags {
     pub no_compression: bool, // 0x80000000
 }
 
+/// [WoW TACT Root][0] parser.
+///
+/// [0]: https://wowdev.wiki/TACT#Root
 pub struct WowRoot {
     /// Mapping of File ID -> Flags + MD5
     pub fid_md5: BTreeMap<u32, BTreeMap<LocaleContentFlags, Md5>>,
@@ -322,9 +326,9 @@ pub struct WowRoot {
 }
 
 impl WowRoot {
+    /// Parse a WoW TACT root file.
     pub fn parse<R: Read + Seek>(f: &mut R, only_locale: LocaleFlags) -> Result<Self> {
         let header = WowRootHeader::parse(f)?;
-        // println!("got header: {header:?}");
         let mut o = Self {
             fid_md5: BTreeMap::new(),
             name_hash_fid: HashMap::new(),
@@ -334,11 +338,9 @@ impl WowRoot {
         loop {
             match CasBlock::parse(f, &header, only_locale) {
                 Ok(block) => {
-                    // println!("block: {block:?}");
-
-                    // Add fids and names to our collection
+                    // Add fids and name hashes to our collection
                     // TODO: make CasBlock push this directly, rather than
-                    // allocating many temporary HashMaps.
+                    // allocating many temporary Vecs.
                     if let Some(fid_md5) = block.fid_md5 {
                         for (k, v) in fid_md5 {
                             if let Some(e) = o.fid_md5.get_mut(&k) {
@@ -356,7 +358,6 @@ impl WowRoot {
                             }
                         }
                     }
-                    // cas_blocks.push(block);
                 }
 
                 Err(Error::IOError(e)) if e.kind() == ErrorKind::UnexpectedEof => {
@@ -366,10 +367,6 @@ impl WowRoot {
                 Err(e) => return Err(e),
             }
         }
-
-        //
-
-        // Ok(Self { header, cas_blocks })
         Ok(o)
     }
 
