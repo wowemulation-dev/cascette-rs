@@ -13,9 +13,10 @@ use std::{
     io::{ErrorKind, Read, Seek},
     ops::BitAnd,
 };
-use tracing::*;
 
 const TACT_MAGIC: &'static [u8; 4] = b"TSFM";
+const MD5_LENGTH: usize = 16;
+pub type Md5 = [u8; MD5_LENGTH];
 
 #[derive(Debug)]
 pub struct WowRootHeader {
@@ -27,12 +28,20 @@ pub struct WowRootHeader {
 }
 
 impl WowRootHeader {
+    /// Parses a WoW Root header.
     pub fn parse<R: Read + Seek>(f: &mut R) -> Result<Self> {
-        let mut magic = [0; 4];
+        let mut magic = [0; TACT_MAGIC.len()];
         f.read_exact(&mut magic)?;
         if &magic != TACT_MAGIC {
-            error!("Pre-8.2 WoW root files not implemented");
-            return Err(Error::NotImplemented);
+            // Pre-8.2 WoW root file (used by Classic Era)
+            f.seek_relative(-(TACT_MAGIC.len() as i64))?;
+            return Ok(Self {
+                use_old_record_format: true,
+                version: 0,
+                total_file_count: 0,
+                named_file_count: 0,
+                allow_non_named_files: true,
+            });
         }
 
         // See if there's a header size here
@@ -67,7 +76,7 @@ impl WowRootHeader {
 
 pub struct CasBlock {
     pub flags: LocaleContentFlags,
-    pub fid_md5: Option<Vec<(u32, [u8; 16])>>,
+    pub fid_md5: Option<Vec<(u32, Md5)>>,
     pub name_hash_fid: Option<Vec<(u64, u32)>>,
 }
 
@@ -90,11 +99,6 @@ impl CasBlock {
         header: &WowRootHeader,
         only_locale: LocaleFlags,
     ) -> Result<Self> {
-        if header.use_old_record_format {
-            error!("Old header format not implemented");
-            return Err(Error::NotImplemented);
-        }
-
         let num_records = f.read_u32le()? as usize;
 
         let flags = if header.version == 2 {
@@ -114,10 +118,24 @@ impl CasBlock {
             }
         };
 
-        let has_name_hashes = !(header.allow_non_named_files && flags.content.no_name_hash());
+        if num_records == 0 {
+            // Ignore empty blocks without seeking
+            return Ok(Self {
+                flags,
+                fid_md5: None,
+                name_hash_fid: None,
+            });
+        }
+
+        let has_name_hashes = header.use_old_record_format
+            || !(header.allow_non_named_files && flags.content.no_name_hash());
         if !flags.locale.all() && !(flags.locale & only_locale).any() {
-            // Skip the section, not for us
-            f.seek_relative((num_records * (20 + if has_name_hashes { 8 } else { 0 })) as i64)?;
+            // Skip the section, not for us.
+            // The size of the section is the same in both old and new record
+            // format, just arranged differently.
+            let record_length =
+                size_of::<u32>() + MD5_LENGTH + if has_name_hashes { size_of::<u64>() } else { 0 };
+            f.seek_relative((num_records * record_length) as i64)?;
 
             return Ok(Self {
                 flags,
@@ -144,26 +162,38 @@ impl CasBlock {
         }
 
         // Collect content MD5s
-        let mut fid_md5: Vec<(u32, [u8; 16])> = Vec::with_capacity(num_records);
-        for file_id in file_ids.iter().copied() {
-            let mut md5 = [0; 16];
-            f.read_exact(&mut md5)?;
+        let mut fid_md5: Vec<(u32, Md5)> = Vec::with_capacity(num_records);
+        let mut name_hash_fid: Option<Vec<(u64, u32)>> = None;
 
-            fid_md5.push((file_id, md5));
-        }
+        if header.use_old_record_format {
+            let mut o = Vec::with_capacity(num_records);
 
-        let name_hash_fid = if has_name_hashes {
-            let mut name_hash_fid = Vec::with_capacity(num_records);
-
-            for file_id in file_ids.iter().copied() {
-                let hash = f.read_u64le()?;
-                name_hash_fid.push((hash, file_id));
+            for file_id in file_ids {
+                let mut md5 = [0; MD5_LENGTH];
+                f.read_exact(&mut md5)?;
+                fid_md5.push((file_id, md5));
+                o.push((f.read_u64le()?, file_id));
             }
 
-            Some(name_hash_fid)
+            name_hash_fid = Some(o);
         } else {
-            None
-        };
+            for &file_id in file_ids.iter() {
+                let mut md5 = [0; MD5_LENGTH];
+                f.read_exact(&mut md5)?;
+                fid_md5.push((file_id, md5));
+            }
+
+            if has_name_hashes {
+                let mut o = Vec::with_capacity(num_records);
+
+                for &file_id in file_ids.iter() {
+                    let hash = f.read_u64le()?;
+                    o.push((hash, file_id));
+                }
+
+                name_hash_fid = Some(o);
+            }
+        }
 
         Ok(Self {
             flags,
@@ -285,7 +315,7 @@ pub struct ContentFlags {
 
 pub struct WowRoot {
     /// Mapping of File ID -> Flags + MD5
-    pub fid_md5: BTreeMap<u32, BTreeMap<LocaleContentFlags, [u8; 16]>>,
+    pub fid_md5: BTreeMap<u32, BTreeMap<LocaleContentFlags, Md5>>,
 
     /// Mapping of `jenkins3_hashpath` -> file ID.
     pub name_hash_fid: HashMap<u64, u32>,
