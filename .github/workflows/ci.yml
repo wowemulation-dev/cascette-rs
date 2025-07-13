@@ -51,6 +51,7 @@ jobs:
             ngdp-bpsv/**
             ribbit-client/**
             tact-client/**
+            tact-parser/**
             ngdp-cdn/**
             ngdp-cache/**
             ngdp-client/**
@@ -87,7 +88,7 @@ jobs:
           fi
           
           # Check individual crate changes
-          for crate in ngdp-bpsv ribbit-client tact-client ngdp-cdn ngdp-cache ngdp-client; do
+          for crate in ngdp-bpsv ribbit-client tact-client tact-parser ngdp-cdn ngdp-cache ngdp-client; do
             if echo "$ALL_CHANGED_FILES" | grep -E "$crate/"; then
               crates_changed="$crates_changed $crate"
             fi
