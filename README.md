@@ -5,6 +5,7 @@ Pipeline) for World of Warcraft emulation.
 
 <div align="center">
 
+[![Discord](https://img.shields.io/discord/1394228766414471219?logo=discord&style=flat-square)](https://discord.gg/QbXn7Vqb)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE-APACHE)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE-MIT)
 [![CI Status](https://github.com/wowemulation-dev/cascette-rs/workflows/CI/badge.svg)](https://github.com/wowemulation-dev/cascette-rs/actions)
@@ -31,7 +32,7 @@ Pipeline) for World of Warcraft emulation.
 ### Implementation Progress
 
 - ✅ **Ribbit Protocol**: Full implementation including V1/V2, signature verification, all endpoints
-- ✅ **TACT Protocol**: HTTP/HTTPS clients for version and CDN queries  
+- ✅ **TACT Protocol**: HTTP/HTTPS clients for version and CDN queries
 - ✅ **BPSV Format**: Complete parser and builder with zero-copy optimizations
 - ✅ **CDN Operations**: Parallel downloads, streaming, retry logic, rate limiting
 - ✅ **Caching**: Transparent caching for all protocols with TTL support
@@ -63,7 +64,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Request WoW versions with typed API
     let versions = client.get_product_versions("wow").await?;
-    
+
     // Print version information
     for entry in &versions.entries {
         println!(
