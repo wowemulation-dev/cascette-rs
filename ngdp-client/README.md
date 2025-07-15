@@ -132,6 +132,25 @@ ngdp config set default_region eu
 ngdp config reset --yes
 ```
 
+**Available Configuration Settings:**
+
+- `default_region` - Default region for API requests (default: us)
+- `cache_dir` - Directory for cached data (default: ~/.cache/ngdp)
+- `cache_enabled` - Enable/disable caching (default: true)
+- `cache_ttl` - Cache time-to-live in seconds (default: 1800)
+- `timeout` - General request timeout in seconds (default: 30)
+- `ribbit_timeout` - Ribbit-specific timeout (default: 30)
+- `tact_timeout` - TACT-specific timeout (default: 30)
+- `max_concurrent_downloads` - Max parallel downloads (default: 4)
+- `retry_attempts` - Number of retry attempts (default: 3)
+- `user_agent` - HTTP User-Agent string (default: ngdp-client/0.1.2)
+- `verify_certificates` - SSL certificate verification (default: true)
+- `proxy_url` - HTTP proxy URL (default: empty)
+- `log_file` - Log output file (default: empty)
+- `color_output` - Enable colored terminal output (default: true)
+- `fallback_to_tact` - Auto-fallback from Ribbit to TACT (default: true)
+- `use_community_cdn_fallbacks` - Use community CDN mirrors (default: true)
+
 ### Caching and Fallback
 
 The CLI includes built-in caching for both Ribbit and TACT API responses with automatic fallback:

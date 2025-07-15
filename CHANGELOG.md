@@ -35,6 +35,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Removed `-d` short flag from `--days` in `products builds` command (was conflicting with `-d` for `--details` in `certs download`)
   - Removed `-o` short flag from `--output` in `download build` and `download files` commands (was conflicting with global `-o` for `--format`)
 
+- Enhanced `config show` command to display all configuration settings:
+  - Now shows all available settings with their default values, not just the three basic ones
+  - Added settings: `cache_enabled`, `cache_ttl`, `max_concurrent_downloads`, `user_agent`, `verify_certificates`, `proxy_url`, `ribbit_timeout`, `tact_timeout`, `retry_attempts`, `log_file`, `color_output`, `fallback_to_tact`, `use_community_cdn_fallbacks`
+  - All settings are now accessible via `config get` command
+
 - Fixed parse_basic example in `ngdp-bpsv`:
   - Corrected HEX field declarations from HEX:32 to HEX:16 to match actual data
   - Example now runs successfully without validation errors

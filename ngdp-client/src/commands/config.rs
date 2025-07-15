@@ -21,10 +21,24 @@ pub async fn handle(
 
 async fn show_config(format: OutputFormat) -> Result<(), Box<dyn std::error::Error>> {
     // TODO: Implement actual config loading
+    // Show all configuration options with their default values
     let config = HashMap::from([
         ("default_region", "us"),
         ("cache_dir", "~/.cache/ngdp"),
         ("timeout", "30"),
+        ("cache_enabled", "true"),
+        ("cache_ttl", "1800"),  // 30 minutes in seconds
+        ("max_concurrent_downloads", "4"),
+        ("user_agent", "ngdp-client/0.1.2"),
+        ("verify_certificates", "true"),
+        ("proxy_url", ""),
+        ("ribbit_timeout", "30"),
+        ("tact_timeout", "30"),
+        ("retry_attempts", "3"),
+        ("log_file", ""),
+        ("color_output", "true"),
+        ("fallback_to_tact", "true"),
+        ("use_community_cdn_fallbacks", "true"),
     ]);
 
     match format {
@@ -93,6 +107,19 @@ async fn get_config(key: String, format: OutputFormat) -> Result<(), Box<dyn std
         "default_region" => Some("us"),
         "cache_dir" => Some("~/.cache/ngdp"),
         "timeout" => Some("30"),
+        "cache_enabled" => Some("true"),
+        "cache_ttl" => Some("1800"),
+        "max_concurrent_downloads" => Some("4"),
+        "user_agent" => Some("ngdp-client/0.1.2"),
+        "verify_certificates" => Some("true"),
+        "proxy_url" => Some(""),
+        "ribbit_timeout" => Some("30"),
+        "tact_timeout" => Some("30"),
+        "retry_attempts" => Some("3"),
+        "log_file" => Some(""),
+        "color_output" => Some("true"),
+        "fallback_to_tact" => Some("true"),
+        "use_community_cdn_fallbacks" => Some("true"),
         _ => None,
     };
 
