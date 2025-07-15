@@ -16,4 +16,10 @@ pub enum Error {
 
     #[error("Failed precondition")]
     FailedPrecondition,
+
+    #[error("Config parser syntax error")]
+    ConfigSyntax,
+
+    #[error("Config parser parameter type mismatch")]
+    ConfigTypeMismatch,
 }

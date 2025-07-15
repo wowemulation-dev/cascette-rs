@@ -18,17 +18,24 @@ using existing cached copies of CDN data from
 - [x] Read [WoW Root][wow-root], to find the file ID and MD5s of each variant
   of game data files (eg: `.db2`)
 
+- [x] Read [CDN config][cdn-config], to get a list of data archives
+
+- [ ] Read [archive indexes][archive-index], to find where file fragments are
+  within an archive
+
 - [ ] Read [encoding table][encoding], to find the BLTE file keys for a game
   data file MD5
 
-- [ ] Read [BLTE files][blte], to get file content
+- [ ] Read [BLTE files][blte], to get file content from archives
 
 - [ ] Read [patch files][patch]
 
 [`ngdp-client`]: ../ngdp-client/
 [`tact-client`]: ../tact-client/
+[archive-index]: https://wowdev.wiki/TACT#Archive_Indexes_(.index)
 [blte]: https://wowdev.wiki/BLTE
 [casc]: https://wowdev.wiki/CASC
+[cdn-config]: https://wowdev.wiki/TACT#CDN_Config
 [encoding]: https://wowdev.wiki/TACT#Encoding_table
 [patch]: https://wowdev.wiki/TACT#Patch
 [simc]: https://github.com/simulationcraft/simc/blob/thewarwithin/casc_extract/

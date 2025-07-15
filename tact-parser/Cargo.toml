@@ -9,6 +9,7 @@ repository.workspace = true
 homepage.workspace = true
 
 [dependencies]
+hex.workspace = true
 modular-bitfield.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
@@ -16,7 +17,6 @@ tracing.workspace = true
 [dev-dependencies]
 clap = { workspace = true, features = ["derive", "cargo", "env"] }
 criterion.workspace = true
-hex.workspace = true
 tracing-subscriber.workspace = true
 
 [[bench]]

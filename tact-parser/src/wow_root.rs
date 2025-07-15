@@ -5,7 +5,7 @@
 //!
 //! [0]: https://wowdev.wiki/TACT#Root
 
-use crate::{Error, Result, ioutils::ReadInt, utils::jenkins3_hashpath};
+use crate::{Error, MD5_LENGTH, Md5, Result, ioutils::ReadInt, utils::jenkins3_hashpath};
 use modular_bitfield::{bitfield, prelude::*};
 use std::{
     collections::{BTreeMap, HashMap},
@@ -15,8 +15,6 @@ use std::{
 };
 
 const TACT_MAGIC: &[u8; 4] = b"TSFM";
-const MD5_LENGTH: usize = 16;
-pub type Md5 = [u8; MD5_LENGTH];
 
 #[derive(Debug)]
 pub struct WowRootHeader {
