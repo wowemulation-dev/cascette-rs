@@ -10,6 +10,7 @@ homepage.workspace = true
 
 [dependencies]
 hex.workspace = true
+md-5 = "0.10.6"
 modular-bitfield.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
