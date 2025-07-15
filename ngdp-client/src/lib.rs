@@ -82,11 +82,11 @@ pub enum ProductsCommands {
         filter: Option<String>,
 
         /// Show only builds from the last N days
-        #[arg(short, long)]
+        #[arg(long)]
         days: Option<u32>,
 
         /// Limit number of results (default: show all)
-        #[arg(short, long)]
+        #[arg(long)]
         limit: Option<usize>,
 
         /// Show only background download builds
