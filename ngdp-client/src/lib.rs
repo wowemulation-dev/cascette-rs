@@ -3,6 +3,7 @@
 //! This library provides the core functionality for the ngdp CLI tool.
 
 pub mod cached_client;
+pub mod cdn_config;
 pub mod commands;
 pub mod fallback_client;
 pub mod output;

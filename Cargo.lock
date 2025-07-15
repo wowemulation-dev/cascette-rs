@@ -1401,6 +1401,7 @@ dependencies = [
  "dirs",
  "ngdp-bpsv",
  "ngdp-cache",
+ "ngdp-cdn",
  "owo-colors",
  "predicates",
  "reqwest",

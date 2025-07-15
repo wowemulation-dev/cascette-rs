@@ -39,6 +39,7 @@ async fn show_config(format: OutputFormat) -> Result<(), Box<dyn std::error::Err
         ("color_output", "true"),
         ("fallback_to_tact", "true"),
         ("use_community_cdn_fallbacks", "true"),
+        ("custom_cdn_fallbacks", ""),  // Comma-separated list
     ]);
 
     match format {
@@ -120,6 +121,7 @@ async fn get_config(key: String, format: OutputFormat) -> Result<(), Box<dyn std
         "color_output" => Some("true"),
         "fallback_to_tact" => Some("true"),
         "use_community_cdn_fallbacks" => Some("true"),
+        "custom_cdn_fallbacks" => Some(""),
         _ => None,
     };
 

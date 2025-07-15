@@ -54,6 +54,8 @@ pub struct CdnClientWithFallback {
     cdn_hosts: Arc<parking_lot::RwLock<Vec<String>>>,
     /// Whether to use default backup CDNs
     use_default_backups: bool,
+    /// Custom CDN hosts to use after community CDNs
+    custom_cdn_hosts: Arc<parking_lot::RwLock<Vec<String>>>,
 }
 
 impl CdnClientWithFallback {
@@ -69,6 +71,7 @@ impl CdnClientWithFallback {
             client: Arc::new(client),
             cdn_hosts: Arc::new(parking_lot::RwLock::new(Vec::new())),
             use_default_backups: true,
+            custom_cdn_hosts: Arc::new(parking_lot::RwLock::new(Vec::new())),
         }
     }
 
@@ -108,22 +111,31 @@ impl CdnClientWithFallback {
         }
     }
 
-    /// Clear all CDN hosts (both primary and backup)
+    /// Clear all CDN hosts (primary, backup, and custom)
     pub fn clear_cdns(&self) {
         self.cdn_hosts.write().clear();
+        self.custom_cdn_hosts.write().clear();
     }
 
-    /// Get the list of all CDN hosts with Blizzard CDNs first, then backups
+    /// Get the list of all CDN hosts with Blizzard CDNs first, then backups, then custom
     pub fn get_all_cdn_hosts(&self) -> Vec<String> {
         let primary_hosts = self.cdn_hosts.read().clone();
         let mut all_hosts = primary_hosts;
 
-        // Add backup CDNs at the end, after all primary CDNs
+        // Add backup CDNs after all primary CDNs
         if self.use_default_backups {
             for backup in DEFAULT_BACKUP_CDNS {
                 if !all_hosts.contains(&backup.to_string()) {
                     all_hosts.push(backup.to_string());
                 }
+            }
+        }
+
+        // Add custom CDNs last, after community CDNs
+        let custom_hosts = self.custom_cdn_hosts.read();
+        for custom_host in custom_hosts.iter() {
+            if !all_hosts.contains(custom_host) {
+                all_hosts.push(custom_host.clone());
             }
         }
 
@@ -133,6 +145,42 @@ impl CdnClientWithFallback {
     /// Set whether to use default backup CDNs
     pub fn set_use_default_backups(&mut self, use_backups: bool) {
         self.use_default_backups = use_backups;
+    }
+
+    /// Add a custom CDN host
+    ///
+    /// Custom CDNs are tried after primary and community CDNs
+    pub fn add_custom_cdn(&self, host: impl Into<String>) {
+        let mut hosts = self.custom_cdn_hosts.write();
+        let host = host.into();
+        if !hosts.contains(&host) {
+            hosts.push(host);
+        }
+    }
+
+    /// Add multiple custom CDN hosts
+    pub fn add_custom_cdns(&self, hosts: impl IntoIterator<Item = impl Into<String>>) {
+        let mut cdn_hosts = self.custom_cdn_hosts.write();
+        for host in hosts {
+            let host = host.into();
+            if !cdn_hosts.contains(&host) {
+                cdn_hosts.push(host);
+            }
+        }
+    }
+
+    /// Set custom CDN hosts, replacing any existing ones
+    pub fn set_custom_cdns(&self, hosts: impl IntoIterator<Item = impl Into<String>>) {
+        let mut cdn_hosts = self.custom_cdn_hosts.write();
+        cdn_hosts.clear();
+        for host in hosts {
+            cdn_hosts.push(host.into());
+        }
+    }
+
+    /// Clear all custom CDN hosts
+    pub fn clear_custom_cdns(&self) {
+        self.custom_cdn_hosts.write().clear();
     }
 
     /// Download content from CDN by hash, trying each CDN host in order
@@ -250,6 +298,7 @@ pub struct CdnClientWithFallbackBuilder {
     base_client_builder: crate::CdnClientBuilder,
     primary_cdns: Vec<String>,
     use_default_backups: bool,
+    custom_cdns: Vec<String>,
 }
 
 impl CdnClientWithFallbackBuilder {
@@ -259,6 +308,7 @@ impl CdnClientWithFallbackBuilder {
             base_client_builder: crate::CdnClient::builder(),
             primary_cdns: Vec::new(),
             use_default_backups: true,
+            custom_cdns: Vec::new(),
         }
     }
 
@@ -291,6 +341,20 @@ impl CdnClientWithFallbackBuilder {
         self
     }
 
+    /// Add a custom CDN host
+    pub fn add_custom_cdn(mut self, host: impl Into<String>) -> Self {
+        self.custom_cdns.push(host.into());
+        self
+    }
+
+    /// Add multiple custom CDN hosts
+    pub fn add_custom_cdns(mut self, hosts: impl IntoIterator<Item = impl Into<String>>) -> Self {
+        for host in hosts {
+            self.custom_cdns.push(host.into());
+        }
+        self
+    }
+
     /// Build the CDN client
     pub fn build(self) -> Result<CdnClientWithFallback> {
         let base_client = self.base_client_builder.build()?;
@@ -298,6 +362,7 @@ impl CdnClientWithFallbackBuilder {
 
         client.set_use_default_backups(self.use_default_backups);
         client.set_primary_cdns(self.primary_cdns);
+        client.set_custom_cdns(self.custom_cdns);
 
         Ok(client)
     }

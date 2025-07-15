@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Prioritizes all Blizzard CDN servers first before trying community mirrors
   - Configurable backup CDN behavior with `use_default_backups` option
   - Full API compatibility with base `CdnClient` for easy migration
+  - Support for custom CDN fallbacks via `add_custom_cdn()` and `set_custom_cdns()` methods
+  - Custom CDNs are tried after primary and community CDNs in fallback order
 
 - **Historical builds command in `ngdp-client`**:
   - Added `ngdp products builds` command to retrieve all historical builds for a product
@@ -37,8 +39,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Enhanced `config show` command to display all configuration settings:
   - Now shows all available settings with their default values, not just the three basic ones
-  - Added settings: `cache_enabled`, `cache_ttl`, `max_concurrent_downloads`, `user_agent`, `verify_certificates`, `proxy_url`, `ribbit_timeout`, `tact_timeout`, `retry_attempts`, `log_file`, `color_output`, `fallback_to_tact`, `use_community_cdn_fallbacks`
+  - Added settings: `cache_enabled`, `cache_ttl`, `max_concurrent_downloads`, `user_agent`, `verify_certificates`, `proxy_url`, `ribbit_timeout`, `tact_timeout`, `retry_attempts`, `log_file`, `color_output`, `fallback_to_tact`, `use_community_cdn_fallbacks`, `custom_cdn_fallbacks`
   - All settings are now accessible via `config get` command
+
+- **Custom CDN fallback configuration in `ngdp-client`**:
+  - New `custom_cdn_fallbacks` configuration option for user-defined CDN hosts
+  - Custom CDNs are tried after Blizzard and community CDNs have been exhausted
+  - Integration with `CdnClientWithFallback` through new `cdn_config` module
+  - Custom CDNs can be configured as comma-separated list in settings
 
 - Fixed parse_basic example in `ngdp-bpsv`:
   - Corrected HEX field declarations from HEX:32 to HEX:16 to match actual data

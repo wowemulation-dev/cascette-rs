@@ -150,6 +150,7 @@ ngdp config reset --yes
 - `color_output` - Enable colored terminal output (default: true)
 - `fallback_to_tact` - Auto-fallback from Ribbit to TACT (default: true)
 - `use_community_cdn_fallbacks` - Use community CDN mirrors (default: true)
+- `custom_cdn_fallbacks` - Comma-separated list of custom CDN hosts (default: empty)
 
 ### Caching and Fallback
 
@@ -170,6 +171,26 @@ ngdp products list --clear-cache
 - Both protocols return identical BPSV data
 - Caching works transparently for both protocols
 - SG region automatically falls back to US for TACT
+
+**CDN Fallback Order:**
+
+When downloading content from CDNs, the client tries hosts in this order:
+
+1. **Primary CDNs** - Blizzard's official CDN servers
+2. **Community CDNs** - Public mirrors (if `use_community_cdn_fallbacks` is true):
+   - `cdn.arctium.tools`
+   - `tact.mirror.reliquaryhq.com`
+3. **Custom CDNs** - User-configured hosts from `custom_cdn_fallbacks`
+
+To configure custom CDN fallbacks:
+
+```bash
+# Set custom CDN fallbacks (comma-separated)
+ngdp config set custom_cdn_fallbacks "my-cdn1.example.com,my-cdn2.example.com"
+
+# Disable community CDN fallbacks
+ngdp config set use_community_cdn_fallbacks false
+```
 
 ## Library Usage
 
