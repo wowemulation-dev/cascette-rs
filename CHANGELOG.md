@@ -33,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed conflicting short command-line flags in `ngdp-client`:
   - Removed `-l` short flag from `--limit` in `products builds` command (was conflicting with `-l` for `--log-level`)
   - Removed `-d` short flag from `--days` in `products builds` command (was conflicting with `-d` for `--details` in `certs download`)
+  - Removed `-o` short flag from `--output` in `download build` and `download files` commands (was conflicting with global `-o` for `--format`)
 
 - Fixed parse_basic example in `ngdp-bpsv`:
   - Corrected HEX field declarations from HEX:32 to HEX:16 to match actual data

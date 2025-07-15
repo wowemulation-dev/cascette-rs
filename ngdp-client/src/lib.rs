@@ -149,7 +149,7 @@ pub enum DownloadCommands {
         build: String,
 
         /// Output directory
-        #[arg(short, long, default_value = ".")]
+        #[arg(long, default_value = ".")]
         output: PathBuf,
 
         /// Region
@@ -166,7 +166,7 @@ pub enum DownloadCommands {
         patterns: Vec<String>,
 
         /// Output directory
-        #[arg(short, long, default_value = ".")]
+        #[arg(long, default_value = ".")]
         output: PathBuf,
 
         /// Build ID or version
