@@ -22,4 +22,10 @@ pub enum Error {
 
     #[error("Config parser parameter type mismatch")]
     ConfigTypeMismatch,
+
+    #[error("Block index {0} is out of range, must be less than {1}")]
+    BlockIndexOutOfRange(u64, u64),
+
+    #[error("Data checksum mismatch")]
+    ChecksumMismatch,
 }

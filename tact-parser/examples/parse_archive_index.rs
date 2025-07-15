@@ -1,6 +1,6 @@
 use clap::Parser;
 use std::{fs::OpenOptions, io::BufReader, path::PathBuf};
-use tact_parser::archive::{ArchiveIndexFooter, ArchiveIndexToc};
+use tact_parser::{Md5, archive::ArchiveIndexParser};
 use tracing::info;
 
 #[derive(Parser)]
@@ -10,32 +10,45 @@ struct Cli {
     pub archive_index: PathBuf,
 }
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
     let args = Cli::parse();
 
     // Get the hash part of the filename
-    let hash = hex::decode(args.archive_index.file_stem().unwrap().as_encoded_bytes()).unwrap();
+    let hash: Md5 = hex::decode(args.archive_index.file_stem().unwrap().as_encoded_bytes())?
+        .as_slice()
+        .try_into()?;
 
-    let mut rf = BufReader::new(
-        OpenOptions::new()
-            .read(true)
-            .open(args.archive_index)
-            .unwrap(),
-    );
+    let mut rf = BufReader::new(OpenOptions::new().read(true).open(args.archive_index)?);
 
     info!("Reading archive index...");
-    // TODO: make a proper wrapper
-    let footer = ArchiveIndexFooter::parse(&mut rf, hash.as_slice().try_into().unwrap()).unwrap();
-    info!("Index footer: {footer:#?}");
-    let toc = ArchiveIndexToc::parse(&mut rf, &footer).unwrap();
+    let mut parser = ArchiveIndexParser::new(&mut rf, &hash)?;
 
-    info!("TOC contains {} entries:", toc.last_ekey.len());
-    for (last_ekey, partial_md5) in toc.last_ekey.iter().zip(toc.block_partial_md5.iter()) {
+    info!("Index footer: {:#?}", parser.footer());
+
+    info!("TOC contains {} entries:", parser.toc().last_ekey.len());
+    for (last_ekey, partial_md5) in parser
+        .toc()
+        .last_ekey
+        .iter()
+        .zip(parser.toc().block_partial_md5.iter())
+    {
         println!(
             "  - EKey {}, MD5 {}",
             hex::encode(last_ekey),
             hex::encode(partial_md5)
         );
     }
+    println!();
+    info!("Reading block 0...");
+    for entry in parser.read_block(0)? {
+        println!(
+            "  - {}, @{:#x}, {:#x} bytes",
+            hex::encode(entry.ekey),
+            entry.archive_offset,
+            entry.blte_encoded_size
+        );
+    }
+
+    Ok(())
 }

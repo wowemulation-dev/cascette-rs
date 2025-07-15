@@ -15,19 +15,19 @@ use tracing::*;
 /// [1]: https://wowdev.wiki/TACT#Archive_Indexes_(.index)
 #[derive(Debug, PartialEq, Eq)]
 pub struct ArchiveIndexFooter {
-    pub toc_hash: Vec<u8>,
-    pub format_revision: u8,
-    pub flags0: u8,
-    pub flags1: u8,
-    pub block_size_bytes: u64,
-    pub offset_bytes: u8,
-    pub size_bytes: u8,
-    pub key_bytes: u8,
-    pub hash_bytes: u8,
-    pub num_elements: u32,
-
+    toc_hash: Vec<u8>,
+    format_revision: u8,
+    flags0: u8,
+    flags1: u8,
+    block_size_bytes: u64,
+    offset_bytes: u8,
+    size_bytes: u8,
+    key_bytes: u8,
+    hash_bytes: u8,
+    /// Number of index entries in the file.
+    num_elements: u32,
     /// Number of blocks in the file, excluding the TOC.
-    pub num_blocks: u64,
+    num_blocks: u64,
 }
 
 impl ArchiveIndexFooter {
@@ -76,12 +76,24 @@ impl ArchiveIndexFooter {
         hasher.update(&nul);
         let actual_footer_hash = hasher.finalize();
 
-        if &actual_footer_hash[..expected_footer_hash.len()] != expected_footer_hash {
+        if !actual_footer_hash.starts_with(expected_footer_hash) {
             error!(
                 "footer_hash mismatch: {} != {}",
                 hex::encode(&actual_footer_hash[..]),
                 hex::encode(expected_footer_hash),
             );
+            return Err(Error::ChecksumMismatch);
+        }
+
+        let offset_bytes = footer[hash_bytes_usize + 4];
+        if usize::from(offset_bytes) > size_of::<u64>() {
+            error!("offset_bytes > {}", size_of::<u64>());
+            return Err(Error::FailedPrecondition);
+        }
+
+        let size_bytes = footer[hash_bytes_usize + 5];
+        if usize::from(size_bytes) > size_of::<u64>() {
+            error!("size_bytes > {}", size_of::<u64>());
             return Err(Error::FailedPrecondition);
         }
 
@@ -95,8 +107,8 @@ impl ArchiveIndexFooter {
             flags0: footer[hash_bytes_usize + 1],
             flags1: footer[hash_bytes_usize + 2],
             block_size_bytes,
-            offset_bytes: footer[hash_bytes_usize + 4],
-            size_bytes: footer[hash_bytes_usize + 5],
+            offset_bytes,
+            size_bytes,
             key_bytes: footer[hash_bytes_usize + 6],
             hash_bytes,
             num_elements: u32::from_le_bytes(
@@ -136,6 +148,16 @@ impl ArchiveIndexFooter {
         error!("no matching hash for footer");
         Err(Error::FailedPrecondition)
     }
+
+    /// Number of index entries in the file.
+    pub fn num_elements(&self) -> u32 {
+        self.num_elements
+    }
+
+    /// Number of blocks in the file, excluding the TOC.
+    pub fn num_blocks(&self) -> u64 {
+        self.num_blocks
+    }
 }
 
 #[derive(Default, PartialEq, Eq)]
@@ -169,5 +191,187 @@ impl ArchiveIndexToc {
         }
 
         Ok(o)
+    }
+}
+
+#[derive(PartialEq, Eq)]
+pub struct ArchiveIndexParser<'a, T: Read + Seek + 'a> {
+    /// File handle
+    f: &'a mut T,
+    footer: ArchiveIndexFooter,
+    toc: ArchiveIndexToc,
+}
+
+impl<'a, T: Read + Seek + 'a> ArchiveIndexParser<'a, T> {
+    pub fn new(f: &'a mut T, hash: &Md5) -> Result<Self> {
+        // Try to read the footer and TOC first
+        let footer = ArchiveIndexFooter::parse(f, hash)?;
+        let toc = ArchiveIndexToc::parse(f, &footer)?;
+
+        Ok(Self { f, footer, toc })
+    }
+
+    pub fn footer(&self) -> &ArchiveIndexFooter {
+        &self.footer
+    }
+
+    pub fn toc(&self) -> &ArchiveIndexToc {
+        &self.toc
+    }
+
+    pub fn read_block(&mut self, index: u64) -> Result<impl Iterator<Item = ArchiveIndexEntry>> {
+        if index >= self.footer.num_blocks {
+            return Err(Error::BlockIndexOutOfRange(index, self.footer.num_blocks));
+        }
+        self.f
+            .seek(SeekFrom::Start(index * self.footer.block_size_bytes))?;
+
+        // Load the entire block into memory (it's small)
+        let mut buf = vec![0; self.footer.block_size_bytes as usize];
+        self.f.read_exact(&mut buf)?;
+
+        // Verify block checksum
+        let expected_hash = &self.toc.block_partial_md5[index as usize];
+        let mut hasher = Md5Hasher::new();
+        hasher.update(&buf);
+        let actual_hash = hasher.finalize();
+
+        if !actual_hash.starts_with(expected_hash) {
+            error!(
+                "block {index} hash mismatch: {} != {}",
+                hex::encode(&actual_hash[..]),
+                hex::encode(expected_hash),
+            );
+            return Err(Error::ChecksumMismatch);
+        }
+
+        Ok(ArchiveIndexBlockParser::new(buf, &self.footer))
+    }
+}
+
+/// Entry in an archive index block.
+#[derive(Default, PartialEq, Eq)]
+pub struct ArchiveIndexEntry {
+    pub ekey: Vec<u8>,
+    pub blte_encoded_size: u64,
+    pub archive_offset: u64,
+}
+
+/// Iterator-based archive index block parser.
+///
+/// This is an internal implementation detail.
+struct ArchiveIndexBlockParser<'a> {
+    block: Vec<u8>,
+
+    /// Current position within `block`.
+    p: usize,
+    entry_length: usize,
+    footer: &'a ArchiveIndexFooter,
+}
+
+impl<'a> ArchiveIndexBlockParser<'a> {
+    fn new(block: Vec<u8>, footer: &'a ArchiveIndexFooter) -> Self {
+        let entry_length = usize::from(footer.key_bytes)
+            + usize::from(footer.size_bytes)
+            + usize::from(footer.offset_bytes);
+
+        Self {
+            block,
+            p: 0,
+            footer,
+            entry_length,
+        }
+    }
+}
+
+impl<'a> Iterator for ArchiveIndexBlockParser<'a> {
+    type Item = ArchiveIndexEntry;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.block.len() < self.entry_length + self.p {
+            return None;
+        }
+
+        let mut buf = &self.block[self.p..self.p + self.entry_length];
+        self.p += self.entry_length;
+
+        let ekey;
+        (ekey, buf) = buf.split_at(self.footer.key_bytes.into());
+        if ekey.iter().all(|b| *b == 0) {
+            // All-zeroes.
+            self.p = self.block.len();
+            return None;
+        }
+
+        // These are variable-length integers, that aren't always powers of 2.
+        // Lets pretend they're all big-endian u64s.
+        let blte_encoded_size = if self.footer.size_bytes == 0 {
+            0
+        } else {
+            let src;
+            (src, buf) = buf.split_at(self.footer.size_bytes.into());
+
+            let mut v = [0; size_of::<u64>()];
+            let off = v.len() - usize::from(self.footer.size_bytes);
+            v[off..].copy_from_slice(src);
+            u64::from_be_bytes(v)
+        };
+
+        let archive_offset = if self.footer.offset_bytes == 0 {
+            0
+        } else {
+            let src;
+            (src, buf) = buf.split_at(self.footer.offset_bytes.into());
+
+            let mut v = [0; size_of::<u64>()];
+            let off = v.len() - usize::from(self.footer.size_bytes);
+            v[off..].copy_from_slice(src);
+            u64::from_be_bytes(v)
+        };
+
+        assert!(buf.is_empty());
+
+        Some(ArchiveIndexEntry {
+            ekey: ekey.to_vec(),
+            blte_encoded_size,
+            archive_offset,
+        })
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use std::io::Cursor;
+
+    #[test]
+    fn archive_index_test() {
+        let _ = tracing_subscriber::fmt::try_init();
+        let hash = b"\x00\x17\xa4\x02\xf5V\xfb\xec\xe4l8\xdcC\x1a,\x9b";
+        let expected = ArchiveIndexFooter {
+            toc_hash: vec![122, 251, 115, 207, 0, 207, 164, 22],
+            format_revision: 1,
+            flags0: 0,
+            flags1: 0,
+            block_size_bytes: 4096,
+            offset_bytes: 4,
+            size_bytes: 4,
+            key_bytes: 16,
+            hash_bytes: 8,
+            num_elements: 7060,
+            num_blocks: 3,
+        };
+
+        // Stripped down footer from 0017a402f556fbece46c38dc431a2c9b.index.
+        //
+        // This puts some dummy data at the start of the index to simulate other
+        // entries, and a dummy TOC.
+        let mut b = vec![0; (4096 * 3) + 1024];
+        b.append(
+            &mut hex::decode("7afb73cf00cfa4160100000404041008941b0000c2e814eb60ab8cf8").unwrap(),
+        );
+
+        let actual = ArchiveIndexFooter::parse(&mut Cursor::new(b), &hash).unwrap();
+        assert_eq!(expected, actual);
     }
 }
