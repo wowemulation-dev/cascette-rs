@@ -23,8 +23,8 @@ fn archive_index_test() {
     // Stripped down footer from 0017a402f556fbece46c38dc431a2c9b.index.
     //
     // This puts some dummy data at the start of the index to simulate other
-    // entries.
-    let mut b = vec![0; 4096 * 3];
+    // entries, and a dummy TOC.
+    let mut b = vec![0; (4096 * 3) + 1024];
     b.append(&mut hex::decode("7afb73cf00cfa4160100000404041008941b0000c2e814eb60ab8cf8").unwrap());
 
     let actual = ArchiveIndexFooter::parse(&mut Cursor::new(b), &hash).unwrap();

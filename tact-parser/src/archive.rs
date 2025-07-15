@@ -26,7 +26,7 @@ pub struct ArchiveIndexFooter {
     pub hash_bytes: u8,
     pub num_elements: u32,
 
-    /// Number of blocks in the file, including the TOC
+    /// Number of blocks in the file, excluding the TOC.
     pub num_blocks: u64,
 }
 
@@ -86,11 +86,7 @@ impl ArchiveIndexFooter {
         }
 
         let block_size_bytes = u64::from(footer[hash_bytes_usize + 3]) << 10;
-        if footer_offset % block_size_bytes != 0 {
-            warn!(
-                "Footer offset {footer_offset:#x} is not a multiple of {block_size_bytes:#x} bytes"
-            );
-        }
+        // This may be unaligned.
         let num_blocks = footer_offset / block_size_bytes;
 
         Ok(Self {
@@ -139,5 +135,39 @@ impl ArchiveIndexFooter {
 
         error!("no matching hash for footer");
         Err(Error::FailedPrecondition)
+    }
+}
+
+#[derive(Default, PartialEq, Eq)]
+pub struct ArchiveIndexToc {
+    /// The last EKey of each block.
+    pub last_ekey: Vec<Vec<u8>>,
+
+    /// Partial MD5 checksum of the block.
+    pub block_partial_md5: Vec<Vec<u8>>,
+}
+
+impl ArchiveIndexToc {
+    /// Parses an archive index TOC.
+    pub fn parse<R: Read + Seek>(f: &mut R, footer: &ArchiveIndexFooter) -> Result<Self> {
+        f.seek(SeekFrom::Start(footer.num_blocks * footer.block_size_bytes))?;
+        let mut o = Self {
+            last_ekey: Vec::with_capacity(footer.num_blocks as usize),
+            block_partial_md5: Vec::with_capacity(footer.num_blocks as usize),
+        };
+
+        for _ in 0..footer.num_blocks {
+            let mut e = vec![0; footer.key_bytes.into()];
+            f.read_exact(&mut e)?;
+            o.last_ekey.push(e);
+        }
+
+        for _ in 0..footer.num_blocks {
+            let mut e = vec![0; footer.hash_bytes.into()];
+            f.read_exact(&mut e)?;
+            o.block_partial_md5.push(e);
+        }
+
+        Ok(o)
     }
 }
