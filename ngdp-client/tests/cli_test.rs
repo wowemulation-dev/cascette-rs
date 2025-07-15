@@ -39,7 +39,8 @@ fn test_products_help() {
         .stdout(predicate::str::contains("list"))
         .stdout(predicate::str::contains("versions"))
         .stdout(predicate::str::contains("cdns"))
-        .stdout(predicate::str::contains("info"));
+        .stdout(predicate::str::contains("info"))
+        .stdout(predicate::str::contains("builds"));
 }
 
 #[test]

@@ -16,6 +16,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Configurable backup CDN behavior with `use_default_backups` option
   - Full API compatibility with base `CdnClient` for easy migration
 
+- **Historical builds command in `ngdp-client`**:
+  - Added `ngdp products builds` command to retrieve all historical builds for a product
+  - Integrates with Wago Tools API (https://wago.tools/api/builds) for comprehensive build history
+  - Support for filtering by version pattern with `--filter`
+  - Time-based filtering with `--days` option
+  - Result limiting with `--limit` option
+  - Background download builds filtering with `--bgdl-only`
+  - Displays build version, creation date, build config, and type (Full/BGDL)
+  - Support for JSON, BPSV, and formatted text output
+  - Caching support with 30-minute TTL to reduce API load
+  - Respects global cache settings (`--no-cache` and `--clear-cache` flags)
+
 ### Fixed
 
 - Fixed parse_basic example in `ngdp-bpsv`:

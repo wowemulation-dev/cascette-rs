@@ -6,7 +6,9 @@ use crate::{
         format_header, format_key_value, format_success, format_url, format_warning, hash_cell,
         header_cell, numeric_cell, print_section_header, print_subsection_header, regular_cell,
     },
+    wago_api,
 };
+use chrono::{Duration, Utc};
 use ribbit_client::{
     CdnEntry, Endpoint, ProductCdnsResponse, ProductVersionsResponse, Region, SummaryResponse,
 };
@@ -25,6 +27,13 @@ pub async fn handle(
         } => show_versions(product, region, all_regions, format).await,
         ProductsCommands::Cdns { product, region } => show_cdns(product, region, format).await,
         ProductsCommands::Info { product, region } => show_info(product, region, format).await,
+        ProductsCommands::Builds {
+            product,
+            filter,
+            days,
+            limit,
+            bgdl_only,
+        } => show_builds(product, filter, days, limit, bgdl_only, format).await,
     }
 }
 
@@ -698,6 +707,198 @@ async fn show_info(
                     }
                 }
             }
+        }
+    }
+
+    Ok(())
+}
+
+async fn show_builds(
+    product: String,
+    filter: Option<String>,
+    days: Option<u32>,
+    limit: Option<usize>,
+    bgdl_only: bool,
+    format: OutputFormat,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let style = OutputStyle::new();
+
+    // Show progress indicator for text format
+    if matches!(format, OutputFormat::Text) {
+        eprintln!("Fetching build history from Wago Tools API...");
+    }
+
+    // Fetch builds from Wago API
+    let builds_response = wago_api::fetch_builds().await?;
+    let mut builds = wago_api::filter_builds_by_product(builds_response, &product);
+
+    if builds.is_empty() {
+        match format {
+            OutputFormat::Json | OutputFormat::JsonPretty => {
+                println!("[]");
+            }
+            OutputFormat::Bpsv => {
+                // Still output the header for consistency
+                println!("## seqn = 1");
+                println!(
+                    "product!STRING:0|version!STRING:0|created_at!STRING:0|build_config!HEX:16|is_bgdl!BOOL:0"
+                );
+            }
+            OutputFormat::Text => {
+                println!(
+                    "{}",
+                    format_warning(&format!("No builds found for product '{product}'"), &style)
+                );
+            }
+        }
+        return Ok(());
+    }
+
+    // Sort builds by created_at date (newest first)
+    builds.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+
+    // Apply filters
+    if let Some(filter_pattern) = &filter {
+        builds.retain(|b| b.version.contains(filter_pattern));
+    }
+
+    if bgdl_only {
+        builds.retain(|b| b.is_bgdl);
+    }
+
+    if let Some(days) = days {
+        let cutoff = Utc::now() - Duration::days(days as i64);
+        builds.retain(|b| {
+            wago_api::parse_wago_date(&b.created_at)
+                .map(|dt| dt > cutoff)
+                .unwrap_or(false)
+        });
+    }
+
+    // Apply limit
+    if let Some(limit) = limit {
+        builds.truncate(limit);
+    }
+
+    // Format output
+    match format {
+        OutputFormat::Json | OutputFormat::JsonPretty => {
+            let output = if matches!(format, OutputFormat::JsonPretty) {
+                serde_json::to_string_pretty(&builds)?
+            } else {
+                serde_json::to_string(&builds)?
+            };
+            println!("{output}");
+        }
+        OutputFormat::Bpsv => {
+            // Convert to BPSV format
+            println!("## seqn = 1");
+            println!(
+                "product!STRING:0|version!STRING:0|created_at!STRING:0|build_config!HEX:16|is_bgdl!BOOL:0"
+            );
+            for build in &builds {
+                println!(
+                    "{}|{}|{}|{}|{}",
+                    build.product,
+                    build.version,
+                    build.created_at,
+                    build.build_config,
+                    if build.is_bgdl { "1" } else { "0" }
+                );
+            }
+        }
+        OutputFormat::Text => {
+            // Print header with count
+            println!(
+                "{} {}",
+                format_header(&format!("Build history for {product}"), &style),
+                format_count_badge(builds.len(), "build", &style)
+            );
+
+            if let Some(filter_pattern) = &filter {
+                println!("{}", format_key_value("Filter", filter_pattern, &style));
+            }
+
+            if bgdl_only {
+                println!(
+                    "{}",
+                    format_key_value("Type", "Background downloads only", &style)
+                );
+            }
+
+            if let Some(days) = days {
+                println!(
+                    "{}",
+                    format_key_value("Period", &format!("Last {days} days"), &style)
+                );
+            }
+
+            println!();
+
+            // Create table
+            let mut table = create_table(&style);
+            table.set_header(vec![
+                header_cell("Version", &style),
+                header_cell("Created", &style),
+                header_cell("Build Config", &style),
+                header_cell("Type", &style),
+            ]);
+
+            // Add rows
+            for build in &builds {
+                // Format the date for display
+                let date_display = if let Some(dt) = wago_api::parse_wago_date(&build.created_at) {
+                    let days_ago = (Utc::now() - dt).num_days();
+                    if days_ago == 0 {
+                        format!("{} (today)", dt.format("%Y-%m-%d %H:%M"))
+                    } else if days_ago == 1 {
+                        format!("{} (yesterday)", dt.format("%Y-%m-%d %H:%M"))
+                    } else if days_ago < 7 {
+                        format!("{} ({} days ago)", dt.format("%Y-%m-%d %H:%M"), days_ago)
+                    } else {
+                        dt.format("%Y-%m-%d %H:%M").to_string()
+                    }
+                } else {
+                    build.created_at.clone()
+                };
+
+                table.add_row(vec![
+                    regular_cell(&build.version),
+                    regular_cell(&date_display),
+                    hash_cell(&format!("Build Config:   {}", build.build_config), &style),
+                    regular_cell(if build.is_bgdl { "BGDL" } else { "Full" }),
+                ]);
+
+                // Add additional config rows if present
+                if build.cdn_config.is_some() || build.product_config.is_some() {
+                    if let Some(cdn_config) = &build.cdn_config {
+                        table.add_row(vec![
+                            regular_cell(""),
+                            regular_cell(""),
+                            hash_cell(&format!("CDN Config:     {cdn_config}"), &style),
+                            regular_cell(""),
+                        ]);
+                    }
+
+                    if let Some(product_config) = &build.product_config {
+                        table.add_row(vec![
+                            regular_cell(""),
+                            regular_cell(""),
+                            hash_cell(&format!("Product Config: {product_config}"), &style),
+                            regular_cell(""),
+                        ]);
+                    }
+                }
+            }
+
+            println!("{table}");
+
+            // Add note about data source
+            println!();
+            println!(
+                "{}",
+                format_key_value("Source", "Wago Tools API (https://wago.tools)", &style)
+            );
         }
     }
 

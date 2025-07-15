@@ -13,6 +13,7 @@ Distribution Pipeline) services.
 - ⚙️ Configuration management
 - 💾 Built-in caching for API responses
 - 🔄 Automatic fallback from Ribbit to TACT on failures
+- 📊 View historical build data from Wago Tools API
 
 ## Installation
 
@@ -48,6 +49,21 @@ ngdp products info wow
 
 # Show CDN configuration for a specific region
 ngdp products cdns wow --region us
+
+# Show all historical builds for a product
+ngdp products builds wow
+
+# Filter builds by version pattern
+ngdp products builds wow --filter "11.1.7"
+
+# Show only builds from last 7 days
+ngdp products builds wow --days 7
+
+# Limit results to 10 most recent builds
+ngdp products builds wow --limit 10
+
+# Show only background download builds
+ngdp products builds wow --bgdl-only
 ```
 
 ### Output Formats

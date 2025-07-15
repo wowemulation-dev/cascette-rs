@@ -6,6 +6,7 @@ pub mod cached_client;
 pub mod commands;
 pub mod fallback_client;
 pub mod output;
+pub mod wago_api;
 
 /// Common test constants
 pub mod test_constants {
@@ -69,6 +70,28 @@ pub enum ProductsCommands {
         /// Region to query (omit to show all regions)
         #[arg(short, long)]
         region: Option<String>,
+    },
+
+    /// Show all historical builds for a product
+    Builds {
+        /// Product name (e.g., wow, wowt, wowxptr)
+        product: String,
+
+        /// Filter by version pattern
+        #[arg(short, long)]
+        filter: Option<String>,
+
+        /// Show only builds from the last N days
+        #[arg(short, long)]
+        days: Option<u32>,
+
+        /// Limit number of results (default: show all)
+        #[arg(short, long)]
+        limit: Option<usize>,
+
+        /// Show only background download builds
+        #[arg(long)]
+        bgdl_only: bool,
     },
 }
 
