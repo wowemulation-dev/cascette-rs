@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2](https://github.com/wowemulation-dev/cascette-rs/compare/tact-client-v0.1.1...tact-client-v0.1.2) - 2025-07-15
+
+### Other
+
+- updated the following local packages: ngdp-bpsv
+
 ## [0.1.1](https://github.com/wowemulation-dev/cascette-rs/compare/tact-client-v0.1.0...tact-client-v0.1.1) - 2025-06-29
 
 ### Other

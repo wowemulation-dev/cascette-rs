@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0](https://github.com/wowemulation-dev/cascette-rs/compare/ngdp-client-v0.1.2...ngdp-client-v0.2.0) - 2025-07-15
+
+### Other
+
+- 🔧 fix: resolve clippy warnings and apply code formatting
+- 📝 docs: synchronize individual crate changelogs with main changelog
+- ✨ feat(ngdp-client): enhance config show to display all settings
+- 🩹 fix(ngdp-client): resolve critical -o flag conflict in download commands
+- 🩹 fix(ngdp-client): resolve conflicting short command-line flags
+- ✨ feat(ngdp-client): add products builds command with Wago Tools API integration
+
 ### Added
 
 - **Historical builds command**:
