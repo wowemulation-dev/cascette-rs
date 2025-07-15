@@ -52,6 +52,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Corrected HEX field declarations from HEX:32 to HEX:16 to match actual data
   - Example now runs successfully without validation errors
 
+- Fixed clippy warnings in `ngdp-client`:
+  - Resolved uninlined_format_args warnings in wago_builds example
+  - Applied consistent code formatting across all crates
+
 - Fixed GitHub Actions workflow failures:
   - Replaced OpenSSL dependency with rustls for cross-platform builds
   - Updated all `reqwest` dependencies to use `rustls-tls` feature

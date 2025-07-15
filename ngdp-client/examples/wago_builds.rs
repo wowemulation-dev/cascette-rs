@@ -32,10 +32,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("   Created: {}", build.created_at);
         println!("   Build Config: {}", build.build_config);
         if let Some(cdn_config) = &build.cdn_config {
-            println!("   CDN Config: {}", cdn_config);
+            println!("   CDN Config: {cdn_config}");
         }
         if let Some(product_config) = &build.product_config {
-            println!("   Product Config: {}", product_config);
+            println!("   Product Config: {product_config}");
         }
         println!("   Type: {}", if build.is_bgdl { "BGDL" } else { "Full" });
         println!();
@@ -58,10 +58,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let _cached_response = wago_api::fetch_builds().await?;
     let cached_elapsed = start.elapsed();
 
-    println!(
-        "Second fetch completed in {:?} (should be much faster)",
-        cached_elapsed
-    );
+    println!("Second fetch completed in {cached_elapsed:?} (should be much faster)");
 
     // Note: The cache has a 30-minute TTL
     println!("\nNote: The cache expires after 30 minutes");

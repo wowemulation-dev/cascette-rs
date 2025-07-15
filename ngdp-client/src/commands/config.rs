@@ -27,7 +27,7 @@ async fn show_config(format: OutputFormat) -> Result<(), Box<dyn std::error::Err
         ("cache_dir", "~/.cache/ngdp"),
         ("timeout", "30"),
         ("cache_enabled", "true"),
-        ("cache_ttl", "1800"),  // 30 minutes in seconds
+        ("cache_ttl", "1800"), // 30 minutes in seconds
         ("max_concurrent_downloads", "4"),
         ("user_agent", "ngdp-client/0.1.2"),
         ("verify_certificates", "true"),
@@ -39,7 +39,7 @@ async fn show_config(format: OutputFormat) -> Result<(), Box<dyn std::error::Err
         ("color_output", "true"),
         ("fallback_to_tact", "true"),
         ("use_community_cdn_fallbacks", "true"),
-        ("custom_cdn_fallbacks", ""),  // Comma-separated list
+        ("custom_cdn_fallbacks", ""), // Comma-separated list
     ]);
 
     match format {

@@ -39,6 +39,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added settings: `cache_enabled`, `cache_ttl`, `max_concurrent_downloads`, `user_agent`, `verify_certificates`, `proxy_url`, `ribbit_timeout`, `tact_timeout`, `retry_attempts`, `log_file`, `color_output`, `fallback_to_tact`, `use_community_cdn_fallbacks`, `custom_cdn_fallbacks`
   - All settings are now accessible via `config get` command
 
+- **Code quality improvements**:
+  - Fixed clippy warnings in examples (uninlined_format_args)
+  - Applied consistent code formatting
+
 ## [0.1.2](https://github.com/wowemulation-dev/cascette-rs/compare/ngdp-client-v0.1.1...ngdp-client-v0.1.2) - 2025-07-05
 
 ### Other
