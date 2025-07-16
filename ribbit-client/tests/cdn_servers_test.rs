@@ -1,7 +1,7 @@
 //! Tests for CDN servers field parsing
 
 use ngdp_bpsv::BpsvDocument;
-use ribbit_client::response_types::{ProductCdnsResponse, TypedResponse};
+use ribbit_client::response_types::{ProductCdnsResponse, TypedBpsvResponse};
 
 #[test]
 fn test_cdn_servers_parsing() {
