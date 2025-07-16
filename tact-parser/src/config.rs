@@ -90,6 +90,32 @@ pub struct CdnConfig {
 }
 
 impl CdnConfig {
+    /// Get an iterator over both `archives` and `archives_index_size`, if both fields were provided.
+    pub fn archives_with_index_size(&self) -> Option<impl Iterator<Item = (&Md5, u32)>> {
+        if let (Some(archives), Some(archives_index_size)) =
+            (&self.archives, &self.archives_index_size)
+        {
+            Some(archives.iter().zip(archives_index_size.iter().copied()))
+        } else {
+            None
+        }
+    }
+
+    /// Get an iterator over both `patch_archives` and `patch_archives_index_size`, if both fields were provided.
+    pub fn patch_archives_with_index_size(&self) -> Option<impl Iterator<Item = (&Md5, u32)>> {
+        if let (Some(patch_archives), Some(patch_archives_index_size)) =
+            (&self.patch_archives, &self.patch_archives_index_size)
+        {
+            Some(
+                patch_archives
+                    .iter()
+                    .zip(patch_archives_index_size.iter().copied()),
+            )
+        } else {
+            None
+        }
+    }
+
     pub fn parse_config<T: BufRead>(f: T) -> Result<Self> {
         Self::parse_config_inner(&mut ConfigParser::new(f))
     }

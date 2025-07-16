@@ -234,7 +234,8 @@ impl<T: BufRead + Seek> BlteExtractor<T> {
     /// Parse a BLTE chunk at `offset`.
     ///
     /// This is designed to work directly with complete `/tpr/{product}/data/`
-    /// blobs (where the )
+    /// blobs (where there are multiple BLTE streams in a single file), but can
+    /// also work on a file with a single BLTE stream.
     pub fn new(mut f: T, offset: u64, size: u64) -> Result<Self> {
         f.seek(SeekFrom::Start(offset))?;
         let header = BlteHeader::parse(&mut f)?;
