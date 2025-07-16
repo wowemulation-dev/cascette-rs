@@ -121,6 +121,11 @@ impl CdnCache {
         self.effective_base_dir().join("patch")
     }
 
+    /// Get the data range cache directory
+    pub fn data_range_dir(&self) -> PathBuf {
+        self.effective_base_dir().join("range")
+    }
+
     /// Construct a config cache path from a hash
     ///
     /// Follows CDN structure: config/{first2}/{next2}/{hash}
@@ -172,6 +177,21 @@ impl CdnCache {
         path
     }
 
+    /// Construct a data range path from a hash.
+    ///
+    /// These paths don't actually exist on the CDN, but we use a similar
+    /// structure: `range/{first2}/{next2}/{hash}`
+    pub fn data_range_path(&self, hash: &str) -> PathBuf {
+        if hash.len() >= 4 {
+            self.data_range_dir()
+                .join(&hash[..2])
+                .join(&hash[2..4])
+                .join(hash)
+        } else {
+            self.data_range_dir().join(hash)
+        }
+    }
+
     /// Check if a config exists in cache
     pub async fn has_config(&self, hash: &str) -> bool {
         tokio::fs::metadata(self.config_path(hash)).await.is_ok()
@@ -180,6 +200,13 @@ impl CdnCache {
     /// Check if data exists in cache
     pub async fn has_data(&self, hash: &str) -> bool {
         tokio::fs::metadata(self.data_path(hash)).await.is_ok()
+    }
+
+    /// Check if a data range file exists in cache
+    pub async fn has_data_range(&self, hash: &str) -> bool {
+        tokio::fs::metadata(self.data_range_path(hash))
+            .await
+            .is_ok()
     }
 
     /// Check if a patch exists in cache
@@ -248,6 +275,20 @@ impl CdnCache {
         Ok(())
     }
 
+    /// Write data range to cache
+    pub async fn write_data_range(&self, hash: &str, data: &[u8]) -> Result<()> {
+        let path = self.data_range_path(hash);
+
+        if let Some(parent) = path.parent() {
+            ensure_dir(parent).await?;
+        }
+
+        trace!("Writing {} bytes to data range cache: {}", data.len(), hash);
+        tokio::fs::write(&path, data).await?;
+
+        Ok(())
+    }
+
     /// Read config from cache
     pub async fn read_config(&self, hash: &str) -> Result<Vec<u8>> {
         let path = self.config_path(hash);
@@ -273,6 +314,13 @@ impl CdnCache {
     pub async fn read_index(&self, hash: &str) -> Result<Vec<u8>> {
         let path = self.index_path(hash);
         trace!("Reading index from cache: {}", hash);
+        Ok(tokio::fs::read(&path).await?)
+    }
+
+    /// Read index from cache
+    pub async fn read_data_range(&self, hash: &str) -> Result<Vec<u8>> {
+        let path = self.data_range_path(hash);
+        trace!("Reading data range from cache: {}", hash);
         Ok(tokio::fs::read(&path).await?)
     }
 
@@ -389,6 +437,9 @@ mod tests {
         let index_path = cache.index_path(hash);
         assert!(index_path.to_str().unwrap().contains("data/de/ad"));
         assert!(index_path.to_str().unwrap().ends_with(".index"));
+
+        let data_range_path = cache.data_range_path(hash);
+        assert!(data_range_path.to_str().unwrap().contains("range/de/ad"));
     }
 
     #[tokio::test]

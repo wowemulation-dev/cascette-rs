@@ -2,7 +2,7 @@
 
 use crate::{Error, Result};
 use reqwest::{Client, Response};
-use std::time::Duration;
+use std::{ops::RangeInclusive, time::Duration};
 use tokio::time::sleep;
 use tracing::{debug, trace, warn};
 
@@ -143,8 +143,18 @@ impl CdnClient {
     }
 
     /// Execute a request with retry logic
-    async fn execute_with_retry(&self, url: &str) -> Result<Response> {
+    async fn execute_with_retry(
+        &self,
+        url: &str,
+        range: Option<impl Into<RangeInclusive<u64>>>,
+    ) -> Result<Response> {
         let mut last_error = None;
+        let range = if let Some(range) = range {
+            let range = range.into();
+            Some(format!("bytes={}-{}", range.start(), range.end()))
+        } else {
+            None
+        };
 
         for attempt in 0..=self.max_retries {
             if attempt > 0 {
@@ -158,6 +168,9 @@ impl CdnClient {
             let mut request = self.client.get(url);
             if let Some(ref user_agent) = self.user_agent {
                 request = request.header("User-Agent", user_agent);
+            }
+            if let Some(ref range) = range {
+                request = request.header("Range", range);
             }
 
             match request.send().await {
@@ -247,7 +260,19 @@ impl CdnClient {
 
     /// Make a basic request to a CDN URL
     pub async fn request(&self, url: &str) -> Result<Response> {
-        self.execute_with_retry(url).await
+        self.execute_with_retry(url, None::<RangeInclusive<u64>>)
+            .await
+    }
+
+    /// Make a request to a CDN URL, with a HTTP `Range` header.
+    ///
+    /// This can be used to download parts of large files.
+    pub async fn request_range(
+        &self,
+        url: &str,
+        range: impl Into<RangeInclusive<u64>>,
+    ) -> Result<Response> {
+        self.execute_with_retry(url, Some(range)).await
     }
 
     /// Build a CDN URL for a content hash
@@ -277,6 +302,18 @@ impl CdnClient {
     pub async fn download(&self, cdn_host: &str, path: &str, hash: &str) -> Result<Response> {
         let url = Self::build_url(cdn_host, path, hash)?;
         self.request(&url).await
+    }
+
+    /// Download content from CDN by hash, with a HTTP `Range` header.
+    pub async fn download_range(
+        &self,
+        cdn_host: &str,
+        path: &str,
+        hash: &str,
+        range: impl Into<RangeInclusive<u64>>,
+    ) -> Result<Response> {
+        let url = Self::build_url(cdn_host, path, hash)?;
+        self.request_range(&url, range).await
     }
 
     /// Download BuildConfig from CDN
@@ -339,12 +376,41 @@ impl CdnClient {
         self.download(cdn_host, &data_path, hash).await
     }
 
+    /// Download partial range of a data file from the CDN.
+    ///
+    /// Data files are stored at `{path}/data/{hash}`
+    pub async fn download_data_range(
+        &self,
+        cdn_host: &str,
+        path: &str,
+        hash: &str,
+        range: impl Into<RangeInclusive<u64>>,
+    ) -> Result<Response> {
+        let data_path = format!("{}/data", path.trim_end_matches('/'));
+        self.download_range(cdn_host, &data_path, hash, range).await
+    }
+
     /// Download patch file from CDN
     ///
     /// Patch files are stored at `{path}/patch/{hash}`
     pub async fn download_patch(&self, cdn_host: &str, path: &str, hash: &str) -> Result<Response> {
         let patch_path = format!("{}/patch", path.trim_end_matches('/'));
         self.download(cdn_host, &patch_path, hash).await
+    }
+
+    /// Download partial range of a patch file from the CDN.
+    ///
+    /// Patch files are stored at `{path}/patch/{hash}`
+    pub async fn download_patch_range(
+        &self,
+        cdn_host: &str,
+        path: &str,
+        hash: &str,
+        range: impl Into<RangeInclusive<u64>>,
+    ) -> Result<Response> {
+        let patch_path = format!("{}/patch", path.trim_end_matches('/'));
+        self.download_range(cdn_host, &patch_path, hash, range)
+            .await
     }
 
     /// Download multiple files in parallel
