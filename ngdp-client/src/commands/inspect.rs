@@ -1,11 +1,17 @@
+use std::{io::Cursor, str::FromStr as _};
+
 use crate::{
     InspectCommands, OutputFormat,
+    cached_client::create_client,
     output::{
         OutputStyle, create_table, format_count_badge, format_header, format_key_value,
         header_cell, numeric_cell, print_section_header, print_subsection_header, regular_cell,
     },
 };
 use ngdp_bpsv::BpsvDocument;
+use ribbit_client::{CdnEntry, Endpoint, ProductCdnsResponse, ProductVersionsResponse, Region};
+use tact_parser::{Md5, config::CdnConfig};
+use thiserror::Error;
 
 pub async fn handle(
     cmd: InspectCommands,
@@ -24,9 +30,7 @@ pub async fn handle(
             println!("Region: {region}");
         }
         InspectCommands::CdnConfig { product, region } => {
-            println!("CDN config inspection not yet implemented");
-            println!("Product: {product}");
-            println!("Region: {region}");
+            inspect_cdn_config(product, region, format).await?
         }
         InspectCommands::Encoding { file, stats } => {
             println!("Encoding inspection not yet implemented");
@@ -156,6 +160,177 @@ async fn inspect_bpsv(
                         "\n{}",
                         format_header(
                             &format!("... and {} more rows", doc.rows().len() - preview_count),
+                            &style
+                        )
+                    );
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Error type for fallback client operations
+#[derive(Error, Debug)]
+enum InspectCdnConfigError {
+    #[error("Region config not found on CDN")]
+    RegionNotFound,
+
+    #[error("No CDNs found in region")]
+    NoCdnsFoundInRegion,
+
+    #[error("BPSV output not supported")]
+    BpsvNotSupported,
+}
+
+async fn inspect_cdn_config(
+    product: String,
+    region: String,
+    format: OutputFormat,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let region_enum = Region::from_str(&region)?;
+    let client = create_client(region_enum).await?;
+
+    let endpoint = Endpoint::ProductVersions(product.clone());
+    let versions: ProductVersionsResponse = client.request_typed(&endpoint).await?;
+
+    let version = versions
+        .get_region(region.as_str())
+        .ok_or(InspectCdnConfigError::RegionNotFound)?;
+
+    // Fetch the CDN host list
+    let endpoint = Endpoint::ProductCdns(product.clone());
+    let cdns: ProductCdnsResponse = client.request_typed(&endpoint).await?;
+
+    // Filter CDN entries for the specified region
+    let filtered_entries: Vec<&CdnEntry> =
+        cdns.entries.iter().filter(|e| e.name == region).collect();
+
+    if filtered_entries.is_empty() {
+        return Err(Box::new(InspectCdnConfigError::NoCdnsFoundInRegion));
+    }
+
+    // Pick CDN to fetch config
+    // TODO: pick randomly
+    let cdn_entry = filtered_entries.first().unwrap();
+    println!("cdn_entry = {cdn_entry:?}");
+    let cdn_host = cdn_entry.hosts.first().unwrap();
+
+    let cdn_config = client
+        .cdn_client()
+        .download_cdn_config(cdn_host, &cdn_entry.path, &version.cdn_config)
+        .await?;
+    let cdn_config = CdnConfig::parse_config(Cursor::new(cdn_config.bytes().await?))?;
+
+    match format {
+        OutputFormat::Json | OutputFormat::JsonPretty => {
+            let json_data = serde_json::json!({
+                "config": version.cdn_config,
+                "archive_group": cdn_config.archive_group.map(hex::encode),
+                "patch_archive_group": cdn_config.patch_archive_group.map(hex::encode),
+
+                "file_index": cdn_config.file_index.map(hex::encode),
+                "file_index_size": cdn_config.file_index_size,
+                "patch_file_index": cdn_config.patch_file_index.map(hex::encode),
+                "patch_file_index_size": cdn_config.patch_file_index_size,
+
+                "archives": cdn_config.archives_with_index_size().map(
+                    |o| {
+                        o.map(|(hash, size): (&Md5, u32)| {
+                            (hex::encode(hash), size)
+                        }).collect::<Vec<_>>()
+                    }),
+                "patch_archives": cdn_config.patch_archives_with_index_size().map(
+                    |o| {
+                        o.map(|(hash, size): (&Md5, u32)| {
+                            (hex::encode(hash), size)
+                        }).collect::<Vec<_>>()
+                    }),
+            });
+
+            if matches!(format, OutputFormat::JsonPretty) {
+                serde_json::to_writer_pretty(std::io::stdout(), &json_data)?;
+            } else {
+                serde_json::to_writer(std::io::stdout(), &json_data)?;
+            };
+        }
+        OutputFormat::Bpsv => {
+            return Err(Box::new(InspectCdnConfigError::BpsvNotSupported));
+        }
+        OutputFormat::Text => {
+            let style = OutputStyle::new();
+
+            // TODO: add missing fields
+            print_section_header(&format!("CDN configuration {}", version.cdn_config), &style);
+
+            print_subsection_header("Archives", &style);
+
+            if let Some(rows) = cdn_config.archives_with_index_size() {
+                let rows_count = rows.size_hint().0;
+                let preview_count = rows_count.min(5);
+                println!(
+                    "\n{}",
+                    format_header(&format!("Preview (first {preview_count} rows)"), &style)
+                );
+                let mut data_table = create_table(&style);
+                data_table.set_header([
+                    header_cell("#", &style),
+                    header_cell("Archive", &style),
+                    header_cell("Index size", &style),
+                ]);
+                for (i, (archive, archive_index_size)) in rows.take(preview_count).enumerate() {
+                    data_table.add_row([
+                        numeric_cell(&(i + 1).to_string()),
+                        regular_cell(&hex::encode(archive)),
+                        numeric_cell(&archive_index_size.to_string()),
+                    ]);
+                }
+
+                println!("{data_table}");
+
+                if rows_count > preview_count {
+                    println!(
+                        "\n{}",
+                        format_header(
+                            &format!("... and {} more rows", rows_count - preview_count),
+                            &style
+                        )
+                    );
+                }
+            }
+
+            print_subsection_header("Patch archives", &style);
+            if let Some(rows) = cdn_config.patch_archives_with_index_size() {
+                let rows_count = rows.size_hint().0;
+                let preview_count = rows_count.min(5);
+                println!(
+                    "\n{}",
+                    format_header(&format!("Preview (first {preview_count} rows)"), &style)
+                );
+                let mut data_table = create_table(&style);
+                data_table.set_header([
+                    header_cell("#", &style),
+                    header_cell("Patch archive", &style),
+                    header_cell("Index size", &style),
+                ]);
+                for (i, (patch_archive, patch_archive_index_size)) in
+                    rows.take(preview_count).enumerate()
+                {
+                    data_table.add_row([
+                        numeric_cell(&(i + 1).to_string()),
+                        regular_cell(&hex::encode(patch_archive)),
+                        numeric_cell(&patch_archive_index_size.to_string()),
+                    ]);
+                }
+
+                println!("{data_table}");
+
+                if rows_count > preview_count {
+                    println!(
+                        "\n{}",
+                        format_header(
+                            &format!("... and {} more rows", rows_count - preview_count),
                             &style
                         )
                     );
