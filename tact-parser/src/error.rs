@@ -28,4 +28,7 @@ pub enum Error {
 
     #[error("Data checksum mismatch")]
     ChecksumMismatch,
+
+    #[error("Unsupported BTLE encoding type: {0}")]
+    UnsupportedBtleEncoding(u8),
 }

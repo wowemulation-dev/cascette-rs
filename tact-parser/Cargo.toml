@@ -9,6 +9,7 @@ repository.workspace = true
 homepage.workspace = true
 
 [dependencies]
+flate2 = "1.1.2"
 hex.workspace = true
 md-5 = "0.10.6"
 modular-bitfield.workspace = true

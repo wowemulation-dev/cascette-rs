@@ -22,6 +22,9 @@ pub trait ReadInt {
     /// Read a big-endian `u16` from the buffer.
     fn read_u16be(&mut self) -> Result<u16, Self::Error>;
 
+    /// Read a big-endian 24-bit unsigned integer from the buffer.
+    fn read_u24be(&mut self) -> Result<u32, Self::Error>;
+
     /// Read a big-endian `u32` from the buffer.
     fn read_u32be(&mut self) -> Result<u32, Self::Error>;
 
@@ -60,6 +63,12 @@ impl<T: Read> ReadInt for T {
         let mut b = [0; size_of::<u16>()];
         self.read_exact(&mut b)?;
         Ok(u16::from_be_bytes(b))
+    }
+
+    fn read_u24be(&mut self) -> Result<u32, Self::Error> {
+        let mut b = [0; size_of::<u32>()];
+        self.read_exact(&mut b[1..])?;
+        Ok(u32::from_be_bytes(b))
     }
 
     fn read_u32be(&mut self) -> Result<u32, Self::Error> {

@@ -142,7 +142,7 @@ impl EncodingTable {
 
         // Reading pages
         let mut md5_map = HashMap::<[u8; 0x10], (u64, Vec<[u8; 0x10]>)>::new();
-        for page_id in 0..header.ce_key_page_table_page_count {
+        for _ in 0..header.ce_key_page_table_page_count {
             // Find where we can read to
             // let end_pos =
             // f.seek(SeekFrom::Current(0))? + u64::from(header.ce_key_page_table_page_size) - 0x26;

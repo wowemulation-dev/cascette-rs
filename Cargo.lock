@@ -2348,6 +2348,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "criterion",
+ "flate2",
  "hex",
  "md-5",
  "modular-bitfield",
