@@ -2,7 +2,7 @@ use crate::{Error, Result, ioutils::ReadInt};
 use std::{
     collections::HashMap,
     fmt::Debug,
-    io::{Read, Seek},
+    io::{Cursor, Read, Seek},
 };
 use tracing::*;
 
@@ -62,16 +62,15 @@ pub struct CEKeyEntry<const CKEY_SIZE: usize, const EKEY_SIZE: usize> {
 }
 
 impl<const CKEY_SIZE: usize, const EKEY_SIZE: usize> CEKeyEntry<CKEY_SIZE, EKEY_SIZE> {
-    pub fn parse<R: Read + Seek>(f: &mut R, remain: &mut u32) -> Result<Option<Self>> {
+    pub fn parse<R: Read>(f: &mut R, remain: &mut u32) -> Result<Option<Self>> {
         if *remain < 0x6 + CKEY_SIZE as u32 + EKEY_SIZE as u32 {
             // There's no way we could read this
-            *remain = 0;
             return Ok(None);
         }
 
         let count = f.read_u8()?;
         if count == 0 {
-            *remain = 0;
+            *remain -= 1;
             return Ok(None);
         }
 
@@ -81,7 +80,6 @@ impl<const CKEY_SIZE: usize, const EKEY_SIZE: usize> CEKeyEntry<CKEY_SIZE, EKEY_
             *remain = nr;
         } else {
             // This would overrun the block
-            *remain = 0;
             return Ok(None);
         }
 
@@ -143,13 +141,13 @@ impl EncodingTable {
         // Reading pages
         let mut md5_map = HashMap::<[u8; 0x10], (u64, Vec<[u8; 0x10]>)>::new();
         for _ in 0..header.ce_key_page_table_page_count {
-            // Find where we can read to
-            // let end_pos =
-            // f.seek(SeekFrom::Current(0))? + u64::from(header.ce_key_page_table_page_size) - 0x26;
+            let mut page = vec![0; header.ce_key_page_table_page_size as usize];
+            f.read_exact(&mut page)?;
 
             // TODO: check MD5
+            let mut page = Cursor::new(&page);
             let mut remain = header.ce_key_page_table_page_size;
-            while let Some(entry) = CEKeyEntry::<0x10, 0x10>::parse(f, &mut remain)? {
+            while let Some(entry) = CEKeyEntry::<0x10, 0x10>::parse(&mut page, &mut remain)? {
                 if let Some(old) = md5_map.insert(entry.ckey, (entry.file_size, entry.ekeys)) {
                     warn!("key conflict: {old:?}");
                 }
