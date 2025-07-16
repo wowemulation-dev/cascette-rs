@@ -7,7 +7,7 @@
 //! - Parse responses as typed data (BPSV format)
 
 use ngdp_cache::cached_ribbit_client::CachedRibbitClient;
-use ribbit_client::{Endpoint, ProductVersionsResponse, Region, TypedResponse};
+use ribbit_client::{response_types::TypedBpsvResponse, Endpoint, ProductVersionsResponse, Region};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
