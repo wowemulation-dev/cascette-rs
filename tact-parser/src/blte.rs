@@ -172,6 +172,11 @@ impl EncryptedBlockHeader {
 
         Ok(Self { key_name, iv })
     }
+
+    /// Length of the block header on disk
+    pub fn len(&self) -> usize {
+        self.key_name.len() + self.iv.len() + 2
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -198,6 +203,15 @@ impl BlockEncoding {
             b'E' => Self::Encrypted(EncryptedBlockHeader::parse(f)?),
             other => return Err(Error::UnsupportedBtleEncoding(other)),
         })
+    }
+
+    /// Length of the encoding header on disk.
+    pub fn len(&self) -> usize {
+        1 + if let BlockEncoding::Encrypted(h) = self {
+            h.len()
+        } else {
+            0
+        }
     }
 }
 
@@ -309,11 +323,12 @@ impl<T: BufRead + Seek> BlteExtractor<T> {
             let header = self.read_block_header(block)?;
             // TODO: checksums
 
+            // Position in the block, skip the headers
+            let mut p = header.encoding.len() as u64;
+
             match header.encoding {
                 BlockEncoding::None => {
                     // Directly copy the contents
-                    let mut p = 0u64;
-
                     while p < header.compressed_size {
                         let read_size = (header.compressed_size - p).min(BUF_SIZE_U64);
 
@@ -324,7 +339,6 @@ impl<T: BufRead + Seek> BlteExtractor<T> {
                 }
 
                 BlockEncoding::Zlib => {
-                    let mut p = 0u64;
                     let mut decompressor = flate2::write::ZlibDecoder::new(file);
                     while p < header.compressed_size {
                         let read_size = (header.compressed_size - p).min(BUF_SIZE_U64);

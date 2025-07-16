@@ -12,7 +12,7 @@
 use clap::Parser;
 use std::{
     fs::OpenOptions,
-    io::{BufReader, Seek, SeekFrom},
+    io::{BufReader, Seek, SeekFrom, Write},
     path::PathBuf,
 };
 use tact_parser::blte::BlteExtractor;
@@ -23,6 +23,9 @@ use tracing::info;
 struct Cli {
     #[clap(long)]
     pub archive: PathBuf,
+
+    #[clap(long)]
+    pub verify_checksum: bool,
 
     #[clap(long)]
     pub output: Option<PathBuf>,
@@ -47,8 +50,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "Has block-level checksums: {:?}",
         stream.has_block_level_checksums(),
     );
-    let _ = stream.verify_compressed_checksum()?;
-    info!("Checksum OK");
+
+    if args.verify_checksum {
+        let _ = stream.verify_compressed_checksum()?;
+        info!("Checksum OK");
+    }
+
+    if let Some(output) = args.output {
+        let o = OpenOptions::new().create_new(true).write(true).open(output)?;
+        let mut o = stream.write_to_file(o)?;
+        o.flush()?;
+    }
 
     Ok(())
 }

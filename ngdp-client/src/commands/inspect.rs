@@ -214,7 +214,6 @@ async fn inspect_cdn_config(
     // Pick CDN to fetch config
     // TODO: pick randomly
     let cdn_entry = filtered_entries.first().unwrap();
-    println!("cdn_entry = {cdn_entry:?}");
     let cdn_host = cdn_entry.hosts.first().unwrap();
 
     let cdn_config = client
