@@ -5,7 +5,7 @@
 use crate::{Error, Md5, Result};
 use md5::{Digest, Md5 as Md5Hasher};
 use std::{
-    io::{BufRead, Read, Seek, SeekFrom},
+    io::{BufRead, Cursor, Read, Seek, SeekFrom},
     iter::repeat_n,
 };
 use tracing::*;
@@ -26,8 +26,9 @@ pub struct ArchiveIndexFooter {
     hash_bytes: u8,
     /// Number of index entries in the file.
     num_elements: u32,
-    /// Number of blocks in the file, excluding the TOC.
-    num_blocks: u64,
+    // /// Number of blocks in the file, excluding the TOC.
+    // num_blocks: u64,
+    footer_offset: u64,
 }
 
 impl ArchiveIndexFooter {
@@ -98,8 +99,8 @@ impl ArchiveIndexFooter {
         }
 
         let block_size_bytes = u64::from(footer[hash_bytes_usize + 3]) << 10;
-        // This may be unaligned.
-        let num_blocks = footer_offset / block_size_bytes;
+        // Huge TOCs pick the wrong spot for this
+        // let num_blocks = footer_offset / block_size_bytes;
 
         Ok(Self {
             toc_hash,
@@ -116,7 +117,8 @@ impl ArchiveIndexFooter {
                     .try_into()
                     .unwrap(),
             ),
-            num_blocks,
+            footer_offset,
+            // num_blocks,
         })
     }
 
@@ -154,10 +156,10 @@ impl ArchiveIndexFooter {
         self.num_elements
     }
 
-    /// Number of blocks in the file, excluding the TOC.
-    pub fn num_blocks(&self) -> u64 {
-        self.num_blocks
-    }
+    // /// Number of blocks in the file, excluding the TOC.
+    // pub fn num_blocks(&self) -> u64 {
+    //     self.num_blocks
+    // }
 }
 
 #[derive(Default, PartialEq, Eq)]
@@ -167,26 +169,68 @@ pub struct ArchiveIndexToc {
 
     /// Partial MD5 checksum of the block.
     pub block_partial_md5: Vec<Vec<u8>>,
+
+    /// Number of blocks in the TOC
+    pub num_blocks: u64,
 }
 
 impl ArchiveIndexToc {
     /// Parses an archive index TOC.
     pub fn parse<R: Read + Seek>(f: &mut R, footer: &ArchiveIndexFooter) -> Result<Self> {
-        f.seek(SeekFrom::Start(footer.num_blocks * footer.block_size_bytes))?;
+        // The TOC might be larger than a page, so we need to find it by looking
+        // at the MD5.
+        // Example: e353ca95b78f9ead4290b49c65a19d63
+
+        let mut hasher = Md5Hasher::new();
+        let mut buf = Vec::new();
+        let max_offset = footer.footer_offset / footer.block_size_bytes;
+        let mut num_blocks = 0;
+        for estimated_num_blocks in (max_offset / 2..=max_offset).rev() {
+            // read the last bit of the file in, minus headers
+            let estimated_toc_start = estimated_num_blocks * footer.block_size_bytes;
+            let estimated_toc_length = footer.footer_offset - estimated_toc_start;
+            debug!("trying TOC at: {estimated_toc_start:#x} with length {estimated_toc_length}");
+
+            // Read in the newest block
+            f.seek(SeekFrom::Start(estimated_toc_start))?;
+
+            // TODO: prepend the next block of the buffer each time
+            buf.clear();
+            buf.resize(estimated_toc_length as usize, 0);
+            f.read_exact(&mut buf)?;
+
+            // Check MD5
+            hasher.update(&buf);
+            let hash = hasher.finalize_reset();
+            if hash.starts_with(&footer.toc_hash) {
+                // we have our match!
+                debug!("TOC is {estimated_num_blocks} long");
+                num_blocks = estimated_num_blocks;
+                break;
+            }
+        }
+
+        if num_blocks == 0 {
+            error!("Cannot find archive index TOC with matching MD5");
+            return Err(Error::FailedPrecondition);
+        }
+
         let mut o = Self {
-            last_ekey: Vec::with_capacity(footer.num_blocks as usize),
-            block_partial_md5: Vec::with_capacity(footer.num_blocks as usize),
+            last_ekey: Vec::with_capacity(num_blocks as usize),
+            block_partial_md5: Vec::with_capacity(num_blocks as usize),
+            num_blocks,
         };
 
-        for _ in 0..footer.num_blocks {
+        let mut toc = Cursor::new(&buf);
+        for _ in 0..num_blocks {
             let mut e = vec![0; footer.key_bytes.into()];
-            f.read_exact(&mut e)?;
+            toc.read_exact(&mut e)?;
             o.last_ekey.push(e);
         }
 
-        for _ in 0..footer.num_blocks {
+        for _ in 0..num_blocks {
             let mut e = vec![0; footer.hash_bytes.into()];
-            f.read_exact(&mut e)?;
+            toc.read_exact(&mut e)?;
             o.block_partial_md5.push(e);
         }
 
@@ -207,7 +251,6 @@ impl<T: BufRead + Seek> ArchiveIndexParser<T> {
         // Try to read the footer and TOC first
         let footer = ArchiveIndexFooter::parse(&mut f, hash)?;
         let toc = ArchiveIndexToc::parse(&mut f, &footer)?;
-
         Ok(Self { f, footer, toc })
     }
 
@@ -220,8 +263,8 @@ impl<T: BufRead + Seek> ArchiveIndexParser<T> {
     }
 
     pub fn read_block(&mut self, index: u64) -> Result<impl Iterator<Item = ArchiveIndexEntry>> {
-        if index >= self.footer.num_blocks {
-            return Err(Error::BlockIndexOutOfRange(index, self.footer.num_blocks));
+        if index >= self.toc.num_blocks {
+            return Err(Error::BlockIndexOutOfRange(index, self.toc.num_blocks));
         }
         self.f
             .seek(SeekFrom::Start(index * self.footer.block_size_bytes))?;

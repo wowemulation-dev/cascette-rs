@@ -409,7 +409,7 @@ async fn inspect_archives(
         );
 
         ekeys.reserve(archive_index.footer().num_elements() as usize);
-        for block in 0..archive_index.footer().num_blocks() {
+        for block in 0..archive_index.toc().num_blocks {
             for entry in archive_index.read_block(block)? {
                 ekeys.insert(
                     entry.ekey,
