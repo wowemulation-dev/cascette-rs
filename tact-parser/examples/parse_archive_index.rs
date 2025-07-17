@@ -10,6 +10,7 @@ use tracing::info;
 #[derive(Parser)]
 #[command(name = "parse_archive_index")]
 struct Cli {
+    /// Archive index to parse.
     #[clap(long)]
     pub archive_index: PathBuf,
 

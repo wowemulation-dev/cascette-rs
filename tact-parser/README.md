@@ -20,13 +20,13 @@ using existing cached copies of CDN data from
 
 - [x] Read [CDN config][cdn-config], to get a list of data archives
 
-- [ ] Read [archive indexes][archive-index], to find where file fragments are
+- [x] Read [archive indexes][archive-index], to find where file fragments are
   within an archive
 
-- [ ] Read [encoding table][encoding], to find the BLTE file keys for a game
+- [x] Read [encoding table][encoding], to find the BLTE file keys for a game
   data file MD5
 
-- [ ] Read [BLTE files][blte], to get file content from archives
+- [x] Read [BLTE files][blte], to get file content from archives
 
 - [ ] Read [patch files][patch]
 

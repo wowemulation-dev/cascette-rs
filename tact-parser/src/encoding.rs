@@ -1,4 +1,5 @@
-use crate::{Error, Result, ioutils::ReadInt};
+use crate::{Error, MD5_LENGTH, Md5, Result, ioutils::ReadInt};
+use md5::{Digest, Md5 as Md5Hasher};
 use std::{
     collections::HashMap,
     fmt::Debug,
@@ -53,29 +54,41 @@ impl EncodingTableHeader {
     }
 }
 
+/// Entry in the [`CEKeyPageTable`][0].
+///
+/// [0]: https://wowdev.wiki/TACT#CEKeyPageTable
 #[derive(Debug)]
-pub struct CEKeyEntry<const CKEY_SIZE: usize, const EKEY_SIZE: usize> {
+struct CEKeyEntry<const CKEY_SIZE: usize, const EKEY_SIZE: usize> {
     /// Size of the non-encoded version of the file.
     pub file_size: u64,
+
+    /// CKey (MD5) of the decoded file.
     pub ckey: [u8; CKEY_SIZE],
+
+    /// EKey(s) (MD5) of the encoded file.
     pub ekeys: Vec<[u8; EKEY_SIZE]>,
 }
 
 impl<const CKEY_SIZE: usize, const EKEY_SIZE: usize> CEKeyEntry<CKEY_SIZE, EKEY_SIZE> {
+    const BASE_ENTRY_SIZE: usize = 6 + CKEY_SIZE;
+
+    /// Parse a single `CEKeyPageTable` entry.
     pub fn parse<R: Read>(f: &mut R, remain: &mut u32) -> Result<Option<Self>> {
-        if *remain < 0x6 + CKEY_SIZE as u32 + EKEY_SIZE as u32 {
+        if *remain < Self::BASE_ENTRY_SIZE as u32 + EKEY_SIZE as u32 {
             // There's no way we could read this
             return Ok(None);
         }
 
         let count = f.read_u8()?;
         if count == 0 {
+            // End of the block
             *remain -= 1;
             return Ok(None);
         }
 
+        // count + file_size + ckey + (count * ekey)
         if let Some(nr) =
-            remain.checked_sub(0x6 + CKEY_SIZE as u32 + (count as u32 * EKEY_SIZE as u32))
+            remain.checked_sub(Self::BASE_ENTRY_SIZE as u32 + (count as u32 * EKEY_SIZE as u32))
         {
             *remain = nr;
         } else {
@@ -102,24 +115,35 @@ impl<const CKEY_SIZE: usize, const EKEY_SIZE: usize> CEKeyEntry<CKEY_SIZE, EKEY_
     }
 }
 
+/// [Encoding table][0].
+///
+/// The encoding file contains:
+///
+/// * Encoding spec table (not parsed)
+/// * `ckey` (MD5) -> `(file_size, ekeys)`
+/// * `ekey` (MD5) -> encoding spec (not parsed)
+/// * Encoding spec for the encoding file itself (not parsed)
+///
+/// [0]: https://wowdev.wiki/TACT#Encoding_table
 pub struct EncodingTable {
-    /// Mapping of `ckey` (MD5) -> (file_size, ekeys)
-    pub md5_map: HashMap<[u8; 16], (u64, Vec<[u8; 16]>)>,
+    /// Mapping of `ckey` (MD5) -> `(file_size, ekeys)`.
+    pub md5_map: HashMap<Md5, (u64, Vec<Md5>)>,
 }
 
 impl EncodingTable {
+    /// Parse an encoding table.
     pub fn parse<R: Read + Seek>(f: &mut R) -> Result<Self> {
         let header = EncodingTableHeader::parse(f)?;
 
-        // These are "always" 0x10 bytes, and we actually need it to be this so
-        // we know it at compile time.
-        if header.hash_size_ckey != 0x10 {
-            error!("hash_size_ckey ({:#x}) != 0x10", header.hash_size_ckey);
+        // These appear to be "always" 0x10 bytes, and we rely on this so that
+        // structures have a known size at compile time.
+        if header.hash_size_ckey != MD5_LENGTH as u8 {
+            error!("hash_size_ckey {} != {MD5_LENGTH}", header.hash_size_ckey);
             return Err(Error::FailedPrecondition);
         }
 
-        if header.hash_size_ekey != 0x10 {
-            error!("hash_size_ekey ({:#x}) != 0x10", header.hash_size_ekey);
+        if header.hash_size_ekey != MD5_LENGTH as u8 {
+            error!("hash_size_ekey {} != {MD5_LENGTH}", header.hash_size_ekey);
             return Err(Error::FailedPrecondition);
         }
 
@@ -127,33 +151,68 @@ impl EncodingTable {
         f.seek_relative(header.e_spec_block_size.into())?;
 
         // CEKeyPageTable index
-        let mut ce_key_page_table_index: Vec<([u8; 0x10], [u8; 0x10])> =
+        // https://wowdev.wiki/TACT#Page_Tables
+        //
+        // We only use the MD5 of the pages here.
+        let mut ce_key_page_table_md5: Vec<Md5> =
             Vec::with_capacity(header.ce_key_page_table_page_count as usize);
         for _ in 0..header.ce_key_page_table_page_count {
-            let mut first_ce_key = [0; 0x10];
-            let mut page_md5 = [0; 0x10];
+            // Skip first_ce_key (we don't use this)
+            f.seek_relative(MD5_LENGTH as i64)?;
 
-            f.read_exact(&mut first_ce_key)?;
+            let mut page_md5 = [0; MD5_LENGTH];
             f.read_exact(&mut page_md5)?;
-            ce_key_page_table_index.push((first_ce_key, page_md5));
+            ce_key_page_table_md5.push(page_md5);
         }
 
-        // Reading pages
-        let mut md5_map = HashMap::<[u8; 0x10], (u64, Vec<[u8; 0x10]>)>::new();
-        for _ in 0..header.ce_key_page_table_page_count {
+        // CEKeyPageTable entries
+        // https://wowdev.wiki/TACT#CEKeyPageTable
+        //
+        // We pre-allocate the HashMap assuming the maximum number of entries.
+        // On Retail encoding tables, HashMap ends up with the same capacity
+        // regardless of whether we pre-allocate or not, or if we only
+        // pre-allocate at each page.
+        //
+        // However, pre-allocating the maximum number of entries _once_ is the
+        // fastest.
+        const MIN_ENTRY_SIZE: usize = 6 + (MD5_LENGTH * 2);
+        let max_entry_count = ((header.ce_key_page_table_page_size as usize) / MIN_ENTRY_SIZE)
+            * header.ce_key_page_table_page_count as usize;
+        let mut md5_map = HashMap::with_capacity(max_entry_count);
+
+        let mut hasher = Md5Hasher::new();
+        for (i, page_md5) in ce_key_page_table_md5.iter().enumerate() {
+            // Read in the entire CEKeyPageTable, so that we don't overrun
+            // buffers.
             let mut page = vec![0; header.ce_key_page_table_page_size as usize];
             f.read_exact(&mut page)?;
 
-            // TODO: check MD5
+            // Check the MD5 of the page
+            hasher.update(&page);
+            let result = hasher.finalize_reset();
+            if !result.starts_with(page_md5) {
+                error!(
+                    "Page {i} MD5 {} != {}",
+                    hex::encode(result),
+                    hex::encode(page_md5)
+                );
+                return Err(Error::ChecksumMismatch);
+            }
+
+            // Parse the entries in the page
             let mut page = Cursor::new(&page);
             let mut remain = header.ce_key_page_table_page_size;
-            while let Some(entry) = CEKeyEntry::<0x10, 0x10>::parse(&mut page, &mut remain)? {
+            while let Some(entry) = CEKeyEntry::parse(&mut page, &mut remain)? {
                 if let Some(old) = md5_map.insert(entry.ckey, (entry.file_size, entry.ekeys)) {
-                    warn!("key conflict: {old:?}");
+                    warn!(
+                        "Encoding key conflict for {}: {old:?}",
+                        hex::encode(entry.ckey),
+                    );
                 }
             }
         }
 
+        // EKeySpecPageTable and ESpec for encoding table not parsed.
         Ok(Self { md5_map })
     }
 }
