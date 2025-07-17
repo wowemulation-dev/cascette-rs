@@ -11,7 +11,11 @@ struct Cli {
 
     /// Filename to find in the root TACT file.
     #[clap(long)]
-    pub filename: String,
+    pub filename: Option<String>,
+
+    /// File ID to find in the root TACT file.
+    #[clap(long)]
+    pub fid: Option<u32>,
 
     /// Consider any locale, not just English.
     #[clap(long)]
@@ -20,7 +24,11 @@ struct Cli {
 
 fn main() {
     tracing_subscriber::fmt::init();
-    let args = Cli::parse();
+    let mut args = Cli::parse();
+
+    if args.fid.is_some() && args.filename.is_some() {
+        panic!("can't search by both filename and FID at the same time");
+    }
 
     let mut rf = BufReader::new(OpenOptions::new().read(true).open(args.root).unwrap());
     let locale = if args.any_locale {
@@ -33,21 +41,25 @@ fn main() {
     let root = WowRoot::parse(&mut rf, locale).unwrap();
     info!("Root contains {} files", root.fid_md5.len());
 
-    // Find the file
-    // interface/cinematics/logo_1024.avi = 21
-    if let Some(fid) = root.get_fid(&args.filename) {
-        println!("File {:?} is File ID {fid}", args.filename);
-
-        // This should not fail
-        if let Some(md5s) = root.fid_md5.get(&fid) {
+    if let Some(filename) = args.filename {
+        if let Some(fid) = root.get_fid(&filename) {
+            println!("File {filename:?} is File ID {fid}");
             println!();
-            println!("Found {} version(s) of the file:", md5s.len());
+            args.fid = Some(fid);
+        } else {
+            println!("File {filename:?} not found!");
+        }
+    }
+
+    if let Some(fid) = args.fid {
+        if let Some(md5s) = root.fid_md5.get(&fid) {
+            println!("Found {} version(s) of file {fid}:", md5s.len());
             println!();
             for (context, md5) in md5s.iter() {
                 println!("MD5: {} => {context:#?}", hex::encode(md5));
             }
+        } else {
+            println!("FID {fid} not found!");
         }
-    } else {
-        println!("File {:?} not found!", args.filename);
     }
 }
