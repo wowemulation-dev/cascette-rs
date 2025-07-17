@@ -278,8 +278,8 @@ impl CdnClient {
     /// Build a CDN URL for a content hash
     ///
     /// CDN URLs follow the pattern:
-    /// `http://{cdn_host}/{path}/{hash[0:2]}/{hash[2:4]}/{hash}`
-    pub fn build_url(cdn_host: &str, path: &str, hash: &str) -> Result<String> {
+    /// `http://{cdn_host}/{path}/{hash[0:2]}/{hash[2:4]}/{hash}{suffix}`
+    pub fn build_url(cdn_host: &str, path: &str, hash: &str, suffix: &str) -> Result<String> {
         // Validate hash format (should be hex)
         if hash.len() < 4 || !hash.chars().all(|c| c.is_ascii_hexdigit()) {
             return Err(Error::invalid_hash(hash));
@@ -287,20 +287,27 @@ impl CdnClient {
 
         // Build the URL with the standard CDN path structure
         let url = format!(
-            "http://{}/{}/{}/{}/{}",
+            "http://{}/{}/{}/{}/{}{}",
             cdn_host,
             path.trim_matches('/'),
             &hash[0..2],
             &hash[2..4],
-            hash
+            hash,
+            suffix,
         );
 
         Ok(url)
     }
 
     /// Download content from CDN by hash
-    pub async fn download(&self, cdn_host: &str, path: &str, hash: &str) -> Result<Response> {
-        let url = Self::build_url(cdn_host, path, hash)?;
+    pub async fn download(
+        &self,
+        cdn_host: &str,
+        path: &str,
+        hash: &str,
+        suffix: &str,
+    ) -> Result<Response> {
+        let url = Self::build_url(cdn_host, path, hash, suffix)?;
         self.request(&url).await
     }
 
@@ -312,7 +319,7 @@ impl CdnClient {
         hash: &str,
         range: impl Into<RangeInclusive<u64>>,
     ) -> Result<Response> {
-        let url = Self::build_url(cdn_host, path, hash)?;
+        let url = Self::build_url(cdn_host, path, hash, "")?;
         self.request_range(&url, range).await
     }
 
@@ -326,7 +333,7 @@ impl CdnClient {
         hash: &str,
     ) -> Result<Response> {
         let config_path = format!("{}/config", path.trim_end_matches('/'));
-        self.download(cdn_host, &config_path, hash).await
+        self.download(cdn_host, &config_path, hash, "").await
     }
 
     /// Download CDNConfig from CDN
@@ -339,7 +346,7 @@ impl CdnClient {
         hash: &str,
     ) -> Result<Response> {
         let config_path = format!("{}/config", path.trim_end_matches('/'));
-        self.download(cdn_host, &config_path, hash).await
+        self.download(cdn_host, &config_path, hash, "").await
     }
 
     /// Download ProductConfig from CDN
@@ -352,7 +359,7 @@ impl CdnClient {
         config_path: &str,
         hash: &str,
     ) -> Result<Response> {
-        self.download(cdn_host, config_path, hash).await
+        self.download(cdn_host, config_path, hash, "").await
     }
 
     /// Download KeyRing from CDN
@@ -365,7 +372,7 @@ impl CdnClient {
         hash: &str,
     ) -> Result<Response> {
         let config_path = format!("{}/config", path.trim_end_matches('/'));
-        self.download(cdn_host, &config_path, hash).await
+        self.download(cdn_host, &config_path, hash, "").await
     }
 
     /// Download data file from CDN
@@ -373,7 +380,20 @@ impl CdnClient {
     /// Data files are stored at `{path}/data/{hash}`
     pub async fn download_data(&self, cdn_host: &str, path: &str, hash: &str) -> Result<Response> {
         let data_path = format!("{}/data", path.trim_end_matches('/'));
-        self.download(cdn_host, &data_path, hash).await
+        self.download(cdn_host, &data_path, hash, "").await
+    }
+
+    /// Download data index file from CDN
+    ///
+    /// Data files are stored at `{path}/data/{hash}.index`
+    pub async fn download_data_index(
+        &self,
+        cdn_host: &str,
+        path: &str,
+        hash: &str,
+    ) -> Result<Response> {
+        let data_path = format!("{}/data", path.trim_end_matches('/'));
+        self.download(cdn_host, &data_path, hash, ".index").await
     }
 
     /// Download partial range of a data file from the CDN.
@@ -395,7 +415,7 @@ impl CdnClient {
     /// Patch files are stored at `{path}/patch/{hash}`
     pub async fn download_patch(&self, cdn_host: &str, path: &str, hash: &str) -> Result<Response> {
         let patch_path = format!("{}/patch", path.trim_end_matches('/'));
-        self.download(cdn_host, &patch_path, hash).await
+        self.download(cdn_host, &patch_path, hash, "").await
     }
 
     /// Download partial range of a patch file from the CDN.
@@ -427,20 +447,19 @@ impl CdnClient {
         &self,
         cdn_host: &str,
         path: &str,
-        hashes: &[String],
+        hashes: impl Iterator<Item = (&str, &str)>,
         max_concurrent: Option<usize>,
     ) -> Vec<Result<Vec<u8>>> {
         use futures_util::stream::{self, StreamExt};
 
         let max_concurrent = max_concurrent.unwrap_or(10); // Default to 10 concurrent downloads
 
-        let futures = hashes.iter().map(|hash| {
+        let futures = hashes.map(|(hash, suffix)| {
             let cdn_host = cdn_host.to_string();
             let path = path.to_string();
-            let hash = hash.clone();
 
             async move {
-                match self.download(&cdn_host, &path, &hash).await {
+                match self.download(&cdn_host, &path, hash, suffix).await {
                     Ok(response) => response
                         .bytes()
                         .await
@@ -465,14 +484,14 @@ impl CdnClient {
     /// # Arguments
     /// * `cdn_host` - CDN host to download from
     /// * `path` - Base path on the CDN
-    /// * `hashes` - List of content hashes to download
+    /// * `hashes` - List of content hashes (with optional suffix) to download
     /// * `max_concurrent` - Maximum number of concurrent downloads (None = unlimited)
     /// * `progress` - Callback function called with (completed_count, total_count) after each download
     pub async fn download_parallel_with_progress<F>(
         &self,
         cdn_host: &str,
         path: &str,
-        hashes: &[String],
+        hashes: impl ExactSizeIterator<Item = (&str, &str)>,
         max_concurrent: Option<usize>,
         mut progress: F,
     ) -> Vec<Result<Vec<u8>>>
@@ -487,14 +506,11 @@ impl CdnClient {
         let total = hashes.len();
         let completed = Arc::new(AtomicUsize::new(0));
 
-        let futures = hashes.iter().enumerate().map(|(idx, hash)| {
-            let cdn_host = cdn_host.to_string();
-            let path = path.to_string();
-            let hash = hash.clone();
+        let futures = hashes.enumerate().map(|(idx, (hash, suffix))| {
             let completed = Arc::clone(&completed);
 
             async move {
-                let result = match self.download(&cdn_host, &path, &hash).await {
+                let result = match self.download(cdn_host, path, hash, suffix).await {
                     Ok(response) => response
                         .bytes()
                         .await
@@ -530,12 +546,17 @@ impl CdnClient {
         &self,
         cdn_host: &str,
         path: &str,
-        hashes: &[String],
+        hashes: impl Iterator<Item = &str>,
         max_concurrent: Option<usize>,
     ) -> Vec<Result<Vec<u8>>> {
         let data_path = format!("{}/data", path.trim_end_matches('/'));
-        self.download_parallel(cdn_host, &data_path, hashes, max_concurrent)
-            .await
+        self.download_parallel(
+            cdn_host,
+            &data_path,
+            hashes.map(|e| (e, "")),
+            max_concurrent,
+        )
+        .await
     }
 
     /// Download multiple config files in parallel
@@ -543,12 +564,17 @@ impl CdnClient {
         &self,
         cdn_host: &str,
         path: &str,
-        hashes: &[String],
+        hashes: impl Iterator<Item = &str>,
         max_concurrent: Option<usize>,
     ) -> Vec<Result<Vec<u8>>> {
         let config_path = format!("{}/config", path.trim_end_matches('/'));
-        self.download_parallel(cdn_host, &config_path, hashes, max_concurrent)
-            .await
+        self.download_parallel(
+            cdn_host,
+            &config_path,
+            hashes.map(|e| (e, "")),
+            max_concurrent,
+        )
+        .await
     }
 
     /// Download multiple patch files in parallel
@@ -556,12 +582,17 @@ impl CdnClient {
         &self,
         cdn_host: &str,
         path: &str,
-        hashes: &[String],
+        hashes: impl Iterator<Item = &str>,
         max_concurrent: Option<usize>,
     ) -> Vec<Result<Vec<u8>>> {
         let patch_path = format!("{}/patch", path.trim_end_matches('/'));
-        self.download_parallel(cdn_host, &patch_path, hashes, max_concurrent)
-            .await
+        self.download_parallel(
+            cdn_host,
+            &patch_path,
+            hashes.map(|e| (e, "")),
+            max_concurrent,
+        )
+        .await
     }
 
     /// Download content and stream it to a writer
@@ -572,6 +603,7 @@ impl CdnClient {
         cdn_host: &str,
         path: &str,
         hash: &str,
+        suffix: &str,
         mut writer: W,
     ) -> Result<u64>
     where
@@ -580,7 +612,7 @@ impl CdnClient {
         use futures_util::StreamExt;
         use tokio::io::AsyncWriteExt;
 
-        let response = self.download(cdn_host, path, hash).await?;
+        let response = self.download(cdn_host, path, hash, suffix).await?;
         let mut stream = response.bytes_stream();
         let mut total_bytes = 0u64;
 
@@ -609,6 +641,7 @@ impl CdnClient {
         cdn_host: &str,
         path: &str,
         hash: &str,
+        suffix: &str,
         mut callback: F,
     ) -> Result<u64>
     where
@@ -616,7 +649,7 @@ impl CdnClient {
     {
         use futures_util::StreamExt;
 
-        let response = self.download(cdn_host, path, hash).await?;
+        let response = self.download(cdn_host, path, hash, suffix).await?;
         let mut stream = response.bytes_stream();
         let mut total_bytes = 0u64;
 
@@ -845,15 +878,11 @@ mod tests {
         let client = CdnClient::new().unwrap();
         let cdn_host = "example.com";
         let path = "test";
-        let hashes = vec![
-            "hash1".to_string(),
-            "hash2".to_string(),
-            "hash3".to_string(),
-        ];
+        let hashes = vec![("hash1", ""), ("hash2", ""), ("hash3", "")];
 
         // This will fail since we don't have a real CDN, but we're testing the API
         let results = client
-            .download_parallel(cdn_host, path, &hashes, Some(2))
+            .download_parallel(cdn_host, path, hashes.into_iter(), Some(2))
             .await;
 
         // Should get 3 results in the same order

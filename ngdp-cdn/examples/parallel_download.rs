@@ -21,11 +21,11 @@ async fn main() {
 
     // Some example hashes (these won't work without a real CDN)
     let hashes = vec![
-        "2e9c1e3b5f5a0c9d9e8f1234567890ab".to_string(),
-        "3fa2b4c6d7e8f9a0b1c2d3e4f5678901".to_string(),
-        "4ab5c6d7e8f9a0b1c2d3e4f567890123".to_string(),
-        "5bc6d7e8f9a0b1c2d3e4f56789012345".to_string(),
-        "6cd7e8f9a0b1c2d3e4f567890123456a".to_string(),
+        ("2e9c1e3b5f5a0c9d9e8f1234567890ab", ""),
+        ("3fa2b4c6d7e8f9a0b1c2d3e4f5678901", ""),
+        ("4ab5c6d7e8f9a0b1c2d3e4f567890123", ""),
+        ("5bc6d7e8f9a0b1c2d3e4f56789012345", ""),
+        ("6cd7e8f9a0b1c2d3e4f567890123456a", ""),
     ];
 
     println!("📥 Downloading {} files in parallel...", hashes.len());
@@ -33,7 +33,7 @@ async fn main() {
     // Method 1: Simple parallel download
     let start = Instant::now();
     let results = client
-        .download_parallel(cdn_host, path, &hashes, Some(3))
+        .download_parallel(cdn_host, path, hashes.iter().copied(), Some(3))
         .await;
     let elapsed = start.elapsed();
 
@@ -50,14 +50,20 @@ async fn main() {
     // Method 2: Parallel download with progress callback
     let start = Instant::now();
     let results = client
-        .download_parallel_with_progress(cdn_host, path, &hashes, Some(3), |completed, total| {
-            println!(
-                "   Progress: {}/{} ({:.0}%)",
-                completed,
-                total,
-                (completed as f64 / total as f64) * 100.0
-            );
-        })
+        .download_parallel_with_progress(
+            cdn_host,
+            path,
+            hashes.iter().copied(),
+            Some(3),
+            |completed, total| {
+                println!(
+                    "   Progress: {}/{} ({:.0}%)",
+                    completed,
+                    total,
+                    (completed as f64 / total as f64) * 100.0
+                );
+            },
+        )
         .await;
     let elapsed = start.elapsed();
 
@@ -73,13 +79,13 @@ async fn main() {
     println!("\n📥 Downloading data files in parallel...");
 
     let data_hashes = vec![
-        "1234567890abcdef1234567890abcdef".to_string(),
-        "abcdef1234567890abcdef1234567890".to_string(),
+        "1234567890abcdef1234567890abcdef",
+        "abcdef1234567890abcdef1234567890",
     ];
 
     let start = Instant::now();
     let data_results = client
-        .download_data_parallel(cdn_host, path, &data_hashes, Some(5))
+        .download_data_parallel(cdn_host, path, data_hashes.into_iter(), Some(5))
         .await;
     let elapsed = start.elapsed();
 

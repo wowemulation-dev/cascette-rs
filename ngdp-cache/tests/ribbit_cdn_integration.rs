@@ -47,7 +47,7 @@ async fn download_with_fallback(
             hosts.len()
         );
 
-        match cdn_client.download(host, path, hash).await {
+        match cdn_client.download(host, path, hash, "").await {
             Ok(response) => {
                 let is_cached = response.is_from_cache();
                 let data = response.bytes().await?;

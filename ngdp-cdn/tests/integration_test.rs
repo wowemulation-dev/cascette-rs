@@ -24,6 +24,7 @@ async fn test_content_not_found_errors() {
             "httpbin.org",
             "status/404",
             "abcdef1234567890abcdef1234567890",
+            "",
         )
         .await;
 

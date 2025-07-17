@@ -42,6 +42,7 @@ const DEFAULT_BACKUP_CDNS: &[&str] = &["cdn.arctium.tools", "tact.mirror.reliqua
 /// let response = client.download(
 ///     "tpr/wow",
 ///     "2e9c1e3b5f5a0c9d9e8f1234567890ab",
+///     "",
 /// ).await?;
 /// # Ok(())
 /// # }
@@ -184,7 +185,7 @@ impl CdnClientWithFallback {
     }
 
     /// Download content from CDN by hash, trying each CDN host in order
-    pub async fn download(&self, path: &str, hash: &str) -> Result<Response> {
+    pub async fn download(&self, path: &str, hash: &str, suffix: &str) -> Result<Response> {
         let hosts = self.get_all_cdn_hosts();
 
         if hosts.is_empty() {
@@ -201,7 +202,7 @@ impl CdnClientWithFallback {
                 cdn_host
             );
 
-            match self.client.download(cdn_host, path, hash).await {
+            match self.client.download(cdn_host, path, hash, suffix).await {
                 Ok(response) => {
                     if index > 0 {
                         info!(
@@ -226,36 +227,44 @@ impl CdnClientWithFallback {
     /// Download BuildConfig from CDN
     pub async fn download_build_config(&self, path: &str, hash: &str) -> Result<Response> {
         let config_path = format!("{}/config", path.trim_end_matches('/'));
-        self.download(&config_path, hash).await
+        self.download(&config_path, hash, "").await
     }
 
     /// Download CDNConfig from CDN
     pub async fn download_cdn_config(&self, path: &str, hash: &str) -> Result<Response> {
         let config_path = format!("{}/config", path.trim_end_matches('/'));
-        self.download(&config_path, hash).await
+        self.download(&config_path, hash, "").await
     }
 
     /// Download ProductConfig from CDN
     pub async fn download_product_config(&self, config_path: &str, hash: &str) -> Result<Response> {
-        self.download(config_path, hash).await
+        self.download(config_path, hash, "").await
     }
 
     /// Download KeyRing from CDN
     pub async fn download_key_ring(&self, path: &str, hash: &str) -> Result<Response> {
         let config_path = format!("{}/config", path.trim_end_matches('/'));
-        self.download(&config_path, hash).await
+        self.download(&config_path, hash, "").await
     }
 
     /// Download data file from CDN
     pub async fn download_data(&self, path: &str, hash: &str) -> Result<Response> {
         let data_path = format!("{}/data", path.trim_end_matches('/'));
-        self.download(&data_path, hash).await
+        self.download(&data_path, hash, "").await
+    }
+
+    /// Download data index file from CDN
+    ///
+    /// Data files are stored at `{path}/data/{hash}.index`
+    pub async fn download_data_index(&self, path: &str, hash: &str) -> Result<Response> {
+        let data_path = format!("{}/data", path.trim_end_matches('/'));
+        self.download(&data_path, hash, ".index").await
     }
 
     /// Download patch file from CDN
     pub async fn download_patch(&self, path: &str, hash: &str) -> Result<Response> {
         let patch_path = format!("{}/patch", path.trim_end_matches('/'));
-        self.download(&patch_path, hash).await
+        self.download(&patch_path, hash, "").await
     }
 
     /// Download content and stream it to a writer
@@ -263,14 +272,20 @@ impl CdnClientWithFallback {
     /// Note: Due to the nature of fallback retries, this method downloads to a temporary
     /// buffer first, then writes to the provided writer. For true streaming without
     /// buffering, use the base `CdnClient` directly with a specific CDN host.
-    pub async fn download_streaming<W>(&self, path: &str, hash: &str, mut writer: W) -> Result<u64>
+    pub async fn download_streaming<W>(
+        &self,
+        path: &str,
+        hash: &str,
+        suffix: &str,
+        mut writer: W,
+    ) -> Result<u64>
     where
         W: tokio::io::AsyncWrite + Unpin,
     {
         use tokio::io::AsyncWriteExt;
 
         // Download to memory first since we need to retry with different CDNs
-        let response = self.download(path, hash).await?;
+        let response = self.download(path, hash, suffix).await?;
         let bytes = response.bytes().await?;
 
         writer

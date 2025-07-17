@@ -36,7 +36,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     for cdn_host in &cdn_hosts {
         info!("Trying CDN host: {}", cdn_host);
 
-        match client.download(cdn_host, path, example_hash).await {
+        match client.download(cdn_host, path, example_hash, "").await {
             Ok(response) => {
                 let content_length = response.content_length().unwrap_or(0);
                 info!("✓ Success! Content length: {} bytes", content_length);
@@ -81,7 +81,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Example of building URLs manually
     info!("\nBuilding CDN URLs manually:");
     for cdn_host in &cdn_hosts[..2] {
-        let url = CdnClient::build_url(cdn_host, path, example_hash)?;
+        let url = CdnClient::build_url(cdn_host, path, example_hash, "")?;
         info!("  {}: {}", cdn_host, url);
     }
 

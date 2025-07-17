@@ -214,24 +214,33 @@ impl CachedCdnClient {
     /// If caching is enabled and the content exists in cache, it will be returned
     /// without making a network request. Otherwise, the content is downloaded
     /// from the CDN and stored in cache for future use.
-    pub async fn download(&self, cdn_host: &str, path: &str, hash: &str) -> Result<CachedResponse> {
+    pub async fn download(
+        &self,
+        cdn_host: &str,
+        path: &str,
+        hash: &str,
+        suffix: &str,
+    ) -> Result<CachedResponse> {
+        // Cache layer is less strict about `hash` than the downloader.
+        let cache_hash = format!("{hash}{suffix}");
+
         // Check cache first if enabled
-        if self.enabled && self.is_cached(path, hash).await? {
-            debug!("Cache hit for CDN {}/{}", path, hash);
-            let data = self.read_from_cache(path, hash).await?;
+        if self.enabled && self.is_cached(path, &cache_hash).await? {
+            debug!("Cache hit for CDN {path}/{hash}{suffix}");
+            let data = self.read_from_cache(path, &cache_hash).await?;
             return Ok(CachedResponse::from_cache(data));
         }
 
         // Cache miss - download from CDN
-        debug!("Cache miss for CDN {}/{}, fetching from server", path, hash);
-        let response = self.client.download(cdn_host, path, hash).await?;
+        debug!("Cache miss for CDN {path}/{hash}{suffix}, fetching from server");
+        let response = self.client.download(cdn_host, path, hash, suffix).await?;
 
         // Get the response body
         let data = response.bytes().await?;
 
         // Cache the content if enabled
         if self.enabled {
-            if let Err(e) = self.write_to_cache(path, hash, &data).await {
+            if let Err(e) = self.write_to_cache(path, &cache_hash, &data).await {
                 debug!("Failed to write to CDN cache: {}", e);
             }
         }
@@ -249,20 +258,27 @@ impl CachedCdnClient {
         cdn_host: &str,
         path: &str,
         hash: &str,
+        suffix: &str,
     ) -> Result<Box<dyn AsyncRead + Unpin + Send>> {
-        // For data files, we can use the streaming API
+        // Cache layer is less strict about `hash` than the downloader.
+        let cache_hash = format!("{hash}{suffix}");
+
+        // For data files, we can load from cache
         if ContentType::from_path(path) == ContentType::Data {
             // Check if cached
             let cache = self.get_cache_for_path(path).await?;
-            if self.enabled && cache.has_data(hash).await {
-                debug!("Cache hit for CDN {}/{} (streaming)", path, hash);
-                let file = cache.open_data(hash).await?;
+            if self.enabled && cache.has_data(&cache_hash).await {
+                debug!("Cache hit for CDN {path}/{cache_hash} (streaming)");
+                let file = cache.open_data(&cache_hash).await?;
                 return Ok(Box::new(file));
             }
         }
 
         // For non-data files or cache misses, download the full content first
-        let response = self.download(cdn_host, path, hash).await?;
+        //
+        // FIXME: This contradicts the function's documentation. CachedResponse
+        // does not have a streaming API.
+        let response = self.download(cdn_host, path, hash, suffix).await?;
         let data = response.bytes().await?;
 
         // Return a cursor over the bytes
@@ -402,7 +418,7 @@ impl CachedCdnClient {
         hash: &str,
     ) -> Result<CachedResponse> {
         let config_path = format!("{}/config", path.trim_end_matches('/'));
-        self.download(cdn_host, &config_path, hash).await
+        self.download(cdn_host, &config_path, hash, "").await
     }
 
     /// Download CDNConfig from CDN with caching
@@ -415,7 +431,7 @@ impl CachedCdnClient {
         hash: &str,
     ) -> Result<CachedResponse> {
         let config_path = format!("{}/config", path.trim_end_matches('/'));
-        self.download(cdn_host, &config_path, hash).await
+        self.download(cdn_host, &config_path, hash, "").await
     }
 
     /// Download ProductConfig from CDN with caching
@@ -428,7 +444,7 @@ impl CachedCdnClient {
         config_path: &str,
         hash: &str,
     ) -> Result<CachedResponse> {
-        self.download(cdn_host, config_path, hash).await
+        self.download(cdn_host, config_path, hash, "").await
     }
 
     /// Download KeyRing from CDN with caching
@@ -441,7 +457,7 @@ impl CachedCdnClient {
         hash: &str,
     ) -> Result<CachedResponse> {
         let config_path = format!("{}/config", path.trim_end_matches('/'));
-        self.download(cdn_host, &config_path, hash).await
+        self.download(cdn_host, &config_path, hash, "").await
     }
 
     /// Download data file from CDN with caching
@@ -454,7 +470,7 @@ impl CachedCdnClient {
         hash: &str,
     ) -> Result<CachedResponse> {
         let data_path = format!("{}/data", path.trim_end_matches('/'));
-        self.download(cdn_host, &data_path, hash).await
+        self.download(cdn_host, &data_path, hash, "").await
     }
 
     /// Download patch file from CDN with caching
@@ -467,7 +483,7 @@ impl CachedCdnClient {
         hash: &str,
     ) -> Result<CachedResponse> {
         let patch_path = format!("{}/patch", path.trim_end_matches('/'));
-        self.download(cdn_host, &patch_path, hash).await
+        self.download(cdn_host, &patch_path, hash, "").await
     }
 }
 

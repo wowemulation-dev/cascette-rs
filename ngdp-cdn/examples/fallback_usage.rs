@@ -60,7 +60,10 @@ async fn main() -> Result<()> {
 
     // In a real scenario, if the primary CDN fails, it will automatically
     // try the next CDN in the list until one succeeds or all fail
-    match custom_client.download("tpr/wow", "1234567890abcdef").await {
+    match custom_client
+        .download("tpr/wow", "1234567890abcdef", "")
+        .await
+    {
         Ok(_response) => {
             info!("Download succeeded!");
         }

@@ -37,7 +37,7 @@ async fn test_primary_cdn_success() {
     client.add_primary_cdn(backup_server.uri().strip_prefix("http://").unwrap());
 
     let response = client
-        .download("tpr/wow", "1234567890abcdef")
+        .download("tpr/wow", "1234567890abcdef", "")
         .await
         .unwrap();
     let content = response.bytes().await.unwrap();
@@ -75,7 +75,7 @@ async fn test_fallback_on_primary_failure() {
         .unwrap();
 
     let response = client
-        .download("tpr/wow", "1234567890abcdef")
+        .download("tpr/wow", "1234567890abcdef", "")
         .await
         .unwrap();
     let content = response.bytes().await.unwrap();
@@ -121,7 +121,7 @@ async fn test_all_cdns_tried_in_order() {
         .unwrap();
 
     let response = client
-        .download("tpr/wow", "1234567890abcdef")
+        .download("tpr/wow", "1234567890abcdef", "")
         .await
         .unwrap();
     let content = response.bytes().await.unwrap();
@@ -154,7 +154,7 @@ async fn test_all_cdns_fail() {
         .build()
         .unwrap();
 
-    let result = client.download("tpr/wow", "1234567890abcdef").await;
+    let result = client.download("tpr/wow", "1234567890abcdef", "").await;
     assert!(result.is_err());
 }
 
@@ -316,7 +316,7 @@ async fn test_streaming_download_fallback() {
 
     let mut buffer = Vec::new();
     let bytes_written = client
-        .download_streaming("tpr/wow", "1234567890abcdef", &mut buffer)
+        .download_streaming("tpr/wow", "1234567890abcdef", "", &mut buffer)
         .await
         .unwrap();
 

@@ -217,6 +217,16 @@ pub enum InspectCommands {
         region: String,
     },
 
+    /// Show archives information
+    Archives {
+        /// Product name
+        product: String,
+
+        /// Region
+        #[arg(short, long, default_value = "us")]
+        region: String,        
+    },
+
     /// Show encoding information
     Encoding {
         /// Path to encoding file

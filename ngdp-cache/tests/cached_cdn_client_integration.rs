@@ -44,7 +44,7 @@ async fn test_cached_cdn_client_basic_caching() {
     // First download - should hit the mock server
     let mock_host = mock_server.uri().replace("http://", "");
     let response1 = client
-        .download(&mock_host, "tpr/wow", test_hash)
+        .download(&mock_host, "tpr/wow", test_hash, "")
         .await
         .unwrap();
 
@@ -56,7 +56,7 @@ async fn test_cached_cdn_client_basic_caching() {
 
     // Second download - should come from cache
     let response2 = client
-        .download(&mock_host, "tpr/wow", test_hash)
+        .download(&mock_host, "tpr/wow", test_hash, "")
         .await
         .unwrap();
 
@@ -111,13 +111,13 @@ async fn test_cached_cdn_client_content_types() {
             .await;
 
         // Download and verify
-        let response = client.download(&mock_host, path, hash).await.unwrap();
+        let response = client.download(&mock_host, path, hash, "").await.unwrap();
 
         assert!(!response.is_from_cache());
         assert_eq!(response.bytes().await.unwrap(), Bytes::from(content));
 
         // Verify it's cached
-        let response2 = client.download(&mock_host, path, hash).await.unwrap();
+        let response2 = client.download(&mock_host, path, hash, "").await.unwrap();
 
         assert!(response2.is_from_cache());
     }
@@ -150,14 +150,14 @@ async fn test_cached_cdn_client_disable_caching() {
     // Both downloads should hit the server
     let mock_host = mock_server.uri().replace("http://", "");
     let response1 = client
-        .download(&mock_host, "data", test_hash)
+        .download(&mock_host, "data", test_hash, "")
         .await
         .unwrap();
 
     assert!(!response1.is_from_cache());
 
     let response2 = client
-        .download(&mock_host, "data", test_hash)
+        .download(&mock_host, "data", test_hash, "")
         .await
         .unwrap();
 
@@ -249,7 +249,7 @@ async fn test_cached_cdn_client_streaming() {
     // Download with streaming
     let mock_host = mock_server.uri().replace("http://", "");
     let mut stream = client
-        .download_stream(&mock_host, "data", test_hash)
+        .download_stream(&mock_host, "data", test_hash, "")
         .await
         .unwrap();
 
@@ -263,7 +263,7 @@ async fn test_cached_cdn_client_streaming() {
 
     // Second download should use cached file for streaming
     let mut stream2 = client
-        .download_stream(&mock_host, "data", test_hash)
+        .download_stream(&mock_host, "data", test_hash, "")
         .await
         .unwrap();
 

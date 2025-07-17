@@ -11,6 +11,7 @@ fn benchmark_url_building(c: &mut Criterion) {
                 black_box("blzddist1-a.akamaihd.net"),
                 black_box("tpr/wow"),
                 black_box("2e9c1e3b5f5a0c9d9e8f1234567890ab"),
+                black_box(""),
             )
         })
     });
