@@ -5,7 +5,7 @@
 use crate::{Error, Md5, Result};
 use md5::{Digest, Md5 as Md5Hasher};
 use std::{
-    io::{Read, Seek, SeekFrom},
+    io::{BufRead, Read, Seek, SeekFrom},
     iter::repeat_n,
 };
 use tracing::*;
@@ -195,18 +195,18 @@ impl ArchiveIndexToc {
 }
 
 #[derive(PartialEq, Eq)]
-pub struct ArchiveIndexParser<'a, T: Read + Seek + 'a> {
+pub struct ArchiveIndexParser<T: BufRead + Seek> {
     /// File handle
-    f: &'a mut T,
+    f: T,
     footer: ArchiveIndexFooter,
     toc: ArchiveIndexToc,
 }
 
-impl<'a, T: Read + Seek + 'a> ArchiveIndexParser<'a, T> {
-    pub fn new(f: &'a mut T, hash: &Md5) -> Result<Self> {
+impl<T: BufRead + Seek> ArchiveIndexParser<T> {
+    pub fn new(mut f: T, hash: &Md5) -> Result<Self> {
         // Try to read the footer and TOC first
-        let footer = ArchiveIndexFooter::parse(f, hash)?;
-        let toc = ArchiveIndexToc::parse(f, &footer)?;
+        let footer = ArchiveIndexFooter::parse(&mut f, hash)?;
+        let toc = ArchiveIndexToc::parse(&mut f, &footer)?;
 
         Ok(Self { f, footer, toc })
     }
@@ -246,6 +246,11 @@ impl<'a, T: Read + Seek + 'a> ArchiveIndexParser<'a, T> {
         }
 
         Ok(ArchiveIndexBlockParser::new(buf, &self.footer))
+    }
+
+    /// Release the file handle from `ArchiveIndexParser`.
+    pub fn to_inner(self) -> T {
+        self.f
     }
 }
 
