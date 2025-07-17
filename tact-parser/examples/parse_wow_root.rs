@@ -1,3 +1,5 @@
+//! The root contains a mapping of file IDs (and sometimes file name hashes) to
+//! MD5 checksums of the file content.
 use clap::Parser;
 use std::{fs::OpenOptions, io::BufReader, path::PathBuf};
 use tact_parser::wow_root::{LocaleFlags, WowRoot};
@@ -10,6 +12,10 @@ struct Cli {
     pub root: PathBuf,
 
     /// Filename to find in the root TACT file.
+    ///
+    /// In Retail, less than 10% of file names are available. The wowdev
+    /// community listfile provides a community-maintained list of filename ->
+    /// FID mapping.
     #[clap(long)]
     pub filename: Option<String>,
 
@@ -39,7 +45,12 @@ fn main() {
 
     info!("Reading WoW TACT root...");
     let root = WowRoot::parse(&mut rf, locale).unwrap();
-    info!("Root contains {} files", root.fid_md5.len());
+    info!(
+        "Root contains {} File IDs, {} ({:.1}%) file names",
+        root.fid_md5.len(),
+        root.name_hash_fid.len(),
+        (root.name_hash_fid.len() as f64 / root.fid_md5.len() as f64) * 100.,
+    );
 
     if let Some(filename) = args.filename {
         if let Some(fid) = root.get_fid(&filename) {
