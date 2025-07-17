@@ -1,0 +1,193 @@
+use crate::{Error, MaybePair, Md5, Result, config::parser::*};
+use std::{collections::BTreeMap, io::BufRead};
+use tracing::*;
+
+/// [Build configuration][0] parser.
+///
+/// [0]: https://wowdev.wiki/TACT#Build_Config
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct BuildConfig {
+    pub root: Option<Md5>,
+
+    pub install: Option<MaybePair<Md5>>,
+    pub install_size: Option<MaybePair<u32>>,
+
+    pub download: Option<MaybePair<Md5>>,
+    pub download_size: Option<MaybePair<u32>>,
+
+    pub size: Option<(Md5, Md5)>,
+    pub size_size: Option<(u32, u32)>,
+
+    pub encoding: Option<MaybePair<Md5>>,
+    pub encoding_size: Option<MaybePair<u32>>,
+
+    pub patch_index: Option<MaybePair<Md5>>,
+    pub patch_index_size: Option<MaybePair<u32>>,
+
+    pub patch: Option<Md5>,
+    pub patch_size: Option<u32>,
+
+    pub patch_config: Option<Md5>,
+
+    pub build_name: Option<String>,
+    pub build_uid: Option<String>,
+    pub build_product: Option<String>,
+    pub build_playbuild_installer: Option<String>,
+
+    pub build_partial_priority: Option<Vec<(Md5, u32)>>,
+
+    pub vfs_root: Option<(Md5, Md5)>,
+    pub vfs_root_size: Option<(u32, u32)>,
+
+    /// VFS manifest.
+    ///
+    /// This uses the indexes from the original file, which normally start at 1.
+    pub vfs: Option<BTreeMap<u16, (Md5, Md5)>>,
+
+    /// VFS manifest size.
+    ///
+    /// This uses the indexes from the original file, which normally start at 1.
+    pub vfs_size: Option<BTreeMap<u16, (u32, u32)>>,
+}
+
+impl BuildConfig {
+    // /// Get an iterator over both `archives` and `archives_index_size`, if both fields were provided.
+    // pub fn archives_with_index_size(&self) -> Option<impl Iterator<Item = (&Md5, u32)>> {
+    //     if let (Some(archives), Some(archives_index_size)) =
+    //         (&self.archives, &self.archives_index_size)
+    //     {
+    //         Some(archives.iter().zip(archives_index_size.iter().copied()))
+    //     } else {
+    //         None
+    //     }
+    // }
+
+    // /// Get an iterator over both `patch_archives` and `patch_archives_index_size`, if both fields were provided.
+    // pub fn patch_archives_with_index_size(&self) -> Option<impl Iterator<Item = (&Md5, u32)>> {
+    //     if let (Some(patch_archives), Some(patch_archives_index_size)) =
+    //         (&self.patch_archives, &self.patch_archives_index_size)
+    //     {
+    //         Some(
+    //             patch_archives
+    //                 .iter()
+    //                 .zip(patch_archives_index_size.iter().copied()),
+    //         )
+    //     } else {
+    //         None
+    //     }
+    // }
+
+    pub fn parse_config<T: BufRead>(f: T) -> Result<Self> {
+        Self::parse_config_inner(&mut ConfigParser::new(f))
+    }
+
+    fn parse_config_inner<T: BufRead>(parser: &mut ConfigParser<T>) -> Result<Self> {
+        let mut o = BuildConfig::default();
+        let mut buf = String::with_capacity(4096);
+
+        while let Some((k, v)) = parser.next(&mut buf)? {
+            let k = k.to_ascii_lowercase();
+            match k.as_str() {
+                "root" => {
+                    o.root = Some(parse_md5_string(v)?);
+                }
+
+                "install" => {
+                    o.install = Some(parse_md5_maybepair_string(v)?);
+                }
+                "install-size" => {
+                    o.install_size = Some(parse_u32_maybepair_string(v)?);
+                }
+
+                "download" => {
+                    o.download = Some(parse_md5_maybepair_string(v)?);
+                }
+                "download-size" => {
+                    o.download_size = Some(parse_u32_maybepair_string(v)?);
+                }
+
+                "size" => {
+                    o.size = Some(parse_md5_pair_string(v)?);
+                }
+                "size-size" => {
+                    o.size_size = Some(parse_u32_pair_string(v)?);
+                }
+
+                "encoding" => {
+                    o.encoding = Some(parse_md5_maybepair_string(v)?);
+                }
+                "encoding-size" => {
+                    o.encoding_size = Some(parse_u32_maybepair_string(v)?);
+                }
+
+                "patch-index" => {
+                    o.patch_index = Some(parse_md5_maybepair_string(v)?);
+                }
+                "patch-index-size" => {
+                    o.patch_index_size = Some(parse_u32_maybepair_string(v)?);
+                }
+
+                "patch" => {
+                    o.patch = Some(parse_md5_string(v)?);
+                }
+                "patch-size" => {
+                    o.patch_size = Some(v.parse().map_err(|_| Error::ConfigTypeMismatch)?);
+                }
+                "patch-config" => {
+                    o.patch_config = Some(parse_md5_string(v)?);
+                }
+
+                "build-name" => {
+                    o.build_name = Some(v.to_string());
+                }
+                "build-uid" => {
+                    o.build_uid = Some(v.to_string());
+                }
+                "build-product" => {
+                    o.build_product = Some(v.to_string());
+                }
+                "build-playbuild-installer" => {
+                    o.build_playbuild_installer = Some(v.to_string());
+                }
+                "build-partial-priority" => {
+                    o.build_partial_priority = Some(parse_md5_u32_pair_string(v)?);
+                }
+                "vfs-root" => {
+                    o.vfs_root = Some(parse_md5_pair_string(v)?);
+                }
+                "vfs-root-size" => {
+                    o.vfs_root_size = Some(parse_u32_pair_string(v)?);
+                }
+                other => {
+                    // Handle `vfs-X` and `vfs-X-size`
+                    if !other.starts_with("vfs-") || other.len() <= 4 {
+                        warn!("Unknown config key: {k:?}");
+                        continue;
+                    }
+
+                    let mut other = &other[4..];
+                    let is_size = other.ends_with("-size");
+                    if is_size {
+                        other = &other[..other.len() - 5];
+                    }
+
+                    // Try to parse what's left as an integer
+                    let Ok(vfs_id) = other.parse::<u16>() else {
+                        warn!("Unknown config key: {k:?}");
+                        continue;
+                    };
+
+                    if is_size {
+                        let vfs_size = o.vfs_size.get_or_insert_default();
+                        vfs_size.insert(vfs_id, parse_u32_pair_string(v)?);
+                    } else {
+                        let vfs = o.vfs.get_or_insert_default();
+                        vfs.insert(vfs_id, parse_md5_pair_string(v)?);
+                    }
+                }
+            }
+        }
+
+        Ok(o)
+    }
+}

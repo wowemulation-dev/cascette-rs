@@ -1,7 +1,4 @@
-use crate::{
-    Error, Md5, Result,
-    config::parser::{ConfigParser, parse_md5_string, parse_md5s_string, parse_u32s_string},
-};
+use crate::{Error, Md5, Result, config::parser::*};
 use std::io::BufRead;
 use tracing::*;
 
