@@ -14,7 +14,7 @@ use std::{
     ops::BitAnd,
 };
 
-const TACT_MAGIC: &'static [u8; 4] = b"TSFM";
+const TACT_MAGIC: &[u8; 4] = b"TSFM";
 const MD5_LENGTH: usize = 16;
 pub type Md5 = [u8; MD5_LENGTH];
 
@@ -291,7 +291,7 @@ pub struct ContentFlags {
     /// Low violence variant.
     pub low_violence: bool, // 0x80
 
-    //// Non-mystery-platform clients should ignore this file.
+    /// Non-mystery-platform clients should ignore this file.
     pub mystery_platform: bool, // 0x100
     #[skip]
     __: B2,
@@ -353,9 +353,7 @@ impl WowRoot {
 
                     if let Some(name_hash_fid) = block.name_hash_fid {
                         for (k, v) in name_hash_fid {
-                            if !o.name_hash_fid.contains_key(&k) {
-                                o.name_hash_fid.insert(k, v);
-                            }
+                            o.name_hash_fid.entry(k).or_insert(v);
                         }
                     }
                 }
