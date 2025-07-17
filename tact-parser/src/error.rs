@@ -31,4 +31,10 @@ pub enum Error {
 
     #[error("Unsupported BLTE encoding type: {0}")]
     UnsupportedBlteEncoding(u8),
+
+    #[error("Listfile syntax error")]
+    ListfileSyntax,
+
+    #[error("Listfile file ID is not an integer")]
+    InvalidListfileID,
 }

@@ -1,0 +1,3 @@
+21;interface/cinematics/logo_1024.avi
+22;interface/cinematics/wow_intro_1024.avi
+99;Fake\\Path.exe

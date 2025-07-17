@@ -5,6 +5,7 @@ pub mod encoding;
 mod error;
 mod ioutils;
 pub mod jenkins3;
+pub mod listfile;
 pub mod utils;
 pub mod wow_root;
 
