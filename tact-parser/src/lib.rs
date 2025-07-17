@@ -18,7 +18,9 @@ const MD5_HEX_LENGTH: usize = MD5_LENGTH * 2;
 /// An array which can have either 1 or 2 items of the same type.
 #[derive(Debug, PartialEq, Eq)]
 pub enum MaybePair<T> {
+    /// Single item
     Solo(T),
+    /// Two items
     Pair(T, T),
 }
 

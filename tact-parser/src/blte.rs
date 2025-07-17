@@ -9,7 +9,7 @@ use md5::{Digest, Md5 as Md5Hasher};
 use std::io::{BufRead, Read, Seek, SeekFrom, Write};
 use tracing::*;
 
-const BLTE_MAGIC: &'static [u8; 4] = b"BLTE";
+const BLTE_MAGIC: &[u8; 4] = b"BLTE";
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct BlteHeader {
@@ -173,9 +173,18 @@ impl EncryptedBlockHeader {
         Ok(Self { key_name, iv })
     }
 
-    /// Length of the block header on disk
+    /// Length of the [`EncryptedBlockHeader`] on disk, including length
+    /// prefixes.
     pub fn len(&self) -> usize {
         self.key_name.len() + self.iv.len() + 2
+    }
+
+    /// `true` if the [`EncryptedBlockHeader`] would take up 0 bytes.
+    ///
+    /// This is always `false`.
+    #[inline]
+    pub const fn is_empty(&self) -> bool {
+        false
     }
 }
 
@@ -212,6 +221,14 @@ impl BlockEncoding {
         } else {
             0
         }
+    }
+
+    /// `true` if the [`BlockEncoding`] would take up 0 bytes.
+    ///
+    /// This is always `false`.
+    #[inline]
+    pub const fn is_empty(&self) -> bool {
+        false
     }
 }
 

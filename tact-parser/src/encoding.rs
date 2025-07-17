@@ -6,7 +6,7 @@ use std::{
 };
 use tracing::*;
 
-const ENCODING_MAGIC: &'static [u8; 2] = b"EN";
+const ENCODING_MAGIC: &[u8; 2] = b"EN";
 
 #[derive(Debug)]
 pub struct EncodingTableHeader {
