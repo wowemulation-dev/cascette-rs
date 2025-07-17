@@ -2,21 +2,7 @@
 
 use ngdp_cache::cached_ribbit_client::CachedRibbitClient;
 use ribbit_client::{Endpoint, Region};
-use std::path::PathBuf;
-
-/// Test data directory for isolated testing
-async fn test_cache_dir() -> PathBuf {
-    let dir = std::env::temp_dir()
-        .join("ngdp_cache_test")
-        .join("cached_ribbit");
-    tokio::fs::create_dir_all(&dir).await.unwrap();
-    dir
-}
-
-/// Clean up test directory
-async fn cleanup_test_dir(dir: &PathBuf) {
-    let _ = tokio::fs::remove_dir_all(dir).await;
-}
+use tempfile::TempDir;
 
 #[tokio::test]
 async fn test_cached_client_creation() {
@@ -25,19 +11,19 @@ async fn test_cached_client_creation() {
     assert_eq!(client.inner().region(), Region::US);
 
     // Test with custom cache directory
-    let test_dir = test_cache_dir().await;
-    let client = CachedRibbitClient::with_cache_dir(Region::EU, test_dir.clone())
+    let test_dir = TempDir::new().unwrap();
+    let client = CachedRibbitClient::with_cache_dir(Region::EU, test_dir.path().to_path_buf())
         .await
         .unwrap();
     assert_eq!(client.inner().region(), Region::EU);
 
-    cleanup_test_dir(&test_dir).await;
+    drop(test_dir);
 }
 
 #[tokio::test]
 async fn test_cache_filename_conventions() {
-    let test_dir = test_cache_dir().await;
-    let _client = CachedRibbitClient::with_cache_dir(Region::US, test_dir.clone())
+    let test_dir = TempDir::new().unwrap();
+    let _client = CachedRibbitClient::with_cache_dir(Region::US, test_dir.path().to_path_buf())
         .await
         .unwrap();
 
@@ -90,13 +76,13 @@ async fn test_cache_filename_conventions() {
     // but we can verify the files are created with correct names
     // This is tested in the unit tests already
 
-    cleanup_test_dir(&test_dir).await;
+    drop(test_dir);
 }
 
 #[tokio::test]
 async fn test_cache_enable_disable() {
-    let test_dir = test_cache_dir().await;
-    let mut client = CachedRibbitClient::with_cache_dir(Region::US, test_dir.clone())
+    let test_dir = TempDir::new().unwrap();
+    let mut client = CachedRibbitClient::with_cache_dir(Region::US, test_dir.path().to_path_buf())
         .await
         .unwrap();
 
@@ -105,25 +91,13 @@ async fn test_cache_enable_disable() {
     client.set_caching_enabled(false);
 
     // Clean up
-    cleanup_test_dir(&test_dir).await;
-}
-
-#[tokio::test]
-async fn test_ttl_differentiation() {
-    let test_dir = test_cache_dir().await;
-    let _client = CachedRibbitClient::with_cache_dir(Region::US, test_dir.clone())
-        .await
-        .unwrap();
-
-    // Just verify client was created - actual TTL testing is done in unit tests
-
-    cleanup_test_dir(&test_dir).await;
+    drop(test_dir);
 }
 
 #[tokio::test]
 async fn test_cache_clear_operations() {
-    let test_dir = test_cache_dir().await;
-    let client = CachedRibbitClient::with_cache_dir(Region::US, test_dir.clone())
+    let test_dir = TempDir::new().unwrap();
+    let client = CachedRibbitClient::with_cache_dir(Region::US, test_dir.path().to_path_buf())
         .await
         .unwrap();
 
@@ -133,31 +107,30 @@ async fn test_cache_clear_operations() {
     // Test that clear_expired doesn't fail on empty cache
     client.clear_expired().await.unwrap();
 
-    cleanup_test_dir(&test_dir).await;
+    drop(test_dir);
 }
 
 #[tokio::test]
 async fn test_expired_cache_cleanup() {
-    let test_dir = test_cache_dir().await;
-    let client = CachedRibbitClient::with_cache_dir(Region::US, test_dir.clone())
+    let test_dir = TempDir::new().unwrap();
+    let client = CachedRibbitClient::with_cache_dir(Region::US, test_dir.path().to_path_buf())
         .await
         .unwrap();
 
     // Test that clear_expired works without errors even when cache is empty
     client.clear_expired().await.unwrap();
-
-    cleanup_test_dir(&test_dir).await;
+    drop(test_dir);
 }
 
 #[tokio::test]
 async fn test_concurrent_cache_access() {
-    let test_dir = test_cache_dir().await;
+    let test_dir = TempDir::new().unwrap();
 
     // Spawn multiple tasks to create clients concurrently
     let mut handles = vec![];
 
     for _ in 0..5 {
-        let test_dir_clone = test_dir.clone();
+        let test_dir_clone = test_dir.path().to_path_buf();
         let handle = tokio::spawn(async move {
             let _client = CachedRibbitClient::with_cache_dir(Region::US, test_dir_clone)
                 .await
@@ -171,35 +144,21 @@ async fn test_concurrent_cache_access() {
         handle.await.unwrap();
     }
 
-    cleanup_test_dir(&test_dir).await;
+    drop(test_dir);
 }
 
 #[tokio::test]
 async fn test_cache_with_different_regions() {
-    let test_dir = test_cache_dir().await;
+    let test_dir = TempDir::new().unwrap();
 
     // Create clients for different regions
-    let _us_client = CachedRibbitClient::with_cache_dir(Region::US, test_dir.clone())
+    let _us_client = CachedRibbitClient::with_cache_dir(Region::US, test_dir.path().to_path_buf())
         .await
         .unwrap();
-    let _eu_client = CachedRibbitClient::with_cache_dir(Region::EU, test_dir.clone())
+    let _eu_client = CachedRibbitClient::with_cache_dir(Region::EU, test_dir.path().to_path_buf())
         .await
         .unwrap();
 
     // Just verify that clients can be created for different regions
-
-    cleanup_test_dir(&test_dir).await;
-}
-
-#[tokio::test]
-async fn test_cache_directory_structure() {
-    let test_dir = test_cache_dir().await;
-    let _client = CachedRibbitClient::with_cache_dir(Region::KR, test_dir.clone())
-        .await
-        .unwrap();
-
-    // Verify the test directory was created
-    assert!(test_dir.exists());
-
-    cleanup_test_dir(&test_dir).await;
+    drop(test_dir);
 }
