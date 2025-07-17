@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1](https://github.com/wowemulation-dev/cascette-rs/compare/ngdp-cdn-v0.2.0...ngdp-cdn-v0.2.1) - 2025-07-15
+
+### Other
+
+- 📝 docs: synchronize individual crate changelogs with main changelog
+
 ### Added
 
 - **Enhanced CDN fallback support**:
