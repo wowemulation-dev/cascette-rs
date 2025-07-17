@@ -1,5 +1,3 @@
-use std::{collections::HashMap, io::Cursor, str::FromStr as _};
-
 use crate::{
     InspectCommands, OutputFormat,
     cached_client::create_client,
@@ -10,6 +8,7 @@ use crate::{
 };
 use ngdp_bpsv::BpsvDocument;
 use ribbit_client::{CdnEntry, Endpoint, ProductCdnsResponse, ProductVersionsResponse, Region};
+use std::{collections::BTreeMap, io::Cursor, str::FromStr as _};
 use tact_parser::{Md5, archive::ArchiveIndexParser, config::CdnConfig};
 use thiserror::Error;
 use tracing::*;
@@ -391,10 +390,11 @@ async fn inspect_archives(
         return Err(Box::new(InspectError::NoArchivesInCdnConfiguration));
     };
 
-    let mut ekeys = HashMap::new();
+    let mut ekeys = BTreeMap::new();
+    info!("Downloading archive indexes...");
     for (archive, size) in archives {
         let hash = hex::encode(archive);
-        info!("Downloading archive index {hash} ({size})...");
+        debug!("Downloading archive index {hash} ({size})...");
 
         let archive_data = client
             .cdn_client()
@@ -403,12 +403,7 @@ async fn inspect_archives(
 
         let mut archive_index =
             ArchiveIndexParser::new(Cursor::new(archive_data.bytes().await?), archive)?;
-        info!(
-            "Adding {} entries from {hash}...",
-            archive_index.footer().num_elements(),
-        );
 
-        ekeys.reserve(archive_index.footer().num_elements() as usize);
         for block in 0..archive_index.toc().num_blocks {
             for entry in archive_index.read_block(block)? {
                 ekeys.insert(
@@ -419,6 +414,73 @@ async fn inspect_archives(
         }
     }
 
-    info!("ekeys has {} / {} entries", ekeys.len(), ekeys.capacity());
+    match format {
+        OutputFormat::Json | OutputFormat::JsonPretty => {
+            let json_data = serde_json::json!({
+                "config": version.cdn_config,
+                "ekeys": ekeys.into_iter().map(
+                    |(ekey, (archive, off, size))| {
+                        (hex::encode(ekey), (hex::encode(archive), off, size))
+                    }).collect::<BTreeMap<_, _>>(),
+            });
+
+            if matches!(format, OutputFormat::JsonPretty) {
+                serde_json::to_writer_pretty(std::io::stdout(), &json_data)?;
+            } else {
+                serde_json::to_writer(std::io::stdout(), &json_data)?;
+            };
+        }
+        OutputFormat::Bpsv => {
+            return Err(Box::new(InspectError::BpsvNotSupported));
+        }
+        OutputFormat::Text => {
+            let style = OutputStyle::new();
+
+            // TODO: add missing fields
+            print_section_header(
+                &format!("Archives in configuration {}", version.cdn_config),
+                &style,
+            );
+
+            print_subsection_header("Archive index", &style);
+
+            let rows_count = ekeys.len();
+            let preview_count = rows_count.min(5);
+            println!(
+                "\n{}",
+                format_header(&format!("Preview (first {preview_count} rows)"), &style)
+            );
+            let mut data_table = create_table(&style);
+            data_table.set_header([
+                header_cell("#", &style),
+                header_cell("EKey", &style),
+                header_cell("CDN archive", &style),
+                header_cell("Offset", &style),
+                header_cell("Length", &style),
+            ]);
+            for (i, (ekey, (archive, off, size))) in ekeys.iter().take(preview_count).enumerate() {
+                data_table.add_row([
+                    numeric_cell(&(i + 1).to_string()),
+                    regular_cell(&hex::encode(ekey)),
+                    regular_cell(&hex::encode(archive)),
+                    numeric_cell(&format!("{off:#x}")),
+                    numeric_cell(&format!("{size:#x}")),
+                ]);
+            }
+
+            println!("{data_table}");
+
+            if rows_count > preview_count {
+                println!(
+                    "\n{}",
+                    format_header(
+                        &format!("... and {} more rows", rows_count - preview_count),
+                        &style
+                    )
+                );
+            }
+        }
+    }
+
     Ok(())
 }
