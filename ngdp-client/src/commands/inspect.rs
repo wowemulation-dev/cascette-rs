@@ -1,4 +1,4 @@
-use std::{io::Cursor, str::FromStr as _};
+use std::{collections::HashMap, io::Cursor, str::FromStr as _};
 
 use crate::{
     InspectCommands, OutputFormat,
@@ -10,14 +10,18 @@ use crate::{
 };
 use ngdp_bpsv::BpsvDocument;
 use ribbit_client::{CdnEntry, Endpoint, ProductCdnsResponse, ProductVersionsResponse, Region};
-use tact_parser::{Md5, config::CdnConfig};
+use tact_parser::{Md5, archive::ArchiveIndexParser, config::CdnConfig};
 use thiserror::Error;
+use tracing::*;
 
 pub async fn handle(
     cmd: InspectCommands,
     format: OutputFormat,
 ) -> Result<(), Box<dyn std::error::Error>> {
     match cmd {
+        InspectCommands::Archives { product, region } => {
+            inspect_archives(product, region, format).await?
+        }
         InspectCommands::Bpsv { input, raw } => inspect_bpsv(input, raw, format).await?,
         InspectCommands::BuildConfig {
             product,
@@ -173,7 +177,7 @@ async fn inspect_bpsv(
 
 /// Error type for fallback client operations
 #[derive(Error, Debug)]
-enum InspectCdnConfigError {
+enum InspectError {
     #[error("Region config not found on CDN")]
     RegionNotFound,
 
@@ -182,6 +186,9 @@ enum InspectCdnConfigError {
 
     #[error("BPSV output not supported")]
     BpsvNotSupported,
+
+    #[error("No 'archives' entry in CDN configuration")]
+    NoArchivesInCdnConfiguration,
 }
 
 async fn inspect_cdn_config(
@@ -197,7 +204,7 @@ async fn inspect_cdn_config(
 
     let version = versions
         .get_region(region.as_str())
-        .ok_or(InspectCdnConfigError::RegionNotFound)?;
+        .ok_or(InspectError::RegionNotFound)?;
 
     // Fetch the CDN host list
     let endpoint = Endpoint::ProductCdns(product.clone());
@@ -208,11 +215,11 @@ async fn inspect_cdn_config(
         cdns.entries.iter().filter(|e| e.name == region).collect();
 
     if filtered_entries.is_empty() {
-        return Err(Box::new(InspectCdnConfigError::NoCdnsFoundInRegion));
+        return Err(Box::new(InspectError::NoCdnsFoundInRegion));
     }
 
     // Pick CDN to fetch config
-    // TODO: pick randomly
+    // TODO: pick with fallback, when fallback supports caching
     let cdn_entry = filtered_entries.first().unwrap();
     let cdn_host = cdn_entry.hosts.first().unwrap();
 
@@ -255,7 +262,7 @@ async fn inspect_cdn_config(
             };
         }
         OutputFormat::Bpsv => {
-            return Err(Box::new(InspectCdnConfigError::BpsvNotSupported));
+            return Err(Box::new(InspectError::BpsvNotSupported));
         }
         OutputFormat::Text => {
             let style = OutputStyle::new();
@@ -338,5 +345,80 @@ async fn inspect_cdn_config(
         }
     }
 
+    Ok(())
+}
+
+async fn inspect_archives(
+    product: String,
+    region: String,
+    format: OutputFormat,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let region_enum = Region::from_str(&region)?;
+    let client = create_client(region_enum).await?;
+
+    let endpoint = Endpoint::ProductVersions(product.clone());
+    let versions: ProductVersionsResponse = client.request_typed(&endpoint).await?;
+
+    let version = versions
+        .get_region(region.as_str())
+        .ok_or(InspectError::RegionNotFound)?;
+
+    // Fetch the CDN host list
+    let endpoint = Endpoint::ProductCdns(product.clone());
+    let cdns: ProductCdnsResponse = client.request_typed(&endpoint).await?;
+
+    // Filter CDN entries for the specified region
+    let filtered_entries: Vec<&CdnEntry> =
+        cdns.entries.iter().filter(|e| e.name == region).collect();
+
+    if filtered_entries.is_empty() {
+        return Err(Box::new(InspectError::NoCdnsFoundInRegion));
+    }
+
+    // Pick CDN to fetch config
+    // TODO: pick with fallback, when fallback supports caching
+    let cdn_entry = filtered_entries.first().unwrap();
+    let cdn_host = cdn_entry.hosts.first().unwrap();
+
+    let cdn_config = client
+        .cdn_client()
+        .download_cdn_config(cdn_host, &cdn_entry.path, &version.cdn_config)
+        .await?;
+    let cdn_config = CdnConfig::parse_config(Cursor::new(cdn_config.bytes().await?))?;
+
+    // Fetch all the archive indexes
+    let Some(archives) = cdn_config.archives_with_index_size() else {
+        return Err(Box::new(InspectError::NoArchivesInCdnConfiguration));
+    };
+
+    let mut ekeys = HashMap::new();
+    for (archive, size) in archives {
+        let hash = hex::encode(archive);
+        info!("Downloading archive index {hash} ({size})...");
+
+        let archive_data = client
+            .cdn_client()
+            .download_data_index(cdn_host, &cdn_entry.path, &hash)
+            .await?;
+
+        let mut archive_index =
+            ArchiveIndexParser::new(Cursor::new(archive_data.bytes().await?), archive)?;
+        info!(
+            "Adding {} entries from {hash}...",
+            archive_index.footer().num_elements(),
+        );
+
+        ekeys.reserve(archive_index.footer().num_elements() as usize);
+        for block in 0..archive_index.footer().num_blocks() {
+            for entry in archive_index.read_block(block)? {
+                ekeys.insert(
+                    entry.ekey,
+                    (archive, entry.archive_offset, entry.blte_encoded_size),
+                );
+            }
+        }
+    }
+
+    info!("ekeys has {} / {} entries", ekeys.len(), ekeys.capacity());
     Ok(())
 }

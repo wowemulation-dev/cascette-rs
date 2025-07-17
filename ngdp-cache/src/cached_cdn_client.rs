@@ -475,6 +475,19 @@ impl CachedCdnClient {
         self.download(cdn_host, &data_path, hash, "").await
     }
 
+    /// Download data index file from CDN
+    ///
+    /// Data files are stored at `{path}/data/{hash}.index`
+    pub async fn download_data_index(
+        &self,
+        cdn_host: &str,
+        path: &str,
+        hash: &str,
+    ) -> Result<CachedResponse> {
+        let data_path = format!("{}/data", path.trim_end_matches('/'));
+        self.download(cdn_host, &data_path, hash, ".index").await
+    }
+
     /// Download patch file from CDN with caching
     ///
     /// Patch files are stored at `{path}/patch/{hash}`
