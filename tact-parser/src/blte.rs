@@ -21,16 +21,29 @@ pub struct BlteHeader {
     /// Set to 0 if unknown.
     total_decompressed_size: u64,
 
+    /// Block info.
     block_info: Option<Vec<BlteBlockInfo>>,
 }
 
 /// Block info
 #[derive(Debug, PartialEq, Eq)]
 pub struct BlteBlockInfo {
+    /// The compressed size of the block, including block header byte(s).
     compressed_size: u32,
+
+    /// The decompressed size of the block.
+    ///
+    /// For non-compressed blocks, this is `compressed_size - 1` (for the block
+    /// header byte).
     decompressed_size: u32,
+
+    /// The MD5 checksum of the compressed block, including header byte(s).
+    ///
+    /// Can be verified with [`BlteExtractor::verify_compressed_checksum`][].
     compressed_hash: Md5,
 
+    /// The MD5 checksum of the block when decompressed.
+    ///
     /// Only present for table format `0x10`.
     decompressed_hash: Option<Md5>,
 
@@ -43,7 +56,7 @@ pub struct BlteBlockInfo {
 }
 
 impl BlteHeader {
-    /// Parses a BLTE header.
+    /// Parse a BLTE header.
     pub fn parse<R: Read>(f: &mut R) -> Result<Self> {
         let mut magic = [0; BLTE_MAGIC.len()];
         f.read_exact(&mut magic)?;
@@ -128,7 +141,7 @@ impl BlteHeader {
 
     /// Total size of all blocks in the file when decompressed.
     ///
-    /// Set to 0 if unknown.
+    /// Returns 0 if unknown.
     pub fn total_decompressed_size(&self) -> u64 {
         self.total_decompressed_size
     }
@@ -210,7 +223,7 @@ impl BlockEncoding {
             b'Z' => Self::Zlib,
             b'4' => Self::Lz4hc,
             b'E' => Self::Encrypted(EncryptedBlockHeader::parse(f)?),
-            other => return Err(Error::UnsupportedBtleEncoding(other)),
+            other => return Err(Error::UnsupportedBlteEncoding(other)),
         })
     }
 
@@ -250,14 +263,20 @@ pub struct BlockEncodingInfo {
 
 /// BLTE payload parser.
 pub struct BlteExtractor<T: BufRead + Seek> {
-    /// File handle
+    /// File handle.
     f: T,
+
+    /// Offset of the start of the BLTE stream within `f`.
     offset: u64,
-    size: u64,
+
+    /// Length of the BLTE stream.
+    length: u64,
+
+    /// BLTE stream header.
     header: BlteHeader,
 }
 
-const EXTRACTOR_BUFFER_SIZE: usize = 4096;
+const EXTRACTOR_BUFFER_SIZE: usize = 8192;
 const BUF_SIZE_U32: u32 = EXTRACTOR_BUFFER_SIZE as u32;
 const BUF_SIZE_U64: u64 = EXTRACTOR_BUFFER_SIZE as u64;
 
@@ -267,7 +286,16 @@ impl<T: BufRead + Seek> BlteExtractor<T> {
     /// This is designed to work directly with complete `/tpr/{product}/data/`
     /// blobs (where there are multiple BLTE streams in a single file), but can
     /// also work on a file with a single BLTE stream.
-    pub fn new(mut f: T, offset: u64, size: u64) -> Result<Self> {
+    ///
+    /// # Arguments
+    ///
+    /// * `offset`: byte offset of the start of the BLTE stream within `f`.
+    ///
+    ///   If `f` contains a single BLTE stream at the start of the file, set
+    ///   this to `0`.
+    ///
+    /// * `size`: length of the BLTE stream within `f`.
+    pub fn new(mut f: T, offset: u64, length: u64) -> Result<Self> {
         f.seek(SeekFrom::Start(offset))?;
         let header = BlteHeader::parse(&mut f)?;
 
@@ -275,10 +303,11 @@ impl<T: BufRead + Seek> BlteExtractor<T> {
             f,
             header,
             offset,
-            size,
+            length,
         })
     }
 
+    /// The header of the BLTE stream.
     pub fn header(&self) -> &BlteHeader {
         &self.header
     }
@@ -301,16 +330,16 @@ impl<T: BufRead + Seek> BlteExtractor<T> {
         } else {
             (
                 self.header.data_offset,
-                self.size - self.header.data_offset,
+                self.length - self.header.data_offset,
                 0,
                 0,
             )
         };
 
-        if off + size > self.size {
+        if off + size > self.length {
             error!(
                 "Block {block} is out of range: {off} + {size} > {}",
-                self.size
+                self.length
             );
             return Err(Error::FailedPrecondition);
         }
@@ -330,7 +359,10 @@ impl<T: BufRead + Seek> BlteExtractor<T> {
     /// Block data may be encrypted or compressed. An uncompressed size _may_
     /// be available in [`BlteHeader::total_decompressed_size()`].
     ///
-    /// When data is compressed,
+    /// Compressed data will be automatically decompressed.
+    ///
+    /// This does not verify checksums during extraction. Those can be verified
+    /// with [`BlteExtractor::verify_compressed_checksum`].
     ///
     /// To extract data to RAM, pass a [`std::io::Cursor`][] to this function.
     pub fn write_to_file<W: Write>(&mut self, mut file: W) -> Result<W> {
