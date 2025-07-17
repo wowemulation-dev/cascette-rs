@@ -97,7 +97,7 @@ pub fn hashlittle2(key: &[u8], pc: &mut u32, pb: &mut u32) {
     //
     // The simpler implementation is to just make that buffer ourselves.
     let mut final_block = [0; 12];
-    final_block[..k.len()].copy_from_slice(&k);
+    final_block[..k.len()].copy_from_slice(k);
 
     a = a.wrapping_add(u32::from_le_bytes(final_block[0..4].try_into().unwrap()));
     if k.len() > 4 {
