@@ -407,7 +407,7 @@ mod test {
             key_bytes: 16,
             hash_bytes: 8,
             num_elements: 7060,
-            num_blocks: 3,
+            footer_offset: (4096 * 3) + 1024,
         };
 
         // Stripped down footer from 0017a402f556fbece46c38dc431a2c9b.index.
