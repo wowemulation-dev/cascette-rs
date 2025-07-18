@@ -166,6 +166,9 @@ impl ArchiveIndexFooter {
     // }
 }
 
+/// [Archive index][1] TOC parser.
+///
+/// [1]: https://wowdev.wiki/TACT#Archive_Indexes_(.index)
 #[derive(Default, PartialEq, Eq)]
 pub struct ArchiveIndexToc {
     /// The last EKey of each block.
@@ -253,94 +256,39 @@ impl ArchiveIndexToc {
     }
 }
 
-#[derive(PartialEq, Eq)]
-pub struct ArchiveIndexParser<T: BufRead + Seek> {
-    /// File handle
-    f: T,
-    footer: ArchiveIndexFooter,
-    toc: ArchiveIndexToc,
-}
-
-impl<T: BufRead + Seek> ArchiveIndexParser<T> {
-    pub fn new(mut f: T, hash: &Md5) -> Result<Self> {
-        // Try to read the footer and TOC first
-        let footer = ArchiveIndexFooter::parse(&mut f, hash)?;
-        let toc = ArchiveIndexToc::parse(&mut f, &footer)?;
-        Ok(Self { f, footer, toc })
-    }
-
-    pub fn footer(&self) -> &ArchiveIndexFooter {
-        &self.footer
-    }
-
-    pub fn toc(&self) -> &ArchiveIndexToc {
-        &self.toc
-    }
-
-    pub fn read_block(&mut self, index: usize) -> Result<impl Iterator<Item = ArchiveIndexEntry>> {
-        let last_ekey = self
-            .toc
-            .last_ekey
-            .get(index)
-            .ok_or(Error::BlockIndexOutOfRange(index, self.toc.num_blocks))?;
-
-        let expected_hash = self
-            .toc
-            .block_partial_md5
-            .get(index)
-            .ok_or(Error::BlockIndexOutOfRange(index, self.toc.num_blocks))?;
-
-        let index = index as u64;
-
-        self.f.seek(SeekFrom::Start(
-            index * u64::from(self.footer.block_size_bytes),
-        ))?;
-
-        // Load the entire block into memory (it's small)
-        let mut buf = vec![0; self.footer.block_size_bytes as usize];
-        self.f.read_exact(&mut buf)?;
-
-        // Verify block checksum
-        let mut hasher = Md5Hasher::new();
-        hasher.update(&buf);
-        let actual_hash = hasher.finalize();
-
-        if !actual_hash.starts_with(expected_hash) {
-            error!(
-                "block {index} hash mismatch: {} != {}",
-                hex::encode(&actual_hash[..]),
-                hex::encode(expected_hash),
-            );
-            return Err(Error::ChecksumMismatch);
-        }
-
-        Ok(ArchiveIndexBlockParser::new(buf, &self.footer, last_ekey))
-    }
-
-    /// Release the file handle from `ArchiveIndexParser`.
-    pub fn to_inner(self) -> T {
-        self.f
-    }
-}
-
-/// Entry in an archive index block.
+/// Entry in an [archive index][1] block.
+///
+/// [1]: https://wowdev.wiki/TACT#Archive_Indexes_(.index)
 #[derive(Default, PartialEq, Eq)]
 pub struct ArchiveIndexEntry {
+    /// The EKey of the item in the archive.
     pub ekey: Vec<u8>,
+
+    /// The BLTE-encoded size of the item in the archive.
     pub blte_encoded_size: u64,
+
+    /// The offset of the item within the archive.
     pub archive_offset: u64,
 }
 
 /// Iterator-based archive index block parser.
 ///
-/// This is an internal implementation detail.
+/// This is an internal implementation detail of
+/// [`ArchiveIndexParser::read_block`].
 struct ArchiveIndexBlockParser<'a> {
+    /// The archive index block.
     block: Vec<u8>,
 
     /// Current position within `block`.
     p: usize,
+
+    /// The total length of each entry in the block.
     entry_length: usize,
+
+    /// The archive index footer.
     footer: &'a ArchiveIndexFooter,
+
+    /// The last expected EKey within the block.
     last_ekey: &'a [u8],
 }
 
@@ -418,6 +366,87 @@ impl<'a> Iterator for ArchiveIndexBlockParser<'a> {
             blte_encoded_size,
             archive_offset,
         })
+    }
+}
+
+/// [Archive index][1] parser.
+///
+/// [1]: https://wowdev.wiki/TACT#Archive_Indexes_(.index)
+#[derive(PartialEq, Eq)]
+pub struct ArchiveIndexParser<T: BufRead + Seek> {
+    /// File handle
+    f: T,
+
+    /// The archive index footer.
+    footer: ArchiveIndexFooter,
+
+    /// The archive index TOC.
+    toc: ArchiveIndexToc,
+}
+
+impl<T: BufRead + Seek> ArchiveIndexParser<T> {
+    /// Parse an archive index.
+    pub fn new(mut f: T, hash: &Md5) -> Result<Self> {
+        // Try to read the footer and TOC first
+        let footer = ArchiveIndexFooter::parse(&mut f, hash)?;
+        let toc = ArchiveIndexToc::parse(&mut f, &footer)?;
+        Ok(Self { f, footer, toc })
+    }
+
+    /// The archive index footer.
+    pub fn footer(&self) -> &ArchiveIndexFooter {
+        &self.footer
+    }
+
+    /// The archive index TOC.
+    pub fn toc(&self) -> &ArchiveIndexToc {
+        &self.toc
+    }
+
+    /// Read archive index entries from a block.
+    pub fn read_block(&mut self, index: usize) -> Result<impl Iterator<Item = ArchiveIndexEntry>> {
+        let last_ekey = self
+            .toc
+            .last_ekey
+            .get(index)
+            .ok_or(Error::BlockIndexOutOfRange(index, self.toc.num_blocks))?;
+
+        let expected_hash = self
+            .toc
+            .block_partial_md5
+            .get(index)
+            .ok_or(Error::BlockIndexOutOfRange(index, self.toc.num_blocks))?;
+
+        let index = index as u64;
+
+        self.f.seek(SeekFrom::Start(
+            index * u64::from(self.footer.block_size_bytes),
+        ))?;
+
+        // Load the entire block into memory (it's small)
+        let mut buf = vec![0; self.footer.block_size_bytes as usize];
+        self.f.read_exact(&mut buf)?;
+
+        // Verify block checksum
+        let mut hasher = Md5Hasher::new();
+        hasher.update(&buf);
+        let actual_hash = hasher.finalize();
+
+        if !actual_hash.starts_with(expected_hash) {
+            error!(
+                "block {index} hash mismatch: {} != {}",
+                hex::encode(&actual_hash[..]),
+                hex::encode(expected_hash),
+            );
+            return Err(Error::ChecksumMismatch);
+        }
+
+        Ok(ArchiveIndexBlockParser::new(buf, &self.footer, last_ekey))
+    }
+
+    /// Release the file handle from `ArchiveIndexParser`.
+    pub fn to_inner(self) -> T {
+        self.f
     }
 }
 
