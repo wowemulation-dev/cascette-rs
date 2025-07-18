@@ -1,6 +1,4 @@
-//! [BLTE][0] parser
-//!
-//! CDN archives contain multiple BLTE blobs, one for each file.
+//! [BLTE][0] archive parser/extractor.
 //!
 //! [0]: https://wowdev.wiki/BLTE
 
@@ -11,10 +9,13 @@ use tracing::*;
 
 const BLTE_MAGIC: &[u8; 4] = b"BLTE";
 
+/// [BLTE][0] archive header / metadata.
+///
+/// [0]: https://wowdev.wiki/BLTE
 #[derive(Debug, PartialEq, Eq)]
 pub struct BlteHeader {
-    /// Offset of the first data block, relative to the start of the header.
-    data_offset: u64,
+    /// Length of the BLTE headers, in bytes.
+    length: u32,
 
     /// Total size of all blocks in the file when decompressed.
     ///
@@ -22,10 +23,15 @@ pub struct BlteHeader {
     total_decompressed_size: u64,
 
     /// Block info.
+    ///
+    /// When **not** present, the remainder of the BLTE stream contains a single
+    /// block.
     block_info: Option<Vec<BlteBlockInfo>>,
 }
 
-/// Block info
+/// [BLTE][0] archive block info/metadata.
+///
+/// [0]: https://wowdev.wiki/BLTE
 #[derive(Debug, PartialEq, Eq)]
 pub struct BlteBlockInfo {
     /// The compressed size of the block, including block header byte(s).
@@ -56,7 +62,7 @@ pub struct BlteBlockInfo {
 }
 
 impl BlteHeader {
-    /// Parse a BLTE header.
+    /// Parse a BLTE header at the file's current position.
     pub fn parse<R: Read>(f: &mut R) -> Result<Self> {
         let mut magic = [0; BLTE_MAGIC.len()];
         f.read_exact(&mut magic)?;
@@ -64,19 +70,19 @@ impl BlteHeader {
             return Err(Error::BadMagic);
         }
 
-        let header_len = f.read_u32be()?;
-        if header_len <= 8 + 4 + 24 {
-            // We couldn't fit a header entry
+        let length = f.read_u32be()?;
+        if length <= 8 + 4 + 24 {
+            // We couldn't fit a BlockInfo entry
             return Ok(BlteHeader {
                 block_info: None,
-                data_offset: u64::from(header_len.max(8)),
+                length: length.max(8),
                 total_decompressed_size: 0,
             });
         }
 
-        if header_len > 65535 {
+        if length > 65535 {
             // Probably invalid, number is arbitrary.
-            error!("huge BLTE header: {header_len} bytes");
+            error!("huge BLTE header: {length} bytes");
             return Err(Error::FailedPrecondition);
         }
 
@@ -90,7 +96,7 @@ impl BlteHeader {
         let num_blocks = f.read_u24be()?;
 
         // Is the header the correct size for the expected number of blocks?
-        let blocks_len = header_len - 8 - 4;
+        let blocks_len = length - 8 - 4;
         let block_len = if has_uncompressed_hash { 40 } else { 24 };
 
         if blocks_len != num_blocks * block_len {
@@ -102,7 +108,7 @@ impl BlteHeader {
         }
 
         let mut block_info = Vec::with_capacity(num_blocks as usize);
-        let mut o = u64::from(header_len);
+        let mut compressed_offset = u64::from(length);
         let mut decompressed_offset = 0;
         for _ in 0..num_blocks {
             let compressed_size = f.read_u32be()?;
@@ -124,17 +130,17 @@ impl BlteHeader {
                 decompressed_size,
                 compressed_hash,
                 decompressed_hash,
-                compressed_offset: o,
+                compressed_offset,
                 decompressed_offset,
             });
 
             decompressed_offset += u64::from(decompressed_size);
-            o += u64::from(compressed_size);
+            compressed_offset += u64::from(compressed_size);
         }
 
         Ok(Self {
             block_info: Some(block_info),
-            data_offset: u64::from(header_len),
+            length,
             total_decompressed_size: decompressed_offset,
         })
     }
@@ -146,7 +152,7 @@ impl BlteHeader {
         self.total_decompressed_size
     }
 
-    pub fn block_count(&self) -> usize {
+    pub const fn block_count(&self) -> usize {
         if let Some(block_info) = self.block_info.as_ref() {
             block_info.len()
         } else {
@@ -159,7 +165,7 @@ impl BlteHeader {
     /// Returns `None` if `block` is out of range.
     pub fn block_data_offset(&self, block: usize) -> Option<u64> {
         if block == 0 {
-            return Some(self.data_offset);
+            return Some(self.length.into());
         }
 
         Some(self.block_info.as_ref()?.get(block)?.compressed_offset)
@@ -317,8 +323,8 @@ impl<T: BufRead + Seek> BlteExtractor<T> {
     pub fn read_block_header(&mut self, block: usize) -> Result<BlockEncodingInfo> {
         let (off, size, doff, dsize) = if let Some(block_infos) = self.header.block_info.as_ref() {
             let block_info = block_infos.get(block).ok_or(Error::BlockIndexOutOfRange(
-                block as u64,
-                self.header.block_count() as u64,
+                block,
+                self.header.block_count(),
             ))?;
 
             (
@@ -328,9 +334,14 @@ impl<T: BufRead + Seek> BlteExtractor<T> {
                 block_info.decompressed_size,
             )
         } else {
+            // No block infos
+            if block != 0 {
+                return Err(Error::BlockIndexOutOfRange(block, 1));
+            }
+
             (
-                self.header.data_offset,
-                self.length - self.header.data_offset,
+                u64::from(self.header.length),
+                self.length - u64::from(self.header.length),
                 0,
                 0,
             )

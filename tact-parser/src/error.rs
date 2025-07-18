@@ -24,7 +24,7 @@ pub enum Error {
     ConfigTypeMismatch,
 
     #[error("Block index {0} is out of range, must be less than {1}")]
-    BlockIndexOutOfRange(u64, u64),
+    BlockIndexOutOfRange(usize, usize),
 
     #[error("Data checksum mismatch")]
     ChecksumMismatch,
@@ -37,4 +37,7 @@ pub enum Error {
 
     #[error("Listfile file ID is not an integer")]
     InvalidListfileID,
+
+    #[error("Arcthive index TOC too large")]
+    ArchiveIndexTocTooLarge,
 }

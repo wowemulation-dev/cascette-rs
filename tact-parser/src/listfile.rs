@@ -48,7 +48,7 @@ impl<'a, T: BufRead + 'a> ListfileParser<'a, T> {
     ///
     /// On encountering an error, the next call to [`next()`][Self::next] will
     /// read the next line of input.
-    pub fn next<'b>(&mut self) -> Result<Option<(u32, PathBuf)>> {
+    pub fn try_next(&mut self) -> Result<Option<(u32, PathBuf)>> {
         let mut buf = String::with_capacity(512);
         loop {
             buf.clear();
@@ -73,7 +73,7 @@ impl<'a, T: BufRead + 'a> ListfileParser<'a, T> {
 
             let k = k.trim().parse().map_err(|_| Error::InvalidListfileID)?;
             // Ignore extra fields
-            let v = v.splitn(1, ';').next().unwrap().trim();
+            let v = v.split(';').next().unwrap().trim();
             let v = listfile_normalise(v);
 
             return Ok(Some((k, v)));
@@ -98,7 +98,7 @@ impl ListfileNameResolver {
 
         let mut parser = ListfileParser::new(f);
 
-        while let Some((fid, name)) = parser.next()? {
+        while let Some((fid, name)) = parser.try_next()? {
             path_to_fid.insert(name.clone(), fid);
             fid_to_path.insert(fid, name);
         }

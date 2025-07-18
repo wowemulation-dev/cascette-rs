@@ -37,7 +37,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if let Some(path) = args.path {
         let path = listfile_normalise(&path);
-        while let Some((f, p)) = listfile.next()? {
+        while let Some((f, p)) = listfile.try_next()? {
             if path == p {
                 println!("{path:?} is File ID {f}");
                 return Ok(());
@@ -49,7 +49,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     if let Some(fid) = args.fid {
-        while let Some((f, p)) = listfile.next()? {
+        while let Some((f, p)) = listfile.try_next()? {
             if fid == f {
                 println!("File ID {fid} is {p:?}");
                 return Ok(());
