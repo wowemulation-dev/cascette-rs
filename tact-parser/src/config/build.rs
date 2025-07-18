@@ -36,6 +36,24 @@ pub struct BuildConfig {
 
     pub build_partial_priority: Option<Vec<(Md5, u32)>>,
 
+    pub build_num: Option<u32>,
+    pub build_attributes: Option<String>,
+    pub build_branch: Option<String>,
+    pub build_comments: Option<String>,
+    pub build_creator: Option<String>,
+    pub build_critical_patch_seqn: Option<u32>,
+    // WC3: Maybe integer? "0"
+    pub build_status: Option<String>,
+    // WC3
+    pub build_source_branch: Option<String>,
+    // WC3: Looks like a SHA1 hash (ie: git/hg?)
+    pub build_source_revision: Option<String>,
+    // WC3
+    pub build_data_branch: Option<String>,
+    // WC3: Maybe integer?
+    pub build_data_revision: Option<String>,
+    pub build_token: Option<String>,
+
     pub vfs_root: Option<(Md5, Md5)>,
     pub vfs_root_size: Option<(u32, u32)>,
 
@@ -51,32 +69,6 @@ pub struct BuildConfig {
 }
 
 impl BuildConfig {
-    // /// Get an iterator over both `archives` and `archives_index_size`, if both fields were provided.
-    // pub fn archives_with_index_size(&self) -> Option<impl Iterator<Item = (&Md5, u32)>> {
-    //     if let (Some(archives), Some(archives_index_size)) =
-    //         (&self.archives, &self.archives_index_size)
-    //     {
-    //         Some(archives.iter().zip(archives_index_size.iter().copied()))
-    //     } else {
-    //         None
-    //     }
-    // }
-
-    // /// Get an iterator over both `patch_archives` and `patch_archives_index_size`, if both fields were provided.
-    // pub fn patch_archives_with_index_size(&self) -> Option<impl Iterator<Item = (&Md5, u32)>> {
-    //     if let (Some(patch_archives), Some(patch_archives_index_size)) =
-    //         (&self.patch_archives, &self.patch_archives_index_size)
-    //     {
-    //         Some(
-    //             patch_archives
-    //                 .iter()
-    //                 .zip(patch_archives_index_size.iter().copied()),
-    //         )
-    //     } else {
-    //         None
-    //     }
-    // }
-
     pub fn parse_config<T: BufRead>(f: T) -> Result<Self> {
         Self::parse_config_inner(&mut ConfigParser::new(f))
     }
@@ -137,8 +129,45 @@ impl BuildConfig {
                     o.patch_config = Some(parse_md5_string(v)?);
                 }
 
+                "build-attributes" => {
+                    o.build_attributes = Some(v.to_string());
+                }
+                "build-branch" => {
+                    o.build_branch = Some(v.to_string());
+                }
+                "build-comments" => {
+                    o.build_comments = Some(v.to_string());
+                }
+                "build-creator" => {
+                    o.build_creator = Some(v.to_string());
+                }
+                "build-critical-patch-seqn" => {
+                    o.build_critical_patch_seqn =
+                        Some(v.parse().map_err(|_| Error::ConfigTypeMismatch)?);
+                }
+                "build-data-branch" => {
+                    o.build_data_branch = Some(v.to_string());
+                }
+                "build-data-revision" => {
+                    o.build_data_revision = Some(v.to_string());
+                }
+                "build-num" => {
+                    o.build_num = Some(v.parse().map_err(|_| Error::ConfigTypeMismatch)?);
+                }
                 "build-name" => {
                     o.build_name = Some(v.to_string());
+                }
+                "build-source-branch" => {
+                    o.build_source_branch = Some(v.to_string());
+                }
+                "build-source-revision" => {
+                    o.build_source_revision = Some(v.to_string());
+                }
+                "build-status" => {
+                    o.build_status = Some(v.to_string());
+                }
+                "build-token" => {
+                    o.build_token = Some(v.to_string());
                 }
                 "build-uid" => {
                     o.build_uid = Some(v.to_string());
