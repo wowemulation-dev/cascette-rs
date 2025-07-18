@@ -1,0 +1,29 @@
+# Build Configuration
+
+root = b8c4c2f4bace28f4f997ddbe62b6c834
+install = a57dbd987f029e669cb7c82181947360 6b0e16e1f45f8362c1ce48fb366620e9
+install-size = 22214 21423
+download = 2615f40fcdd3b04ceffeaa84a558d0be 3729b7dfba016f6cfb0f82ebbed5a1da
+download-size = 65024386 55581360
+size = 77c65df44cf74134f78adf6bfa47672a 67a0619243ab2b6988a0c33fa187bfbd
+size-size = 42297509 35940101
+encoding = 659278477ea99f2f37d4da25986efa73 8943c5eb795e90ceef6b95f248f4744c
+encoding-size = 172053000 163371663
+patch-index = e424f628ecd0a04bce23a39fdb46acdd e925d7d8c359553402c41d0e4466ebde
+patch-index-size = 533697 481110
+patch = 6cde709e24d86ca0ec77052de03970b3
+patch-size = 280909
+patch-config = e10026ed8bbe059cbe48d22ddd4f3ac4
+build-name = WOW-61967patch11.1.7_Retail
+build-uid = wow
+build-product = WoW
+build-playbuild-installer = ngdptool_casc2
+build-partial-priority = 2237224fc7208d8364fed9eed73066ac:262144 2f86a9a5395ccbdd7efa202ee585bde1:262144 953942f10c31d9426953334431a649e4:262144
+vfs-root = d81552c9c29a3537a0670781725323a4 261ed7526ea11d5c2a5575df12b780b7
+vfs-root-size = 50666 33890
+vfs-1 = d81552c9c29a3537a0670781725323a4 261ed7526ea11d5c2a5575df12b780b7
+vfs-1-size = 50666 33890
+vfs-2 = 0829dd568562d934948d769dac517e10 1698bee10510a61982eebb0670060616
+vfs-2-size = 609 568
+
+

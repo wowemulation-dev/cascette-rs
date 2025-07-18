@@ -13,6 +13,7 @@ pub mod cached_ribbit_client;
 pub mod cached_tact_client;
 pub mod cdn;
 pub mod error;
+pub mod filesystem_cache;
 pub mod generic;
 pub mod ribbit;
 

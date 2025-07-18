@@ -22,6 +22,7 @@
 //!     "blzddist1-a.akamaihd.net",
 //!     "tpr/wow",
 //!     "2e9c1e3b5f5a0c9d9e8f1234567890ab",
+//!     "",
 //! ).await?;
 //!
 //! let content = response.bytes().await?;
@@ -50,13 +51,19 @@
 
 #![warn(missing_docs)]
 
+mod backoff;
+mod cache;
 mod client;
 mod error;
-mod fallback;
+// mod fallback;
+mod hosts;
 
 #[cfg(test)]
 mod client_test;
 
-pub use client::{CdnClient, CdnClientBuilder};
+pub use backoff::Backoff;
+pub use cache::{CacheProvider, DummyCacheProvider};
+pub use client::{CdnClient, CdnClientBuilder, build_path};
 pub use error::{Error, Result};
-pub use fallback::{CdnClientWithFallback, CdnClientWithFallbackBuilder};
+// pub use fallback::{CdnClientWithFallback, CdnClientWithFallbackBuilder};
+pub use hosts::{CdnHostProvider, PriorityHostList, StaticHostList, SingleHost};

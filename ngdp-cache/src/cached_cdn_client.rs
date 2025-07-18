@@ -30,6 +30,7 @@
 //!     "blzddist1-a.akamaihd.net",
 //!     "tpr/wow/config",  // Config files use /config suffix
 //!     "2e9c1e3b5f5a0c9d9e8f1234567890ab",
+//!     "",
 //! ).await?;
 //! let data = response.bytes().await?;
 //!
@@ -40,6 +41,7 @@
 //!     "blzddist1-a.akamaihd.net",
 //!     "tpr/wow/config",
 //!     "2e9c1e3b5f5a0c9d9e8f1234567890ab",
+//!     "",
 //! ).await?;
 //! # Ok(())
 //! # }
@@ -47,7 +49,7 @@
 
 use bytes::Bytes;
 use reqwest::Response;
-use std::path::PathBuf;
+use std::{ops::RangeInclusive, path::PathBuf};
 use tokio::io::AsyncRead;
 use tracing::debug;
 
@@ -61,6 +63,7 @@ enum ContentType {
     Config,
     Data,
     Patch,
+    DataRange,
 }
 
 impl ContentType {
@@ -71,6 +74,8 @@ impl ContentType {
             Self::Config
         } else if path_lower.contains("/patch") || path_lower.ends_with("patch") {
             Self::Patch
+        } else if path_lower.contains("/range") || path_lower.ends_with("range") {
+            Self::DataRange
         } else {
             Self::Data
         }
@@ -167,6 +172,7 @@ impl CachedCdnClient {
         Ok(match content_type {
             ContentType::Config => cache.has_config(hash).await,
             ContentType::Data => cache.has_data(hash).await,
+            ContentType::DataRange => cache.has_data_range(hash).await,
             ContentType::Patch => cache.has_patch(hash).await,
         })
     }
@@ -178,6 +184,7 @@ impl CachedCdnClient {
         let data = match content_type {
             ContentType::Config => cache.read_config(hash).await?,
             ContentType::Data => cache.read_data(hash).await?,
+            ContentType::DataRange => cache.read_data_range(hash).await?,
             ContentType::Patch => cache.read_patch(hash).await?,
         };
         Ok(Bytes::from(data))
@@ -190,6 +197,7 @@ impl CachedCdnClient {
         match content_type {
             ContentType::Config => cache.write_config(hash, data).await?,
             ContentType::Data => cache.write_data(hash, data).await?,
+            ContentType::DataRange => cache.write_data_range(hash, data).await?,
             ContentType::Patch => cache.write_patch(hash, data).await?,
         };
         Ok(())
@@ -208,24 +216,33 @@ impl CachedCdnClient {
     /// If caching is enabled and the content exists in cache, it will be returned
     /// without making a network request. Otherwise, the content is downloaded
     /// from the CDN and stored in cache for future use.
-    pub async fn download(&self, cdn_host: &str, path: &str, hash: &str) -> Result<CachedResponse> {
+    pub async fn download(
+        &self,
+        cdn_host: &str,
+        path: &str,
+        hash: &str,
+        suffix: &str,
+    ) -> Result<CachedResponse> {
+        // Cache layer is less strict about `hash` than the downloader.
+        let cache_hash = format!("{hash}{suffix}");
+
         // Check cache first if enabled
-        if self.enabled && self.is_cached(path, hash).await? {
-            debug!("Cache hit for CDN {}/{}", path, hash);
-            let data = self.read_from_cache(path, hash).await?;
+        if self.enabled && self.is_cached(path, &cache_hash).await? {
+            debug!("Cache hit for CDN {path}/{hash}{suffix}");
+            let data = self.read_from_cache(path, &cache_hash).await?;
             return Ok(CachedResponse::from_cache(data));
         }
 
         // Cache miss - download from CDN
-        debug!("Cache miss for CDN {}/{}, fetching from server", path, hash);
-        let response = self.client.download(cdn_host, path, hash).await?;
+        debug!("Cache miss for CDN {path}/{hash}{suffix}, fetching from server");
+        let response = self.client.download(cdn_host, path, hash, suffix).await?;
 
         // Get the response body
         let data = response.bytes().await?;
 
         // Cache the content if enabled
         if self.enabled {
-            if let Err(e) = self.write_to_cache(path, hash, &data).await {
+            if let Err(e) = self.write_to_cache(path, &cache_hash, &data).await {
                 debug!("Failed to write to CDN cache: {}", e);
             }
         }
@@ -243,24 +260,88 @@ impl CachedCdnClient {
         cdn_host: &str,
         path: &str,
         hash: &str,
+        suffix: &str,
     ) -> Result<Box<dyn AsyncRead + Unpin + Send>> {
-        // For data files, we can use the streaming API
+        // Cache layer is less strict about `hash` than the downloader.
+        let cache_hash = format!("{hash}{suffix}");
+
+        // For data files, we can load from cache
         if ContentType::from_path(path) == ContentType::Data {
             // Check if cached
             let cache = self.get_cache_for_path(path).await?;
-            if self.enabled && cache.has_data(hash).await {
-                debug!("Cache hit for CDN {}/{} (streaming)", path, hash);
-                let file = cache.open_data(hash).await?;
+            if self.enabled && cache.has_data(&cache_hash).await {
+                debug!("Cache hit for CDN {path}/{cache_hash} (streaming)");
+                let file = cache.open_data(&cache_hash).await?;
                 return Ok(Box::new(file));
             }
         }
 
         // For non-data files or cache misses, download the full content first
-        let response = self.download(cdn_host, path, hash).await?;
+        //
+        // FIXME: This contradicts the function's documentation. CachedResponse
+        // does not have a streaming API.
+        let response = self.download(cdn_host, path, hash, suffix).await?;
         let data = response.bytes().await?;
 
         // Return a cursor over the bytes
         Ok(Box::new(std::io::Cursor::new(data.to_vec())))
+    }
+
+    /// Download partial content from CDN, with caching.
+    ///
+    /// This requires an additional `cache_hash`, which is used to key the cache
+    /// entries in the range cache directory. A BLTE stream's `EKey` is one way
+    /// to handle this.
+    ///
+    /// A single, global namespace is used for all entries in `cache_hash`,
+    /// regardless of whether they are `data` or `patches`.
+    ///
+    /// If caching is enabled and the content exists in cache, it will be returned
+    /// without making a network request. Otherwise, the content is downloaded
+    /// from the CDN and stored in cache for future use.
+    pub async fn download_range(
+        &self,
+        cdn_host: &str,
+        path: &str,
+        hash: &str,
+        cache_hash: &str,
+        range: impl Into<RangeInclusive<u64>>,
+    ) -> Result<CachedResponse> {
+        let range = range.into();
+        // Check cache first if enabled
+        let cache_path = "range";
+        if self.enabled && self.is_cached(cache_path, cache_hash).await? {
+            debug!("Cache hit for ranged file {}/{}", cache_path, cache_hash);
+            let data = self.read_from_cache(cache_path, cache_hash).await?;
+            return Ok(CachedResponse::from_cache(data));
+        }
+
+        // Cache miss - download from CDN
+        debug!(
+            "Cache miss for ranged file {}/{}, fetching {}/{} ({}-{}) from server",
+            cache_path,
+            cache_hash,
+            path,
+            hash,
+            range.start(),
+            range.end(),
+        );
+        let response = self
+            .client
+            .download_range(cdn_host, path, hash, range)
+            .await?;
+
+        // Get the response body
+        let data = response.bytes().await?;
+
+        // Cache the content if enabled
+        if self.enabled {
+            if let Err(e) = self.write_to_cache(cache_path, cache_hash, &data).await {
+                debug!("Failed to write to CDN cache: {}", e);
+            }
+        }
+
+        Ok(CachedResponse::from_network(data))
     }
 
     /// Get the size of cached content without reading it
@@ -270,7 +351,10 @@ impl CachedCdnClient {
         }
 
         // Only data files support efficient size checking
-        if ContentType::from_path(path) == ContentType::Data {
+        if matches!(
+            ContentType::from_path(path),
+            ContentType::Data | ContentType::DataRange
+        ) {
             let cache = self.get_cache_for_path(path).await?;
             Ok(Some(cache.data_size(hash).await?))
         } else {
@@ -305,16 +389,19 @@ impl CachedCdnClient {
                     stats.total_files += 1;
                     stats.total_size += metadata.len();
 
-                    let path = entry.path();
-                    if path.to_string_lossy().contains("config") {
+                    let path = entry.path().to_string_lossy();
+                    if path.contains("config") {
                         stats.config_files += 1;
                         stats.config_size += metadata.len();
-                    } else if path.to_string_lossy().contains("patch") {
+                    } else if path.contains("patch") {
                         stats.patch_files += 1;
                         stats.patch_size += metadata.len();
-                    } else if path.to_string_lossy().contains("data") {
+                    } else if path.contains("data") {
                         stats.data_files += 1;
                         stats.data_size += metadata.len();
+                    } else if path.contains("range") {
+                        stats.range_files += 1;
+                        stats.range_size = metadata.len();
                     }
                 }
             }
@@ -333,7 +420,7 @@ impl CachedCdnClient {
         hash: &str,
     ) -> Result<CachedResponse> {
         let config_path = format!("{}/config", path.trim_end_matches('/'));
-        self.download(cdn_host, &config_path, hash).await
+        self.download(cdn_host, &config_path, hash, "").await
     }
 
     /// Download CDNConfig from CDN with caching
@@ -346,7 +433,7 @@ impl CachedCdnClient {
         hash: &str,
     ) -> Result<CachedResponse> {
         let config_path = format!("{}/config", path.trim_end_matches('/'));
-        self.download(cdn_host, &config_path, hash).await
+        self.download(cdn_host, &config_path, hash, "").await
     }
 
     /// Download ProductConfig from CDN with caching
@@ -359,7 +446,7 @@ impl CachedCdnClient {
         config_path: &str,
         hash: &str,
     ) -> Result<CachedResponse> {
-        self.download(cdn_host, config_path, hash).await
+        self.download(cdn_host, config_path, hash, "").await
     }
 
     /// Download KeyRing from CDN with caching
@@ -372,7 +459,7 @@ impl CachedCdnClient {
         hash: &str,
     ) -> Result<CachedResponse> {
         let config_path = format!("{}/config", path.trim_end_matches('/'));
-        self.download(cdn_host, &config_path, hash).await
+        self.download(cdn_host, &config_path, hash, "").await
     }
 
     /// Download data file from CDN with caching
@@ -385,7 +472,20 @@ impl CachedCdnClient {
         hash: &str,
     ) -> Result<CachedResponse> {
         let data_path = format!("{}/data", path.trim_end_matches('/'));
-        self.download(cdn_host, &data_path, hash).await
+        self.download(cdn_host, &data_path, hash, "").await
+    }
+
+    /// Download data index file from CDN
+    ///
+    /// Data files are stored at `{path}/data/{hash}.index`
+    pub async fn download_data_index(
+        &self,
+        cdn_host: &str,
+        path: &str,
+        hash: &str,
+    ) -> Result<CachedResponse> {
+        let data_path = format!("{}/data", path.trim_end_matches('/'));
+        self.download(cdn_host, &data_path, hash, ".index").await
     }
 
     /// Download patch file from CDN with caching
@@ -398,7 +498,7 @@ impl CachedCdnClient {
         hash: &str,
     ) -> Result<CachedResponse> {
         let patch_path = format!("{}/patch", path.trim_end_matches('/'));
-        self.download(cdn_host, &patch_path, hash).await
+        self.download(cdn_host, &patch_path, hash, "").await
     }
 }
 
@@ -467,6 +567,10 @@ pub struct CacheStats {
     pub patch_files: u64,
     /// Size of cached patch files in bytes
     pub patch_size: u64,
+    /// Number of cached range files
+    pub range_files: u64,
+    /// Size of cached range files in bytes
+    pub range_size: u64,
 }
 
 impl CacheStats {
@@ -488,6 +592,11 @@ impl CacheStats {
     /// Get patch size in human-readable format  
     pub fn patch_size_human(&self) -> String {
         format_bytes(self.patch_size)
+    }
+
+    /// Get range size in human-readable format  
+    pub fn range_size_human(&self) -> String {
+        format_bytes(self.range_size)
     }
 }
 

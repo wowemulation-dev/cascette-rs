@@ -87,7 +87,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             // Try to download a config file
             // Try to download a BuildConfig file (uses path/config)
             match cdn_client
-                .download(host, &format!("{}/config", cdn.path), config_hash)
+                .download(host, &format!("{}/config", cdn.path), config_hash, "")
                 .await
             {
                 Ok(response) => {

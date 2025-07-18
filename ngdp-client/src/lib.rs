@@ -199,8 +199,8 @@ pub enum InspectCommands {
         /// Product name
         product: String,
 
-        /// Build ID
-        build: String,
+        /// Build config hash
+        config: Option<String>,
 
         /// Region
         #[arg(short, long, default_value = "us")]
@@ -212,9 +212,22 @@ pub enum InspectCommands {
         /// Product name
         product: String,
 
+        /// CDN config hash
+        config: Option<String>,
+
         /// Region
         #[arg(short, long, default_value = "us")]
         region: String,
+    },
+
+    /// Show archives information
+    Archives {
+        /// Product name
+        product: String,
+
+        /// Region
+        #[arg(short, long, default_value = "us")]
+        region: String,        
     },
 
     /// Show encoding information

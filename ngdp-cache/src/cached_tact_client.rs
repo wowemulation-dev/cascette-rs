@@ -641,17 +641,10 @@ mod tests {
                 .unwrap();
 
             let path = client.get_cache_path("wow", TactEndpoint::Versions, Some(12345));
-            assert!(
-                path.to_string_lossy()
-                    .contains("us/v1/wow/versions-12345.bpsv")
-            );
+            assert!(path.ends_with("us/v1/wow/versions-12345.bpsv"));
 
             let path_no_seq = client.get_cache_path("d3", TactEndpoint::Cdns, None);
-            assert!(
-                path_no_seq
-                    .to_string_lossy()
-                    .contains("us/v1/d3/cdns-0.bpsv")
-            );
+            assert!(path_no_seq.ends_with("us/v1/d3/cdns-0.bpsv"));
         });
     }
 

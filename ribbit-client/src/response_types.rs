@@ -6,18 +6,25 @@
 use crate::{Error, Response, error::Result};
 use ngdp_bpsv::BpsvDocument;
 
-/// Trait for typed responses that can be parsed from BPSV documents
+/// Trait for typed responses that can be parsed from HTTP responses
 pub trait TypedResponse: Sized {
+    /// Parse from a raw response
+    ///
+    /// # Errors
+    /// Returns an error if the response has no data or parsing fails.
+    fn from_response(response: &Response) -> Result<Self>;
+}
+
+/// Trait for typed responses that can be parsed from BPSV documents
+pub trait TypedBpsvResponse: Sized {
     /// Parse the response from a BPSV document
     ///
     /// # Errors
     /// Returns an error if parsing the BPSV document fails.
     fn from_bpsv(doc: &BpsvDocument) -> Result<Self>;
+}
 
-    /// Parse from a raw response
-    ///
-    /// # Errors
-    /// Returns an error if the response has no data or parsing fails.
+impl<T: TypedBpsvResponse> TypedResponse for T {
     fn from_response(response: &Response) -> Result<Self> {
         match &response.data {
             Some(data) => {
@@ -177,7 +184,7 @@ impl<'a> FieldAccessor<'a> {
 
 // Implementations for each response type
 
-impl TypedResponse for ProductVersionsResponse {
+impl TypedBpsvResponse for ProductVersionsResponse {
     fn from_bpsv(doc: &BpsvDocument) -> Result<Self> {
         let mut entries = Vec::new();
         let schema = doc.schema();
@@ -203,7 +210,7 @@ impl TypedResponse for ProductVersionsResponse {
     }
 }
 
-impl TypedResponse for ProductCdnsResponse {
+impl TypedBpsvResponse for ProductCdnsResponse {
     fn from_bpsv(doc: &BpsvDocument) -> Result<Self> {
         let mut entries = Vec::new();
         let schema = doc.schema();
@@ -234,7 +241,7 @@ impl TypedResponse for ProductCdnsResponse {
     }
 }
 
-impl TypedResponse for ProductBgdlResponse {
+impl TypedBpsvResponse for ProductBgdlResponse {
     fn from_bpsv(doc: &BpsvDocument) -> Result<Self> {
         let mut entries = Vec::new();
         let schema = doc.schema();
@@ -258,7 +265,7 @@ impl TypedResponse for ProductBgdlResponse {
     }
 }
 
-impl TypedResponse for SummaryResponse {
+impl TypedBpsvResponse for SummaryResponse {
     fn from_bpsv(doc: &BpsvDocument) -> Result<Self> {
         let mut products = Vec::new();
         let schema = doc.schema();

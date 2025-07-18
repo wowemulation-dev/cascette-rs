@@ -33,7 +33,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("Downloading config file (first time - from CDN)...");
     let start = Instant::now();
     match client
-        .download(cdn_host, "tpr/configs/data", config_hash)
+        .download(cdn_host, "tpr/configs/data", config_hash, "")
         .await
     {
         Ok(response) => {
@@ -56,7 +56,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("Downloading config file again (should be cached)...");
     let start = Instant::now();
     match client
-        .download(cdn_host, "tpr/configs/data", config_hash)
+        .download(cdn_host, "tpr/configs/data", config_hash, "")
         .await
     {
         Ok(response) => {
@@ -79,7 +79,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("\nDemonstrating different content types:");
 
     // Data file example
-    match client.download(cdn_host, "data", data_hash).await {
+    match client.download(cdn_host, "data", data_hash, "").await {
         Ok(response) => {
             let is_cached = response.is_from_cache();
             let content_length = response.content_length();
@@ -133,7 +133,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     mutable_client.set_caching_enabled(false);
 
     match mutable_client
-        .download(cdn_host, "tpr/configs/data", config_hash)
+        .download(cdn_host, "tpr/configs/data", config_hash, "")
         .await
     {
         Ok(response) => {
@@ -158,7 +158,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("\nStreaming example:");
     let large_file_hash = "1234567890abcdef1234567890abcdef"; // Example large file
     match custom_client
-        .download_stream(cdn_host, "data", large_file_hash)
+        .download_stream(cdn_host, "data", large_file_hash, "")
         .await
     {
         Ok(mut stream) => {

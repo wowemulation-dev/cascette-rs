@@ -1,0 +1,28 @@
+# Build Configuration
+
+root = ea8aefdebdbd6429da905c8c6a2b1813
+install = 54c189d60033f93f42e7b91165e7de1c a9dcee49ab3f952d69441eb3fd91c159
+install-size = 23038 22281
+download = 42a7bb33cd1e9a7b72bef6ee14719b58 53ba96f0965adc306d2d0cf3b457949c
+download-size = 5606744 4818287
+size = d1d9e612a645cc7a7e4b42628bde21ce 0d5704735f4985e555907a7e7647099a
+size-size = 3637629 3076687
+encoding = b07b881f4527bda7cf8a1a2f99e8622e bbf06e7476382cfaa396cff0049d356b
+encoding-size = 14004322 14003043
+patch-index = 5472ee24b5b9d148acfd2a436fc514be 76ce88ecb704dc93849def9fb489a6fb
+patch-index-size = 16783 6591
+patch = 4f185b4a837d4a363b2490432aaef092
+patch-size = 11017
+patch-config = 474b9630df5b46df5d98ec27c5f78d07
+build-name = WOW-61582patch1.15.7_ClassicRetail
+build-uid = wow_classic_era
+build-product = WoW
+build-playbuild-installer = ngdptool_casc2
+vfs-root = e66c10804e5180c61fb859556b070e75 9b3acedb4ef76379f36f59499bd80814
+vfs-root-size = 14703 10256
+vfs-1 = e66c10804e5180c61fb859556b070e75 9b3acedb4ef76379f36f59499bd80814
+vfs-1-size = 14703 10256
+vfs-2 = 752748ad87e666c572c8b1a6d6d8cf78 b1f344b5b268465025a551e95d56d70f
+vfs-2-size = 867 668
+
+
