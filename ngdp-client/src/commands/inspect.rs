@@ -9,7 +9,11 @@ use crate::{
 use ngdp_bpsv::BpsvDocument;
 use ribbit_client::{CdnEntry, Endpoint, ProductCdnsResponse, ProductVersionsResponse, Region};
 use std::{collections::BTreeMap, io::Cursor, str::FromStr as _};
-use tact_parser::{Md5, archive::ArchiveIndexParser, config::CdnConfig};
+use tact_parser::{
+    Md5,
+    archive::ArchiveIndexParser,
+    config::{BuildConfig, CdnConfig},
+};
 use thiserror::Error;
 use tracing::*;
 
@@ -24,17 +28,14 @@ pub async fn handle(
         InspectCommands::Bpsv { input, raw } => inspect_bpsv(input, raw, format).await?,
         InspectCommands::BuildConfig {
             product,
-            build,
+            config,
             region,
-        } => {
-            println!("Build config inspection not yet implemented");
-            println!("Product: {product}");
-            println!("Build: {build}");
-            println!("Region: {region}");
-        }
-        InspectCommands::CdnConfig { product, region } => {
-            inspect_cdn_config(product, region, format).await?
-        }
+        } => inspect_build_config(product, config, region, format).await?,
+        InspectCommands::CdnConfig {
+            product,
+            config,
+            region,
+        } => inspect_cdn_config(product, config, region, format).await?,
         InspectCommands::Encoding { file, stats } => {
             println!("Encoding inspection not yet implemented");
             println!("File: {file:?}");
@@ -192,18 +193,25 @@ enum InspectError {
 
 async fn inspect_cdn_config(
     product: String,
+    config: Option<String>,
     region: String,
     format: OutputFormat,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let region_enum = Region::from_str(&region)?;
     let client = create_client(region_enum).await?;
 
-    let endpoint = Endpoint::ProductVersions(product.clone());
-    let versions: ProductVersionsResponse = client.request_typed(&endpoint).await?;
+    let config = match config {
+        Some(config) => config,
+        None => {
+            let endpoint = Endpoint::ProductVersions(product.clone());
+            let versions: ProductVersionsResponse = client.request_typed(&endpoint).await?;
 
-    let version = versions
-        .get_region(region.as_str())
-        .ok_or(InspectError::RegionNotFound)?;
+            let version = versions
+                .get_region(region.as_str())
+                .ok_or(InspectError::RegionNotFound)?;
+            version.cdn_config.clone()
+        }
+    };
 
     // Fetch the CDN host list
     let endpoint = Endpoint::ProductCdns(product.clone());
@@ -224,14 +232,14 @@ async fn inspect_cdn_config(
 
     let cdn_config = client
         .cdn_client()
-        .download_cdn_config(cdn_host, &cdn_entry.path, &version.cdn_config)
+        .download_cdn_config(cdn_host, &cdn_entry.path, &config)
         .await?;
     let cdn_config = CdnConfig::parse_config(Cursor::new(cdn_config.bytes().await?))?;
 
     match format {
         OutputFormat::Json | OutputFormat::JsonPretty => {
             let json_data = serde_json::json!({
-                "config": version.cdn_config,
+                "config": config,
                 "archive_group": cdn_config.archive_group.map(hex::encode),
                 "patch_archive_group": cdn_config.patch_archive_group.map(hex::encode),
 
@@ -267,7 +275,7 @@ async fn inspect_cdn_config(
             let style = OutputStyle::new();
 
             // TODO: add missing fields
-            print_section_header(&format!("CDN configuration {}", version.cdn_config), &style);
+            print_section_header(&format!("CDN configuration {config}"), &style);
 
             print_subsection_header("Archives", &style);
 
@@ -483,4 +491,53 @@ async fn inspect_archives(
     }
 
     Ok(())
+}
+
+async fn inspect_build_config(
+    product: String,
+    config: Option<String>,
+    region: String,
+    _format: OutputFormat,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let region_enum = Region::from_str(&region)?;
+    let client = create_client(region_enum).await?;
+
+    let config = match config {
+        Some(config) => config,
+        None => {
+            let endpoint = Endpoint::ProductVersions(product.clone());
+            let versions: ProductVersionsResponse = client.request_typed(&endpoint).await?;
+
+            let version = versions
+                .get_region(region.as_str())
+                .ok_or(InspectError::RegionNotFound)?;
+            version.cdn_config.clone()
+        }
+    };
+
+    // Fetch the CDN host list
+    let endpoint = Endpoint::ProductCdns(product.clone());
+    let cdns: ProductCdnsResponse = client.request_typed(&endpoint).await?;
+
+    // Filter CDN entries for the specified region
+    let filtered_entries: Vec<&CdnEntry> =
+        cdns.entries.iter().filter(|e| e.name == region).collect();
+
+    if filtered_entries.is_empty() {
+        return Err(Box::new(InspectError::NoCdnsFoundInRegion));
+    }
+
+    // Pick CDN to fetch config
+    // TODO: pick with fallback, when fallback supports caching
+    let cdn_entry = filtered_entries.first().unwrap();
+    let cdn_host = cdn_entry.hosts.first().unwrap();
+
+    let build_config = client
+        .cdn_client()
+        .download_build_config(cdn_host, &cdn_entry.path, &config)
+        .await?;
+    let build_config = BuildConfig::parse_config(Cursor::new(build_config.bytes().await?))?;
+
+    info!("Build config: {build_config:?}");
+    todo!()
 }
