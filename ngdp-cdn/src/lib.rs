@@ -54,10 +54,13 @@
 mod client;
 mod error;
 mod fallback;
+mod hosts;
+mod traits;
 
 #[cfg(test)]
 mod client_test;
 
 pub use client::{CdnClient, CdnClientBuilder};
 pub use error::{Error, Result};
+pub use hosts::{CdnHostProvider, PriorityHostList, StaticHostList};
 pub use fallback::{CdnClientWithFallback, CdnClientWithFallbackBuilder};
