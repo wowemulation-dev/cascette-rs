@@ -41,6 +41,6 @@ pub use client::{Response, RibbitClient};
 pub use error::{Error, Result};
 pub use response_types::{
     BgdlEntry, CdnEntry, ProductBgdlResponse, ProductCdnsResponse, ProductSummary,
-    ProductVersionsResponse, SummaryResponse, TypedResponse, VersionEntry,
+    ProductVersionsResponse, SummaryResponse, TypedBpsvResponse, TypedResponse, VersionEntry,
 };
 pub use types::{Endpoint, ProtocolVersion, Region};
