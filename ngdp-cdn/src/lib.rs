@@ -64,3 +64,4 @@ pub use client::{CdnClient, CdnClientBuilder};
 pub use error::{Error, Result};
 pub use hosts::{CdnHostProvider, PriorityHostList, StaticHostList};
 pub use fallback::{CdnClientWithFallback, CdnClientWithFallbackBuilder};
+pub use traits::CacheProvider;

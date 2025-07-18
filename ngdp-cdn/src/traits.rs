@@ -1,5 +1,5 @@
-use bytes::Bytes;
-use futures_util::{Sink, Stream};
+use std::future::Future;
+use tokio::io::{AsyncBufRead, AsyncSeek, AsyncWrite};
 
 /// Cache provider trait.
 pub trait CacheProvider {
@@ -8,12 +8,11 @@ pub trait CacheProvider {
     /// Return `None` if the item is not in cache.
     ///
     /// This function assumes that all cache items are immutable.
-    async fn read(&self, path: &str, hash: &str, suffix: &str)
-    -> Option<impl Stream<Item = Bytes>>;
+    fn read(&self, full_path: &str) -> impl Future<Output = Option<impl AsyncBufRead + AsyncSeek>>;
 
     /// Write an item to cache, by providing a [`Sink`][] where it can be
     /// written.
     ///
     /// Return `None` if the item should not be cached.
-    async fn write(&self, path: &str, hash: &str, suffix: &str) -> Option<impl Sink<Bytes>>;
+    fn write(&self, full_path: &str) -> impl Future<Output = Option<impl AsyncWrite>>;
 }
