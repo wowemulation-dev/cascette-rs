@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1](https://github.com/wowemulation-dev/cascette-rs/compare/ngdp-client-v0.2.0...ngdp-client-v0.2.1) - 2025-07-18
+
+### Other
+
+- updated the following local packages: ngdp-cache
+
 ## [0.2.0](https://github.com/wowemulation-dev/cascette-rs/compare/ngdp-client-v0.1.2...ngdp-client-v0.2.0) - 2025-07-15
 
 ### Other
