@@ -381,7 +381,6 @@ impl<T: BufRead + Seek> BlteExtractor<T> {
 
         for block in 0..self.header.block_count() {
             let header = self.read_block_header(block)?;
-            // TODO: checksums
 
             // Position in the block, skip the headers
             let mut p = header.encoding.len() as u64;
