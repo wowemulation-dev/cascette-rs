@@ -38,10 +38,10 @@ pub enum Error {
     },
 
     /// Content not found on CDN
-    #[error("Content not found: {hash}")]
+    #[error("Content not found: {path}")]
     ContentNotFound {
-        /// The content hash that was not found
-        hash: String,
+        /// The path that was not found
+        path: String,
     },
 
     /// Content verification failed
@@ -92,6 +92,9 @@ pub enum Error {
     /// Partial content not supported
     #[error("CDN server does not support partial content (range requests)")]
     PartialContentNotSupported,
+    
+    #[error("Hosts not set")]
+    NoHosts,
 }
 
 /// Result type for CDN operations
@@ -124,8 +127,8 @@ impl Error {
     }
 
     /// Create a content not found error
-    pub fn content_not_found(hash: impl Into<String>) -> Self {
-        Self::ContentNotFound { hash: hash.into() }
+    pub fn content_not_found(path: impl Into<String>) -> Self {
+        Self::ContentNotFound { path: path.into() }
     }
 
     /// Create a verification failed error

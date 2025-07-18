@@ -9,7 +9,7 @@ pub trait CdnHostProvider {
 }
 
 /// CDN host list provider that always returns the same hostname.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct SingleHost(pub String);
 
 impl CdnHostProvider for SingleHost {
@@ -26,7 +26,7 @@ impl From<String> for SingleHost {
 
 /// CDN host list provider that works with a simple list of hostnames, and
 /// selects them at random each time.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct StaticHostList(pub Vec<String>);
 
 impl CdnHostProvider for StaticHostList {
@@ -70,7 +70,7 @@ impl From<Vec<String>> for StaticHostList {
 /// ]);
 /// # }
 /// ```
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct PriorityHostList(pub Vec<Vec<String>>);
 
 impl CdnHostProvider for PriorityHostList {

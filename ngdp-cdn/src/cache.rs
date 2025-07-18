@@ -1,5 +1,5 @@
 use std::future::Future;
-use tokio::io::{AsyncBufRead, AsyncSeek, AsyncWrite};
+use tokio::io::{AsyncBufRead, AsyncSeek, AsyncWrite, Empty};
 
 /// Cache provider trait.
 pub trait CacheProvider {
@@ -15,4 +15,19 @@ pub trait CacheProvider {
     ///
     /// Return `None` if the item should not be cached.
     fn write(&self, full_path: &str) -> impl Future<Output = Option<impl AsyncWrite>>;
+}
+
+/// No-op cache provider.
+pub struct DummyCacheProvider;
+
+impl CacheProvider for DummyCacheProvider {
+    async fn read(&self, full_path: &str) -> Option<impl AsyncBufRead + AsyncSeek> {
+        let _ = full_path;
+        None::<Empty>
+    }
+
+    async fn write(&self, full_path: &str) -> Option<impl AsyncWrite> {
+        let _ = full_path;
+        None::<Empty>
+    }
 }

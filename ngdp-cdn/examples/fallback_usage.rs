@@ -1,6 +1,6 @@
 //! Example demonstrating CDN fallback functionality
 
-use ngdp_cdn::{CdnClientWithFallback, Result};
+use ngdp_cdn::{CdnClient, DummyCacheProvider, PriorityHostList, Result};
 use tracing::{Level, info};
 use tracing_subscriber::FmtSubscriber;
 
@@ -12,9 +12,27 @@ async fn main() -> Result<()> {
         .finish();
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 
-    // Example 1: Create client with default backup CDNs
-    info!("Creating CDN client with default backup CDNs");
-    let client = CdnClientWithFallback::new()?;
+    // Example 1: Create client with backup CDNs
+    info!("Creating CDN client with backup CDNs");
+
+    // Example CDN hosts (these would typically come from TACT CDN manifest)
+    let cdn_hosts = PriorityHostList(vec![
+        vec![
+            "blzddist1-a.akamaihd.net".to_string(),
+            "level3.blizzard.com".to_string(),
+            "cdn.blizzard.com".to_string(),
+        ],
+        vec![
+            "cdn.arctium.tools".to_string(),
+            "tact.mirror.reliquaryhq.com".to_string(),
+        ],
+    ]);
+
+    // Create a CDN client with default configuration
+    let client: CdnClient<PriorityHostList, DummyCacheProvider> =
+    CdnClient::builder().hosts(cdn_hosts.clone()).build()?;
+
+    info!("Created CDN client with default configuration");
 
     // The client will automatically use these backup CDNs:
     // - http://cdn.arctium.tools/
@@ -22,56 +40,7 @@ async fn main() -> Result<()> {
 
     info!("Default CDN hosts: {:?}", client.get_all_cdn_hosts());
 
-    // Example 2: Add primary CDNs from Ribbit response
-    info!("\nAdding primary CDNs (Blizzard servers)");
-    client.add_primary_cdns(vec![
-        "blzddist1-a.akamaihd.net",
-        "level3.blizzard.com",
-        "blzddist2-a.akamaihd.net",
-    ]);
-
-    info!("CDN order (Blizzard first, then community backups):");
-    for (i, host) in client.get_all_cdn_hosts().iter().enumerate() {
-        info!("  {}. {}", i + 1, host);
-    }
-
-    // Example 3: Custom configuration without default backups
-    info!("\nCreating client with custom configuration");
-    let custom_client = CdnClientWithFallback::builder()
-        .add_primary_cdn("primary.example.com")
-        .add_primary_cdn("secondary.example.com")
-        .use_default_backups(false)
-        .configure_base_client(|builder| {
-            builder
-                .max_retries(5)
-                .initial_backoff_ms(200)
-                .connect_timeout(60)
-        })
-        .build()?;
-
-    info!(
-        "Custom client CDN hosts: {:?}",
-        custom_client.get_all_cdn_hosts()
-    );
-
-    // Example 4: Download with automatic fallback
-    info!("\nDemonstrating download with fallback");
-    info!("Note: This will fail since we're using example CDNs");
-
-    // In a real scenario, if the primary CDN fails, it will automatically
-    // try the next CDN in the list until one succeeds or all fail
-    match custom_client
-        .download("tpr/wow", "1234567890abcdef", "")
-        .await
-    {
-        Ok(_response) => {
-            info!("Download succeeded!");
-        }
-        Err(e) => {
-            info!("Download failed (expected in this example): {}", e);
-        }
-    }
-
+    // TODO: rewrite this
     // Example 5: Integrating with Ribbit client
     info!("\nExample integration with Ribbit client:");
     info!("// After getting CDN entries from Ribbit:");

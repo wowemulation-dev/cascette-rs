@@ -51,17 +51,19 @@
 
 #![warn(missing_docs)]
 
+mod backoff;
+mod cache;
 mod client;
 mod error;
-mod fallback;
+// mod fallback;
 mod hosts;
-mod traits;
 
 #[cfg(test)]
 mod client_test;
 
-pub use client::{CdnClient, CdnClientBuilder};
+pub use backoff::Backoff;
+pub use cache::{CacheProvider, DummyCacheProvider};
+pub use client::{CdnClient, CdnClientBuilder, build_path};
 pub use error::{Error, Result};
-pub use hosts::{CdnHostProvider, PriorityHostList, StaticHostList};
-pub use fallback::{CdnClientWithFallback, CdnClientWithFallbackBuilder};
-pub use traits::CacheProvider;
+// pub use fallback::{CdnClientWithFallback, CdnClientWithFallbackBuilder};
+pub use hosts::{CdnHostProvider, PriorityHostList, StaticHostList, SingleHost};
