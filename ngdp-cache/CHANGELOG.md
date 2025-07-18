@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.4](https://github.com/wowemulation-dev/cascette-rs/compare/ngdp-cache-v0.1.3...ngdp-cache-v0.1.4) - 2025-07-18
+
+### Fixed
+
+- path tests on non-linux platforms
+
+### Other
+
+- Merge pull request #11 from micolous/refactor/bpsv-response
+- Merge pull request #10 from micolous/fix/non-linux-paths
+
 ## [0.1.3](https://github.com/wowemulation-dev/cascette-rs/compare/ngdp-cache-v0.1.2...ngdp-cache-v0.1.3) - 2025-07-15
 
 ### Other
