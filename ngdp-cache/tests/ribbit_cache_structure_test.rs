@@ -3,9 +3,12 @@
 //! This test demonstrates that CachedRibbitClient uses the correct
 //! cache directory structure: ~/.cache/ngdp/ribbit/{region}/
 
+#[cfg(target_os = "linux")]
 use ngdp_cache::ribbit::RibbitCache;
+#[cfg(target_os = "linux")]
 use tempfile::TempDir;
 
+#[cfg(target_os = "linux")]
 #[tokio::test]
 async fn test_ribbit_cache_directory_structure() -> Result<(), Box<dyn std::error::Error>> {
     // Use a temporary directory for testing
@@ -51,6 +54,7 @@ async fn test_ribbit_cache_directory_structure() -> Result<(), Box<dyn std::erro
     Ok(())
 }
 
+#[cfg(target_os = "linux")]
 #[tokio::test]
 async fn test_ribbit_cache_file_naming() -> Result<(), Box<dyn std::error::Error>> {
     let temp_dir = TempDir::new()?;

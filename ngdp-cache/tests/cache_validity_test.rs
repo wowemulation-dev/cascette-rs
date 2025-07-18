@@ -1,8 +1,11 @@
 //! Test that cached data is still valid and being used
 
+#[cfg(target_os = "linux")]
 use ngdp_cache::{generic::GenericCache, ribbit::RibbitCache};
+#[cfg(target_os = "linux")]
 use tempfile::TempDir;
 
+#[cfg(target_os = "linux")]
 #[tokio::test]
 async fn test_cache_ttl_and_validity() -> Result<(), Box<dyn std::error::Error>> {
     let temp_dir = TempDir::new()?;
@@ -43,6 +46,7 @@ async fn test_cache_ttl_and_validity() -> Result<(), Box<dyn std::error::Error>>
     Ok(())
 }
 
+#[cfg(target_os = "linux")]
 #[tokio::test]
 async fn test_generic_cache_performance() -> Result<(), Box<dyn std::error::Error>> {
     let temp_dir = TempDir::new()?;
@@ -79,6 +83,7 @@ async fn test_generic_cache_performance() -> Result<(), Box<dyn std::error::Erro
     Ok(())
 }
 
+#[cfg(target_os = "linux")]
 #[tokio::test]
 async fn test_cache_file_structure() -> Result<(), Box<dyn std::error::Error>> {
     let temp_dir = TempDir::new()?;

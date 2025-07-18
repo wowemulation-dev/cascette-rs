@@ -378,17 +378,16 @@ mod tests {
         let hash = "deadbeef1234567890abcdef12345678";
 
         let config_path = cache.config_path(hash);
-        assert!(config_path.to_str().unwrap().contains("config/de/ad"));
+        assert!(config_path.ends_with("config/de/ad/deadbeef1234567890abcdef12345678"));
 
         let data_path = cache.data_path(hash);
-        assert!(data_path.to_str().unwrap().contains("data/de/ad"));
+        assert!(data_path.ends_with("data/de/ad/deadbeef1234567890abcdef12345678"));
 
         let patch_path = cache.patch_path(hash);
-        assert!(patch_path.to_str().unwrap().contains("patch/de/ad"));
+        assert!(patch_path.ends_with("patch/de/ad/deadbeef1234567890abcdef12345678"));
 
         let index_path = cache.index_path(hash);
-        assert!(index_path.to_str().unwrap().contains("data/de/ad"));
-        assert!(index_path.to_str().unwrap().ends_with(".index"));
+        assert!(index_path.ends_with("data/de/ad/deadbeef1234567890abcdef12345678.index"));
     }
 
     #[tokio::test]
@@ -398,24 +397,19 @@ mod tests {
         let hash = "deadbeef1234567890abcdef12345678";
 
         let config_path = cache.config_path(hash);
-        assert!(
-            config_path
-                .to_str()
-                .unwrap()
-                .contains("tpr/wow/config/de/ad")
-        );
+        assert!(config_path.ends_with("tpr/wow/config/de/ad/deadbeef1234567890abcdef12345678"));
 
         let data_path = cache.data_path(hash);
-        assert!(data_path.to_str().unwrap().contains("tpr/wow/data/de/ad"));
+        assert!(data_path.ends_with("tpr/wow/data/de/ad/deadbeef1234567890abcdef12345678"));
 
         let patch_path = cache.patch_path(hash);
-        assert!(patch_path.to_str().unwrap().contains("tpr/wow/patch/de/ad"));
+        assert!(patch_path.ends_with("tpr/wow/patch/de/ad/deadbeef1234567890abcdef12345678"));
     }
 
     #[tokio::test]
     async fn test_cdn_product_cache() {
         let cache = CdnCache::for_product("wow").await.unwrap();
-        assert!(cache.base_dir().to_str().unwrap().contains("cdn/wow"));
+        assert!(cache.base_dir().ends_with("cdn/wow"));
     }
 
     #[tokio::test]
