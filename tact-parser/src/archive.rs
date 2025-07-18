@@ -172,7 +172,7 @@ pub struct ArchiveIndexToc {
     pub last_ekey: Vec<Vec<u8>>,
 
     /// Partial MD5 checksum of the block.
-    pub block_partial_md5: Vec<Vec<u8>>,
+    block_partial_md5: Vec<Vec<u8>>,
 
     /// Number of blocks in the TOC
     pub num_blocks: usize,
@@ -194,16 +194,25 @@ impl ArchiveIndexToc {
             // read the last bit of the file in, minus headers
             let estimated_toc_start =
                 (estimated_num_blocks as u64) * u64::from(footer.block_size_bytes);
-            let estimated_toc_length = footer.footer_offset - estimated_toc_start;
+            let estimated_toc_length = (footer.footer_offset - estimated_toc_start) as usize;
             debug!("trying TOC at: {estimated_toc_start:#x} with length {estimated_toc_length}");
 
             // Read in the newest block
             f.seek(SeekFrom::Start(estimated_toc_start))?;
 
-            // TODO: prepend the next block of the buffer each time
-            buf.clear();
-            buf.resize(estimated_toc_length as usize, 0);
-            f.read_exact(&mut buf)?;
+            if estimated_num_blocks == max_blocks {
+                // If the TOC is 1 block long, then it might be a short read
+                buf.resize(estimated_toc_length, 0);
+                f.read_exact(&mut buf)?;
+            } else {
+                // Reading in another full block to prepend
+                let mut prev_buf = vec![0; footer.block_size_bytes as usize];
+                f.read_exact(&mut prev_buf)?;
+
+                // Append existing buffer to new buffer
+                prev_buf.append(&mut buf);
+                buf = prev_buf;
+            }
 
             // Check MD5
             hasher.update(&buf);
@@ -269,6 +278,12 @@ impl<T: BufRead + Seek> ArchiveIndexParser<T> {
     }
 
     pub fn read_block(&mut self, index: usize) -> Result<impl Iterator<Item = ArchiveIndexEntry>> {
+        let last_ekey = self
+            .toc
+            .last_ekey
+            .get(index)
+            .ok_or(Error::BlockIndexOutOfRange(index, self.toc.num_blocks))?;
+
         let expected_hash = self
             .toc
             .block_partial_md5
@@ -299,7 +314,7 @@ impl<T: BufRead + Seek> ArchiveIndexParser<T> {
             return Err(Error::ChecksumMismatch);
         }
 
-        Ok(ArchiveIndexBlockParser::new(buf, &self.footer))
+        Ok(ArchiveIndexBlockParser::new(buf, &self.footer, last_ekey))
     }
 
     /// Release the file handle from `ArchiveIndexParser`.
@@ -326,10 +341,11 @@ struct ArchiveIndexBlockParser<'a> {
     p: usize,
     entry_length: usize,
     footer: &'a ArchiveIndexFooter,
+    last_ekey: &'a [u8],
 }
 
 impl<'a> ArchiveIndexBlockParser<'a> {
-    fn new(block: Vec<u8>, footer: &'a ArchiveIndexFooter) -> Self {
+    fn new(block: Vec<u8>, footer: &'a ArchiveIndexFooter, last_ekey: &'a [u8]) -> Self {
         let entry_length = usize::from(footer.key_bytes)
             + usize::from(footer.size_bytes)
             + usize::from(footer.offset_bytes);
@@ -339,6 +355,7 @@ impl<'a> ArchiveIndexBlockParser<'a> {
             p: 0,
             footer,
             entry_length,
+            last_ekey,
         }
     }
 }
@@ -388,7 +405,13 @@ impl<'a> Iterator for ArchiveIndexBlockParser<'a> {
             u64::from_be_bytes(v)
         };
 
+        // Our previous reads should all add up
         assert!(buf.is_empty());
+
+        if ekey == self.last_ekey {
+            // This is the last EKey in the block, brick the iterator
+            self.p = self.block.len();
+        }
 
         Some(ArchiveIndexEntry {
             ekey: ekey.to_vec(),

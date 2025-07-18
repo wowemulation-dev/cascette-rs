@@ -40,17 +40,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("Index footer: {:#?}", parser.footer());
 
     info!("TOC contains {} entries:", parser.toc().last_ekey.len());
-    for (last_ekey, partial_md5) in parser
-        .toc()
-        .last_ekey
-        .iter()
-        .zip(parser.toc().block_partial_md5.iter())
-    {
-        println!(
-            "  - EKey {}, MD5 {}",
-            hex::encode(last_ekey),
-            hex::encode(partial_md5)
-        );
+    for (block, last_ekey) in parser.toc().last_ekey.iter().enumerate() {
+        println!("  - Block {block} last EKey: {}", hex::encode(last_ekey));
     }
     println!();
     info!("Reading block 0...");

@@ -28,7 +28,7 @@ use std::{
 };
 
 /// Base listfile parser, which emits entries using an iterator-like interface.
-/// 
+///
 /// If you're looking up many records, use [`ListfileNameResolver`] provides
 /// [`BTreeMap`]-based lookups, which is faster than re-scanning the file.
 pub struct ListfileParser<'a, T: BufRead + 'a> {
@@ -82,7 +82,7 @@ impl<'a, T: BufRead + 'a> ListfileParser<'a, T> {
 }
 
 /// [`BTreeMap`]-based File ID/path resolver.
-/// 
+///
 /// When you only need to look up a single record, it's more efficient to use
 /// [`ListfileParser`] directly.
 pub struct ListfileNameResolver {
