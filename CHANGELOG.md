@@ -9,7 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Automatic CDN fallback support in `ngdp-cdn`**:
+#### `tact-parser` crate
+
+- **New crate for parsing TACT file formats**:
+  - Support for parsing WoW root files to find file IDs and MD5s
+  - Jenkins3 hash implementation for TACT data processing
+  - Support for both modern (8.2+) and legacy pre-8.2 root formats
+  - Efficient buffered I/O operations for improved performance
+  - Comprehensive test suite with unit and integration tests
+  - Performance benchmarks for Jenkins3 hashing
+  - Example demonstrating WoW root file parsing
+
+#### `ngdp-cdn` crate
+
+- **Automatic CDN fallback support**:
   - Added `CdnClientWithFallback` for automatic failover between multiple CDN hosts
   - Built-in support for community backup CDNs: `cdn.arctium.tools` and `tact.mirror.reliquaryhq.com`
   - Prioritizes all Blizzard CDN servers first before trying community mirrors
@@ -18,7 +31,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Support for custom CDN fallbacks via `add_custom_cdn()` and `set_custom_cdns()` methods
   - Custom CDNs are tried after primary and community CDNs in fallback order
 
-- **Historical builds command in `ngdp-client`**:
+#### `ngdp-client` crate
+
+- **Historical builds command**:
   - Added `ngdp products builds` command to retrieve all historical builds for a product
   - Integrates with Wago Tools API (https://wago.tools/api/builds) for comprehensive build history
   - Support for filtering by version pattern with `--filter`
@@ -30,42 +45,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Caching support with 30-minute TTL to reduce API load
   - Respects global cache settings (`--no-cache` and `--clear-cache` flags)
 
+### Changed
+
+#### `ribbit-client` crate
+
+- **Refactored BPSV response handling**:
+  - Split BPSV functionality from `TypedResponse` to new `TypedBpsvResponse` trait
+  - Allows non-BPSV responses to be parsed through the typed response system
+  - Re-exported `TypedBpsvResponse` for backward compatibility
+  - Improved separation of concerns between response types
+
 ### Fixed
 
-- Fixed conflicting short command-line flags in `ngdp-client`:
-  - Removed `-l` short flag from `--limit` in `products builds` command (was conflicting with `-l` for `--log-level`)
-  - Removed `-d` short flag from `--days` in `products builds` command (was conflicting with `-d` for `--details` in `certs download`)
-  - Removed `-o` short flag from `--output` in `download build` and `download files` commands (was conflicting with global `-o` for `--format`)
+- Fixed path tests on non-Linux platforms in multiple crates:
+  - Updated cache path tests to work correctly across different operating systems
+  - Fixed hardcoded Unix path separators that caused test failures on Windows
 
-- Enhanced `config show` command to display all configuration settings:
-  - Now shows all available settings with their default values, not just the three basic ones
-  - Added settings: `cache_enabled`, `cache_ttl`, `max_concurrent_downloads`, `user_agent`, `verify_certificates`, `proxy_url`, `ribbit_timeout`, `tact_timeout`, `retry_attempts`, `log_file`, `color_output`, `fallback_to_tact`, `use_community_cdn_fallbacks`, `custom_cdn_fallbacks`
-  - All settings are now accessible via `config get` command
+#### Code Quality and Safety Improvements
 
-- **Custom CDN fallback configuration in `ngdp-client`**:
-  - New `custom_cdn_fallbacks` configuration option for user-defined CDN hosts
-  - Custom CDNs are tried after Blizzard and community CDNs have been exhausted
-  - Integration with `CdnClientWithFallback` through new `cdn_config` module
-  - Custom CDNs can be configured as comma-separated list in settings
+- **Removed panicking Default implementations**:
+  - Removed `Default` trait implementation from `CdnClient` that would panic on failure
+  - Removed `Default` trait implementation from `CdnClientWithFallback` that would panic on failure
+  - These implementations were not used anywhere in the codebase
 
-- Fixed parse_basic example in `ngdp-bpsv`:
-  - Corrected HEX field declarations from HEX:32 to HEX:16 to match actual data
-  - Example now runs successfully without validation errors
+- **Fixed unwrap() calls in library code**:
+  - Replaced all `unwrap()` calls in `tact-client` response parsing with proper error handling
+  - Added meaningful error messages for missing fields using the `MissingField` error variant
+  - All library code now properly propagates errors instead of panicking
 
-- Fixed clippy warnings in `ngdp-client`:
-  - Resolved uninlined_format_args warnings in wago_builds example
-  - Applied consistent code formatting across all crates
+- **Documented safety of unwrap() usage**:
+  - Added SAFETY comments to `tact-parser/src/jenkins3.rs` explaining why unwrap() calls are safe
+  - These unwraps operate on fixed-size array slices where bounds are guaranteed
 
-- Fixed GitHub Actions workflow failures:
-  - Replaced OpenSSL dependency with rustls for cross-platform builds
-  - Updated all `reqwest` dependencies to use `rustls-tls` feature
-  - Removed `native-tls` dependency that prevented cross-compilation
-  - Fixed cross-compilation for targets: `aarch64-unknown-linux-musl`, `armv7-unknown-linux-gnueabihf`
+- **Code optimization and cleanup**:
+  - Removed unnecessary `to_string()` calls and string clones in `ngdp-cdn`
+  - Replaced `vec!` with arrays for small fixed-size collections
+  - Optimized string building in `ngdp-client` using iterator chains instead of manual loops
+  - Fixed clippy warnings about format string inlining
 
-- Fixed Release-plz workflow permissions issue:
-  - Updated workflow to support Personal Access Token (PAT) via `RELEASE_PLZ_TOKEN` secret
-  - Added documentation for PAT setup in `.github/WORKFLOW_SETUP.md`
-  - Workflow now falls back to `GITHUB_TOKEN` if PAT is not configured
 
 ## [0.1.0] - 2025-06-28
 

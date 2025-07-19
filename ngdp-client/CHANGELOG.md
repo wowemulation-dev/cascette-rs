@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Code optimization**:
+  - Optimized string building in certificate PEM to DER conversion using iterator chains
+  - More efficient and idiomatic implementation of base64 extraction
+
 ## [0.2.0](https://github.com/wowemulation-dev/cascette-rs/compare/ngdp-client-v0.1.2...ngdp-client-v0.2.0) - 2025-07-15
 
 ### Other

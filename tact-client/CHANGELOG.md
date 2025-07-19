@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Replaced unwrap() calls with proper error handling**:
+  - All response parsing now uses `ok_or_else()` with meaningful error messages
+  - Added proper error propagation for missing fields in BPSV responses
+  - Prevents potential panics when parsing malformed responses
+
 ## [0.1.2](https://github.com/wowemulation-dev/cascette-rs/compare/tact-client-v0.1.1...tact-client-v0.1.2) - 2025-07-15
 
 ### Other

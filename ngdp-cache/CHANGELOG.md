@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed path tests on non-Linux platforms:
+  - Updated cache path tests to work correctly across different operating systems
+  - Fixed hardcoded Unix path separators that caused test failures on Windows
+
 ## [0.1.3](https://github.com/wowemulation-dev/cascette-rs/compare/ngdp-cache-v0.1.2...ngdp-cache-v0.1.3) - 2025-07-15
 
 ### Other

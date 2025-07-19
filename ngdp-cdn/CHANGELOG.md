@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Removed panicking Default implementation**:
+  - Removed `Default` trait implementation that would panic on failure
+  - The implementation was not used anywhere in the codebase
+
+- **Code optimization**:
+  - Removed unnecessary string clones in parallel download operations
+  - Replaced `vec!` with array for fixed-size test data
+  - Removed redundant `to_string()` calls in fallback implementation
+
 ## [0.2.1](https://github.com/wowemulation-dev/cascette-rs/compare/ngdp-cdn-v0.2.0...ngdp-cdn-v0.2.1) - 2025-07-15
 
 ### Other

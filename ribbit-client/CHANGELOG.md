@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Refactored BPSV response handling:
+  - Split BPSV functionality from `TypedResponse` to new `TypedBpsvResponse` trait
+  - Allows non-BPSV responses to be parsed through the typed response system
+  - Re-exported `TypedBpsvResponse` for backward compatibility
+  - Improved separation of concerns between response types
+
 ## [0.1.2](https://github.com/wowemulation-dev/cascette-rs/compare/ribbit-client-v0.1.1...ribbit-client-v0.1.2) - 2025-07-15
 
 ### Other
