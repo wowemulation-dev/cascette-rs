@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3](https://github.com/wowemulation-dev/cascette-rs/compare/tact-client-v0.1.2...tact-client-v0.1.3) - 2025-07-19
+
+### Other
+
+- 📝 docs: update changelogs and add module documentation
+- 🚨 fix: remove panicking Default impls and fix unwrap() calls
+
 ### Fixed
 
 - **Replaced unwrap() calls with proper error handling**:
