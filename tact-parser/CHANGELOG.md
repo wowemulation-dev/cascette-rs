@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0](https://github.com/wowemulation-dev/cascette-rs/releases/tag/tact-parser-v0.1.0) - 2025-07-19
+
+### Fixed
+
+- clippy/fmt
+
+### Other
+
+- 📝 docs: update changelogs and add module documentation
+- 🎨 style: optimize code and remove unnecessary allocations
+- 🚨 fix: remove panicking Default impls and fix unwrap() calls
+- Move tact-parser dependencies into workspace
+- fmt
+- tidy up old stuff
+- Implement support for pre-8.2 roots
+- Use bufread to improve performance
+- Docs
+- fmt
+- Move all the tests into separate files like the rest of the packages
+- Sort ReadInt implementations
+- Initial wow TACT root parser
+
 ### Added
 
 - Initial release of tact-parser crate
