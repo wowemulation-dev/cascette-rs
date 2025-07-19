@@ -18,10 +18,7 @@ fn bench_jenkins3(c: &mut Criterion) {
     ] {
         group.bench_with_input(BenchmarkId::from_parameter(name), data, |b, &data| {
             b.iter_batched(
-                || {
-                    // No setup
-                    ()
-                },
+                || {},
                 |_| {
                     let mut pc = 0;
                     let mut pb = 0;

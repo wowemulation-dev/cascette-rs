@@ -149,21 +149,13 @@ async fn download(
 /// Convert PEM certificate to DER format
 fn convert_pem_to_der(pem_data: &str) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     // Extract base64 content from PEM
-    let mut base64_content = String::new();
-    let mut in_cert = false;
-
-    for line in pem_data.lines() {
-        if line.contains("BEGIN CERTIFICATE") {
-            in_cert = true;
-            continue;
-        }
-        if line.contains("END CERTIFICATE") {
-            break;
-        }
-        if in_cert {
-            base64_content.push_str(line.trim());
-        }
-    }
+    let base64_content: String = pem_data
+        .lines()
+        .skip_while(|line| !line.contains("BEGIN CERTIFICATE"))
+        .skip(1) // Skip the BEGIN line itself
+        .take_while(|line| !line.contains("END CERTIFICATE"))
+        .map(|line| line.trim())
+        .collect();
 
     if base64_content.is_empty() {
         return Err("No certificate content found in PEM data".into());
