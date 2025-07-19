@@ -83,6 +83,8 @@ pub fn hashlittle2(key: &[u8], pc: &mut u32, pb: &mut u32) {
     // handle alignment issues. Instead, we always copy the data into aligned
     // variables.
     while k.len() > 12 {
+        // SAFETY: These unwraps are safe because we check k.len() > 12 above,
+        // and the slice ranges [0..4], [4..8], [8..12] are exactly 4 bytes each
         a = a.wrapping_add(u32::from_le_bytes(k[0..4].try_into().unwrap()));
         b = b.wrapping_add(u32::from_le_bytes(k[4..8].try_into().unwrap()));
         c = c.wrapping_add(u32::from_le_bytes(k[8..12].try_into().unwrap()));
@@ -99,6 +101,8 @@ pub fn hashlittle2(key: &[u8], pc: &mut u32, pb: &mut u32) {
     let mut final_block = [0; 12];
     final_block[..k.len()].copy_from_slice(k);
 
+    // SAFETY: These unwraps are safe because final_block is exactly 12 bytes,
+    // and the slice ranges [0..4], [4..8], [8..12] are exactly 4 bytes each
     a = a.wrapping_add(u32::from_le_bytes(final_block[0..4].try_into().unwrap()));
     if k.len() > 4 {
         b = b.wrapping_add(u32::from_le_bytes(final_block[4..8].try_into().unwrap()));

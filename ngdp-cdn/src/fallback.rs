@@ -119,14 +119,15 @@ impl CdnClientWithFallback {
 
     /// Get the list of all CDN hosts with Blizzard CDNs first, then backups, then custom
     pub fn get_all_cdn_hosts(&self) -> Vec<String> {
-        let primary_hosts = self.cdn_hosts.read().clone();
-        let mut all_hosts = primary_hosts;
+        let primary_hosts = self.cdn_hosts.read();
+        let mut all_hosts = primary_hosts.clone();
 
         // Add backup CDNs after all primary CDNs
         if self.use_default_backups {
             for backup in DEFAULT_BACKUP_CDNS {
-                if !all_hosts.contains(&backup.to_string()) {
-                    all_hosts.push(backup.to_string());
+                let backup_string = (*backup).to_string();
+                if !all_hosts.contains(&backup_string) {
+                    all_hosts.push(backup_string);
                 }
             }
         }
@@ -286,11 +287,6 @@ impl CdnClientWithFallback {
     }
 }
 
-impl Default for CdnClientWithFallback {
-    fn default() -> Self {
-        Self::new().expect("Failed to create default CDN client")
-    }
-}
 
 /// Builder for configuring CDN client with fallback
 #[derive(Debug, Clone)]

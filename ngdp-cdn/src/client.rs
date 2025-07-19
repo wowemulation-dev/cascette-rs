@@ -371,10 +371,9 @@ impl CdnClient {
         let futures = hashes.iter().map(|hash| {
             let cdn_host = cdn_host.to_string();
             let path = path.to_string();
-            let hash = hash.clone();
 
             async move {
-                match self.download(&cdn_host, &path, &hash).await {
+                match self.download(&cdn_host, &path, hash).await {
                     Ok(response) => response
                         .bytes()
                         .await
@@ -564,11 +563,6 @@ impl CdnClient {
     }
 }
 
-impl Default for CdnClient {
-    fn default() -> Self {
-        Self::new().expect("Failed to create default CDN client")
-    }
-}
 
 /// Builder for configuring CDN client
 #[derive(Debug, Clone)]
@@ -779,7 +773,7 @@ mod tests {
         let client = CdnClient::new().unwrap();
         let cdn_host = "example.com";
         let path = "test";
-        let hashes = vec![
+        let hashes = [
             "hash1".to_string(),
             "hash2".to_string(),
             "hash3".to_string(),

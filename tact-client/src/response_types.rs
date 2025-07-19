@@ -106,9 +106,18 @@ pub fn parse_versions(content: &str) -> Result<Vec<VersionEntry>> {
 
     for row in doc.rows() {
         entries.push(VersionEntry {
-            region: row.get_raw(region_idx).unwrap().to_string(),
-            build_config: row.get_raw(build_config_idx).unwrap().to_string(),
-            cdn_config: row.get_raw(cdn_config_idx).unwrap().to_string(),
+            region: row
+                .get_raw(region_idx)
+                .ok_or_else(|| Error::missing_field("Region"))?
+                .to_string(),
+            build_config: row
+                .get_raw(build_config_idx)
+                .ok_or_else(|| Error::missing_field("BuildConfig"))?
+                .to_string(),
+            cdn_config: row
+                .get_raw(cdn_config_idx)
+                .ok_or_else(|| Error::missing_field("CDNConfig"))?
+                .to_string(),
             key_ring: key_ring_idx.and_then(|idx| {
                 row.get_raw(idx).and_then(|s| {
                     if s.is_empty() {
@@ -118,14 +127,27 @@ pub fn parse_versions(content: &str) -> Result<Vec<VersionEntry>> {
                     }
                 })
             }),
-            build_id: row.get_raw(build_id_idx).unwrap().parse().map_err(|_| {
-                Error::InvalidManifest {
-                    line: 0,
-                    reason: format!("Invalid BuildId: {}", row.get_raw(build_id_idx).unwrap()),
-                }
-            })?,
-            versions_name: row.get_raw(versions_name_idx).unwrap().to_string(),
-            product_config: row.get_raw(product_config_idx).unwrap().to_string(),
+            build_id: row
+                .get_raw(build_id_idx)
+                .ok_or_else(|| Error::missing_field("BuildId"))?
+                .parse()
+                .map_err(|_| {
+                    let build_id_str = row
+                        .get_raw(build_id_idx)
+                        .unwrap_or("<missing>"); // Safe because we checked above
+                    Error::InvalidManifest {
+                        line: 0,
+                        reason: format!("Invalid BuildId: {build_id_str}"),
+                    }
+                })?,
+            versions_name: row
+                .get_raw(versions_name_idx)
+                .ok_or_else(|| Error::missing_field("VersionsName"))?
+                .to_string(),
+            product_config: row
+                .get_raw(product_config_idx)
+                .ok_or_else(|| Error::missing_field("ProductConfig"))?
+                .to_string(),
         });
     }
 
@@ -172,7 +194,9 @@ pub fn parse_cdns(content: &str) -> Result<Vec<CdnEntry>> {
 
     for row in doc.rows() {
         // Parse hosts as space-separated list
-        let hosts_str = row.get_raw(hosts_idx).unwrap();
+        let hosts_str = row
+            .get_raw(hosts_idx)
+            .ok_or_else(|| Error::missing_field("Hosts"))?;
         let hosts = if hosts_str.is_empty() {
             Vec::new()
         } else {
@@ -194,11 +218,20 @@ pub fn parse_cdns(content: &str) -> Result<Vec<CdnEntry>> {
             .unwrap_or_default();
 
         entries.push(CdnEntry {
-            name: row.get_raw(name_idx).unwrap().to_string(),
-            path: row.get_raw(path_idx).unwrap().to_string(),
+            name: row
+                .get_raw(name_idx)
+                .ok_or_else(|| Error::missing_field("Name"))?
+                .to_string(),
+            path: row
+                .get_raw(path_idx)
+                .ok_or_else(|| Error::missing_field("Path"))?
+                .to_string(),
             hosts,
             servers,
-            config_path: row.get_raw(config_path_idx).unwrap().to_string(),
+            config_path: row
+                .get_raw(config_path_idx)
+                .ok_or_else(|| Error::missing_field("ConfigPath"))?
+                .to_string(),
         });
     }
 
@@ -239,9 +272,18 @@ pub fn parse_bgdl(content: &str) -> Result<Vec<BgdlEntry>> {
 
     for row in doc.rows() {
         entries.push(BgdlEntry {
-            region: row.get_raw(region_idx).unwrap().to_string(),
-            build_config: row.get_raw(build_config_idx).unwrap().to_string(),
-            cdn_config: row.get_raw(cdn_config_idx).unwrap().to_string(),
+            region: row
+                .get_raw(region_idx)
+                .ok_or_else(|| Error::missing_field("Region"))?
+                .to_string(),
+            build_config: row
+                .get_raw(build_config_idx)
+                .ok_or_else(|| Error::missing_field("BuildConfig"))?
+                .to_string(),
+            cdn_config: row
+                .get_raw(cdn_config_idx)
+                .ok_or_else(|| Error::missing_field("CDNConfig"))?
+                .to_string(),
             install_bgdl_config: install_bgdl_idx.and_then(|idx| {
                 row.get_raw(idx).and_then(|s| {
                     if s.is_empty() {
