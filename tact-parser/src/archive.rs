@@ -8,6 +8,7 @@ use std::{
     io::{BufRead, Cursor, Read, Seek, SeekFrom},
     iter::repeat_n,
 };
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncSeek, AsyncSeekExt};
 use tracing::*;
 
 /// [Archive index][1] footer parser.
@@ -49,7 +50,21 @@ impl ArchiveIndexFooter {
         let earliest_footer_point = f.seek(SeekFrom::End(-(Self::MAX_FOOTER_SIZE_U16 as i64)))?;
         f.read_exact(&mut footer_buf)?;
         let (hash_bytes, footer) = Self::find_footer(&footer_buf, hash)?;
+        Self::parse_inner(earliest_footer_point, hash_bytes, footer)
+    }
 
+    /// Parses an archive index footer asynchronously.
+    pub async fn aparse<R: AsyncRead + AsyncSeek + Unpin>(f: &mut R, hash: &Md5) -> Result<Self> {
+        let mut footer_buf = [0; Self::MAX_FOOTER_SIZE];
+        let earliest_footer_point = f
+            .seek(SeekFrom::End(-(Self::MAX_FOOTER_SIZE_U16 as i64)))
+            .await?;
+        f.read_exact(&mut footer_buf).await?;
+        let (hash_bytes, footer) = Self::find_footer(&footer_buf, hash)?;
+        Self::parse_inner(earliest_footer_point, hash_bytes, footer)
+    }
+
+    fn parse_inner(earliest_footer_point: u64, hash_bytes: u8, footer: &[u8]) -> Result<Self> {
         // Find where the footer actually finishes
         let footer_offset =
             earliest_footer_point + (Self::MAX_FOOTER_SIZE_U16 as u64) - (footer.len() as u64);
