@@ -7,14 +7,19 @@ use crate::{
     },
 };
 use ngdp_bpsv::BpsvDocument;
+use ngdp_cache::cached_cdn_client::CachedCdnClient;
+use ngdp_cdn::{
+    CdnClientBuilderTrait as _, CdnClientWithFallbackBuilder, FallbackCdnClientTrait as _,
+};
 use ribbit_client::{CdnEntry, Endpoint, ProductCdnsResponse, ProductVersionsResponse, Region};
 use std::{collections::BTreeMap, io::Cursor, str::FromStr as _};
 use tact_parser::{
     Md5,
     archive::ArchiveIndexParser,
-    config::{BuildConfig, CdnConfig},
+    config::{BuildConfig, CdnConfig, ConfigParsable as _},
 };
 use thiserror::Error;
+use tokio::io::{AsyncBufRead, BufReader};
 use tracing::*;
 
 pub async fn handle(
@@ -226,13 +231,14 @@ async fn inspect_cdn_config(
     }
 
     // Pick CDN to fetch config
-    // TODO: pick with fallback, when fallback supports caching
+    let cdn_client_builder = CdnClientWithFallbackBuilder::<CachedCdnClient>::new();
+    // TODO: configure cache directory
     let cdn_entry = filtered_entries.first().unwrap();
-    let cdn_host = cdn_entry.hosts.first().unwrap();
+    let cdn_client_builder = cdn_client_builder.add_primary_cdns(cdn_entry.hosts.iter());
+    let cdn_client = cdn_client_builder.build().await?;
 
-    let cdn_config = client
-        .cdn_client()
-        .download_cdn_config(cdn_host, &cdn_entry.path, &config)
+    let cdn_config = cdn_client
+        .download_cdn_config(&cdn_entry.path, &config)
         .await?;
     let cdn_config = CdnConfig::parse_config(Cursor::new(cdn_config.bytes().await?))?;
 
@@ -383,53 +389,55 @@ async fn inspect_archives(
     }
 
     // Pick CDN to fetch config
-    // TODO: pick with fallback, when fallback supports caching
+    let cdn_client_builder = CdnClientWithFallbackBuilder::<CachedCdnClient>::new();
+    // TODO: configure cache directory
     let cdn_entry = filtered_entries.first().unwrap();
-    let cdn_host = cdn_entry.hosts.first().unwrap();
+    let cdn_client_builder = cdn_client_builder.add_primary_cdns(cdn_entry.hosts.iter());
+    let cdn_client = cdn_client_builder.build().await?;
 
-    let cdn_config = client
-        .cdn_client()
-        .download_cdn_config(cdn_host, &cdn_entry.path, &version.cdn_config)
+    let cdn_config = cdn_client
+        .download_cdn_config(&cdn_entry.path, &version.cdn_config)
         .await?;
-    let cdn_config = CdnConfig::parse_config(Cursor::new(cdn_config.bytes().await?))?;
+    let cdn_config =
+        CdnConfig::aparse_config(BufReader::new(cdn_config.to_inner())).await?;
 
     // Fetch all the archive indexes
     let Some(archives) = cdn_config.archives_with_index_size() else {
         return Err(Box::new(InspectError::NoArchivesInCdnConfiguration));
     };
 
-    let mut ekeys = BTreeMap::new();
+    // let mut ekeys = BTreeMap::new();
     info!("Downloading archive indexes...");
     for (archive, size) in archives {
         let hash = hex::encode(archive);
         debug!("Downloading archive index {hash} ({size})...");
 
-        let archive_data = client
-            .cdn_client()
-            .download_data_index(cdn_host, &cdn_entry.path, &hash)
+        let archive_data = cdn_client
+            .download_data_index(&cdn_entry.path, &hash)
             .await?;
 
-        let mut archive_index =
-            ArchiveIndexParser::new(Cursor::new(archive_data.bytes().await?), archive)?;
+        todo!();
+        // let mut archive_index =
+        //     ArchiveIndexParser::new(BufReader::new(archive_data.to_inner()), archive)?;
 
-        for block in 0..archive_index.toc().num_blocks {
-            for entry in archive_index.read_block(block)? {
-                ekeys.insert(
-                    entry.ekey,
-                    (archive, entry.archive_offset, entry.blte_encoded_size),
-                );
-            }
-        }
+        // for block in 0..archive_index.toc().num_blocks {
+        //     for entry in archive_index.read_block(block)? {
+        //         ekeys.insert(
+        //             entry.ekey,
+        //             (archive, entry.archive_offset, entry.blte_encoded_size),
+        //         );
+        //     }
+        // }
     }
 
     match format {
         OutputFormat::Json | OutputFormat::JsonPretty => {
             let json_data = serde_json::json!({
                 "config": version.cdn_config,
-                "ekeys": ekeys.into_iter().map(
-                    |(ekey, (archive, off, size))| {
-                        (hex::encode(ekey), (hex::encode(archive), off, size))
-                    }).collect::<BTreeMap<_, _>>(),
+                // "ekeys": ekeys.into_iter().map(
+                //     |(ekey, (archive, off, size))| {
+                //         (hex::encode(ekey), (hex::encode(archive), off, size))
+                //     }).collect::<BTreeMap<_, _>>(),
             });
 
             if matches!(format, OutputFormat::JsonPretty) {
@@ -452,12 +460,12 @@ async fn inspect_archives(
 
             print_subsection_header("Archive index", &style);
 
-            let rows_count = ekeys.len();
-            let preview_count = rows_count.min(5);
-            println!(
-                "\n{}",
-                format_header(&format!("Preview (first {preview_count} rows)"), &style)
-            );
+            // let rows_count = ekeys.len();
+            // let preview_count = rows_count.min(5);
+            // println!(
+            //     "\n{}",
+            //     format_header(&format!("Preview (first {preview_count} rows)"), &style)
+            // );
             let mut data_table = create_table(&style);
             data_table.set_header([
                 header_cell("#", &style),
@@ -466,27 +474,27 @@ async fn inspect_archives(
                 header_cell("Offset", &style),
                 header_cell("Length", &style),
             ]);
-            for (i, (ekey, (archive, off, size))) in ekeys.iter().take(preview_count).enumerate() {
-                data_table.add_row([
-                    numeric_cell(&(i + 1).to_string()),
-                    regular_cell(&hex::encode(ekey)),
-                    regular_cell(&hex::encode(archive)),
-                    numeric_cell(&format!("{off:#x}")),
-                    numeric_cell(&format!("{size:#x}")),
-                ]);
-            }
+            // for (i, (ekey, (archive, off, size))) in ekeys.iter().take(preview_count).enumerate() {
+            //     data_table.add_row([
+            //         numeric_cell(&(i + 1).to_string()),
+            //         regular_cell(&hex::encode(ekey)),
+            //         regular_cell(&hex::encode(archive)),
+            //         numeric_cell(&format!("{off:#x}")),
+            //         numeric_cell(&format!("{size:#x}")),
+            //     ]);
+            // }
 
             println!("{data_table}");
 
-            if rows_count > preview_count {
-                println!(
-                    "\n{}",
-                    format_header(
-                        &format!("... and {} more rows", rows_count - preview_count),
-                        &style
-                    )
-                );
-            }
+            // if rows_count > preview_count {
+            //     println!(
+            //         "\n{}",
+            //         format_header(
+            //             &format!("... and {} more rows", rows_count - preview_count),
+            //             &style
+            //         )
+            //     );
+            // }
         }
     }
 
@@ -528,15 +536,17 @@ async fn inspect_build_config(
     }
 
     // Pick CDN to fetch config
-    // TODO: pick with fallback, when fallback supports caching
+    let cdn_client_builder = CdnClientWithFallbackBuilder::<CachedCdnClient>::new();
+    // TODO: configure cache directory
     let cdn_entry = filtered_entries.first().unwrap();
-    let cdn_host = cdn_entry.hosts.first().unwrap();
+    let cdn_client_builder = cdn_client_builder.add_primary_cdns(cdn_entry.hosts.iter());
+    let cdn_client = cdn_client_builder.build().await?;
 
-    let build_config = client
-        .cdn_client()
-        .download_build_config(cdn_host, &cdn_entry.path, &config)
+    let cdn_config = cdn_client
+        .download_cdn_config(&cdn_entry.path, &config)
         .await?;
-    let build_config = BuildConfig::parse_config(Cursor::new(build_config.bytes().await?))?;
+    let build_config =
+        BuildConfig::aparse_config(BufReader::new(cdn_config.to_inner())).await?;
 
     info!("Build config: {build_config:?}");
     todo!()

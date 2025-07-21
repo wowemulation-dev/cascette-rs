@@ -19,7 +19,7 @@ use tokio::{
     fs::{File, OpenOptions},
     io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt},
 };
-use tracing::{debug, trace};
+use tracing::{debug, trace, error};
 
 /// Cache for CDN content following the standard CDN directory structure
 pub struct CdnCache {
@@ -330,8 +330,7 @@ impl CdnCache {
             path.push(&hash[..2]);
             path.push(&hash[2..4]);
         }
-        path.push(hash);
-        path.push(suffix);
+        path.push(format!("{hash}{suffix}"));
         path
     }
 
@@ -348,12 +347,17 @@ impl CdnCache {
         hash: &'a str,
         suffix: &'a str,
     ) -> Result<Option<File>> {
+        let path = path.as_ref();
+        debug!("Cache for {path:?} {hash:?} {suffix:?}");
         let path = self.cache_path(path, hash, suffix);
 
-        match OpenOptions::new().read(true).open(path).await {
+        match OpenOptions::new().read(true).open(&path).await {
             Ok(f) => Ok(Some(f)),
             Err(e) if e.kind() == ErrorKind::NotFound => Ok(None),
-            Err(e) => Err(e.into()),
+            Err(e) => {
+                error!("Read cache error for {path:?}: {e:?}");
+                Err(e.into())
+            },
         }
     }
 
