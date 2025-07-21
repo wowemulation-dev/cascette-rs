@@ -2356,6 +2356,7 @@ dependencies = [
  "md-5",
  "modular-bitfield",
  "thiserror",
+ "tokio",
  "tracing",
  "tracing-subscriber",
 ]

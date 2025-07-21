@@ -3,4 +3,4 @@ mod build;
 mod cdn;
 mod parser;
 
-pub use self::{build::BuildConfig, cdn::CdnConfig};
+pub use self::{build::BuildConfig, cdn::CdnConfig, parser::ConfigParsable};

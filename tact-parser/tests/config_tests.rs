@@ -1,15 +1,14 @@
 use std::{collections::BTreeMap, io::Cursor};
 use tact_parser::{
-    MaybePair,
-    config::{BuildConfig, CdnConfig},
+    config::{BuildConfig, CdnConfig, ConfigParsable as _}, MaybePair
 };
 
 /// Parse stripped down version of retail CDN config
 /// `c8940696493179b5c4f9d59cf4fc9a9b`.
 ///
 /// Most products look like this.
-#[test]
-fn cdn_config_retail() {
+#[tokio::test]
+async fn cdn_config_retail() -> Result<(), Box<dyn std::error::Error>> {
     let _ = tracing_subscriber::fmt::try_init();
     let expected = CdnConfig {
         archives: Some(vec![
@@ -31,17 +30,21 @@ fn cdn_config_retail() {
         ..Default::default()
     };
     let i = include_str!("data/cdn_config_retail");
-    let actual = CdnConfig::parse_config(Cursor::new(i)).unwrap();
-
+    let actual = CdnConfig::parse_config(Cursor::new(i))?;
     assert_eq!(expected, actual);
+
+    let actual = CdnConfig::aparse_config(Cursor::new(i)).await?;
+    assert_eq!(expected, actual);
+
+    Ok(())
 }
 
 /// Parse stripped down version of viper CDN config
 /// `a998cf3e0a5c9829dd5c2c194dbadc04`.
 ///
 /// This doesn't have any patch records.
-#[test]
-fn cdn_config_viper() {
+#[tokio::test]
+async fn cdn_config_viper() -> Result<(), Box<dyn std::error::Error>> {
     let _ = tracing_subscriber::fmt::try_init();
     let expected = CdnConfig {
         archives: Some(vec![
@@ -56,8 +59,12 @@ fn cdn_config_viper() {
     };
     let i = include_str!("data/cdn_config_viper");
     let actual = CdnConfig::parse_config(Cursor::new(i)).unwrap();
-
     assert_eq!(expected, actual);
+
+    let actual = CdnConfig::aparse_config(Cursor::new(i)).await?;
+    assert_eq!(expected, actual);
+
+    Ok(())
 }
 
 /// Parse stripped-down version of retail build config
