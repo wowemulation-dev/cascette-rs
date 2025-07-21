@@ -1,6 +1,7 @@
 //! Integration tests for CachedCdnClient helper methods
 
 use ngdp_cache::cached_cdn_client::CachedCdnClient;
+use ngdp_cdn::CdnClientTrait;
 use tempfile::TempDir;
 
 #[tokio::test]

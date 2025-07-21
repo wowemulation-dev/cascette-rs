@@ -6,6 +6,7 @@
 //! 3. Attempting to download actual files from CDNs with fallback
 
 use ngdp_cache::{cached_cdn_client::CachedCdnClient, cached_ribbit_client::CachedRibbitClient};
+use ngdp_cdn::CdnClientTrait;
 use ribbit_client::{Endpoint, ProductCdnsResponse, ProductVersionsResponse, Region};
 use std::time::Duration;
 use tracing::{Level, error, info, warn};

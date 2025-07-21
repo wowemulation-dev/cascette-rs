@@ -1,6 +1,6 @@
 //! Basic usage example for ngdp-cdn
 
-use ngdp_cdn::CdnClient;
+use ngdp_cdn::{CdnClient, CdnClientBuilderTrait as _, CdnClientTrait};
 use tracing::{error, info};
 
 #[tokio::main]
@@ -68,7 +68,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .connect_timeout(60)
         .request_timeout(300)
         .pool_max_idle_per_host(50)
-        .build()?;
+        .build()
+        .await?;
 
     info!("Custom client configuration:");
     info!("  Max retries: 5");

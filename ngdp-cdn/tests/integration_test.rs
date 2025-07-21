@@ -1,6 +1,6 @@
 //! Integration tests for ngdp-cdn
 
-use ngdp_cdn::{CdnClient, Error};
+use ngdp_cdn::{CdnClient, CdnClientBuilderTrait as _, CdnClientTrait, Error};
 
 #[tokio::test]
 async fn test_content_not_found_errors() {
@@ -44,6 +44,7 @@ async fn test_retry_on_server_error() {
         .max_retries(2)
         .initial_backoff_ms(10)
         .build()
+        .await
         .unwrap();
 
     // httpbin.org/status/500 always returns 500
@@ -59,6 +60,7 @@ async fn test_custom_configuration() {
         .request_timeout(10)
         .pool_max_idle_per_host(10)
         .build()
+        .await
         .unwrap();
 
     // Should succeed with custom config
@@ -97,6 +99,7 @@ async fn test_rate_limit_handling() {
         .max_retries(1)
         .initial_backoff_ms(10)
         .build()
+        .await
         .unwrap();
 
     // httpbin.org/status/429 returns 429 Too Many Requests

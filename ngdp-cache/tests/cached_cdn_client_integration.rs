@@ -2,11 +2,11 @@
 //!
 //! These tests verify the caching behavior with mock CDN responses.
 
-use std::io::Cursor;
-
 use bytes::Bytes;
 use ngdp_cache::cached_cdn_client::CachedCdnClient;
 use ngdp_cache::cdn::CdnCache;
+use ngdp_cdn::CdnClientTrait;
+use std::io::Cursor;
 use tempfile::TempDir;
 use wiremock::matchers::{method, path_regex};
 use wiremock::{Mock, MockServer, ResponseTemplate};

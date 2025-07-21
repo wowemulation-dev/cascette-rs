@@ -1,6 +1,9 @@
 //! Integration tests for CDN fallback functionality
 
-use ngdp_cdn::CdnClientWithFallback;
+use ngdp_cdn::{
+    CdnClient, CdnClientBuilder, CdnClientBuilderTrait as _, CdnClientTrait as _,
+    CdnClientWithFallback, CdnClientWithFallbackBuilder, FallbackCdnClientTrait as _,
+};
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
     matchers::{method, path},
@@ -28,10 +31,11 @@ async fn test_primary_cdn_success() {
         .mount(&backup_server)
         .await;
 
-    let client = CdnClientWithFallback::builder()
+    let client = CdnClientWithFallbackBuilder::<CdnClient>::new()
         .add_primary_cdn(primary_server.uri().strip_prefix("http://").unwrap())
         .use_default_backups(false)
         .build()
+        .await
         .unwrap();
 
     client.add_primary_cdn(backup_server.uri().strip_prefix("http://").unwrap());
@@ -64,14 +68,15 @@ async fn test_fallback_on_primary_failure() {
         .mount(&backup_server)
         .await;
 
-    let client = CdnClientWithFallback::builder()
+    let client = CdnClientWithFallback::<CdnClient>::builder()
         .add_primary_cdn(primary_server.uri().strip_prefix("http://").unwrap())
         .add_primary_cdn(backup_server.uri().strip_prefix("http://").unwrap())
         .use_default_backups(false)
-        .configure_base_client(|builder| {
+        .configure_base_client(|builder: CdnClientBuilder| {
             builder.max_retries(0) // Disable retries on individual CDN
         })
         .build()
+        .await
         .unwrap();
 
     let response = client
@@ -111,13 +116,14 @@ async fn test_all_cdns_tried_in_order() {
         .mount(&server3)
         .await;
 
-    let client = CdnClientWithFallback::builder()
+    let client = CdnClientWithFallback::<CdnClient>::builder()
         .add_primary_cdn(server1.uri().strip_prefix("http://").unwrap())
         .add_primary_cdn(server2.uri().strip_prefix("http://").unwrap())
         .add_primary_cdn(server3.uri().strip_prefix("http://").unwrap())
         .use_default_backups(false)
-        .configure_base_client(|builder| builder.max_retries(0))
+        .configure_base_client(|builder: CdnClientBuilder| builder.max_retries(0))
         .build()
+        .await
         .unwrap();
 
     let response = client
@@ -146,12 +152,13 @@ async fn test_all_cdns_fail() {
         .mount(&server2)
         .await;
 
-    let client = CdnClientWithFallback::builder()
+    let client = CdnClientWithFallback::<CdnClient>::builder()
         .add_primary_cdn(server1.uri().strip_prefix("http://").unwrap())
         .add_primary_cdn(server2.uri().strip_prefix("http://").unwrap())
         .use_default_backups(false)
-        .configure_base_client(|builder| builder.max_retries(0))
+        .configure_base_client(|builder: CdnClientBuilder| builder.max_retries(0))
         .build()
+        .await
         .unwrap();
 
     let result = client.download("tpr/wow", "1234567890abcdef", "").await;
@@ -161,7 +168,7 @@ async fn test_all_cdns_fail() {
 /// Test default backup CDNs
 #[tokio::test]
 async fn test_default_backup_cdns() {
-    let client = CdnClientWithFallback::new().unwrap();
+    let client = CdnClientWithFallback::<CdnClient>::new().await.unwrap();
     let hosts = client.get_all_cdn_hosts();
 
     assert!(hosts.contains(&"cdn.arctium.tools".to_string()));
@@ -171,7 +178,7 @@ async fn test_default_backup_cdns() {
 /// Test disabling default backup CDNs
 #[tokio::test]
 async fn test_disable_default_backups() {
-    let mut client = CdnClientWithFallback::new().unwrap();
+    let mut client = CdnClientWithFallback::<CdnClient>::new().await.unwrap();
     client.set_use_default_backups(false);
 
     let hosts = client.get_all_cdn_hosts();
@@ -181,9 +188,10 @@ async fn test_disable_default_backups() {
 /// Test adding and removing CDNs
 #[tokio::test]
 async fn test_cdn_management() {
-    let client = CdnClientWithFallback::builder()
+    let client = CdnClientWithFallback::<CdnClient>::builder()
         .use_default_backups(false)
         .build()
+        .await
         .unwrap();
 
     // Add CDNs
@@ -212,9 +220,10 @@ async fn test_cdn_management() {
 /// Test that duplicate CDNs are not added
 #[tokio::test]
 async fn test_no_duplicate_cdns() {
-    let client = CdnClientWithFallback::builder()
+    let client = CdnClientWithFallback::<CdnClient>::builder()
         .use_default_backups(false)
         .build()
+        .await
         .unwrap();
 
     client.add_primary_cdn("cdn1.example.com");
@@ -256,12 +265,13 @@ async fn test_different_download_types() {
         .mount(&backup_server)
         .await;
 
-    let client = CdnClientWithFallback::builder()
+    let client = CdnClientWithFallback::<CdnClient>::builder()
         .add_primary_cdn(primary_server.uri().strip_prefix("http://").unwrap())
         .add_primary_cdn(backup_server.uri().strip_prefix("http://").unwrap())
         .use_default_backups(false)
-        .configure_base_client(|builder| builder.max_retries(0))
+        .configure_base_client(|builder: CdnClientBuilder| builder.max_retries(0))
         .build()
+        .await
         .unwrap();
 
     // Test build config
@@ -306,20 +316,22 @@ async fn test_streaming_download_fallback() {
         .mount(&backup_server)
         .await;
 
-    let client = CdnClientWithFallback::builder()
+    let client = CdnClientWithFallback::<CdnClient>::builder()
         .add_primary_cdn(primary_server.uri().strip_prefix("http://").unwrap())
         .add_primary_cdn(backup_server.uri().strip_prefix("http://").unwrap())
         .use_default_backups(false)
         .configure_base_client(|builder| builder.max_retries(0))
         .build()
-        .unwrap();
-
-    let mut buffer = Vec::new();
-    let bytes_written = client
-        .download_streaming("tpr/wow", "1234567890abcdef", "", &mut buffer)
         .await
         .unwrap();
 
-    assert_eq!(bytes_written, 16);
-    assert_eq!(buffer, b"streamed content");
+    todo!();
+    // let mut buffer = Vec::new();
+    // let bytes_written = client
+    //     .download_streaming("tpr/wow", "1234567890abcdef", "", &mut buffer)
+    //     .await
+    //     .unwrap();
+
+    // assert_eq!(bytes_written, 16);
+    // assert_eq!(buffer, b"streamed content");
 }

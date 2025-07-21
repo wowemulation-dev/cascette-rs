@@ -1,6 +1,9 @@
 //! CDN client for downloading NGDP content
 
-use crate::{Error, Result};
+use crate::{
+    Error, Result,
+    traits::{CdnClientBuilderTrait, CdnClientTrait},
+};
 use reqwest::{Client, Response};
 use std::{ops::RangeInclusive, time::Duration};
 use tokio::time::sleep;
@@ -79,11 +82,6 @@ impl CdnClient {
             jitter_factor: DEFAULT_JITTER_FACTOR,
             user_agent: None,
         }
-    }
-
-    /// Create a builder for configuring the CDN client
-    pub fn builder() -> CdnClientBuilder {
-        CdnClientBuilder::new()
     }
 
     /// Set the maximum number of retries
@@ -297,140 +295,6 @@ impl CdnClient {
         );
 
         Ok(url)
-    }
-
-    /// Download content from CDN by hash
-    pub async fn download(
-        &self,
-        cdn_host: &str,
-        path: &str,
-        hash: &str,
-        suffix: &str,
-    ) -> Result<Response> {
-        let url = Self::build_url(cdn_host, path, hash, suffix)?;
-        self.request(&url).await
-    }
-
-    /// Download content from CDN by hash, with a HTTP `Range` header.
-    pub async fn download_range(
-        &self,
-        cdn_host: &str,
-        path: &str,
-        hash: &str,
-        range: impl Into<RangeInclusive<u64>>,
-    ) -> Result<Response> {
-        let url = Self::build_url(cdn_host, path, hash, "")?;
-        self.request_range(&url, range).await
-    }
-
-    /// Download BuildConfig from CDN
-    ///
-    /// BuildConfig files are stored at `{path}/config/{hash}`
-    pub async fn download_build_config(
-        &self,
-        cdn_host: &str,
-        path: &str,
-        hash: &str,
-    ) -> Result<Response> {
-        let config_path = format!("{}/config", path.trim_end_matches('/'));
-        self.download(cdn_host, &config_path, hash, "").await
-    }
-
-    /// Download CDNConfig from CDN
-    ///
-    /// CDNConfig files are stored at `{path}/config/{hash}`
-    pub async fn download_cdn_config(
-        &self,
-        cdn_host: &str,
-        path: &str,
-        hash: &str,
-    ) -> Result<Response> {
-        let config_path = format!("{}/config", path.trim_end_matches('/'));
-        self.download(cdn_host, &config_path, hash, "").await
-    }
-
-    /// Download ProductConfig from CDN
-    ///
-    /// ProductConfig files are stored at `{config_path}/{hash}`
-    /// Note: This uses the config_path from CDN response, not the regular path
-    pub async fn download_product_config(
-        &self,
-        cdn_host: &str,
-        config_path: &str,
-        hash: &str,
-    ) -> Result<Response> {
-        self.download(cdn_host, config_path, hash, "").await
-    }
-
-    /// Download KeyRing from CDN
-    ///
-    /// KeyRing files are stored at `{path}/config/{hash}`
-    pub async fn download_key_ring(
-        &self,
-        cdn_host: &str,
-        path: &str,
-        hash: &str,
-    ) -> Result<Response> {
-        let config_path = format!("{}/config", path.trim_end_matches('/'));
-        self.download(cdn_host, &config_path, hash, "").await
-    }
-
-    /// Download data file from CDN
-    ///
-    /// Data files are stored at `{path}/data/{hash}`
-    pub async fn download_data(&self, cdn_host: &str, path: &str, hash: &str) -> Result<Response> {
-        let data_path = format!("{}/data", path.trim_end_matches('/'));
-        self.download(cdn_host, &data_path, hash, "").await
-    }
-
-    /// Download data index file from CDN
-    ///
-    /// Data files are stored at `{path}/data/{hash}.index`
-    pub async fn download_data_index(
-        &self,
-        cdn_host: &str,
-        path: &str,
-        hash: &str,
-    ) -> Result<Response> {
-        let data_path = format!("{}/data", path.trim_end_matches('/'));
-        self.download(cdn_host, &data_path, hash, ".index").await
-    }
-
-    /// Download partial range of a data file from the CDN.
-    ///
-    /// Data files are stored at `{path}/data/{hash}`
-    pub async fn download_data_range(
-        &self,
-        cdn_host: &str,
-        path: &str,
-        hash: &str,
-        range: impl Into<RangeInclusive<u64>>,
-    ) -> Result<Response> {
-        let data_path = format!("{}/data", path.trim_end_matches('/'));
-        self.download_range(cdn_host, &data_path, hash, range).await
-    }
-
-    /// Download patch file from CDN
-    ///
-    /// Patch files are stored at `{path}/patch/{hash}`
-    pub async fn download_patch(&self, cdn_host: &str, path: &str, hash: &str) -> Result<Response> {
-        let patch_path = format!("{}/patch", path.trim_end_matches('/'));
-        self.download(cdn_host, &patch_path, hash, "").await
-    }
-
-    /// Download partial range of a patch file from the CDN.
-    ///
-    /// Patch files are stored at `{path}/patch/{hash}`
-    pub async fn download_patch_range(
-        &self,
-        cdn_host: &str,
-        path: &str,
-        hash: &str,
-        range: impl Into<RangeInclusive<u64>>,
-    ) -> Result<Response> {
-        let patch_path = format!("{}/patch", path.trim_end_matches('/'));
-        self.download_range(cdn_host, &patch_path, hash, range)
-            .await
     }
 
     /// Download multiple files in parallel
@@ -669,6 +533,48 @@ impl Default for CdnClient {
     }
 }
 
+impl CdnClientTrait for CdnClient {
+    type Response = Response;
+    type Error = Error;
+    type Builder = CdnClientBuilder;
+
+    /// Create a new CDN client with default configuration
+    async fn new() -> Result<Self> {
+        Self::new()
+    }
+
+    /// Create a builder for configuring the CDN client
+    fn builder() -> Self::Builder {
+        CdnClientBuilder::new()
+    }
+
+    /// Download content from CDN by hash
+    async fn download(
+        &self,
+        cdn_host: &str,
+        path: &str,
+        hash: &str,
+        suffix: &str,
+    ) -> Result<Response> {
+        let url = Self::build_url(cdn_host, path, hash, suffix)?;
+        self.request(&url).await
+    }
+
+    /// Download content from CDN by hash, with a HTTP `Range` header.
+    async fn download_range(
+        &self,
+        cdn_host: &str,
+        path: &str,
+        hash: &str,
+        cache_hash: &str,
+        range: impl Into<RangeInclusive<u64>>,
+    ) -> Result<Response> {
+        let _ = cache_hash;
+        let url = Self::build_url(cdn_host, path, hash, "")?;
+        self.request_range(&url, range).await
+    }
+}
+
 /// Builder for configuring CDN client
 #[derive(Debug, Clone)]
 pub struct CdnClientBuilder {
@@ -684,21 +590,6 @@ pub struct CdnClientBuilder {
 }
 
 impl CdnClientBuilder {
-    /// Create a new builder with default values
-    pub fn new() -> Self {
-        Self {
-            connect_timeout_secs: DEFAULT_CONNECT_TIMEOUT_SECS,
-            request_timeout_secs: DEFAULT_REQUEST_TIMEOUT_SECS,
-            pool_max_idle_per_host: 20,
-            max_retries: DEFAULT_MAX_RETRIES,
-            initial_backoff_ms: DEFAULT_INITIAL_BACKOFF_MS,
-            max_backoff_ms: DEFAULT_MAX_BACKOFF_MS,
-            backoff_multiplier: DEFAULT_BACKOFF_MULTIPLIER,
-            jitter_factor: DEFAULT_JITTER_FACTOR,
-            user_agent: None,
-        }
-    }
-
     /// Set connection timeout
     pub fn connect_timeout(mut self, secs: u64) -> Self {
         self.connect_timeout_secs = secs;
@@ -752,9 +643,29 @@ impl CdnClientBuilder {
         self.user_agent = Some(user_agent.into());
         self
     }
+}
+
+impl CdnClientBuilderTrait for CdnClientBuilder {
+    type Client = CdnClient;
+    type Error = Error;
+
+    /// Create a new builder with default values
+    fn new() -> Self {
+        Self {
+            connect_timeout_secs: DEFAULT_CONNECT_TIMEOUT_SECS,
+            request_timeout_secs: DEFAULT_REQUEST_TIMEOUT_SECS,
+            pool_max_idle_per_host: 20,
+            max_retries: DEFAULT_MAX_RETRIES,
+            initial_backoff_ms: DEFAULT_INITIAL_BACKOFF_MS,
+            max_backoff_ms: DEFAULT_MAX_BACKOFF_MS,
+            backoff_multiplier: DEFAULT_BACKOFF_MULTIPLIER,
+            jitter_factor: DEFAULT_JITTER_FACTOR,
+            user_agent: None,
+        }
+    }
 
     /// Build the CDN client
-    pub fn build(self) -> Result<CdnClient> {
+    async fn build(self) -> Result<CdnClient> {
         let client = Client::builder()
             .connect_timeout(Duration::from_secs(self.connect_timeout_secs))
             .timeout(Duration::from_secs(self.request_timeout_secs))
@@ -793,8 +704,8 @@ mod tests {
         assert_eq!(client.max_backoff_ms, DEFAULT_MAX_BACKOFF_MS);
     }
 
-    #[test]
-    fn test_builder_configuration() {
+    #[tokio::test]
+    async fn test_builder_configuration() {
         let client = CdnClient::builder()
             .max_retries(5)
             .initial_backoff_ms(200)
@@ -805,6 +716,7 @@ mod tests {
             .request_timeout(600)
             .pool_max_idle_per_host(100)
             .build()
+            .await
             .unwrap();
 
         assert_eq!(client.max_retries, 5);
@@ -856,11 +768,12 @@ mod tests {
         assert_eq!(client.user_agent, Some("MyNGDPClient/1.0".to_string()));
     }
 
-    #[test]
-    fn test_user_agent_via_builder() {
+    #[tokio::test]
+    async fn test_user_agent_via_builder() {
         let client = CdnClient::builder()
             .user_agent("MyNGDPClient/2.0")
             .build()
+            .await
             .unwrap();
 
         assert_eq!(client.user_agent, Some("MyNGDPClient/2.0".to_string()));

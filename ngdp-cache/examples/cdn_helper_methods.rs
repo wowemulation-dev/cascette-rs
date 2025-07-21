@@ -4,6 +4,7 @@
 //! different types of content from the CDN.
 
 use ngdp_cache::cached_cdn_client::CachedCdnClient;
+use ngdp_cdn::CdnClientTrait;
 use tracing::{Level, info};
 use tracing_subscriber::FmtSubscriber;
 

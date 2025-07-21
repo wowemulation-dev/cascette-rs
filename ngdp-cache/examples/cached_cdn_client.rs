@@ -8,6 +8,7 @@
 //! - Streaming large files
 
 use ngdp_cache::cached_cdn_client::CachedCdnClient;
+use ngdp_cdn::CdnClientTrait;
 use std::time::Instant;
 use tracing::{Level, info};
 use tracing_subscriber::FmtSubscriber;

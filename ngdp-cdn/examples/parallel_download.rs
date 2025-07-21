@@ -1,6 +1,6 @@
 //! Example of parallel downloading using ngdp-cdn
 
-use ngdp_cdn::CdnClient;
+use ngdp_cdn::{CdnClient, CdnClientBuilder, CdnClientBuilderTrait as _};
 use std::time::Instant;
 
 #[tokio::main]
@@ -9,10 +9,11 @@ async fn main() {
     tracing_subscriber::fmt::init();
 
     // Create CDN client
-    let client = CdnClient::builder()
+    let client = CdnClientBuilder::new()
         .max_retries(3)
         .pool_max_idle_per_host(50) // Increase pool size for parallel downloads
         .build()
+        .await
         .expect("Failed to create CDN client");
 
     // Example: Download multiple files in parallel

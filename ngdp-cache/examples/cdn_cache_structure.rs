@@ -4,6 +4,7 @@
 //! preserving the CDN's path structure in the local cache.
 
 use ngdp_cache::{cached_cdn_client::CachedCdnClient, cached_ribbit_client::CachedRibbitClient};
+use ngdp_cdn::CdnClientTrait;
 use ribbit_client::{Endpoint, ProductCdnsResponse, Region, TypedResponse};
 use tracing::{Level, info};
 use tracing_subscriber::FmtSubscriber;

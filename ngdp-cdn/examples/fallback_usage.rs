@@ -1,6 +1,9 @@
 //! Example demonstrating CDN fallback functionality
 
-use ngdp_cdn::{CdnClientWithFallback, Result};
+use ngdp_cdn::{
+    CdnClient, CdnClientBuilder, CdnClientBuilderTrait as _, CdnClientWithFallback,
+    CdnClientWithFallbackBuilder, FallbackCdnClientTrait as _, Result,
+};
 use tracing::{Level, info};
 use tracing_subscriber::FmtSubscriber;
 
@@ -14,7 +17,7 @@ async fn main() -> Result<()> {
 
     // Example 1: Create client with default backup CDNs
     info!("Creating CDN client with default backup CDNs");
-    let client = CdnClientWithFallback::new()?;
+    let client: CdnClientWithFallback<CdnClient> = CdnClientWithFallback::new().await?;
 
     // The client will automatically use these backup CDNs:
     // - http://cdn.arctium.tools/
@@ -37,17 +40,18 @@ async fn main() -> Result<()> {
 
     // Example 3: Custom configuration without default backups
     info!("\nCreating client with custom configuration");
-    let custom_client = CdnClientWithFallback::builder()
+    let custom_client: CdnClientWithFallback<CdnClient> = CdnClientWithFallbackBuilder::new()
         .add_primary_cdn("primary.example.com")
         .add_primary_cdn("secondary.example.com")
         .use_default_backups(false)
-        .configure_base_client(|builder| {
+        .configure_base_client(|builder: CdnClientBuilder| {
             builder
                 .max_retries(5)
                 .initial_backoff_ms(200)
                 .connect_timeout(60)
         })
-        .build()?;
+        .build()
+        .await?;
 
     info!(
         "Custom client CDN hosts: {:?}",

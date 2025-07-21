@@ -1,7 +1,7 @@
 //! Benchmarks for ngdp-cdn
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use ngdp_cdn::CdnClient;
+use ngdp_cdn::{CdnClient, CdnClientBuilder, CdnClientBuilderTrait as _};
 use std::hint::black_box;
 
 fn benchmark_url_building(c: &mut Criterion) {
@@ -22,7 +22,7 @@ fn benchmark_client_creation(c: &mut Criterion) {
 
     c.bench_function("client_builder", |b| {
         b.iter(|| {
-            CdnClient::builder()
+            CdnClientBuilder::new()
                 .max_retries(5)
                 .initial_backoff_ms(200)
                 .build()

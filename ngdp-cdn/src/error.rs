@@ -2,6 +2,8 @@
 
 use thiserror::Error;
 
+use crate::FallbackError;
+
 /// Error types for CDN operations
 #[derive(Error, Debug)]
 pub enum Error {
@@ -106,13 +108,6 @@ impl Error {
         }
     }
 
-    /// Create a CDN exhausted error with generic message
-    pub fn cdn_exhausted() -> Self {
-        Self::CdnExhausted {
-            resource: "requested content".to_string(),
-        }
-    }
-
     /// Create an invalid host error
     pub fn invalid_host(host: impl Into<String>) -> Self {
         Self::InvalidHost { host: host.into() }
@@ -161,5 +156,24 @@ impl Error {
     /// Create a size mismatch error
     pub fn size_mismatch(expected: u64, actual: u64) -> Self {
         Self::SizeMismatch { expected, actual }
+    }
+}
+
+impl FallbackError for Error {
+    /// Create an invalid host error
+    fn invalid_host(host: impl Into<String>) -> Self {
+        Self::InvalidHost { host: host.into() }
+    }
+
+    fn cdn_exhausted() -> Self {
+        Self::CdnExhausted {
+            resource: "requested content".to_string(),
+        }
+    }
+
+    fn invalid_response(reason: impl Into<String>) -> Self {
+        Self::InvalidResponse {
+            reason: reason.into(),
+        }
     }
 }
