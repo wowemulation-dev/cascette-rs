@@ -43,10 +43,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     {
         Ok(response) => {
             let is_cached = response.is_from_cache();
-            let data = response.bytes().await?;
+            let data = response.to_inner();
             info!(
                 "   ✓ Downloaded {} bytes (cached: {})",
-                data.len(),
+                data.metadata().await?.len(),
                 is_cached
             );
         }
@@ -63,10 +63,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     {
         Ok(response) => {
             let is_cached = response.is_from_cache();
-            let data = response.bytes().await?;
+            let data = response.to_inner();
             info!(
                 "   ✓ Downloaded {} bytes (cached: {})",
-                data.len(),
+                data.metadata().await?.len(),
                 is_cached
             );
         }
@@ -83,10 +83,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     {
         Ok(response) => {
             let is_cached = response.is_from_cache();
-            let data = response.bytes().await?;
+            let data = response.to_inner();
             info!(
                 "   ✓ Downloaded {} bytes (cached: {})",
-                data.len(),
+                data.metadata().await?.len(),
                 is_cached
             );
         }
@@ -103,10 +103,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     {
         Ok(response) => {
             let is_cached = response.is_from_cache();
-            let data = response.bytes().await?;
+            let data = response.to_inner();
             info!(
                 "   ✓ Downloaded {} bytes (cached: {})",
-                data.len(),
+                data.metadata().await?.len(),
                 is_cached
             );
         }
@@ -120,10 +120,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     match client.download_data(cdn_host, path, data_hash).await {
         Ok(response) => {
             let is_cached = response.is_from_cache();
-            let data = response.bytes().await?;
+            let data = response.to_inner();
             info!(
                 "   ✓ Downloaded {} bytes (cached: {})",
-                data.len(),
+                data.metadata().await?.len(),
                 is_cached
             );
         }
@@ -137,10 +137,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     match client.download_patch(cdn_host, path, patch_hash).await {
         Ok(response) => {
             let is_cached = response.is_from_cache();
-            let data = response.bytes().await?;
+            let data = response.to_inner();
             info!(
                 "   ✓ Downloaded {} bytes (cached: {})",
-                data.len(),
+                data.metadata().await?.len(),
                 is_cached
             );
         }

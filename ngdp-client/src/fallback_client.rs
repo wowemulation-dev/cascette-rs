@@ -32,7 +32,6 @@ pub enum FallbackError {
 pub struct FallbackClient {
     ribbit_client: CachedRibbitClient,
     tact_client: CachedTactClient,
-    cdn_client: CachedCdnClient,
     region: Region,
     caching_enabled: bool,
 }
@@ -61,14 +60,9 @@ impl FallbackClient {
             .await
             .map_err(|e| FallbackError::ClientCreation(format!("TACT: {e}")))?;
 
-        let cdn_client = CachedCdnClient::new()
-            .await
-            .map_err(|e| FallbackError::ClientCreation(format!("CDN: {e}")))?;
-
         Ok(Self {
             ribbit_client,
             tact_client,
-            cdn_client,
             region,
             caching_enabled: true,
         })
@@ -79,7 +73,6 @@ impl FallbackClient {
         self.caching_enabled = enabled;
         self.ribbit_client.set_caching_enabled(enabled);
         self.tact_client.set_caching_enabled(enabled);
-        self.cdn_client.set_caching_enabled(enabled);
     }
 
     /// Make a request using fallback logic
@@ -214,10 +207,6 @@ impl FallbackClient {
         self.ribbit_client.clear_cache().await?;
         self.tact_client.clear_cache().await?;
         Ok(())
-    }
-
-    pub fn cdn_client(&self) -> &CachedCdnClient {
-        &self.cdn_client
     }
 }
 

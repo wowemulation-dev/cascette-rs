@@ -32,7 +32,8 @@ pub fn get_cache_dir() -> Result<PathBuf> {
 }
 
 /// Ensure a directory exists, creating it if necessary
-pub(crate) async fn ensure_dir(path: &Path) -> Result<()> {
+pub(crate) async fn ensure_dir(path: impl AsRef<Path>) -> Result<()> {
+    let path = path.as_ref();
     if tokio::fs::metadata(path).await.is_err() {
         tokio::fs::create_dir_all(path).await?;
     }

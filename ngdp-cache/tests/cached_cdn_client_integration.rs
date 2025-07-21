@@ -2,6 +2,8 @@
 //!
 //! These tests verify the caching behavior with mock CDN responses.
 
+use std::io::Cursor;
+
 use bytes::Bytes;
 use ngdp_cache::cached_cdn_client::CachedCdnClient;
 use ngdp_cache::cdn::CdnCache;
@@ -291,15 +293,18 @@ async fn test_cached_cdn_client_size_check() {
         .await
         .unwrap();
     cache.set_cdn_path(Some("data".to_string()));
-    cache.write_data(test_hash, test_content).await.unwrap();
+    cache
+        .write_buffer("data", test_hash, "", Cursor::new(test_content))
+        .await
+        .unwrap();
 
     // Check cached size
-    let size = client.cached_size("data", test_hash).await.unwrap();
+    let size = client.cached_size("data", test_hash, "").await.unwrap();
     assert_eq!(size, Some(test_content.len() as u64));
 
     // Non-existent file should return None
     let no_size = client
-        .cached_size("data", "nonexistent123456")
+        .cached_size("data", "nonexistent123456", "")
         .await
         .unwrap();
     assert_eq!(no_size, None);

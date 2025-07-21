@@ -38,11 +38,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     {
         Ok(response) => {
             let is_cached = response.is_from_cache();
-            let data = response.bytes().await?;
+            let data = response.to_inner();
             let elapsed = start.elapsed();
             info!(
                 "Downloaded {} bytes in {:?} (from cache: {})",
-                data.len(),
+                data.metadata().await?.len(),
                 elapsed,
                 is_cached
             );
@@ -61,11 +61,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     {
         Ok(response) => {
             let is_cached = response.is_from_cache();
-            let data = response.bytes().await?;
+            let data = response.to_inner();
             let elapsed = start.elapsed();
             info!(
                 "Downloaded {} bytes in {:?} (from cache: {})",
-                data.len(),
+                data.metadata().await?.len(),
                 elapsed,
                 is_cached
             );
@@ -82,7 +82,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     match client.download(cdn_host, "data", data_hash, "").await {
         Ok(response) => {
             let is_cached = response.is_from_cache();
-            let content_length = response.content_length();
+            let data = response.to_inner();
+            let content_length = data.metadata().await?.len();
             info!(
                 "Data file download - from cache: {}, size: {} bytes",
                 is_cached, content_length
@@ -122,7 +123,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Example of checking if content is cached before downloading
     info!("\nChecking cached content size:");
-    match client.cached_size("tpr/configs/data", config_hash).await? {
+    match client.cached_size("tpr/configs/data", config_hash, "").await? {
         Some(size) => info!("Config file is cached, size: {} bytes", size),
         None => info!("Config file is not cached"),
     }

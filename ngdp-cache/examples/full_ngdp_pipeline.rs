@@ -17,6 +17,7 @@ use ribbit_client::{
 };
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
+use tokio::io::AsyncReadExt;
 use tracing::{Level, debug, error, info, warn};
 use tracing_subscriber::FmtSubscriber;
 
@@ -127,22 +128,19 @@ async fn download_config_with_fallback(
 
         match result {
             Ok(response) => {
+                // TODO: switch to File API
                 let is_cached = response.is_from_cache();
-                match response.bytes().await {
-                    Ok(data) => {
-                        let size = data.len();
-                        info!(
-                            "    ✓ Downloaded {} ({} bytes, cached: {})",
-                            config_type.name(),
-                            size,
-                            is_cached
-                        );
-                        return Some((data.to_vec(), is_cached));
-                    }
-                    Err(e) => {
-                        warn!("    ✗ Failed to read response data: {}", e);
-                    }
-                }
+                let mut data = response.to_inner();
+                let size = data.metadata().await.map(|m| m.len()).unwrap_or_default();
+                info!(
+                    "    ✓ Downloaded {} ({} bytes, cached: {})",
+                    config_type.name(),
+                    size,
+                    is_cached
+                );
+                let mut buf = Vec::with_capacity(size as usize);
+                data.read_to_end(&mut buf).await.unwrap();
+                return Some((buf, is_cached));
             }
             Err(e) => {
                 debug!("    ✗ Failed to download from {}: {}", host, e);

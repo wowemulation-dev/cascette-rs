@@ -8,10 +8,18 @@
 //! Where `{cdn_path}` is the path provided by the CDN (e.g., "tpr/wow").
 //! Archives and indices are stored in the data directory with `.index` extension for indices.
 
-use std::path::PathBuf;
-use tracing::{debug, trace};
-
 use crate::{Result, ensure_dir, get_cache_dir};
+use futures::StreamExt as _;
+use reqwest::Response;
+use std::{
+    io::ErrorKind,
+    path::{Path, PathBuf},
+};
+use tokio::{
+    fs::{File, OpenOptions},
+    io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt},
+};
+use tracing::{debug, trace};
 
 /// Cache for CDN content following the standard CDN directory structure
 pub struct CdnCache {
@@ -36,6 +44,7 @@ impl CdnCache {
     }
 
     /// Create a CDN cache for a specific product
+    #[deprecated(note = "simplifying API")]
     pub async fn for_product(product: &str) -> Result<Self> {
         let base_dir = get_cache_dir()?.join("cdn").join(product);
         ensure_dir(&base_dir).await?;
@@ -52,13 +61,14 @@ impl CdnCache {
     }
 
     /// Create a CDN cache with a custom base directory
-    pub async fn with_base_dir(base_dir: PathBuf) -> Result<Self> {
-        ensure_dir(&base_dir).await?;
+    pub async fn with_base_dir(base_dir: impl AsRef<Path>) -> Result<Self> {
+        let base_dir = base_dir.as_ref();
+        ensure_dir(base_dir).await?;
 
-        debug!("Initialized CDN cache at: {:?}", base_dir);
+        debug!("Initialized CDN cache at: {base_dir:?}");
 
         Ok(Self {
-            base_dir,
+            base_dir: base_dir.to_path_buf(),
             cdn_path: None,
         })
     }
@@ -193,16 +203,25 @@ impl CdnCache {
     }
 
     /// Check if a config exists in cache
+    #[deprecated(
+        note = "use `if let Some(f) = read_cache(\"config\", ...).await?` instead; this function is not atomic"
+    )]
     pub async fn has_config(&self, hash: &str) -> bool {
         tokio::fs::metadata(self.config_path(hash)).await.is_ok()
     }
 
     /// Check if data exists in cache
+    #[deprecated(
+        note = "use `if let Some(f) = read_cache(\"data\", ...).await?` instead; this function is not atomic"
+    )]
     pub async fn has_data(&self, hash: &str) -> bool {
         tokio::fs::metadata(self.data_path(hash)).await.is_ok()
     }
 
     /// Check if a data range file exists in cache
+    #[deprecated(
+        note = "use `if let Some(f) = read_cache(\"range\", ...).await?` instead; this function is not atomic"
+    )]
     pub async fn has_data_range(&self, hash: &str) -> bool {
         tokio::fs::metadata(self.data_range_path(hash))
             .await
@@ -210,16 +229,23 @@ impl CdnCache {
     }
 
     /// Check if a patch exists in cache
+    #[deprecated(
+        note = "use `if let Some(f) = read_cache(\"patch\", ...).await?` instead; this function is not atomic"
+    )]
     pub async fn has_patch(&self, hash: &str) -> bool {
         tokio::fs::metadata(self.patch_path(hash)).await.is_ok()
     }
 
     /// Check if an index exists in cache
+    #[deprecated(
+        note = "use `if let Some(f) = read_cache(\"data\", \"{hash}.index\").await?` instead; this function is not atomic"
+    )]
     pub async fn has_index(&self, hash: &str) -> bool {
         tokio::fs::metadata(self.index_path(hash)).await.is_ok()
     }
 
     /// Write config data to cache
+    #[deprecated(note = "use write_response")]
     pub async fn write_config(&self, hash: &str, data: &[u8]) -> Result<()> {
         let path = self.config_path(hash);
 
@@ -234,6 +260,7 @@ impl CdnCache {
     }
 
     /// Write data to cache
+    #[deprecated(note = "use write_response")]
     pub async fn write_data(&self, hash: &str, data: &[u8]) -> Result<()> {
         let path = self.data_path(hash);
 
@@ -248,6 +275,7 @@ impl CdnCache {
     }
 
     /// Write patch data to cache
+    #[deprecated(note = "use write_response")]
     pub async fn write_patch(&self, hash: &str, data: &[u8]) -> Result<()> {
         let path = self.patch_path(hash);
 
@@ -262,6 +290,7 @@ impl CdnCache {
     }
 
     /// Write index to cache
+    #[deprecated(note = "use write_response")]
     pub async fn write_index(&self, hash: &str, data: &[u8]) -> Result<()> {
         let path = self.index_path(hash);
 
@@ -276,6 +305,7 @@ impl CdnCache {
     }
 
     /// Write data range to cache
+    #[deprecated(note = "use write_response")]
     pub async fn write_data_range(&self, hash: &str, data: &[u8]) -> Result<()> {
         let path = self.data_range_path(hash);
 
@@ -289,7 +319,139 @@ impl CdnCache {
         Ok(())
     }
 
+    /// Path where `path/hash` should be cached to.
+    ///
+    /// `hash` has no formatting restrictions, and may have a suffix appended to
+    /// it.
+    pub fn cache_path(&self, path: impl AsRef<Path>, hash: &str, suffix: &str) -> PathBuf {
+        let mut path = self.effective_base_dir().join(path);
+        if hash.len() >= 4 {
+            // abcdef -> ab/cd/abcdef
+            path.push(&hash[..2]);
+            path.push(&hash[2..4]);
+        }
+        path.push(hash);
+        path.push(suffix);
+        path
+    }
+
+    /// Open a cache file for reading.
+    ///    
+    /// `hash` has no formatting restrictions, and may have a suffix appended to
+    /// it.
+    ///
+    /// Returns `Ok(None)` if the file does not exist. All other errors are
+    /// propegated normally.
+    pub async fn read_cache<'a>(
+        &self,
+        path: impl AsRef<Path>,
+        hash: &'a str,
+        suffix: &'a str,
+    ) -> Result<Option<File>> {
+        let path = self.cache_path(path, hash, suffix);
+
+        match OpenOptions::new().read(true).open(path).await {
+            Ok(f) => Ok(Some(f)),
+            Err(e) if e.kind() == ErrorKind::NotFound => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    /// Writes a [`Response`] to a file, and then return a handle to that file,
+    /// seeked to the start.
+    ///
+    /// The file will be open in read-write mode, but trait bounds will
+    /// attempt to prevent write operations.
+    ///
+    /// `hash` has no formatting restrictions, and may have a suffix appended to
+    /// it.
+    pub async fn write_response(
+        &self,
+        path: impl AsRef<Path>,
+        hash: &str,
+        suffix: &str,
+        response: Response,
+    ) -> Result<File> {
+        let path = self.cache_path(path, hash, suffix);
+        if let Some(parent) = path.parent() {
+            ensure_dir(parent).await?;
+        }
+
+        let mut output = OpenOptions::new()
+            .create(true)
+            .read(true)
+            .write(true)
+            .open(path)
+            .await?;
+        let len = response.content_length().unwrap_or(0);
+        let mut stream = response.bytes_stream();
+
+        let mut first = true;
+        while let Some(buf) = stream.next().await {
+            if first {
+                first = false;
+                // Only resize the file once the first chunk arrives.
+                output.set_len(len).await?;
+            }
+            let buf = buf?;
+            output.write_all(&buf).await?;
+        }
+
+        output.flush().await?;
+        output.rewind().await?;
+        Ok(output)
+    }
+
+    pub async fn write_buffer(
+        &self,
+        path: impl AsRef<Path>,
+        hash: &str,
+        suffix: &str,
+        mut buffer: impl AsyncReadExt + Unpin,
+    ) -> Result<File> {
+        let path = self.cache_path(path, hash, suffix);
+        if let Some(parent) = path.parent() {
+            ensure_dir(parent).await?;
+        }
+
+        let mut output = OpenOptions::new()
+            .create(true)
+            .read(true)
+            .write(true)
+            .open(path)
+            .await?;
+
+        let mut b = [0; 8 << 10];
+        while let Ok(len) = buffer.read(&mut b).await {
+            output.write_all(&b[..len]).await?;
+        }
+
+        output.flush().await?;
+        output.rewind().await?;
+        Ok(output)
+    }
+
+    /// Get cached object size without reading it
+    ///
+    /// # Safety
+    ///
+    /// This function is not atomic.
+    pub async fn object_size(
+        &self,
+        path: impl AsRef<Path>,
+        hash: &str,
+        suffix: &str,
+    ) -> Result<Option<u64>> {
+        let path = self.cache_path(path, hash, suffix);
+        match tokio::fs::metadata(&path).await {
+            Ok(m) => Ok(Some(m.len())),
+            Err(e) if e.kind() == ErrorKind::NotFound => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
     /// Read config from cache
+    #[deprecated(note = "use `read_cache(\"config\", ...)` instead")]
     pub async fn read_config(&self, hash: &str) -> Result<Vec<u8>> {
         let path = self.config_path(hash);
         trace!("Reading config from cache: {}", hash);
@@ -297,6 +459,7 @@ impl CdnCache {
     }
 
     /// Read data from cache
+    #[deprecated(note = "use `read_cache(\"data\", ...)` instead")]
     pub async fn read_data(&self, hash: &str) -> Result<Vec<u8>> {
         let path = self.data_path(hash);
         trace!("Reading data from cache: {}", hash);
@@ -304,6 +467,7 @@ impl CdnCache {
     }
 
     /// Read patch from cache
+    #[deprecated(note = "use `read_cache(\"patch\", ...)` instead")]
     pub async fn read_patch(&self, hash: &str) -> Result<Vec<u8>> {
         let path = self.patch_path(hash);
         trace!("Reading patch from cache: {}", hash);
@@ -311,6 +475,7 @@ impl CdnCache {
     }
 
     /// Read index from cache
+    #[deprecated(note = "use `read_cache(\"index\", ...)` instead")]
     pub async fn read_index(&self, hash: &str) -> Result<Vec<u8>> {
         let path = self.index_path(hash);
         trace!("Reading index from cache: {}", hash);
@@ -318,6 +483,7 @@ impl CdnCache {
     }
 
     /// Read index from cache
+    #[deprecated(note = "use `read_cache(\"range\", ...)` instead")]
     pub async fn read_data_range(&self, hash: &str) -> Result<Vec<u8>> {
         let path = self.data_range_path(hash);
         trace!("Reading data range from cache: {}", hash);
@@ -327,6 +493,7 @@ impl CdnCache {
     /// Stream read data from cache
     ///
     /// Returns a file handle for efficient streaming
+    #[deprecated(note = "use `read_cache(\"data\", ...)` instead")]
     pub async fn open_data(&self, hash: &str) -> Result<tokio::fs::File> {
         let path = self.data_path(hash);
         trace!("Opening data for streaming: {}", hash);
@@ -334,6 +501,10 @@ impl CdnCache {
     }
 
     /// Get data size without reading it
+    ///
+    /// # Safety
+    ///
+    /// This function is not atomic.
     pub async fn data_size(&self, hash: &str) -> Result<u64> {
         let path = self.data_path(hash);
         let metadata = tokio::fs::metadata(&path).await?;
@@ -341,7 +512,7 @@ impl CdnCache {
     }
 
     /// Get the base directory of this cache
-    pub fn base_dir(&self) -> &PathBuf {
+    pub fn base_dir(&self) -> &Path {
         &self.base_dir
     }
 
@@ -351,6 +522,8 @@ impl CdnCache {
     }
 
     /// Write multiple config files in parallel
+    #[deprecated(note = "use write_response")]
+    #[allow(deprecated)]
     pub async fn write_configs_batch(&self, entries: &[(String, Vec<u8>)]) -> Result<()> {
         use futures::future::try_join_all;
 
@@ -363,6 +536,8 @@ impl CdnCache {
     }
 
     /// Write multiple data files in parallel
+    #[deprecated(note = "use write_response")]
+    #[allow(deprecated)]
     pub async fn write_data_batch(&self, entries: &[(String, Vec<u8>)]) -> Result<()> {
         use futures::future::try_join_all;
 
@@ -375,6 +550,8 @@ impl CdnCache {
     }
 
     /// Read multiple config files in parallel
+    #[deprecated(note = "use `read_cache(\"config\", ...)` instead")]
+    #[allow(deprecated)]
     pub async fn read_configs_batch(&self, hashes: &[String]) -> Vec<Result<Vec<u8>>> {
         use futures::future::join_all;
 
@@ -383,6 +560,8 @@ impl CdnCache {
     }
 
     /// Read multiple data files in parallel
+    #[deprecated(note = "use `read_cache(\"data\", ...)` instead")]
+    #[allow(deprecated)]
     pub async fn read_data_batch(&self, hashes: &[String]) -> Vec<Result<Vec<u8>>> {
         use futures::future::join_all;
 
@@ -391,6 +570,10 @@ impl CdnCache {
     }
 
     /// Check existence of multiple configs in parallel
+    #[deprecated(
+        note = "use `if let Some(f) = read_cache(\"config\", ...).await?` instead; this function is not atomic"
+    )]
+    #[allow(deprecated)]
     pub async fn has_configs_batch(&self, hashes: &[String]) -> Vec<bool> {
         use futures::future::join_all;
 
@@ -399,6 +582,10 @@ impl CdnCache {
     }
 
     /// Check existence of multiple data files in parallel
+    #[deprecated(
+        note = "use `if let Some(f) = read_cache(\"data\", ...).await?` instead; this function is not atomic"
+    )]
+    #[allow(deprecated)]
     pub async fn has_data_batch(&self, hashes: &[String]) -> Vec<bool> {
         use futures::future::join_all;
 
@@ -407,6 +594,10 @@ impl CdnCache {
     }
 
     /// Get sizes of multiple data files in parallel
+    ///
+    /// # Safety
+    ///
+    /// This function is not atomic.
     pub async fn data_sizes_batch(&self, hashes: &[String]) -> Vec<Result<u64>> {
         use futures::future::join_all;
 
@@ -464,6 +655,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(deprecated)]
     async fn test_cdn_cache_operations() {
         let cache = CdnCache::for_product("test").await.unwrap();
         let hash = "test5678901234567890abcdef123456";
