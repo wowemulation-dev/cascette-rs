@@ -93,7 +93,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             {
                 Ok(response) => {
                     let is_cached = response.is_from_cache();
-                    let data = response.to_inner();
+                    let data = response.into_inner();
                     info!(
                         "  Downloaded {} bytes (from cache: {})",
                         data.metadata().await?.len(),

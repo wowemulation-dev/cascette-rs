@@ -1,6 +1,6 @@
 //! Example of parallel downloading using ngdp-cdn
 
-use ngdp_cdn::{CdnClient, CdnClientBuilder, CdnClientBuilderTrait as _};
+use ngdp_cdn::{CdnClientBuilder, CdnClientBuilderTrait as _};
 use std::time::Instant;
 
 #[tokio::main]

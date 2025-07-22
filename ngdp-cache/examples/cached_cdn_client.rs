@@ -39,7 +39,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     {
         Ok(response) => {
             let is_cached = response.is_from_cache();
-            let data = response.to_inner();
+            let data = response.into_inner();
             let elapsed = start.elapsed();
             info!(
                 "Downloaded {} bytes in {:?} (from cache: {})",
@@ -62,7 +62,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     {
         Ok(response) => {
             let is_cached = response.is_from_cache();
-            let data = response.to_inner();
+            let data = response.into_inner();
             let elapsed = start.elapsed();
             info!(
                 "Downloaded {} bytes in {:?} (from cache: {})",
@@ -83,7 +83,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     match client.download(cdn_host, "data", data_hash, "").await {
         Ok(response) => {
             let is_cached = response.is_from_cache();
-            let data = response.to_inner();
+            let data = response.into_inner();
             let content_length = data.metadata().await?.len();
             info!(
                 "Data file download - from cache: {}, size: {} bytes",

@@ -399,7 +399,7 @@ async fn inspect_archives(
         .download_cdn_config(&cdn_entry.path, &version.cdn_config)
         .await?;
     let cdn_config =
-        CdnConfig::aparse_config(BufReader::new(cdn_config.to_inner())).await?;
+        CdnConfig::aparse_config(BufReader::new(cdn_config.into_inner())).await?;
 
     // Fetch all the archive indexes
     let Some(archives) = cdn_config.archives_with_index_size() else {
@@ -546,7 +546,7 @@ async fn inspect_build_config(
         .download_cdn_config(&cdn_entry.path, &config)
         .await?;
     let build_config =
-        BuildConfig::aparse_config(BufReader::new(cdn_config.to_inner())).await?;
+        BuildConfig::aparse_config(BufReader::new(cdn_config.into_inner())).await?;
 
     info!("Build config: {build_config:?}");
     todo!()

@@ -32,7 +32,7 @@ async fn download_build_config_with_fallback(
         match cdn_client.download_build_config(host, path, hash).await {
             Ok(response) => {
                 let is_cached = response.is_from_cache();
-                let data = response.to_inner();
+                let data = response.into_inner();
                 let size = data.metadata().await.map(|m| m.len()).unwrap_or_default();
                 info!(
                     "  ✓ Successfully downloaded {} bytes from {} (cached: {})",

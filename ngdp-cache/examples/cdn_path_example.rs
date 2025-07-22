@@ -20,7 +20,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("For US region CDN servers, the full download paths would be:\n");
 
     // Build config path
-    let build_config_path = cdn.config_path(build_config);
+    let build_config_path = cdn.cache_path("tpr/wow/config", build_config, "");
     println!("Build Config:");
     println!("  Hash: {build_config}");
     println!("  Cache path: {build_config_path:?}");
@@ -39,7 +39,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("\nCDN Config:");
     println!("  Hash: {cdn_config}");
-    let cdn_config_path = cdn.config_path(cdn_config);
+    let cdn_config_path = cdn.cache_path("tpr/wow/config", cdn_config, "");
     println!("  Cache path: {cdn_config_path:?}");
     println!(
         "  CDN URL: http://{{cdn_host}}/{{product_path}}/config/{}/{}/{}",
@@ -56,7 +56,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("\nProduct Config (uses different path!):");
     println!("  Hash: {product_config}");
-    let product_config_path = cdn.config_path(product_config);
+    let product_config_path = cdn.cache_path("tpr/configs/data", cdn_config, "");
     println!("  Cache path: {product_config_path:?}");
     println!(
         "  CDN URL: http://{{cdn_host}}/{{config_path}}/{}/{}/{}",

@@ -1,8 +1,8 @@
 //! Integration tests for CDN fallback functionality
 
 use ngdp_cdn::{
-    CdnClient, CdnClientBuilder, CdnClientBuilderTrait as _, CdnClientTrait as _,
-    CdnClientWithFallback, CdnClientWithFallbackBuilder, FallbackCdnClientTrait as _,
+    CdnClient, CdnClientBuilder, CdnClientBuilderTrait as _, CdnClientWithFallback,
+    CdnClientWithFallbackBuilder, FallbackCdnClientTrait as _,
 };
 use wiremock::{
     Mock, MockServer, ResponseTemplate,

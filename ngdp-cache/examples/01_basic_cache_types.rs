@@ -23,15 +23,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n2. CDN Cache:");
     let cdn = CdnCache::for_product("wow").await?;
 
-    // Cache config data
+    // Cache some data from a buffer
     let config_hash = "abcdef1234567890abcdef1234567890";
-    cdn.write_config(config_hash, b"build-config-data").await?;
-    println!("   Config cached at: {:?}", cdn.config_path(config_hash));
-
-    // Cache data/archive
-    let data_hash = "1234567890abcdef1234567890abcdef";
-    cdn.write_data(data_hash, b"archive-data").await?;
-    println!("   Data cached at: {:?}", cdn.data_path(data_hash));
+    cdn.write_buffer("demo/basic_cache", config_hash, "", b"build-config-data".as_slice()).await?;
+    println!("   Config cached at: {:?}", cdn.cache_path("demo/basic_cache", config_hash, ""));
 
     // Ribbit cache example
     println!("\n3. Ribbit Cache:");

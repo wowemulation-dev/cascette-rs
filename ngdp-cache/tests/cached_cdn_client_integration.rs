@@ -289,10 +289,9 @@ async fn test_cached_cdn_client_size_check() {
     let test_content = b"Content with known size";
 
     // Create a CdnCache to write the file in the correct location
-    let mut cache = CdnCache::with_base_dir(client.cache_dir().to_path_buf())
+    let cache = CdnCache::with_base_dir(client.cache_dir().to_path_buf())
         .await
         .unwrap();
-    cache.set_cdn_path(Some("data".to_string()));
     cache
         .write_buffer("data", test_hash, "", Cursor::new(test_content))
         .await

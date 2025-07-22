@@ -98,11 +98,12 @@ fn bench_cdn_cache_operations(c: &mut Criterion) {
             |(cache, hash)| {
                 runtime.block_on(async move {
                     cache
-                        .write_data(&hash, black_box(LARGE_DATA))
+                        .write_buffer("bench/large", &hash, "", black_box(LARGE_DATA))
                         .await
                         .unwrap();
+
                     // Cleanup
-                    tokio::fs::remove_file(cache.data_path(&hash)).await.ok();
+                    let _ = cache.delete_object("bench/large", &hash, "").await;
                 });
             },
             BatchSize::SmallInput,
@@ -119,11 +120,11 @@ fn bench_cdn_cache_operations(c: &mut Criterion) {
             |(cache, hash)| {
                 runtime.block_on(async move {
                     cache
-                        .write_config(&hash, black_box(MEDIUM_DATA))
+                        .write_buffer("bench/medium", &hash, "", black_box(MEDIUM_DATA))
                         .await
                         .unwrap();
                     // Cleanup
-                    tokio::fs::remove_file(cache.config_path(&hash)).await.ok();
+                    let _ = cache.delete_object("bench/medium", &hash, "").await;
                 });
             },
             BatchSize::SmallInput,
@@ -137,15 +138,17 @@ fn bench_cdn_cache_operations(c: &mut Criterion) {
                 let cache = runtime.block_on(CdnCache::new()).unwrap();
                 let hash = format!("{}{:08x}", TEST_HASH, rand::random::<u32>());
                 runtime
-                    .block_on(cache.write_data(&hash, LARGE_DATA))
+                    .block_on(cache.write_buffer("bench/size", &hash, "", LARGE_DATA))
                     .unwrap();
                 (cache, hash)
             },
             |(cache, hash)| {
                 runtime.block_on(async move {
-                    let _size = black_box(cache.data_size(&hash).await.unwrap());
+                    let _size =
+                        black_box(cache.object_size("bench/size", &hash, "").await.unwrap());
+
                     // Cleanup
-                    tokio::fs::remove_file(cache.data_path(&hash)).await.ok();
+                    let _ = cache.delete_object("bench/size", &hash, "").await;
                 });
             },
             BatchSize::SmallInput,
@@ -155,9 +158,7 @@ fn bench_cdn_cache_operations(c: &mut Criterion) {
     c.bench_function("cdn_cache_path_construction", |b| {
         let cache = runtime.block_on(CdnCache::new()).unwrap();
         b.iter(|| {
-            let _config_path = black_box(cache.config_path(black_box(TEST_HASH)));
-            let _data_path = black_box(cache.data_path(black_box(TEST_HASH)));
-            let _patch_path = black_box(cache.patch_path(black_box(TEST_HASH)));
+            let _ = black_box(cache.cache_path("dummy", TEST_HASH, ""));
         });
     });
 }
@@ -262,9 +263,7 @@ fn bench_path_operations(c: &mut Criterion) {
 
         b.iter(|| {
             for hash in &hashes {
-                let _config = black_box(cdn.config_path(black_box(hash)));
-                let _data = black_box(cdn.data_path(black_box(hash)));
-                let _index = black_box(cdn.index_path(black_box(hash)));
+                let _ = black_box(cdn.cache_path("test/path_segmentation", hash, ""));
             }
         });
     });

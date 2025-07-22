@@ -131,7 +131,7 @@ async fn download_config_with_fallback(
             Ok(response) => {
                 // TODO: switch to File API
                 let is_cached = response.is_from_cache();
-                let mut data = response.to_inner();
+                let mut data = response.into_inner();
                 let size = data.metadata().await.map(|m| m.len()).unwrap_or_default();
                 info!(
                     "    ✓ Downloaded {} ({} bytes, cached: {})",

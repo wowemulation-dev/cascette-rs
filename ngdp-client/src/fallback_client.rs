@@ -4,10 +4,7 @@
 //! first (as it's the primary protocol) and falls back to TACT HTTP if
 //! Ribbit fails. Both protocols return identical BPSV data.
 
-use ngdp_cache::{
-    cached_cdn_client::CachedCdnClient, cached_ribbit_client::CachedRibbitClient,
-    cached_tact_client::CachedTactClient,
-};
+use ngdp_cache::{cached_ribbit_client::CachedRibbitClient, cached_tact_client::CachedTactClient};
 use ribbit_client::{Endpoint, Region};
 use std::fmt;
 use tact_client::error::Error as TactError;
