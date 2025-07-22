@@ -1,5 +1,4 @@
 use crate::{Error, Md5, Result, config::parser::*};
-use std::io::BufRead;
 use tracing::*;
 
 /// CDN configuration parser.
@@ -53,58 +52,49 @@ impl CdnConfig {
             None
         }
     }
+}
 
-    pub fn parse_config<T: BufRead>(f: T) -> Result<Self> {
-        Self::parse_config_inner(&mut ConfigParser::new(f))
-    }
-
-    fn parse_config_inner<T: BufRead>(parser: &mut ConfigParser<T>) -> Result<Self> {
-        let mut o = CdnConfig::default();
-        let mut buf = String::with_capacity(4096);
-
-        while let Some((k, v)) = parser.next(&mut buf)? {
-            let k = k.to_ascii_lowercase();
-            match k.as_str() {
-                "archives" => {
-                    o.archives = Some(parse_md5s_string(v)?);
-                }
-                "archives-index-size" => {
-                    o.archives_index_size = Some(parse_u32s_string(v)?);
-                }
-                "archive-group" => {
-                    o.archive_group = Some(parse_md5_string(v)?);
-                }
-                "patch-archives" => {
-                    o.patch_archives = Some(parse_md5s_string(v)?);
-                }
-                "patch-archives-index-size" => {
-                    o.patch_archives_index_size = Some(parse_u32s_string(v)?);
-                }
-                "patch-archive-group" => {
-                    o.patch_archive_group = Some(parse_md5_string(v)?);
-                }
-                "file-index" => {
-                    o.file_index = Some(parse_md5_string(v)?);
-                }
-                "file-index-size" => {
-                    o.file_index_size = Some(v.parse().map_err(|_| Error::ConfigTypeMismatch)?);
-                }
-                "patch-file-index" => {
-                    o.patch_file_index = Some(parse_md5_string(v)?);
-                }
-                "patch-file-index-size" => {
-                    o.patch_file_index_size =
-                        Some(v.parse().map_err(|_| Error::ConfigTypeMismatch)?);
-                }
-                "builds" => {
-                    o.builds = Some(v.split_ascii_whitespace().map(String::from).collect());
-                }
-                _ => {
-                    warn!("Unknown config key: {k:?}");
-                }
+impl ConfigParsableInternal for CdnConfig {
+    fn handle_kv(o: &mut Self, k: &str, v: &str) -> Result<()> {
+        let k = k.to_ascii_lowercase();
+        match k.as_str() {
+            "archives" => {
+                o.archives = Some(parse_md5s_string(v)?);
+            }
+            "archives-index-size" => {
+                o.archives_index_size = Some(parse_u32s_string(v)?);
+            }
+            "archive-group" => {
+                o.archive_group = Some(parse_md5_string(v)?);
+            }
+            "patch-archives" => {
+                o.patch_archives = Some(parse_md5s_string(v)?);
+            }
+            "patch-archives-index-size" => {
+                o.patch_archives_index_size = Some(parse_u32s_string(v)?);
+            }
+            "patch-archive-group" => {
+                o.patch_archive_group = Some(parse_md5_string(v)?);
+            }
+            "file-index" => {
+                o.file_index = Some(parse_md5_string(v)?);
+            }
+            "file-index-size" => {
+                o.file_index_size = Some(v.parse().map_err(|_| Error::ConfigTypeMismatch)?);
+            }
+            "patch-file-index" => {
+                o.patch_file_index = Some(parse_md5_string(v)?);
+            }
+            "patch-file-index-size" => {
+                o.patch_file_index_size = Some(v.parse().map_err(|_| Error::ConfigTypeMismatch)?);
+            }
+            "builds" => {
+                o.builds = Some(v.split_ascii_whitespace().map(String::from).collect());
+            }
+            _ => {
+                warn!("Unknown config key: {k:?}");
             }
         }
-
-        Ok(o)
+        Ok(())
     }
 }

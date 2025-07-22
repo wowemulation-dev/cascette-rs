@@ -11,7 +11,7 @@
 //! # Example
 //!
 //! ```no_run
-//! use ngdp_cdn::CdnClient;
+//! use ngdp_cdn::{CdnClient, CdnClientTrait};
 //!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! // Create a CDN client with default configuration
@@ -34,7 +34,7 @@
 //! # Advanced Configuration
 //!
 //! ```no_run
-//! use ngdp_cdn::CdnClient;
+//! use ngdp_cdn::{CdnClient, CdnClientTrait, CdnClientBuilderTrait};
 //!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! // Create a client with custom retry configuration
@@ -44,7 +44,8 @@
 //!     .max_backoff_ms(30_000)
 //!     .connect_timeout(60)
 //!     .pool_max_idle_per_host(50)
-//!     .build()?;
+//!     .build()
+//!     .await?;
 //! # Ok(())
 //! # }
 //! ```
@@ -54,10 +55,12 @@
 mod client;
 mod error;
 mod fallback;
+mod traits;
 
 #[cfg(test)]
 mod client_test;
 
+pub use crate::traits::{CdnClientBuilderTrait, CdnClientTrait, FallbackCdnClientTrait};
 pub use client::{CdnClient, CdnClientBuilder};
 pub use error::{Error, Result};
 pub use fallback::{CdnClientWithFallback, CdnClientWithFallbackBuilder};

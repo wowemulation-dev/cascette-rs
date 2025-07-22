@@ -8,6 +8,7 @@
 //! - Streaming large files
 
 use ngdp_cache::cached_cdn_client::CachedCdnClient;
+use ngdp_cdn::CdnClientTrait;
 use std::time::Instant;
 use tracing::{Level, info};
 use tracing_subscriber::FmtSubscriber;
@@ -38,11 +39,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     {
         Ok(response) => {
             let is_cached = response.is_from_cache();
-            let data = response.bytes().await?;
+            let data = response.into_inner();
             let elapsed = start.elapsed();
             info!(
                 "Downloaded {} bytes in {:?} (from cache: {})",
-                data.len(),
+                data.metadata().await?.len(),
                 elapsed,
                 is_cached
             );
@@ -61,11 +62,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     {
         Ok(response) => {
             let is_cached = response.is_from_cache();
-            let data = response.bytes().await?;
+            let data = response.into_inner();
             let elapsed = start.elapsed();
             info!(
                 "Downloaded {} bytes in {:?} (from cache: {})",
-                data.len(),
+                data.metadata().await?.len(),
                 elapsed,
                 is_cached
             );
@@ -82,7 +83,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     match client.download(cdn_host, "data", data_hash, "").await {
         Ok(response) => {
             let is_cached = response.is_from_cache();
-            let content_length = response.content_length();
+            let data = response.into_inner();
+            let content_length = data.metadata().await?.len();
             info!(
                 "Data file download - from cache: {}, size: {} bytes",
                 is_cached, content_length
@@ -122,31 +124,34 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Example of checking if content is cached before downloading
     info!("\nChecking cached content size:");
-    match client.cached_size("tpr/configs/data", config_hash).await? {
+    match client
+        .cached_size("tpr/configs/data", config_hash, "")
+        .await?
+    {
         Some(size) => info!("Config file is cached, size: {} bytes", size),
         None => info!("Config file is not cached"),
     }
 
-    // Example of disabling caching temporarily
-    info!("\nDisabling caching temporarily:");
-    let mut mutable_client = CachedCdnClient::for_product("wow").await?;
-    mutable_client.set_caching_enabled(false);
+    // // Example of disabling caching temporarily
+    // info!("\nDisabling caching temporarily:");
+    // let mut mutable_client = CachedCdnClient::for_product("wow").await?;
+    // mutable_client.set_caching_enabled(false);
 
-    match mutable_client
-        .download(cdn_host, "tpr/configs/data", config_hash, "")
-        .await
-    {
-        Ok(response) => {
-            let is_cached = response.is_from_cache();
-            info!(
-                "Downloaded with caching disabled - from cache: {}",
-                is_cached
-            );
-        }
-        Err(e) => {
-            info!("Failed to download: {}", e);
-        }
-    }
+    // match mutable_client
+    //     .download(cdn_host, "tpr/configs/data", config_hash, "")
+    //     .await
+    // {
+    //     Ok(response) => {
+    //         let is_cached = response.is_from_cache();
+    //         info!(
+    //             "Downloaded with caching disabled - from cache: {}",
+    //             is_cached
+    //         );
+    //     }
+    //     Err(e) => {
+    //         info!("Failed to download: {}", e);
+    //     }
+    // }
 
     // Example with custom cache directory
     info!("\nUsing custom cache directory:");
@@ -158,12 +163,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("\nStreaming example:");
     let large_file_hash = "1234567890abcdef1234567890abcdef"; // Example large file
     match custom_client
-        .download_stream(cdn_host, "data", large_file_hash, "")
+        .download(cdn_host, "data", large_file_hash, "")
         .await
     {
-        Ok(mut stream) => {
+        Ok(stream) => {
+            let mut stream = stream.into_inner();
             let mut buffer = vec![0u8; 1024];
-            match tokio::io::AsyncReadExt::read(&mut *stream, &mut buffer).await {
+            match tokio::io::AsyncReadExt::read(&mut stream, &mut buffer).await {
                 Ok(n) => info!("Read {} bytes from stream", n),
                 Err(e) => info!("Failed to read from stream: {}", e),
             }

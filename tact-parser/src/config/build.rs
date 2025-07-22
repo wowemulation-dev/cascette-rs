@@ -1,5 +1,5 @@
 use crate::{Error, MaybePair, Md5, Result, config::parser::*};
-use std::{collections::BTreeMap, io::BufRead};
+use std::collections::BTreeMap;
 use tracing::*;
 
 /// [Build configuration][0] parser.
@@ -68,155 +68,146 @@ pub struct BuildConfig {
     pub vfs_size: Option<BTreeMap<u16, (u32, u32)>>,
 }
 
-impl BuildConfig {
-    pub fn parse_config<T: BufRead>(f: T) -> Result<Self> {
-        Self::parse_config_inner(&mut ConfigParser::new(f))
-    }
+impl ConfigParsableInternal for BuildConfig {
+    fn handle_kv(o: &mut Self, k: &str, v: &str) -> Result<()> {
+        let k = k.to_ascii_lowercase();
+        match k.as_str() {
+            "root" => {
+                o.root = Some(parse_md5_string(v)?);
+            }
 
-    fn parse_config_inner<T: BufRead>(parser: &mut ConfigParser<T>) -> Result<Self> {
-        let mut o = BuildConfig::default();
-        let mut buf = String::with_capacity(4096);
+            "install" => {
+                o.install = Some(parse_md5_maybepair_string(v)?);
+            }
+            "install-size" => {
+                o.install_size = Some(parse_u32_maybepair_string(v)?);
+            }
 
-        while let Some((k, v)) = parser.next(&mut buf)? {
-            let k = k.to_ascii_lowercase();
-            match k.as_str() {
-                "root" => {
-                    o.root = Some(parse_md5_string(v)?);
+            "download" => {
+                o.download = Some(parse_md5_maybepair_string(v)?);
+            }
+            "download-size" => {
+                o.download_size = Some(parse_u32_maybepair_string(v)?);
+            }
+
+            "size" => {
+                o.size = Some(parse_md5_pair_string(v)?);
+            }
+            "size-size" => {
+                o.size_size = Some(parse_u32_pair_string(v)?);
+            }
+
+            "encoding" => {
+                o.encoding = Some(parse_md5_maybepair_string(v)?);
+            }
+            "encoding-size" => {
+                o.encoding_size = Some(parse_u32_maybepair_string(v)?);
+            }
+
+            "patch-index" => {
+                o.patch_index = Some(parse_md5_maybepair_string(v)?);
+            }
+            "patch-index-size" => {
+                o.patch_index_size = Some(parse_u32_maybepair_string(v)?);
+            }
+
+            "patch" => {
+                o.patch = Some(parse_md5_string(v)?);
+            }
+            "patch-size" => {
+                o.patch_size = Some(v.parse().map_err(|_| Error::ConfigTypeMismatch)?);
+            }
+            "patch-config" => {
+                o.patch_config = Some(parse_md5_string(v)?);
+            }
+
+            "build-attributes" => {
+                o.build_attributes = Some(v.to_string());
+            }
+            "build-branch" => {
+                o.build_branch = Some(v.to_string());
+            }
+            "build-comments" => {
+                o.build_comments = Some(v.to_string());
+            }
+            "build-creator" => {
+                o.build_creator = Some(v.to_string());
+            }
+            "build-critical-patch-seqn" => {
+                o.build_critical_patch_seqn =
+                    Some(v.parse().map_err(|_| Error::ConfigTypeMismatch)?);
+            }
+            "build-data-branch" => {
+                o.build_data_branch = Some(v.to_string());
+            }
+            "build-data-revision" => {
+                o.build_data_revision = Some(v.to_string());
+            }
+            "build-num" => {
+                o.build_num = Some(v.parse().map_err(|_| Error::ConfigTypeMismatch)?);
+            }
+            "build-name" => {
+                o.build_name = Some(v.to_string());
+            }
+            "build-source-branch" => {
+                o.build_source_branch = Some(v.to_string());
+            }
+            "build-source-revision" => {
+                o.build_source_revision = Some(v.to_string());
+            }
+            "build-status" => {
+                o.build_status = Some(v.to_string());
+            }
+            "build-token" => {
+                o.build_token = Some(v.to_string());
+            }
+            "build-uid" => {
+                o.build_uid = Some(v.to_string());
+            }
+            "build-product" => {
+                o.build_product = Some(v.to_string());
+            }
+            "build-playbuild-installer" => {
+                o.build_playbuild_installer = Some(v.to_string());
+            }
+            "build-partial-priority" => {
+                o.build_partial_priority = Some(parse_md5_u32_pair_string(v)?);
+            }
+            "vfs-root" => {
+                o.vfs_root = Some(parse_md5_pair_string(v)?);
+            }
+            "vfs-root-size" => {
+                o.vfs_root_size = Some(parse_u32_pair_string(v)?);
+            }
+            other => {
+                // Handle `vfs-X` and `vfs-X-size`
+                if !other.starts_with("vfs-") || other.len() <= 4 {
+                    warn!("Unknown config key: {k:?}");
+                    return Ok(());
                 }
 
-                "install" => {
-                    o.install = Some(parse_md5_maybepair_string(v)?);
-                }
-                "install-size" => {
-                    o.install_size = Some(parse_u32_maybepair_string(v)?);
-                }
-
-                "download" => {
-                    o.download = Some(parse_md5_maybepair_string(v)?);
-                }
-                "download-size" => {
-                    o.download_size = Some(parse_u32_maybepair_string(v)?);
+                let mut other = &other[4..];
+                let is_size = other.ends_with("-size");
+                if is_size {
+                    other = &other[..other.len() - 5];
                 }
 
-                "size" => {
-                    o.size = Some(parse_md5_pair_string(v)?);
-                }
-                "size-size" => {
-                    o.size_size = Some(parse_u32_pair_string(v)?);
-                }
+                // Try to parse what's left as an integer
+                let Ok(vfs_id) = other.parse::<u16>() else {
+                    warn!("Unknown config key: {k:?}");
+                    return Ok(());
+                };
 
-                "encoding" => {
-                    o.encoding = Some(parse_md5_maybepair_string(v)?);
-                }
-                "encoding-size" => {
-                    o.encoding_size = Some(parse_u32_maybepair_string(v)?);
-                }
-
-                "patch-index" => {
-                    o.patch_index = Some(parse_md5_maybepair_string(v)?);
-                }
-                "patch-index-size" => {
-                    o.patch_index_size = Some(parse_u32_maybepair_string(v)?);
-                }
-
-                "patch" => {
-                    o.patch = Some(parse_md5_string(v)?);
-                }
-                "patch-size" => {
-                    o.patch_size = Some(v.parse().map_err(|_| Error::ConfigTypeMismatch)?);
-                }
-                "patch-config" => {
-                    o.patch_config = Some(parse_md5_string(v)?);
-                }
-
-                "build-attributes" => {
-                    o.build_attributes = Some(v.to_string());
-                }
-                "build-branch" => {
-                    o.build_branch = Some(v.to_string());
-                }
-                "build-comments" => {
-                    o.build_comments = Some(v.to_string());
-                }
-                "build-creator" => {
-                    o.build_creator = Some(v.to_string());
-                }
-                "build-critical-patch-seqn" => {
-                    o.build_critical_patch_seqn =
-                        Some(v.parse().map_err(|_| Error::ConfigTypeMismatch)?);
-                }
-                "build-data-branch" => {
-                    o.build_data_branch = Some(v.to_string());
-                }
-                "build-data-revision" => {
-                    o.build_data_revision = Some(v.to_string());
-                }
-                "build-num" => {
-                    o.build_num = Some(v.parse().map_err(|_| Error::ConfigTypeMismatch)?);
-                }
-                "build-name" => {
-                    o.build_name = Some(v.to_string());
-                }
-                "build-source-branch" => {
-                    o.build_source_branch = Some(v.to_string());
-                }
-                "build-source-revision" => {
-                    o.build_source_revision = Some(v.to_string());
-                }
-                "build-status" => {
-                    o.build_status = Some(v.to_string());
-                }
-                "build-token" => {
-                    o.build_token = Some(v.to_string());
-                }
-                "build-uid" => {
-                    o.build_uid = Some(v.to_string());
-                }
-                "build-product" => {
-                    o.build_product = Some(v.to_string());
-                }
-                "build-playbuild-installer" => {
-                    o.build_playbuild_installer = Some(v.to_string());
-                }
-                "build-partial-priority" => {
-                    o.build_partial_priority = Some(parse_md5_u32_pair_string(v)?);
-                }
-                "vfs-root" => {
-                    o.vfs_root = Some(parse_md5_pair_string(v)?);
-                }
-                "vfs-root-size" => {
-                    o.vfs_root_size = Some(parse_u32_pair_string(v)?);
-                }
-                other => {
-                    // Handle `vfs-X` and `vfs-X-size`
-                    if !other.starts_with("vfs-") || other.len() <= 4 {
-                        warn!("Unknown config key: {k:?}");
-                        continue;
-                    }
-
-                    let mut other = &other[4..];
-                    let is_size = other.ends_with("-size");
-                    if is_size {
-                        other = &other[..other.len() - 5];
-                    }
-
-                    // Try to parse what's left as an integer
-                    let Ok(vfs_id) = other.parse::<u16>() else {
-                        warn!("Unknown config key: {k:?}");
-                        continue;
-                    };
-
-                    if is_size {
-                        let vfs_size = o.vfs_size.get_or_insert_default();
-                        vfs_size.insert(vfs_id, parse_u32_pair_string(v)?);
-                    } else {
-                        let vfs = o.vfs.get_or_insert_default();
-                        vfs.insert(vfs_id, parse_md5_pair_string(v)?);
-                    }
+                if is_size {
+                    let vfs_size = o.vfs_size.get_or_insert_default();
+                    vfs_size.insert(vfs_id, parse_u32_pair_string(v)?);
+                } else {
+                    let vfs = o.vfs.get_or_insert_default();
+                    vfs.insert(vfs_id, parse_md5_pair_string(v)?);
                 }
             }
         }
 
-        Ok(o)
+        Ok(())
     }
 }

@@ -3,9 +3,8 @@
 //! This module provides a CDN client that supports multiple CDN hosts
 //! with automatic fallback when a primary CDN fails.
 
-use crate::{CdnClient, Error, Result};
-use reqwest::Response;
-use std::sync::Arc;
+use crate::{CdnClientBuilderTrait, CdnClientTrait, Error, FallbackCdnClientTrait};
+use std::{fmt::Debug, sync::Arc};
 use tracing::{debug, info, warn};
 
 /// Default backup CDN servers
@@ -25,11 +24,11 @@ const DEFAULT_BACKUP_CDNS: &[&str] = &["cdn.arctium.tools", "tact.mirror.reliqua
 /// # Example
 ///
 /// ```no_run
-/// use ngdp_cdn::CdnClientWithFallback;
+/// use ngdp_cdn::{CdnClient, CdnClientWithFallback, FallbackCdnClientTrait};
 ///
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 /// // Create with default backup CDNs
-/// let client = CdnClientWithFallback::new()?;
+/// let client = CdnClientWithFallback::<CdnClient>::new().await?;
 ///
 /// // Add Blizzard CDNs (these will be tried first)
 /// client.add_primary_cdns(vec![
@@ -48,9 +47,13 @@ const DEFAULT_BACKUP_CDNS: &[&str] = &["cdn.arctium.tools", "tact.mirror.reliqua
 /// # }
 /// ```
 #[derive(Debug, Clone)]
-pub struct CdnClientWithFallback {
+pub struct CdnClientWithFallback<T>
+where
+    T: CdnClientTrait,
+    <T as CdnClientTrait>::Error: From<Error>,
+{
     /// Base CDN client for making requests
-    client: Arc<CdnClient>,
+    client: Arc<T>,
     /// List of CDN hosts to try in order
     cdn_hosts: Arc<parking_lot::RwLock<Vec<String>>>,
     /// Whether to use default backup CDNs
@@ -59,26 +62,19 @@ pub struct CdnClientWithFallback {
     custom_cdn_hosts: Arc<parking_lot::RwLock<Vec<String>>>,
 }
 
-impl CdnClientWithFallback {
-    /// Create a new CDN client with default backup CDNs
-    pub fn new() -> Result<Self> {
-        let client = CdnClient::new()?;
-        Ok(Self::with_client(client))
-    }
-
+impl<T> CdnClientWithFallback<T>
+where
+    T: CdnClientTrait,
+    <T as CdnClientTrait>::Error: From<Error>,
+{
     /// Create a new CDN client with a custom base client
-    pub fn with_client(client: CdnClient) -> Self {
+    pub fn with_client(client: T) -> Self {
         Self {
             client: Arc::new(client),
             cdn_hosts: Arc::new(parking_lot::RwLock::new(Vec::new())),
             use_default_backups: true,
             custom_cdn_hosts: Arc::new(parking_lot::RwLock::new(Vec::new())),
         }
-    }
-
-    /// Create a builder for configuring the CDN client
-    pub fn builder() -> CdnClientWithFallbackBuilder {
-        CdnClientWithFallbackBuilder::new()
     }
 
     /// Add a primary CDN host
@@ -184,15 +180,81 @@ impl CdnClientWithFallback {
         self.custom_cdn_hosts.write().clear();
     }
 
+    // Removed: using a temporary file works better
+    // /// Download content and stream it to a writer
+    // ///
+    // /// Note: Due to the nature of fallback retries, this method downloads to a temporary
+    // /// buffer first, then writes to the provided writer. For true streaming without
+    // /// buffering, use the base `CdnClient` directly with a specific CDN host.
+    // pub async fn download_streaming<W>(
+    //     &self,
+    //     path: &str,
+    //     hash: &str,
+    //     suffix: &str,
+    //     mut writer: W,
+    // ) -> Result<u64, T::Error>
+    // where
+    //     W: tokio::io::AsyncWrite + Unpin,
+    // {
+    //     use tokio::io::AsyncWriteExt;
+
+    //     // Download to memory first since we need to retry with different CDNs
+    //     let response = self.download(path, hash, suffix).await?;
+    //     let bytes = response.bytes().await?;
+
+    //     writer
+    //         .write_all(&bytes)
+    //         .await
+    //         .map_err(|e| From<Error>::invalid_response(format!("Write error: {e}")))?;
+    //     writer
+    //         .flush()
+    //         .await
+    //         .map_err(|e| From<Error>::invalid_response(format!("Write error: {e}")))?;
+
+    //     Ok(bytes.len() as u64)
+    // }
+}
+
+// impl<T> Default for CdnClientWithFallback<T>
+// where
+//     T: CdnClientTrait,
+//     <T as CdnClientTrait>::Error: From<Error>,
+// {
+//     fn default() -> Self {
+//         Self::new().expect("Failed to create default CDN client")
+//     }
+// }
+
+#[async_trait::async_trait]
+impl<T> FallbackCdnClientTrait for CdnClientWithFallback<T>
+where
+    T: CdnClientTrait + Send + Sync,
+    <T as CdnClientTrait>::Error: From<Error> + Send,
+{
+    type Response = T::Response;
+    type Error = T::Error;
+    type Builder = CdnClientWithFallbackBuilder<T>;
+
+    /// Create a new CDN client with default backup CDNs
+    async fn new() -> Result<Self, Self::Error> {
+        let client = T::new().await?;
+        Ok(Self::with_client(client))
+    }
+
     /// Download content from CDN by hash, trying each CDN host in order
-    pub async fn download(&self, path: &str, hash: &str, suffix: &str) -> Result<Response> {
+    async fn download(
+        &self,
+        path: &str,
+        hash: &str,
+        suffix: &str,
+    ) -> Result<Self::Response, Self::Error> {
         let hosts = self.get_all_cdn_hosts();
 
         if hosts.is_empty() {
-            return Err(Error::invalid_host("No CDN hosts configured"));
+            return Err(Error::invalid_host("No CDN hosts configured").into());
         }
 
-        let mut last_error = None;
+        let mut last_error: Option<<T as CdnClientTrait>::Error> = None;
 
         for (index, cdn_host) in hosts.iter().enumerate() {
             debug!(
@@ -221,116 +283,97 @@ impl CdnClientWithFallback {
         }
 
         // All CDNs failed
-        Err(last_error.unwrap_or_else(Error::cdn_exhausted))
-    }
-
-    /// Download BuildConfig from CDN
-    pub async fn download_build_config(&self, path: &str, hash: &str) -> Result<Response> {
-        let config_path = format!("{}/config", path.trim_end_matches('/'));
-        self.download(&config_path, hash, "").await
-    }
-
-    /// Download CDNConfig from CDN
-    pub async fn download_cdn_config(&self, path: &str, hash: &str) -> Result<Response> {
-        let config_path = format!("{}/config", path.trim_end_matches('/'));
-        self.download(&config_path, hash, "").await
-    }
-
-    /// Download ProductConfig from CDN
-    pub async fn download_product_config(&self, config_path: &str, hash: &str) -> Result<Response> {
-        self.download(config_path, hash, "").await
-    }
-
-    /// Download KeyRing from CDN
-    pub async fn download_key_ring(&self, path: &str, hash: &str) -> Result<Response> {
-        let config_path = format!("{}/config", path.trim_end_matches('/'));
-        self.download(&config_path, hash, "").await
-    }
-
-    /// Download data file from CDN
-    pub async fn download_data(&self, path: &str, hash: &str) -> Result<Response> {
-        let data_path = format!("{}/data", path.trim_end_matches('/'));
-        self.download(&data_path, hash, "").await
-    }
-
-    /// Download data index file from CDN
-    ///
-    /// Data files are stored at `{path}/data/{hash}.index`
-    pub async fn download_data_index(&self, path: &str, hash: &str) -> Result<Response> {
-        let data_path = format!("{}/data", path.trim_end_matches('/'));
-        self.download(&data_path, hash, ".index").await
-    }
-
-    /// Download patch file from CDN
-    pub async fn download_patch(&self, path: &str, hash: &str) -> Result<Response> {
-        let patch_path = format!("{}/patch", path.trim_end_matches('/'));
-        self.download(&patch_path, hash, "").await
-    }
-
-    /// Download content and stream it to a writer
-    ///
-    /// Note: Due to the nature of fallback retries, this method downloads to a temporary
-    /// buffer first, then writes to the provided writer. For true streaming without
-    /// buffering, use the base `CdnClient` directly with a specific CDN host.
-    pub async fn download_streaming<W>(
-        &self,
-        path: &str,
-        hash: &str,
-        suffix: &str,
-        mut writer: W,
-    ) -> Result<u64>
-    where
-        W: tokio::io::AsyncWrite + Unpin,
-    {
-        use tokio::io::AsyncWriteExt;
-
-        // Download to memory first since we need to retry with different CDNs
-        let response = self.download(path, hash, suffix).await?;
-        let bytes = response.bytes().await?;
-
-        writer
-            .write_all(&bytes)
-            .await
-            .map_err(|e| Error::invalid_response(format!("Write error: {e}")))?;
-        writer
-            .flush()
-            .await
-            .map_err(|e| Error::invalid_response(format!("Write error: {e}")))?;
-
-        Ok(bytes.len() as u64)
-    }
-}
-
-impl Default for CdnClientWithFallback {
-    fn default() -> Self {
-        Self::new().expect("Failed to create default CDN client")
+        Err(last_error.unwrap_or_else(|| Error::cdn_exhausted().into()))
     }
 }
 
 /// Builder for configuring CDN client with fallback
-#[derive(Debug, Clone)]
-pub struct CdnClientWithFallbackBuilder {
-    base_client_builder: crate::CdnClientBuilder,
+// #[derive(Debug, Clone)]
+pub struct CdnClientWithFallbackBuilder<T>
+where
+    T: CdnClientTrait,
+    <T as CdnClientTrait>::Error: From<Error>,
+{
+    base_client_builder: <T as CdnClientTrait>::Builder,
     primary_cdns: Vec<String>,
     use_default_backups: bool,
     custom_cdns: Vec<String>,
 }
 
-impl CdnClientWithFallbackBuilder {
-    /// Create a new builder
-    pub fn new() -> Self {
+impl<T> Clone for CdnClientWithFallbackBuilder<T>
+where
+    T: CdnClientTrait,
+    <T as CdnClientTrait>::Error: From<Error>,
+{
+    fn clone(&self) -> Self {
         Self {
-            base_client_builder: crate::CdnClient::builder(),
+            base_client_builder: self.base_client_builder.clone(),
+            primary_cdns: self.primary_cdns.clone(),
+            use_default_backups: self.use_default_backups.clone(),
+            custom_cdns: self.custom_cdns.clone(),
+        }
+    }
+}
+
+impl<T> Debug for CdnClientWithFallbackBuilder<T>
+where
+    T: CdnClientTrait,
+    <T as CdnClientTrait>::Error: From<Error>,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CdnClientWithFallbackBuilder")
+            .field("base_client_builder", &self.base_client_builder)
+            .field("primary_cdns", &self.primary_cdns)
+            .field("use_default_backups", &self.use_default_backups)
+            .field("custom_cdns", &self.custom_cdns)
+            .finish()
+    }
+}
+
+#[async_trait::async_trait]
+impl<T> CdnClientBuilderTrait for CdnClientWithFallbackBuilder<T>
+where
+    T: CdnClientTrait,
+    <T as CdnClientTrait>::Error: From<Error>,
+{
+    type Client = CdnClientWithFallback<T>;
+    type Error = <<T as CdnClientTrait>::Builder as CdnClientBuilderTrait>::Error;
+
+    fn new() -> Self {
+        Self {
+            base_client_builder: <T as CdnClientTrait>::Builder::new(),
             primary_cdns: Vec::new(),
             use_default_backups: true,
             custom_cdns: Vec::new(),
+            // _phantom: PhantomData,
         }
     }
 
+    async fn build(self) -> Result<Self::Client, Self::Error> {
+        let base_client: <<T as CdnClientTrait>::Builder as CdnClientBuilderTrait>::Client =
+            match self.base_client_builder.build().await {
+                Ok(o) => o,
+                Err(e) => return Err(e),
+            };
+        let mut client = CdnClientWithFallback::with_client(base_client);
+
+        client.set_use_default_backups(self.use_default_backups);
+        client.set_primary_cdns(self.primary_cdns);
+        client.set_custom_cdns(self.custom_cdns);
+
+        Ok(client)
+    }
+}
+
+impl<T> CdnClientWithFallbackBuilder<T>
+where
+    T: CdnClientTrait,
+    <T as CdnClientTrait>::Error: From<Error>,
+{
     /// Configure the base CDN client
     pub fn configure_base_client<F>(mut self, f: F) -> Self
     where
-        F: FnOnce(crate::CdnClientBuilder) -> crate::CdnClientBuilder,
+        F: FnOnce(T::Builder) -> T::Builder,
     {
         self.base_client_builder = f(self.base_client_builder);
         self
@@ -369,21 +412,13 @@ impl CdnClientWithFallbackBuilder {
         }
         self
     }
-
-    /// Build the CDN client
-    pub fn build(self) -> Result<CdnClientWithFallback> {
-        let base_client = self.base_client_builder.build()?;
-        let mut client = CdnClientWithFallback::with_client(base_client);
-
-        client.set_use_default_backups(self.use_default_backups);
-        client.set_primary_cdns(self.primary_cdns);
-        client.set_custom_cdns(self.custom_cdns);
-
-        Ok(client)
-    }
 }
 
-impl Default for CdnClientWithFallbackBuilder {
+impl<T> Default for CdnClientWithFallbackBuilder<T>
+where
+    T: CdnClientTrait,
+    <T as CdnClientTrait>::Error: From<Error>,
+{
     fn default() -> Self {
         Self::new()
     }
@@ -392,10 +427,12 @@ impl Default for CdnClientWithFallbackBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::CdnClient;
 
-    #[test]
-    fn test_default_backup_cdns() {
-        let client = CdnClientWithFallback::new().unwrap();
+    #[tokio::test]
+
+    async fn test_default_backup_cdns() {
+        let client = CdnClientWithFallback::<CdnClient>::new().await.unwrap();
         let hosts = client.get_all_cdn_hosts();
 
         // Should have the default backup CDNs
@@ -404,9 +441,9 @@ mod tests {
         assert!(hosts.contains(&"tact.mirror.reliquaryhq.com".to_string()));
     }
 
-    #[test]
-    fn test_add_primary_cdn() {
-        let client = CdnClientWithFallback::new().unwrap();
+    #[tokio::test]
+    async fn test_add_primary_cdn() {
+        let client = CdnClientWithFallback::<CdnClient>::new().await.unwrap();
         client.add_primary_cdn("primary.example.com");
 
         let hosts = client.get_all_cdn_hosts();
@@ -418,9 +455,10 @@ mod tests {
         assert_eq!(hosts[2], "tact.mirror.reliquaryhq.com");
     }
 
-    #[test]
-    fn test_primary_cdns_before_backups() {
-        let client = CdnClientWithFallback::new().unwrap();
+    #[tokio::test]
+
+    async fn test_primary_cdns_before_backups() {
+        let client = CdnClientWithFallback::<CdnClient>::new().await.unwrap();
 
         // Add multiple primary CDNs
         client.add_primary_cdns(vec![
@@ -442,9 +480,9 @@ mod tests {
         assert_eq!(hosts[4], "tact.mirror.reliquaryhq.com");
     }
 
-    #[test]
-    fn test_disable_default_backups() {
-        let mut client = CdnClientWithFallback::new().unwrap();
+    #[tokio::test]
+    async fn test_disable_default_backups() {
+        let mut client = CdnClientWithFallback::<CdnClient>::new().await.unwrap();
         client.set_use_default_backups(false);
         client.add_primary_cdn("primary.example.com");
 
@@ -453,14 +491,15 @@ mod tests {
         assert_eq!(hosts[0], "primary.example.com");
     }
 
-    #[test]
-    fn test_builder_configuration() {
-        let client = CdnClientWithFallback::builder()
+    #[tokio::test]
+    async fn test_builder_configuration() {
+        let client = CdnClientWithFallbackBuilder::<CdnClient>::new()
             .add_primary_cdn("cdn1.example.com")
             .add_primary_cdn("cdn2.example.com")
             .use_default_backups(false)
             .configure_base_client(|builder| builder.max_retries(5).initial_backoff_ms(200))
             .build()
+            .await
             .unwrap();
 
         let hosts = client.get_all_cdn_hosts();
@@ -469,9 +508,9 @@ mod tests {
         assert_eq!(hosts[1], "cdn2.example.com");
     }
 
-    #[test]
-    fn test_no_duplicate_hosts() {
-        let client = CdnClientWithFallback::new().unwrap();
+    #[tokio::test]
+    async fn test_no_duplicate_hosts() {
+        let client = CdnClientWithFallback::<CdnClient>::new().await.unwrap();
         client.add_primary_cdn("cdn.arctium.tools");
         client.add_primary_cdn("other.example.com");
 

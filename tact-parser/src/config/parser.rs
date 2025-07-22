@@ -1,5 +1,9 @@
 use crate::{Error, MD5_HEX_LENGTH, MD5_LENGTH, MaybePair, Md5, Result};
-use std::io::{BufRead, ErrorKind};
+use std::{
+    future::Future,
+    io::{BufRead, ErrorKind},
+};
+use tokio::io::{AsyncBufRead, AsyncBufReadExt};
 use tracing::*;
 
 /// Parser for TACT configuration files.
@@ -17,15 +21,17 @@ use tracing::*;
 /// ```
 ///
 /// Files often include trailing newline characters.
-pub struct ConfigParser<T: BufRead> {
+pub struct ConfigParser<T> {
     inner: T,
 }
 
-impl<T: BufRead> ConfigParser<T> {
+impl<T> ConfigParser<T> {
     pub fn new(inner: T) -> Self {
         ConfigParser { inner }
     }
+}
 
+impl<T: BufRead> ConfigParser<T> {
     /// Get the next element from the file, or return `None` at EOF.
     ///
     /// The returned values will be pointers within the provided `buf`.
@@ -58,6 +64,84 @@ impl<T: BufRead> ConfigParser<T> {
 
             return Ok(Some((k.trim(), v.trim())));
         }
+    }
+}
+
+impl<T: AsyncBufRead + Unpin> ConfigParser<T> {
+    /// Get the next element from the file, or return `None` at EOF.
+    ///
+    /// The returned values will be pointers within the provided `buf`.
+    ///
+    /// Comments and empty lines will be automatically skipped.
+    ///
+    /// **Note:** Unlike [`BufRead::read_line()`], this will automatically clear
+    /// `buf` each time it is called.
+    pub async fn anext<'a>(&mut self, buf: &'a mut String) -> Result<Option<(&'a str, &'a str)>> {
+        loop {
+            buf.clear();
+            match self.inner.read_line(buf).await {
+                Ok(0) => return Ok(None),
+                Err(e) if e.kind() == ErrorKind::UnexpectedEof => {
+                    return Ok(None);
+                }
+                Err(e) => return Err(e.into()),
+                Ok(_) => (),
+            }
+
+            let line = buf.trim();
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+
+            let Some((k, v)) = buf.split_once('=') else {
+                warn!("Cannot parse configuration line: {line:?}");
+                return Err(Error::ConfigSyntax);
+            };
+
+            return Ok(Some((k.trim(), v.trim())));
+        }
+    }
+}
+
+/// Internal trait for parsable configuration files
+pub(crate) trait ConfigParsableInternal: Default + Send {
+    fn handle_kv(o: &mut Self, k: &str, v: &str) -> Result<()>;
+}
+
+/// Trait for parsable configuration files
+pub trait ConfigParsable: Sized + Send {
+    /// Parse a configuration from a [`BufRead`].
+    fn parse_config<T: BufRead>(f: T) -> Result<Self>;
+
+    /// Parse a configuration from a [`AsyncBufRead`].
+    fn aparse_config<T: AsyncBufRead + Unpin + Send>(
+        f: T,
+    ) -> impl Future<Output = Result<Self>> + Send;
+}
+
+impl<U: ConfigParsableInternal> ConfigParsable for U {
+    fn parse_config<T: BufRead>(f: T) -> Result<Self> {
+        let mut parser = ConfigParser::new(f);
+        let mut o = Self::default();
+        let mut buf = String::with_capacity(4096);
+
+        while let Some((k, v)) = parser.next(&mut buf)? {
+            Self::handle_kv(&mut o, k, v)?;
+        }
+
+        Ok(o)
+    }
+
+    async fn aparse_config<T: AsyncBufRead + Unpin + Send>(f: T) -> Result<Self> {
+        let mut parser = ConfigParser::new(f);
+        let mut o = Self::default();
+        let mut buf = String::with_capacity(4096);
+
+        while let Some((k, v)) = parser.anext(&mut buf).await? {
+            Self::handle_kv(&mut o, k, v)?;
+        }
+
+        Ok(o)
     }
 }
 

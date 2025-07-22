@@ -20,6 +20,7 @@ tracing.workspace = true
 bytes = "1.9"
 futures-util = "0.3"
 parking_lot = "0.12"
+async-trait = "0.1.88"
 
 [dev-dependencies]
 criterion.workspace = true

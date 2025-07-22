@@ -4,6 +4,7 @@
 //! preserving the CDN's path structure in the local cache.
 
 use ngdp_cache::{cached_cdn_client::CachedCdnClient, cached_ribbit_client::CachedRibbitClient};
+use ngdp_cdn::CdnClientTrait;
 use ribbit_client::{Endpoint, ProductCdnsResponse, Region, TypedResponse};
 use tracing::{Level, info};
 use tracing_subscriber::FmtSubscriber;
@@ -92,10 +93,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             {
                 Ok(response) => {
                     let is_cached = response.is_from_cache();
-                    let data = response.bytes().await?;
+                    let data = response.into_inner();
                     info!(
                         "  Downloaded {} bytes (from cache: {})",
-                        data.len(),
+                        data.metadata().await?.len(),
                         is_cached
                     );
 

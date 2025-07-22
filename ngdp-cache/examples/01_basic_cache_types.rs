@@ -1,6 +1,7 @@
 //! Basic usage example for ngdp-cache
 
 use ngdp_cache::{cdn::CdnCache, generic::GenericCache, ribbit::RibbitCache};
+use tokio::io::AsyncReadExt;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -12,8 +13,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Generic cache example
     println!("1. Generic Cache:");
     let generic = GenericCache::new().await?;
-    generic.write("my_key", b"Hello, World!").await?;
-    let data = generic.read("my_key").await?;
+    generic.write_buffer("", "my_key", &b"Hello, World!"[..]).await?;
+    
+    let mut read_file = generic.read_object("", "my_key").await?.unwrap();
+    let mut data = Vec::new();
+    read_file.read_to_end(&mut data).await.unwrap();
+
     println!(
         "   Read from generic cache: {}",
         String::from_utf8_lossy(&data)
@@ -21,17 +26,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // CDN cache example
     println!("\n2. CDN Cache:");
-    let cdn = CdnCache::for_product("wow").await?;
+    let cdn = CdnCache::with_subdirectory("wow").await?;
 
-    // Cache config data
+    // Cache some data from a buffer
     let config_hash = "abcdef1234567890abcdef1234567890";
-    cdn.write_config(config_hash, b"build-config-data").await?;
-    println!("   Config cached at: {:?}", cdn.config_path(config_hash));
-
-    // Cache data/archive
-    let data_hash = "1234567890abcdef1234567890abcdef";
-    cdn.write_data(data_hash, b"archive-data").await?;
-    println!("   Data cached at: {:?}", cdn.data_path(data_hash));
+    cdn.write_buffer("demo/basic_cache", config_hash, &b"build-config-data"[..]).await?;
+    println!("   Config cached at: {:?}", cdn.cache_path("demo/basic_cache", config_hash));
 
     // Ribbit cache example
     println!("\n3. Ribbit Cache:");

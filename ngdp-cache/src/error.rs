@@ -1,5 +1,4 @@
 //! Error types for the ngdp-cache crate
-
 use thiserror::Error;
 
 /// Result type for ngdp-cache operations

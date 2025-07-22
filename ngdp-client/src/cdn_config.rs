@@ -3,13 +3,14 @@
 //! This module provides functionality for configuring CDN clients based on
 //! application settings, including custom CDN fallback support.
 
-use ngdp_cdn::CdnClientWithFallback;
+use ngdp_cache::cached_cdn_client::CachedCdnClient;
+use ngdp_cdn::{CdnClientBuilderTrait as _, CdnClientWithFallback, FallbackCdnClientTrait as _};
 use std::error::Error;
 
 /// Create a CDN client with configured fallbacks
 pub async fn create_cdn_client_with_config(
     primary_cdns: Vec<String>,
-) -> Result<CdnClientWithFallback, Box<dyn Error>> {
+) -> Result<CdnClientWithFallback<CachedCdnClient>, Box<dyn Error>> {
     let mut builder = CdnClientWithFallback::builder();
 
     // Add primary CDNs (Blizzard servers)
@@ -32,7 +33,7 @@ pub async fn create_cdn_client_with_config(
         }
     }
 
-    Ok(builder.build()?)
+    Ok(builder.build().await?)
 }
 
 /// Get a boolean configuration value

@@ -11,11 +11,13 @@ use std::path::{Path, PathBuf};
 pub mod cached_cdn_client;
 pub mod cached_ribbit_client;
 pub mod cached_tact_client;
+mod cache;
 pub mod cdn;
 pub mod error;
 pub mod generic;
 pub mod ribbit;
 
+pub use cache::Cache;
 pub use cdn::CdnCache;
 pub use error::{Error, Result};
 
@@ -32,7 +34,8 @@ pub fn get_cache_dir() -> Result<PathBuf> {
 }
 
 /// Ensure a directory exists, creating it if necessary
-pub(crate) async fn ensure_dir(path: &Path) -> Result<()> {
+pub(crate) async fn ensure_dir(path: impl AsRef<Path>) -> Result<()> {
+    let path = path.as_ref();
     if tokio::fs::metadata(path).await.is_err() {
         tokio::fs::create_dir_all(path).await?;
     }

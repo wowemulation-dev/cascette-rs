@@ -7,6 +7,7 @@
 //! 4. All responses are cached for improved performance
 
 use ngdp_cache::{cached_cdn_client::CachedCdnClient, cached_ribbit_client::CachedRibbitClient};
+use ngdp_cdn::CdnClientTrait;
 use ribbit_client::{
     Endpoint, ProductCdnsResponse, ProductVersionsResponse, Region, TypedResponse,
 };
@@ -24,26 +25,20 @@ async fn download_build_config_with_fallback(
     path: &str,
     hash: &str,
     product: &str,
-) -> Option<usize> {
+) -> Option<u64> {
     for (i, host) in hosts.iter().enumerate() {
         info!("  Trying CDN host {} of {}: {}", i + 1, hosts.len(), host);
 
         match cdn_client.download_build_config(host, path, hash).await {
             Ok(response) => {
                 let is_cached = response.is_from_cache();
-                match response.bytes().await {
-                    Ok(data) => {
-                        let size = data.len();
-                        info!(
-                            "  ✓ Successfully downloaded {} bytes from {} (cached: {})",
-                            size, host, is_cached
-                        );
-                        return Some(size);
-                    }
-                    Err(e) => {
-                        warn!("  ✗ Failed to read response data: {}", e);
-                    }
-                }
+                let data = response.into_inner();
+                let size = data.metadata().await.map(|m| m.len()).unwrap_or_default();
+                info!(
+                    "  ✓ Successfully downloaded {} bytes from {} (cached: {})",
+                    size, host, is_cached
+                );
+                return Some(size);
             }
             Err(e) => {
                 warn!("  ✗ Failed to download from {}: {}", host, e);
