@@ -12,14 +12,14 @@ use ngdp_cdn::{
     CdnClientBuilderTrait as _, CdnClientWithFallbackBuilder, FallbackCdnClientTrait as _,
 };
 use ribbit_client::{CdnEntry, Endpoint, ProductCdnsResponse, ProductVersionsResponse, Region};
-use std::{collections::BTreeMap, io::Cursor, str::FromStr as _};
+use std::{collections::BTreeMap, str::FromStr as _};
 use tact_parser::{
     Md5,
     archive::ArchiveIndexParser,
     config::{BuildConfig, CdnConfig, ConfigParsable as _},
 };
 use thiserror::Error;
-use tokio::io::{AsyncBufRead, BufReader};
+use tokio::io::BufReader;
 use tracing::*;
 
 pub async fn handle(
@@ -226,21 +226,19 @@ async fn inspect_cdn_config(
     let filtered_entries: Vec<&CdnEntry> =
         cdns.entries.iter().filter(|e| e.name == region).collect();
 
-    if filtered_entries.is_empty() {
-        return Err(Box::new(InspectError::NoCdnsFoundInRegion));
-    }
-
     // Pick CDN to fetch config
-    let cdn_client_builder = CdnClientWithFallbackBuilder::<CachedCdnClient>::new();
-    // TODO: configure cache directory
-    let cdn_entry = filtered_entries.first().unwrap();
-    let cdn_client_builder = cdn_client_builder.add_primary_cdns(cdn_entry.hosts.iter());
-    let cdn_client = cdn_client_builder.build().await?;
+    let cdn_entry = filtered_entries
+        .first()
+        .ok_or(InspectError::NoCdnsFoundInRegion)?;
+    let cdn_client = CdnClientWithFallbackBuilder::<CachedCdnClient>::new()
+        .add_primary_cdns(cdn_entry.hosts.iter())
+        .build()
+        .await?;
 
     let cdn_config = cdn_client
         .download_cdn_config(&cdn_entry.path, &config)
         .await?;
-    let cdn_config = CdnConfig::parse_config(Cursor::new(cdn_config.bytes().await?))?;
+    let cdn_config = CdnConfig::aparse_config(BufReader::new(cdn_config.into_inner())).await?;
 
     match format {
         OutputFormat::Json | OutputFormat::JsonPretty => {
@@ -384,29 +382,26 @@ async fn inspect_archives(
     let filtered_entries: Vec<&CdnEntry> =
         cdns.entries.iter().filter(|e| e.name == region).collect();
 
-    if filtered_entries.is_empty() {
-        return Err(Box::new(InspectError::NoCdnsFoundInRegion));
-    }
-
     // Pick CDN to fetch config
-    let cdn_client_builder = CdnClientWithFallbackBuilder::<CachedCdnClient>::new();
-    // TODO: configure cache directory
-    let cdn_entry = filtered_entries.first().unwrap();
-    let cdn_client_builder = cdn_client_builder.add_primary_cdns(cdn_entry.hosts.iter());
-    let cdn_client = cdn_client_builder.build().await?;
+    let cdn_entry = filtered_entries
+        .first()
+        .ok_or(InspectError::NoCdnsFoundInRegion)?;
+    let cdn_client = CdnClientWithFallbackBuilder::<CachedCdnClient>::new()
+        .add_primary_cdns(cdn_entry.hosts.iter())
+        .build()
+        .await?;
 
     let cdn_config = cdn_client
         .download_cdn_config(&cdn_entry.path, &version.cdn_config)
         .await?;
-    let cdn_config =
-        CdnConfig::aparse_config(BufReader::new(cdn_config.into_inner())).await?;
+    let cdn_config = CdnConfig::aparse_config(BufReader::new(cdn_config.into_inner())).await?;
 
     // Fetch all the archive indexes
     let Some(archives) = cdn_config.archives_with_index_size() else {
         return Err(Box::new(InspectError::NoArchivesInCdnConfiguration));
     };
 
-    // let mut ekeys = BTreeMap::new();
+    let mut ekeys = BTreeMap::new();
     info!("Downloading archive indexes...");
     for (archive, size) in archives {
         let hash = hex::encode(archive);
@@ -416,28 +411,27 @@ async fn inspect_archives(
             .download_data_index(&cdn_entry.path, &hash)
             .await?;
 
-        todo!();
-        // let mut archive_index =
-        //     ArchiveIndexParser::new(BufReader::new(archive_data.to_inner()), archive)?;
+        let mut archive_index =
+            ArchiveIndexParser::anew(BufReader::new(archive_data.into_inner()), archive).await?;
 
-        // for block in 0..archive_index.toc().num_blocks {
-        //     for entry in archive_index.read_block(block)? {
-        //         ekeys.insert(
-        //             entry.ekey,
-        //             (archive, entry.archive_offset, entry.blte_encoded_size),
-        //         );
-        //     }
-        // }
+        for block in 0..archive_index.toc().num_blocks {
+            for entry in archive_index.aread_block(block).await? {
+                ekeys.insert(
+                    entry.ekey,
+                    (archive, entry.archive_offset, entry.blte_encoded_size),
+                );
+            }
+        }
     }
 
     match format {
         OutputFormat::Json | OutputFormat::JsonPretty => {
             let json_data = serde_json::json!({
                 "config": version.cdn_config,
-                // "ekeys": ekeys.into_iter().map(
-                //     |(ekey, (archive, off, size))| {
-                //         (hex::encode(ekey), (hex::encode(archive), off, size))
-                //     }).collect::<BTreeMap<_, _>>(),
+                "ekeys": ekeys.into_iter().map(
+                    |(ekey, (archive, off, size))| {
+                        (hex::encode(ekey), (hex::encode(archive), off, size))
+                    }).collect::<BTreeMap<_, _>>(),
             });
 
             if matches!(format, OutputFormat::JsonPretty) {
@@ -460,12 +454,12 @@ async fn inspect_archives(
 
             print_subsection_header("Archive index", &style);
 
-            // let rows_count = ekeys.len();
-            // let preview_count = rows_count.min(5);
-            // println!(
-            //     "\n{}",
-            //     format_header(&format!("Preview (first {preview_count} rows)"), &style)
-            // );
+            let rows_count = ekeys.len();
+            let preview_count = rows_count.min(5);
+            println!(
+                "\n{}",
+                format_header(&format!("Preview (first {preview_count} rows)"), &style)
+            );
             let mut data_table = create_table(&style);
             data_table.set_header([
                 header_cell("#", &style),
@@ -474,27 +468,27 @@ async fn inspect_archives(
                 header_cell("Offset", &style),
                 header_cell("Length", &style),
             ]);
-            // for (i, (ekey, (archive, off, size))) in ekeys.iter().take(preview_count).enumerate() {
-            //     data_table.add_row([
-            //         numeric_cell(&(i + 1).to_string()),
-            //         regular_cell(&hex::encode(ekey)),
-            //         regular_cell(&hex::encode(archive)),
-            //         numeric_cell(&format!("{off:#x}")),
-            //         numeric_cell(&format!("{size:#x}")),
-            //     ]);
-            // }
+            for (i, (ekey, (archive, off, size))) in ekeys.iter().take(preview_count).enumerate() {
+                data_table.add_row([
+                    numeric_cell(&(i + 1).to_string()),
+                    regular_cell(&hex::encode(ekey)),
+                    regular_cell(&hex::encode(archive)),
+                    numeric_cell(&format!("{off:#x}")),
+                    numeric_cell(&format!("{size:#x}")),
+                ]);
+            }
 
             println!("{data_table}");
 
-            // if rows_count > preview_count {
-            //     println!(
-            //         "\n{}",
-            //         format_header(
-            //             &format!("... and {} more rows", rows_count - preview_count),
-            //             &style
-            //         )
-            //     );
-            // }
+            if rows_count > preview_count {
+                println!(
+                    "\n{}",
+                    format_header(
+                        &format!("... and {} more rows", rows_count - preview_count),
+                        &style
+                    )
+                );
+            }
         }
     }
 
@@ -531,22 +525,19 @@ async fn inspect_build_config(
     let filtered_entries: Vec<&CdnEntry> =
         cdns.entries.iter().filter(|e| e.name == region).collect();
 
-    if filtered_entries.is_empty() {
-        return Err(Box::new(InspectError::NoCdnsFoundInRegion));
-    }
-
     // Pick CDN to fetch config
-    let cdn_client_builder = CdnClientWithFallbackBuilder::<CachedCdnClient>::new();
-    // TODO: configure cache directory
-    let cdn_entry = filtered_entries.first().unwrap();
-    let cdn_client_builder = cdn_client_builder.add_primary_cdns(cdn_entry.hosts.iter());
-    let cdn_client = cdn_client_builder.build().await?;
-
-    let cdn_config = cdn_client
-        .download_cdn_config(&cdn_entry.path, &config)
+    let cdn_entry = filtered_entries
+        .first()
+        .ok_or(InspectError::NoCdnsFoundInRegion)?;
+    let cdn_client = CdnClientWithFallbackBuilder::<CachedCdnClient>::new()
+        .add_primary_cdns(cdn_entry.hosts.iter())
+        .build()
         .await?;
-    let build_config =
-        BuildConfig::aparse_config(BufReader::new(cdn_config.into_inner())).await?;
+
+    let build_config = cdn_client
+        .download_build_config(&cdn_entry.path, &config)
+        .await?;
+    let build_config = BuildConfig::aparse_config(BufReader::new(build_config.into_inner())).await?;
 
     info!("Build config: {build_config:?}");
     todo!()
