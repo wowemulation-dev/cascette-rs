@@ -188,7 +188,7 @@ pub trait FallbackCdnClientTrait: Sized {
     type Response;
 
     /// Error type
-    type Error: FallbackError + Error;
+    type Error: From<crate::Error> + Error;
 
     /// Client builder type
     type Builder: CdnClientBuilderTrait<Client = Self>;
@@ -201,6 +201,7 @@ pub trait FallbackCdnClientTrait: Sized {
         Self::Builder::new()
     }
 
+    /// Download a file from the CDN by hash
     async fn download(
         &self,
         path: &str,
@@ -270,11 +271,4 @@ pub trait FallbackCdnClientTrait: Sized {
         let patch_path = format!("{}/patch", path.trim_end_matches('/'));
         self.download(&patch_path, hash, "").await
     }
-}
-
-/// Specialised error types for the fallback CDN client.
-pub trait FallbackError {
-    fn invalid_host(host: impl Into<String>) -> Self;
-    fn cdn_exhausted() -> Self;
-    fn invalid_response(reason: impl Into<String>) -> Self;
 }

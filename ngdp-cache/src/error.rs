@@ -1,6 +1,4 @@
 //! Error types for the ngdp-cache crate
-
-use ngdp_cdn::FallbackError;
 use thiserror::Error;
 
 /// Result type for ngdp-cache operations
@@ -52,18 +50,4 @@ pub enum Error {
     /// UTF-8 conversion error
     #[error("UTF-8 conversion error: {0}")]
     Utf8(#[from] std::string::FromUtf8Error),
-}
-
-impl FallbackError for Error {
-    fn invalid_host(host: impl Into<String>) -> Self {
-        ngdp_cdn::Error::invalid_host(host).into()
-    }
-
-    fn cdn_exhausted() -> Self {
-        ngdp_cdn::Error::cdn_exhausted().into()
-    }
-
-    fn invalid_response(reason: impl Into<String>) -> Self {
-        ngdp_cdn::Error::invalid_response(reason).into()
-    }
 }

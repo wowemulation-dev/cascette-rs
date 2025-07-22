@@ -59,9 +59,7 @@ mod traits;
 #[cfg(test)]
 mod client_test;
 
-pub use crate::traits::{
-    CdnClientBuilderTrait, CdnClientTrait, FallbackCdnClientTrait, FallbackError,
-};
+pub use crate::traits::{CdnClientBuilderTrait, CdnClientTrait, FallbackCdnClientTrait};
 pub use client::{CdnClient, CdnClientBuilder};
 pub use error::{Error, Result};
 pub use fallback::{CdnClientWithFallback, CdnClientWithFallbackBuilder};

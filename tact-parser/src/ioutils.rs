@@ -1,6 +1,11 @@
 //! Internal utility functions
 
-use std::io::{Error, Read};
+use std::{
+    future::Future,
+    io::{Error, Read},
+};
+
+use tokio::io::AsyncReadExt;
 
 /// Generic trait for reading integer types from a buffer.
 pub trait ReadInt {
@@ -80,6 +85,29 @@ impl<T: Read> ReadInt for T {
     fn read_u40be(&mut self) -> Result<u64, Self::Error> {
         let mut b = [0; size_of::<u64>()];
         self.read_exact(&mut b[3..])?;
+        Ok(u64::from_be_bytes(b))
+    }
+}
+
+/// Generic async trait for reading integer types from a buffer.
+pub trait AsyncReadInt: AsyncReadExt {
+    /// Read a big-endian 24-bit unsigned integer from the buffer.
+    fn read_u24(&mut self) -> impl Future<Output = Result<u32, Error>> + Send;
+
+    /// Read a big-endian 40-bit unsigned integer from the buffer.
+    fn read_u40(&mut self) -> impl Future<Output = Result<u64, Error>>;
+}
+
+impl<T: AsyncReadExt + Unpin + Send> AsyncReadInt for T {
+    async fn read_u24(&mut self) -> Result<u32, Error> {
+        let mut b = [0; size_of::<u32>()];
+        self.read_exact(&mut b[1..]).await?;
+        Ok(u32::from_be_bytes(b))
+    }
+
+    async fn read_u40(&mut self) -> Result<u64, Error> {
+        let mut b = [0; size_of::<u64>()];
+        self.read_exact(&mut b[3..]).await?;
         Ok(u64::from_be_bytes(b))
     }
 }

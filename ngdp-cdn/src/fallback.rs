@@ -3,12 +3,8 @@
 //! This module provides a CDN client that supports multiple CDN hosts
 //! with automatic fallback when a primary CDN fails.
 
-use crate::{
-    CdnClient, CdnClientBuilderTrait, CdnClientTrait, Error, FallbackError,
-    traits::{CdnClientTrait as _, FallbackCdnClientTrait},
-};
-use reqwest::Response;
-use std::{fmt::Debug, marker::PhantomData, sync::Arc};
+use crate::{CdnClientBuilderTrait, CdnClientTrait, Error, FallbackCdnClientTrait};
+use std::{fmt::Debug, sync::Arc};
 use tracing::{debug, info, warn};
 
 /// Default backup CDN servers
@@ -54,7 +50,7 @@ const DEFAULT_BACKUP_CDNS: &[&str] = &["cdn.arctium.tools", "tact.mirror.reliqua
 pub struct CdnClientWithFallback<T>
 where
     T: CdnClientTrait,
-    <T as CdnClientTrait>::Error: FallbackError,
+    <T as CdnClientTrait>::Error: From<Error>,
 {
     /// Base CDN client for making requests
     client: Arc<T>,
@@ -69,7 +65,7 @@ where
 impl<T> CdnClientWithFallback<T>
 where
     T: CdnClientTrait,
-    <T as CdnClientTrait>::Error: FallbackError,
+    <T as CdnClientTrait>::Error: From<Error>,
 {
     /// Create a new CDN client with a custom base client
     pub fn with_client(client: T) -> Self {
@@ -209,11 +205,11 @@ where
     //     writer
     //         .write_all(&bytes)
     //         .await
-    //         .map_err(|e| FallbackError::invalid_response(format!("Write error: {e}")))?;
+    //         .map_err(|e| From<Error>::invalid_response(format!("Write error: {e}")))?;
     //     writer
     //         .flush()
     //         .await
-    //         .map_err(|e| FallbackError::invalid_response(format!("Write error: {e}")))?;
+    //         .map_err(|e| From<Error>::invalid_response(format!("Write error: {e}")))?;
 
     //     Ok(bytes.len() as u64)
     // }
@@ -222,7 +218,7 @@ where
 // impl<T> Default for CdnClientWithFallback<T>
 // where
 //     T: CdnClientTrait,
-//     <T as CdnClientTrait>::Error: FallbackError,
+//     <T as CdnClientTrait>::Error: From<Error>,
 // {
 //     fn default() -> Self {
 //         Self::new().expect("Failed to create default CDN client")
@@ -233,7 +229,7 @@ where
 impl<T> FallbackCdnClientTrait for CdnClientWithFallback<T>
 where
     T: CdnClientTrait + Send + Sync,
-    <T as CdnClientTrait>::Error: FallbackError + Send,
+    <T as CdnClientTrait>::Error: From<Error> + Send,
 {
     type Response = T::Response;
     type Error = T::Error;
@@ -255,7 +251,7 @@ where
         let hosts = self.get_all_cdn_hosts();
 
         if hosts.is_empty() {
-            return Err(FallbackError::invalid_host("No CDN hosts configured"));
+            return Err(Error::invalid_host("No CDN hosts configured").into());
         }
 
         let mut last_error: Option<<T as CdnClientTrait>::Error> = None;
@@ -287,7 +283,7 @@ where
         }
 
         // All CDNs failed
-        Err(last_error.unwrap_or_else(FallbackError::cdn_exhausted))
+        Err(last_error.unwrap_or_else(|| Error::cdn_exhausted().into()))
     }
 }
 
@@ -295,21 +291,19 @@ where
 // #[derive(Debug, Clone)]
 pub struct CdnClientWithFallbackBuilder<T>
 where
-    // T: CdnClientBuilderTrait<Client = U, Error = <U as CdnClientTrait>::Error>,
     T: CdnClientTrait,
-    <T as CdnClientTrait>::Error: FallbackError,
+    <T as CdnClientTrait>::Error: From<Error>,
 {
     base_client_builder: <T as CdnClientTrait>::Builder,
     primary_cdns: Vec<String>,
     use_default_backups: bool,
     custom_cdns: Vec<String>,
-    // _phantom: PhantomData<U>,
 }
 
 impl<T> Clone for CdnClientWithFallbackBuilder<T>
 where
     T: CdnClientTrait,
-    <T as CdnClientTrait>::Error: FallbackError,
+    <T as CdnClientTrait>::Error: From<Error>,
 {
     fn clone(&self) -> Self {
         Self {
@@ -324,7 +318,7 @@ where
 impl<T> Debug for CdnClientWithFallbackBuilder<T>
 where
     T: CdnClientTrait,
-    <T as CdnClientTrait>::Error: FallbackError,
+    <T as CdnClientTrait>::Error: From<Error>,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("CdnClientWithFallbackBuilder")
@@ -340,7 +334,7 @@ where
 impl<T> CdnClientBuilderTrait for CdnClientWithFallbackBuilder<T>
 where
     T: CdnClientTrait,
-    <T as CdnClientTrait>::Error: FallbackError,
+    <T as CdnClientTrait>::Error: From<Error>,
 {
     type Client = CdnClientWithFallback<T>;
     type Error = <<T as CdnClientTrait>::Builder as CdnClientBuilderTrait>::Error;
@@ -374,12 +368,7 @@ where
 impl<T> CdnClientWithFallbackBuilder<T>
 where
     T: CdnClientTrait,
-    <T as CdnClientTrait>::Error: FallbackError,
-    // T: CdnClientBuilderTrait<Client = U, Error = <U as CdnClientTrait>::Error>,
-    // U: CdnClientTrait,
-    // <U as CdnClientTrait>::Error: FallbackError,
-    // <T as CdnClientBuilderTrait>::Client: CdnClientTrait,
-    // <<T as CdnClientBuilderTrait>::Client as CdnClientTrait>::Error: FallbackError,
+    <T as CdnClientTrait>::Error: From<Error>,
 {
     /// Configure the base CDN client
     pub fn configure_base_client<F>(mut self, f: F) -> Self
@@ -427,11 +416,8 @@ where
 
 impl<T> Default for CdnClientWithFallbackBuilder<T>
 where
-    // T: CdnClientBuilderTrait<Client = U, Error = <U as CdnClientTrait>::Error>,
-    // U: CdnClientTrait,
-    // <U as CdnClientTrait>::Error: FallbackError,
     T: CdnClientTrait,
-    <T as CdnClientTrait>::Error: FallbackError,
+    <T as CdnClientTrait>::Error: From<Error>,
 {
     fn default() -> Self {
         Self::new()
@@ -441,6 +427,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::CdnClient;
 
     #[tokio::test]
 

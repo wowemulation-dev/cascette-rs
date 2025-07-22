@@ -9,6 +9,7 @@ repository.workspace = true
 homepage.workspace = true
 
 [dependencies]
+async-compression = { version = "0.4.27", features = ["zlib", "tokio"] }
 flate2 = "1.1.2"
 hex.workspace = true
 md-5 = "0.10.6"
@@ -21,7 +22,7 @@ tracing.workspace = true
 clap = { workspace = true, features = ["derive", "cargo", "env"] }
 criterion.workspace = true
 tracing-subscriber.workspace = true
-tokio = { workspace = true, features = ["macros", "rt"] }
+tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "fs"] }
 
 [[bench]]
 name = "jenkins3"
