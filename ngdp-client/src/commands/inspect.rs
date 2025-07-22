@@ -11,7 +11,7 @@ use ngdp_cache::cached_cdn_client::CachedCdnClient;
 use ngdp_cdn::{
     CdnClientBuilderTrait as _, CdnClientWithFallbackBuilder, FallbackCdnClientTrait as _,
 };
-use ribbit_client::{CdnEntry, Endpoint, ProductCdnsResponse, ProductVersionsResponse, Region};
+use ribbit_client::{Endpoint, ProductCdnsResponse, ProductVersionsResponse, Region};
 use std::{collections::BTreeMap, str::FromStr as _};
 use tact_parser::{
     Md5,
@@ -222,14 +222,11 @@ async fn inspect_cdn_config(
     let endpoint = Endpoint::ProductCdns(product.clone());
     let cdns: ProductCdnsResponse = client.request_typed(&endpoint).await?;
 
-    // Filter CDN entries for the specified region
-    let filtered_entries: Vec<&CdnEntry> =
-        cdns.entries.iter().filter(|e| e.name == region).collect();
-
     // Pick CDN to fetch config
-    let cdn_entry = filtered_entries
-        .first()
+    let cdn_entry = cdns
+        .get_cdn(&region)
         .ok_or(InspectError::NoCdnsFoundInRegion)?;
+
     let cdn_client = CdnClientWithFallbackBuilder::<CachedCdnClient>::new()
         .add_primary_cdns(cdn_entry.hosts.iter())
         .build()
@@ -378,14 +375,11 @@ async fn inspect_archives(
     let endpoint = Endpoint::ProductCdns(product.clone());
     let cdns: ProductCdnsResponse = client.request_typed(&endpoint).await?;
 
-    // Filter CDN entries for the specified region
-    let filtered_entries: Vec<&CdnEntry> =
-        cdns.entries.iter().filter(|e| e.name == region).collect();
-
     // Pick CDN to fetch config
-    let cdn_entry = filtered_entries
-        .first()
+    let cdn_entry = cdns
+        .get_cdn(&region)
         .ok_or(InspectError::NoCdnsFoundInRegion)?;
+
     let cdn_client = CdnClientWithFallbackBuilder::<CachedCdnClient>::new()
         .add_primary_cdns(cdn_entry.hosts.iter())
         .build()
@@ -521,14 +515,11 @@ async fn inspect_build_config(
     let endpoint = Endpoint::ProductCdns(product.clone());
     let cdns: ProductCdnsResponse = client.request_typed(&endpoint).await?;
 
-    // Filter CDN entries for the specified region
-    let filtered_entries: Vec<&CdnEntry> =
-        cdns.entries.iter().filter(|e| e.name == region).collect();
-
     // Pick CDN to fetch config
-    let cdn_entry = filtered_entries
-        .first()
+    let cdn_entry = cdns
+        .get_cdn(&region)
         .ok_or(InspectError::NoCdnsFoundInRegion)?;
+
     let cdn_client = CdnClientWithFallbackBuilder::<CachedCdnClient>::new()
         .add_primary_cdns(cdn_entry.hosts.iter())
         .build()
@@ -537,7 +528,8 @@ async fn inspect_build_config(
     let build_config = cdn_client
         .download_build_config(&cdn_entry.path, &config)
         .await?;
-    let build_config = BuildConfig::aparse_config(BufReader::new(build_config.into_inner())).await?;
+    let build_config =
+        BuildConfig::aparse_config(BufReader::new(build_config.into_inner())).await?;
 
     info!("Build config: {build_config:?}");
     todo!()
