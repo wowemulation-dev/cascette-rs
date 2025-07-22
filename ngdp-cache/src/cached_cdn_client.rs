@@ -72,47 +72,30 @@ pub struct CachedCdnClient {
 }
 
 impl CachedCdnClient {
-
-
     /// Create a new cached client for a specific product
     #[deprecated(note = "simplifying API")]
     #[allow(deprecated)]
     pub async fn for_product(product: &str) -> Result<Self> {
         let client = CdnClient::new()?;
-        let cache = CdnCache::for_product(product).await?;
+        let cache = CdnCache::with_subdirectory(product).await?;
 
         debug!("Initialized cached CDN client for product '{}'", product);
 
-        Ok(Self {
-            client,
-            cache,
-        })
+        Ok(Self { client, cache })
     }
 
-    /// Create a new cached client with custom cache directory
-    
-    #[allow(deprecated)]
+    /// Create a new cached client with custom cache directory    
     pub async fn with_cache_dir(cache_dir: impl AsRef<Path>) -> Result<Self> {
         let client = CdnClient::new()?;
-        let cache_dir = cache_dir.as_ref();
-        crate::ensure_dir(&cache_dir).await?;
-        let cache = CdnCache::with_base_dir(&cache_dir).await?;
+        let cache = CdnCache::with_base_dir(cache_dir).await?;
 
-        Ok(Self {
-            client,
-            cache,
-        })
+        Ok(Self { client, cache })
     }
 
     /// Create from an existing CDN client
-    #[allow(deprecated)]
     pub async fn with_client(client: CdnClient) -> Result<Self> {
         let cache = CdnCache::new().await?;
-
-        Ok(Self {
-            client,
-            cache,
-        })
+        Ok(Self { client, cache })
     }
 
     /// Enable or disable caching
@@ -129,7 +112,6 @@ impl CachedCdnClient {
         &self.cache.base_dir()
     }
 
-
     /// Make a basic request to a CDN URL
     ///
     /// This method does not use caching as it's for arbitrary URLs.
@@ -137,36 +119,6 @@ impl CachedCdnClient {
     pub async fn request(&self, url: &str) -> Result<Response> {
         Ok(self.client.request(url).await?)
     }
-
-    // /// Download content from CDN by hash with caching
-    // ///
-    // /// If caching is enabled and the content exists in cache, it will be returned
-    // /// without making a network request. Otherwise, the content is downloaded
-    // /// from the CDN and stored in cache for future use.
-    // pub async fn download(
-    //     &self,
-    //     cdn_host: &str,
-    //     path: &str,
-    //     hash: &str,
-    //     suffix: &str,
-    // ) -> Result<CachedResponse> {
-    //     if let Some(file) = self.cache.read_cache(path, hash, suffix).await? {
-    //         debug!("Cache hit for CDN {path}/{hash}{suffix}");
-    //         return Ok(CachedResponse::from_cache(file));
-    //     }
-
-    //     // Cache miss - download from CDN
-    //     debug!("Cache miss for CDN {path}/{hash}{suffix}, fetching from server");
-    //     let response = self.client.download(cdn_host, path, hash, suffix).await?;
-
-    //     // Copy the downloaded data to cache
-    //     let file = self
-    //         .cache
-    //         .write_response(path, hash, suffix, response)
-    //         .await?;
-
-    //     Ok(CachedResponse::from_network(file))
-    // }
 
     /// Stream download content from CDN with caching
     ///
@@ -177,7 +129,7 @@ impl CachedCdnClient {
     /// # Deprecated
     ///
     /// This is now an alias for [`Self::download`].
-    /// 
+    ///
     /// The original version of the function only read data file caches.
     ///
     /// For other files and on cache misses, it will download the file into
@@ -193,7 +145,11 @@ impl CachedCdnClient {
         hash: &str,
         suffix: &str,
     ) -> Result<Box<dyn AsyncRead + Unpin + Send>> {
-        Ok(Box::new(self.download(cdn_host, path, hash, suffix).await?.into_inner()))
+        Ok(Box::new(
+            self.download(cdn_host, path, hash, suffix)
+                .await?
+                .into_inner(),
+        ))
     }
 
     /// Get the size of cached content without reading it
@@ -202,7 +158,7 @@ impl CachedCdnClient {
     ///
     /// This function is not atomic.
     pub async fn cached_size(&self, path: &str, hash: &str, suffix: &str) -> Result<Option<u64>> {
-        self.cache.object_size(path, hash, suffix).await
+        self.cache.object_size_with_suffix(path, hash, suffix).await
     }
 
     /// Clear all cached content
@@ -253,6 +209,7 @@ impl CachedCdnClient {
     }
 }
 
+#[async_trait::async_trait]
 impl CdnClientTrait for CachedCdnClient {
     type Response = CachedResponse;
     type Error = Error;
@@ -265,10 +222,7 @@ impl CdnClientTrait for CachedCdnClient {
 
         debug!("Initialized cached CDN client");
 
-        Ok(Self {
-            client,
-            cache,
-        })
+        Ok(Self { client, cache })
     }
 
     fn builder() -> Self::Builder {
@@ -287,7 +241,7 @@ impl CdnClientTrait for CachedCdnClient {
         hash: &str,
         suffix: &str,
     ) -> std::result::Result<Self::Response, Self::Error> {
-        if let Some(file) = self.cache.read_cache(path, hash, suffix).await? {
+        if let Some(file) = self.cache.read_object_with_suffix(path, hash, suffix).await? {
             debug!("Cache hit for CDN {path}/{hash}{suffix}");
             return Ok(CachedResponse::from_cache(file));
         }
@@ -299,7 +253,7 @@ impl CdnClientTrait for CachedCdnClient {
         // Copy the downloaded data to cache
         let file = self
             .cache
-            .write_response(path, hash, suffix, response)
+            .write_response_with_suffix(path, hash, suffix, response)
             .await?;
 
         Ok(CachedResponse::from_network(file))
@@ -323,12 +277,12 @@ impl CdnClientTrait for CachedCdnClient {
         path: &str,
         hash: &str,
         cache_hash: &str,
-        range: impl Into<RangeInclusive<u64>>,
+        range: impl Into<RangeInclusive<u64>> + Send,
     ) -> std::result::Result<Self::Response, Self::Error> {
         let range = range.into();
         let cache_path = "range";
 
-        if let Some(file) = self.cache.read_cache(cache_path, cache_hash, "").await? {
+        if let Some(file) = self.cache.read_object(cache_path, cache_hash).await? {
             debug!("Cache hit for CDN {path}/{cache_hash}");
             return Ok(CachedResponse::from_cache(file));
         }
@@ -351,7 +305,7 @@ impl CdnClientTrait for CachedCdnClient {
         // Copy the downloaded data to cache
         let file = self
             .cache
-            .write_response(cache_path, &cache_hash, "", response)
+            .write_response(cache_path, &cache_hash, response)
             .await?;
 
         Ok(CachedResponse::from_network(file))
@@ -367,6 +321,7 @@ pub struct CachedCdnClientBuilder {
     cache_base_dir: Option<PathBuf>,
 }
 
+#[async_trait::async_trait]
 impl CdnClientBuilderTrait for CachedCdnClientBuilder {
     type Client = CachedCdnClient;
     type Error = Error;
@@ -383,7 +338,6 @@ impl CdnClientBuilderTrait for CachedCdnClientBuilder {
             Some(c) => CdnCache::with_base_dir(c).await?,
             None => CdnCache::new().await?,
         };
-
 
         Ok(CachedCdnClient {
             client: self.builder.build().await?,
@@ -559,6 +513,6 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(client.cache_dir(), &temp_dir.path().to_path_buf());
+        assert_eq!(client.cache_dir(), &temp_dir.path().join("cdn"));
     }
 }

@@ -3,13 +3,17 @@
 use chrono::{DateTime, Utc};
 use ngdp_cache::generic::GenericCache;
 use serde::{Deserialize, Serialize};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{
+    io::BufReader,
+    time::{Duration, SystemTime},
+};
+use tracing::*;
 
 /// Base URL for Wago Tools API
 const WAGO_API_BASE: &str = "https://wago.tools/api";
 
 /// Cache TTL for Wago builds API (30 minutes)
-const WAGO_CACHE_TTL_SECS: u64 = 30 * 60;
+const WAGO_CACHE_TTL: Duration = Duration::from_secs(30 * 60);
 
 /// Build information from Wago Tools API
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -86,28 +90,17 @@ pub async fn fetch_builds() -> Result<WagoBuildsResponse, Box<dyn std::error::Er
     };
 
     let cache_key = "builds.json";
-    let meta_key = "builds.meta";
 
     // Check if cached data exists and is valid
-    let cache_path = cache.get_path(cache_key);
-    let meta_path = cache.get_path(meta_key);
+    let now = SystemTime::now();
+    let builds = cache.read_object("", cache_key).await?;
 
-    // Check cache validity
-    if let Ok(metadata_content) = tokio::fs::read_to_string(&meta_path).await {
-        if let Ok(timestamp) = metadata_content.trim().parse::<u64>() {
-            let now = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs();
-
-            if now < timestamp + WAGO_CACHE_TTL_SECS {
-                // Cache is still valid, try to read it
-                if let Ok(cached_data) = tokio::fs::read(&cache_path).await {
-                    if let Ok(builds) = serde_json::from_slice(&cached_data) {
-                        tracing::debug!("Using cached Wago builds data");
-                        return Ok(builds);
-                    }
-                }
+    if let Some(builds) = builds {
+        let timestamp = builds.metadata().await?.modified()?;
+        if now < timestamp + WAGO_CACHE_TTL {
+            if let Ok(builds) = serde_json::from_reader(BufReader::new(builds.into_std().await)) {
+                debug!("Using cached Wago builds data");
+                return Ok(builds);
             }
         }
     }
@@ -117,19 +110,8 @@ pub async fn fetch_builds() -> Result<WagoBuildsResponse, Box<dyn std::error::Er
     let builds = fetch_builds_uncached().await?;
 
     // Cache the response
-    if let Ok(json_data) = serde_json::to_vec(&builds) {
-        // Write cache data
-        let _ = cache.write(cache_key, &json_data).await;
-
-        // Write metadata (timestamp)
-        let timestamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
-        let _ = cache
-            .write(meta_key, timestamp.to_string().as_bytes())
-            .await;
-    }
+    let writer = cache.write_object("", cache_key).await?.into_std().await;
+    serde_json::to_writer(writer, &builds)?;
 
     Ok(builds)
 }

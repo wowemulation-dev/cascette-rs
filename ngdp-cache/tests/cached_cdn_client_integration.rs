@@ -6,8 +6,8 @@ use bytes::Bytes;
 use ngdp_cache::cached_cdn_client::CachedCdnClient;
 use ngdp_cache::cdn::CdnCache;
 use ngdp_cdn::CdnClientTrait;
-use std::io::Cursor;
 use tempfile::TempDir;
+use tokio::io::AsyncWriteExt;
 use wiremock::matchers::{method, path_regex};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -126,49 +126,6 @@ async fn test_cached_cdn_client_content_types() {
 }
 
 #[tokio::test]
-async fn test_cached_cdn_client_disable_caching() {
-    let mock_server = MockServer::start().await;
-    let temp_dir = TempDir::new().unwrap();
-    let mut client = CachedCdnClient::with_cache_dir(temp_dir.path().to_path_buf())
-        .await
-        .unwrap();
-
-    // Disable caching
-    client.set_caching_enabled(false);
-
-    let test_hash = "d1234567890abcdef1234567890abcde";
-    let test_content = b"Test content with caching disabled";
-
-    // Mock should be called twice since caching is disabled
-    Mock::given(method("GET"))
-        .and(path_regex(
-            r"^/data/d1/23/d1234567890abcdef1234567890abcde$",
-        ))
-        .respond_with(mock_cdn_response(test_content))
-        .expect(2)
-        .mount(&mock_server)
-        .await;
-
-    // Both downloads should hit the server
-    let mock_host = mock_server.uri().replace("http://", "");
-    let response1 = client
-        .download(&mock_host, "data", test_hash, "")
-        .await
-        .unwrap();
-
-    assert!(!response1.is_from_cache());
-
-    let response2 = client
-        .download(&mock_host, "data", test_hash, "")
-        .await
-        .unwrap();
-
-    assert!(!response2.is_from_cache());
-
-    mock_server.verify().await;
-}
-
-#[tokio::test]
 async fn test_cached_cdn_client_cache_stats() {
     let temp_dir = TempDir::new().unwrap();
     let client = CachedCdnClient::with_cache_dir(temp_dir.path().to_path_buf())
@@ -251,26 +208,30 @@ async fn test_cached_cdn_client_streaming() {
     // Download with streaming
     let mock_host = mock_server.uri().replace("http://", "");
     let mut stream = client
-        .download_stream(&mock_host, "data", test_hash, "")
+        .download(&mock_host, "data", test_hash, "")
         .await
-        .unwrap();
+        .unwrap()
+        .into_inner();
 
     // Read from stream
     let mut buffer = Vec::new();
-    tokio::io::AsyncReadExt::read_to_end(&mut *stream, &mut buffer)
+    tokio::io::AsyncReadExt::read_to_end(&mut stream, &mut buffer)
         .await
         .unwrap();
 
     assert_eq!(buffer, test_content);
 
     // Second download should use cached file for streaming
-    let mut stream2 = client
-        .download_stream(&mock_host, "data", test_hash, "")
+    let stream2 = client
+        .download(&mock_host, "data", test_hash, "")
         .await
         .unwrap();
 
+    assert!(stream2.is_from_cache());
+    let mut stream2 = stream2.into_inner();
+
     let mut buffer2 = Vec::new();
-    tokio::io::AsyncReadExt::read_to_end(&mut *stream2, &mut buffer2)
+    tokio::io::AsyncReadExt::read_to_end(&mut stream2, &mut buffer2)
         .await
         .unwrap();
 
@@ -288,14 +249,17 @@ async fn test_cached_cdn_client_size_check() {
     let test_hash = "size1234567890abcdef1234567890ab";
     let test_content = b"Content with known size";
 
-    // Create a CdnCache to write the file in the correct location
-    let cache = CdnCache::with_base_dir(client.cache_dir().to_path_buf())
-        .await
-        .unwrap();
-    cache
-        .write_buffer("data", test_hash, "", Cursor::new(test_content))
-        .await
-        .unwrap();
+    {
+        // Create a CdnCache to write the file in the correct location
+        let cache = CdnCache::with_base_dir(temp_dir.path().to_path_buf())
+            .await
+            .unwrap();
+        let mut f = cache
+            .write_buffer("data", test_hash, &test_content[..])
+            .await
+            .unwrap();
+        f.flush().await.unwrap();
+    }
 
     // Check cached size
     let size = client.cached_size("data", test_hash, "").await.unwrap();

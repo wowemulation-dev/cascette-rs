@@ -5,7 +5,7 @@ use crate::{
     traits::{CdnClientBuilderTrait, CdnClientTrait},
 };
 use reqwest::{Client, Response};
-use std::{ops::RangeInclusive, time::Duration};
+use std::{marker::Send, ops::RangeInclusive, time::Duration};
 use tokio::time::sleep;
 use tracing::{debug, trace, warn};
 
@@ -533,6 +533,7 @@ impl Default for CdnClient {
     }
 }
 
+#[async_trait::async_trait]
 impl CdnClientTrait for CdnClient {
     type Response = Response;
     type Error = Error;
@@ -567,7 +568,7 @@ impl CdnClientTrait for CdnClient {
         path: &str,
         hash: &str,
         cache_hash: &str,
-        range: impl Into<RangeInclusive<u64>>,
+        range: impl Into<RangeInclusive<u64>> + Send,
     ) -> Result<Response> {
         let _ = cache_hash;
         let url = Self::build_url(cdn_host, path, hash, "")?;
@@ -645,6 +646,7 @@ impl CdnClientBuilder {
     }
 }
 
+#[async_trait::async_trait]
 impl CdnClientBuilderTrait for CdnClientBuilder {
     type Client = CdnClient;
     type Error = Error;

@@ -12,6 +12,7 @@ keywords = ["ngdp", "cache", "blizzard", "tact", "cdn"]
 categories = ["caching", "filesystem", "games"]
 
 [dependencies]
+async-trait = "0.1.88"
 bytes = "1.8"
 dirs = { workspace = true }
 futures = "0.3"

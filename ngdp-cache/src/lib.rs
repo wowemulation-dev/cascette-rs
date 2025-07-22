@@ -11,12 +11,13 @@ use std::path::{Path, PathBuf};
 pub mod cached_cdn_client;
 pub mod cached_ribbit_client;
 pub mod cached_tact_client;
-pub mod cache;
+mod cache;
 pub mod cdn;
 pub mod error;
 pub mod generic;
 pub mod ribbit;
 
+pub use cache::Cache;
 pub use cdn::CdnCache;
 pub use error::{Error, Result};
 

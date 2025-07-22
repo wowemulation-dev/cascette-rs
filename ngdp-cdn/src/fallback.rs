@@ -71,12 +71,6 @@ where
     T: CdnClientTrait,
     <T as CdnClientTrait>::Error: FallbackError,
 {
-    /// Create a new CDN client with default backup CDNs
-    pub async fn new() -> Result<Self, <T as CdnClientTrait>::Error> {
-        let client = T::new().await?;
-        Ok(Self::with_client(client))
-    }
-
     /// Create a new CDN client with a custom base client
     pub fn with_client(client: T) -> Self {
         Self {
@@ -86,14 +80,6 @@ where
             custom_cdn_hosts: Arc::new(parking_lot::RwLock::new(Vec::new())),
         }
     }
-
-    // /// Create a builder for configuring the CDN client
-    // pub fn builder<U>() -> CdnClientWithFallbackBuilder<U, T>
-    // where
-    //     U: CdnClientBuilderTrait<Client = CdnClientWithFallback<T>, Error = Error>,
-    // {
-    //     CdnClientWithFallbackBuilder::new()
-    // }
 
     /// Add a primary CDN host
     ///
@@ -243,10 +229,11 @@ where
 //     }
 // }
 
+#[async_trait::async_trait]
 impl<T> FallbackCdnClientTrait for CdnClientWithFallback<T>
 where
-    T: CdnClientTrait,
-    <T as CdnClientTrait>::Error: FallbackError,
+    T: CdnClientTrait + Send + Sync,
+    <T as CdnClientTrait>::Error: FallbackError + Send,
 {
     type Response = T::Response;
     type Error = T::Error;
@@ -349,13 +336,11 @@ where
     }
 }
 
+#[async_trait::async_trait]
 impl<T> CdnClientBuilderTrait for CdnClientWithFallbackBuilder<T>
 where
     T: CdnClientTrait,
     <T as CdnClientTrait>::Error: FallbackError,
-    // T: CdnClientBuilderTrait<Client = U, Error = <U as CdnClientTrait>::Error>,
-    // U: CdnClientTrait,
-    // <U as CdnClientTrait>::Error: FallbackError + std::error::Error,
 {
     type Client = CdnClientWithFallback<T>;
     type Error = <<T as CdnClientTrait>::Builder as CdnClientBuilderTrait>::Error;
