@@ -228,7 +228,11 @@ pub enum InspectCommands {
 
         /// Region
         #[arg(short, long, default_value = "us")]
-        region: String,        
+        region: String,
+
+        /// CDN config ID, leave unset for automatic
+        #[arg(short, long)]
+        cdn_config_id: Option<String>,
     },
 
     /// Show encoding information
@@ -245,7 +249,7 @@ pub enum InspectCommands {
     Listfile {
         /// Path to listfile
         file: Option<PathBuf>,
-    }
+    },
 }
 
 #[derive(Subcommand)]

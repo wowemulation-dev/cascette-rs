@@ -29,9 +29,11 @@ pub async fn handle(
     format: OutputFormat,
 ) -> Result<(), Box<dyn std::error::Error>> {
     match cmd {
-        InspectCommands::Archives { product, region } => {
-            inspect_archives(product, region, format).await?
-        }
+        InspectCommands::Archives {
+            product,
+            region,
+            cdn_config_id,
+        } => inspect_archives(product, region, cdn_config_id, format).await?,
         InspectCommands::Bpsv { input, raw } => inspect_bpsv(input, raw, format).await?,
         InspectCommands::BuildConfig {
             product,
@@ -364,17 +366,26 @@ async fn inspect_cdn_config(
 async fn inspect_archives(
     product: String,
     region: String,
+    cdn_config_id: Option<String>,
     format: OutputFormat,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let region_enum = Region::from_str(&region)?;
     let client = create_client(region_enum).await?;
 
-    let endpoint = Endpoint::ProductVersions(product.clone());
-    let versions: ProductVersionsResponse = client.request_typed(&endpoint).await?;
+    let cdn_config_id = match cdn_config_id {
+        Some(cdn_config_id) => cdn_config_id,
+        None => {
+            // Find dynamically
+            let endpoint = Endpoint::ProductVersions(product.clone());
+            let versions: ProductVersionsResponse = client.request_typed(&endpoint).await?;
 
-    let version = versions
-        .get_region(region.as_str())
-        .ok_or(InspectError::RegionNotFound)?;
+            let version = versions
+                .get_region(region.as_str())
+                .ok_or(InspectError::RegionNotFound)?;
+
+            version.cdn_config.clone()
+        }
+    };
 
     // Fetch the CDN host list
     let endpoint = Endpoint::ProductCdns(product.clone());
@@ -391,7 +402,7 @@ async fn inspect_archives(
         .await?;
 
     let cdn_config = cdn_client
-        .download_cdn_config(&cdn_entry.path, &version.cdn_config)
+        .download_cdn_config(&cdn_entry.path, &cdn_config_id)
         .await?;
     let cdn_config = CdnConfig::aparse_config(BufReader::new(cdn_config.into_inner())).await?;
 
@@ -426,7 +437,7 @@ async fn inspect_archives(
     match format {
         OutputFormat::Json | OutputFormat::JsonPretty => {
             let json_data = serde_json::json!({
-                "config": version.cdn_config,
+                "config": cdn_config_id,
                 "ekeys": ekeys.into_iter().map(
                     |(ekey, (archive, off, size))| {
                         (hex::encode(ekey), (hex::encode(archive), off, size))
@@ -447,7 +458,7 @@ async fn inspect_archives(
 
             // TODO: add missing fields
             print_section_header(
-                &format!("Archives in configuration {}", version.cdn_config),
+                &format!("Archives in configuration {cdn_config_id}"),
                 &style,
             );
 
