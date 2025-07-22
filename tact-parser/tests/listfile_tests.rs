@@ -1,4 +1,4 @@
-use std::{io::Cursor, path::PathBuf};
+use std::io::Cursor;
 use tact_parser::listfile::{ListfileNameResolver, listfile_normalise};
 
 /// Test with a fake version of the community listfile.
@@ -27,7 +27,7 @@ fn test_listfile() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     assert_eq!(
-        Some(PathBuf::from("interface/cinematics/logo_1024.avi").as_path()),
+        Some("interface/cinematics/logo_1024.avi"),
         parser.get_path_for_fid(21),
     );
 
@@ -38,16 +38,19 @@ fn test_listfile() -> Result<(), Box<dyn std::error::Error>> {
 
 #[test]
 fn normalise_listfile() {
-    assert_eq!(
-        listfile_normalise("interface/cinematics/logo_1024.avi"),
-        PathBuf::from("interface/cinematics/logo_1024.avi"),
-    );
-    assert_eq!(
-        listfile_normalise("interface\\cinematics\\logo_1024.avi"),
-        PathBuf::from("interface/cinematics/logo_1024.avi"),
-    );
-    assert_eq!(
-        listfile_normalise("InTeRfAcE\\CiNeMaTiCs/LOGo_1024.aVI"),
-        PathBuf::from("interface/cinematics/logo_1024.avi"),
-    );
+    let tests = vec![
+        // expected, input
+        ("a/b/c.avi", "a/b/c.avi"),
+        ("a/b/c.avi", "a\\b\\c.avi"),
+        ("a/b/c.avi", "a\\..\\..\\b\\c.avi"),
+        ("a/foo/b/c.avi", "\\\\a\\foo\\..\\b\\c.avi"),
+        ("http/example.com/foo.txt", "http://example.com/foo.txt"),
+        ("a/bcde/f/g", "a/BcDe/f/g"),
+        ("foo/bar", "foo/bar/"),
+    ];
+
+    for (expected, input) in tests.iter() {
+        let actual = listfile_normalise(input);
+        assert_eq!(expected, &actual, "for {input}");
+    }
 }
