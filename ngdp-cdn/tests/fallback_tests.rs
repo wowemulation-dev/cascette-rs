@@ -1,9 +1,11 @@
 //! Integration tests for CDN fallback functionality
 
+use futures_util::StreamExt;
 use ngdp_cdn::{
     CdnClient, CdnClientBuilder, CdnClientBuilderTrait as _, CdnClientWithFallback,
     CdnClientWithFallbackBuilder, FallbackCdnClientTrait as _,
 };
+use tokio::io::AsyncWriteExt;
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
     matchers::{method, path},
@@ -325,13 +327,17 @@ async fn test_streaming_download_fallback() {
         .await
         .unwrap();
 
-    todo!();
-    // let mut buffer = Vec::new();
-    // let bytes_written = client
-    //     .download_streaming("tpr/wow", "1234567890abcdef", "", &mut buffer)
-    //     .await
-    //     .unwrap();
+    let mut buffer = Vec::new();
+    let res = client
+        .download("tpr/wow", "1234567890abcdef", "")
+        .await
+        .unwrap();
 
-    // assert_eq!(bytes_written, 16);
-    // assert_eq!(buffer, b"streamed content");
+    let mut stream = res.bytes_stream();
+    while let Some(b) = stream.next().await {
+        let b = b.unwrap();
+        buffer.write_all(&b).await.unwrap();
+    }
+
+    assert_eq!(buffer, b"streamed content");
 }

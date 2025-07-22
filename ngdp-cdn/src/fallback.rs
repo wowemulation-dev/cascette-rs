@@ -24,11 +24,11 @@ const DEFAULT_BACKUP_CDNS: &[&str] = &["cdn.arctium.tools", "tact.mirror.reliqua
 /// # Example
 ///
 /// ```no_run
-/// use ngdp_cdn::CdnClientWithFallback;
+/// use ngdp_cdn::{CdnClient, CdnClientWithFallback, FallbackCdnClientTrait};
 ///
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 /// // Create with default backup CDNs
-/// let client = CdnClientWithFallback::new()?;
+/// let client = CdnClientWithFallback::<CdnClient>::new().await?;
 ///
 /// // Add Blizzard CDNs (these will be tried first)
 /// client.add_primary_cdns(vec![

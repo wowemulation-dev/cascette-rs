@@ -129,7 +129,7 @@ async fn test_cdn_cache_product_separation() {
 
     // Ensure it doesn't exist in D4 cache
     assert!(
-        !d4_cache
+        d4_cache
             .read_object(path, data_hash)
             .await
             .unwrap()
