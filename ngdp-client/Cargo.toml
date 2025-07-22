@@ -43,6 +43,7 @@ base64 = "0.22"
 x509-cert = "0.2"
 der = "0.7"
 chrono = { version = "0.4", features = ["serde"] }
+octorust = { version = "0.10.0", features = ["httpcache"] }
 
 [dev-dependencies]
 assert_cmd = "2.0"

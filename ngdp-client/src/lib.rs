@@ -6,6 +6,7 @@ pub mod cached_client;
 pub mod cdn_config;
 pub mod commands;
 pub mod fallback_client;
+pub mod listfile;
 pub mod output;
 pub mod wago_api;
 
@@ -239,6 +240,12 @@ pub enum InspectCommands {
         #[arg(short, long)]
         stats: bool,
     },
+
+    /// Show community listfile information
+    Listfile {
+        /// Path to listfile
+        file: Option<PathBuf>,
+    }
 }
 
 #[derive(Subcommand)]

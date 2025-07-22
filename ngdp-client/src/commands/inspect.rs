@@ -1,6 +1,7 @@
 use crate::{
     InspectCommands, OutputFormat,
     cached_client::create_client,
+    listfile::{download_release, get_latest_asset_id, get_octorust_client},
     output::{
         OutputStyle, create_table, format_count_badge, format_header, format_key_value,
         header_cell, numeric_cell, print_section_header, print_subsection_header, regular_cell,
@@ -12,14 +13,15 @@ use ngdp_cdn::{
     CdnClientBuilderTrait as _, CdnClientWithFallbackBuilder, FallbackCdnClientTrait as _,
 };
 use ribbit_client::{Endpoint, ProductCdnsResponse, ProductVersionsResponse, Region};
-use std::{collections::BTreeMap, str::FromStr as _};
+use std::{collections::BTreeMap, path::PathBuf, str::FromStr as _};
 use tact_parser::{
     Md5,
     archive::ArchiveIndexParser,
     config::{BuildConfig, CdnConfig, ConfigParsable as _},
+    listfile::ListfileNameResolver,
 };
 use thiserror::Error;
-use tokio::io::BufReader;
+use tokio::{fs::File, io::BufReader};
 use tracing::*;
 
 pub async fn handle(
@@ -45,6 +47,9 @@ pub async fn handle(
             println!("Encoding inspection not yet implemented");
             println!("File: {file:?}");
             println!("Stats: {stats}");
+        }
+        InspectCommands::Listfile { file } => {
+            inspect_listfile(file, format).await?;
         }
     }
     Ok(())
@@ -533,4 +538,90 @@ async fn inspect_build_config(
 
     info!("Build config: {build_config:?}");
     todo!()
+}
+
+async fn inspect_listfile(
+    path: Option<PathBuf>,
+    format: OutputFormat,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let (name, file) = match path {
+        Some(path) => (
+            path.as_path().to_string_lossy().to_string(),
+            File::open(&path).await?,
+        ),
+
+        None => {
+            // Download the current listfile
+            info!("Downloading latest listfile from GitHub (around 120 MiB)...");
+
+            // TODO: implement credentials
+            let github = get_octorust_client(None)?;
+
+            let Some(asset_id) = get_latest_asset_id(&github).await? else {
+                error!("Could not find listfile in latest release!");
+                return Ok(());
+            };
+
+            (asset_id.to_string(), download_release(asset_id).await?)
+        }
+    };
+
+    info!("Parsing listfile...");
+    let mut reader = BufReader::new(file);
+    let resolver = ListfileNameResolver::anew(&mut reader).await?;
+
+    match format {
+        OutputFormat::Json | OutputFormat::JsonPretty => {
+            let json_data = serde_json::json!({
+                "fids": resolver.fid_to_path(),
+            });
+
+            if matches!(format, OutputFormat::JsonPretty) {
+                serde_json::to_writer_pretty(std::io::stdout(), &json_data)?;
+            } else {
+                serde_json::to_writer(std::io::stdout(), &json_data)?;
+            };
+        }
+        OutputFormat::Bpsv => {
+            return Err(Box::new(InspectError::BpsvNotSupported));
+        }
+        OutputFormat::Text => {
+            let style = OutputStyle::new();
+
+            print_section_header(&format!("Entries in community listfile {name}"), &style);
+            let rows_count = resolver.len();
+            let preview_count = rows_count.min(5);
+            println!(
+                "\n{}",
+                format_header(&format!("Preview (first {preview_count} rows)"), &style)
+            );
+            let mut data_table = create_table(&style);
+            data_table.set_header([
+                header_cell("#", &style),
+                header_cell("FID", &style),
+                header_cell("Path", &style),
+            ]);
+            for (i, (fid, path)) in resolver.iter().take(preview_count).enumerate() {
+                data_table.add_row([
+                    numeric_cell(&(i + 1).to_string()),
+                    numeric_cell(&format!("{fid}")),
+                    regular_cell(&path),
+                ]);
+            }
+
+            println!("{data_table}");
+
+            if rows_count > preview_count {
+                println!(
+                    "\n{}",
+                    format_header(
+                        &format!("... and {} more rows", rows_count - preview_count),
+                        &style
+                    )
+                );
+            }
+        }
+    }
+
+    Ok(())
 }
