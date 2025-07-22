@@ -476,21 +476,6 @@ impl CachedTactClient {
         Ok(self.client.get(path).await?)
     }
 
-    /// Download a file from CDN (no caching for binary files)
-    ///
-    /// **Note**: This method downloads actual game content from CDN servers and does NOT
-    /// cache the response. CDN content caching should be implemented in a separate layer
-    /// (e.g., in ngdp-cdn crate) to handle binary data efficiently with proper storage
-    /// in ~/.cache/ngdp/cdn/ instead of the TACT metadata cache.
-    pub async fn download_file(
-        &self,
-        cdn_host: &str,
-        path: &str,
-        hash: &str,
-    ) -> Result<reqwest::Response> {
-        Ok(self.client.download_file(cdn_host, path, hash).await?)
-    }
-
     /// Get the underlying HTTP client
     pub fn inner(&self) -> &HttpClient {
         &self.client
