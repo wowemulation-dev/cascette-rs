@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use tracing::Level;
 
+use ngdp_client::commands::keys::KeysCommands;
 use ngdp_client::{
     CertsCommands, ConfigCommands, DownloadCommands, InspectCommands, OutputFormat,
     ProductsCommands, StorageCommands, cached_client, commands,
@@ -88,6 +89,10 @@ enum Commands {
     #[command(subcommand)]
     Config(ConfigCommands),
 
+    /// Manage encryption keys
+    #[command(subcommand)]
+    Keys(KeysCommands),
+
     /// Certificate operations
     #[command(subcommand)]
     Certs(CertsCommands),
@@ -137,6 +142,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Commands::Inspect(cmd) => commands::inspect::handle(cmd, cli.format).await,
         Commands::Config(cmd) => commands::config::handle(cmd, cli.format).await,
         Commands::Certs(cmd) => commands::certs::handle(cmd, cli.format).await,
+        Commands::Keys(cmd) => commands::keys::handle_keys_command(cmd).await,
     };
 
     // Handle errors with more user-friendly messages

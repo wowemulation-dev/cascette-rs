@@ -1,0 +1,22 @@
+[package]
+name = "blte"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[dependencies]
+flate2 = "1.0"
+lz4_flex = "0.11"
+ngdp-crypto = { path = "../ngdp-crypto" }
+md5 = "0.7"
+tracing = "0.1"
+thiserror = "2.0"
+byteorder = "1.5"
+hex = "0.4"
+
+[dev-dependencies]
+tokio = { version = "1.0", features = ["macros", "rt"] }

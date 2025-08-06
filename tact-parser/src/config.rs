@@ -31,16 +31,15 @@ impl ConfigFile {
     pub fn parse(text: &str) -> Result<Self> {
         let mut values = HashMap::new();
         let mut hashes = HashMap::new();
-        
+
         for line in text.lines() {
             let line = line.trim();
-            
+
             // Skip comments and empty lines
             if line.is_empty() || line.starts_with('#') {
                 continue;
             }
-            
-            
+
             // Split on " = " (space equals space) or " =" (space equals, for empty values)
             let (key, value) = if let Some(eq_pos) = line.find(" = ") {
                 let key = line[..eq_pos].trim();
@@ -53,56 +52,68 @@ impl ConfigFile {
             } else {
                 continue; // No valid key = value format found
             };
-            
+
             trace!("Config entry: '{}' = '{}'", key, value);
-            
+
             // Always insert the value, even if empty
             values.insert(key.to_string(), value.to_string());
-            
-            // Check if value contains hash and size
+
+            // Check if value contains hash and optionally size
             if !value.is_empty() {
                 let parts: Vec<&str> = value.split_whitespace().collect();
-                if parts.len() >= 2 && is_hex_hash(parts[0]) {
-                    if let Ok(size) = parts[1].parse::<u64>() {
-                        hashes.insert(key.to_string(), HashPair {
-                            hash: parts[0].to_string(),
-                            size,
-                        });
+                if !parts.is_empty() && is_hex_hash(parts[0]) {
+                    // Check if it's a hash-size pair
+                    if parts.len() >= 2 {
+                        if let Ok(size) = parts[1].parse::<u64>() {
+                            hashes.insert(
+                                key.to_string(),
+                                HashPair {
+                                    hash: parts[0].to_string(),
+                                    size,
+                                },
+                            );
+                        }
                     }
+                    // Note: We don't store single hashes in the hashes map
+                    // They can be accessed via get_value() and extracted manually
                 }
             }
         }
-        
-        debug!("Parsed config with {} entries, {} hash pairs", values.len(), hashes.len());
-        
+
+        debug!(
+            "Parsed config with {} entries, {} hash pairs",
+            values.len(),
+            hashes.len()
+        );
+
         Ok(ConfigFile { values, hashes })
     }
-    
+
     /// Get a value by key
     pub fn get_value(&self, key: &str) -> Option<&str> {
         self.values.get(key).map(|s| s.as_str())
     }
-    
+
     /// Get a hash by key (extracts from hash-size pairs)
     pub fn get_hash(&self, key: &str) -> Option<&str> {
         self.hashes.get(key).map(|hp| hp.hash.as_str())
     }
-    
+
     /// Get a size by key (extracts from hash-size pairs)
     pub fn get_size(&self, key: &str) -> Option<u64> {
         self.hashes.get(key).map(|hp| hp.size)
     }
-    
+
     /// Get a hash pair by key
     pub fn get_hash_pair(&self, key: &str) -> Option<&HashPair> {
         self.hashes.get(key)
     }
-    
+
     /// Check if a key exists
     pub fn has_key(&self, key: &str) -> bool {
         self.values.contains_key(key)
     }
-    
+
     /// Get all keys
     pub fn keys(&self) -> Vec<&str> {
         self.values.keys().map(|s| s.as_str()).collect()
@@ -175,32 +186,50 @@ impl BuildConfig {
         let config = ConfigFile::parse(text)?;
         Ok(BuildConfig { config })
     }
-    
-    /// Get the root file hash
+
+    /// Helper to extract hash from a key, handling both formats
+    fn extract_hash(&self, key: &str) -> Option<&str> {
+        // First try to get from hash-size pairs
+        if let Some(hash) = self.config.get_hash(key) {
+            return Some(hash);
+        }
+
+        // Fall back to single hash value or first hash in multi-hash value
+        if let Some(value) = self.config.get_value(key) {
+            let parts: Vec<&str> = value.split_whitespace().collect();
+            if !parts.is_empty() && is_hex_hash(parts[0]) {
+                return Some(parts[0]);
+            }
+        }
+
+        None
+    }
+
+    /// Get the root file hash (handles both single hash and hash-size formats)
     pub fn root_hash(&self) -> Option<&str> {
-        self.config.get_hash(build_keys::ROOT)
+        self.extract_hash(build_keys::ROOT)
     }
-    
-    /// Get the encoding file hash
+
+    /// Get the encoding file hash (handles both single hash and hash-size formats)
     pub fn encoding_hash(&self) -> Option<&str> {
-        self.config.get_hash(build_keys::ENCODING)
+        self.extract_hash(build_keys::ENCODING)
     }
-    
-    /// Get the install manifest hash
+
+    /// Get the install manifest hash (handles both single hash and hash-size formats)
     pub fn install_hash(&self) -> Option<&str> {
-        self.config.get_hash(build_keys::INSTALL)
+        self.extract_hash(build_keys::INSTALL)
     }
-    
-    /// Get the download manifest hash
+
+    /// Get the download manifest hash (handles both single hash and hash-size formats)
     pub fn download_hash(&self) -> Option<&str> {
-        self.config.get_hash(build_keys::DOWNLOAD)
+        self.extract_hash(build_keys::DOWNLOAD)
     }
-    
-    /// Get the size file hash
+
+    /// Get the size file hash (handles both single hash and hash-size formats)
     pub fn size_hash(&self) -> Option<&str> {
-        self.config.get_hash(build_keys::SIZE)
+        self.extract_hash(build_keys::SIZE)
     }
-    
+
     /// Get the build name
     pub fn build_name(&self) -> Option<&str> {
         self.config.get_value(build_keys::BUILD_NAME)
@@ -220,7 +249,7 @@ impl CdnConfig {
         let config = ConfigFile::parse(text)?;
         Ok(CdnConfig { config })
     }
-    
+
     /// Get the archives list
     pub fn archives(&self) -> Vec<&str> {
         self.config
@@ -228,12 +257,12 @@ impl CdnConfig {
             .map(|v| v.split_whitespace().collect())
             .unwrap_or_default()
     }
-    
+
     /// Get the archive group
     pub fn archive_group(&self) -> Option<&str> {
         self.config.get_value(cdn_keys::ARCHIVE_GROUP)
     }
-    
+
     /// Get the file index
     pub fn file_index(&self) -> Option<&str> {
         self.config.get_value(cdn_keys::FILE_INDEX)
@@ -243,7 +272,7 @@ impl CdnConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_parse_simple_config() {
         let config_text = r#"
@@ -254,14 +283,14 @@ key2 = value2
 # Empty lines are ignored
 key3 = value with spaces
         "#;
-        
+
         let config = ConfigFile::parse(config_text).unwrap();
         assert_eq!(config.get_value("key1"), Some("value1"));
         assert_eq!(config.get_value("key2"), Some("value2"));
         assert_eq!(config.get_value("key3"), Some("value with spaces"));
         assert_eq!(config.get_value("nonexistent"), None);
     }
-    
+
     #[test]
     fn test_parse_hash_pairs() {
         let config_text = r#"
@@ -270,26 +299,26 @@ root = 0123456789abcdef 789
 install = fedcba9876543210 456789
 invalid = not_a_hash 123
         "#;
-        
+
         let config = ConfigFile::parse(config_text).unwrap();
-        
+
         // Check hash extraction
         assert_eq!(config.get_hash("encoding"), Some("abc123def456789"));
         assert_eq!(config.get_size("encoding"), Some(123456));
-        
+
         assert_eq!(config.get_hash("root"), Some("0123456789abcdef"));
         assert_eq!(config.get_size("root"), Some(789));
-        
+
         assert_eq!(config.get_hash("install"), Some("fedcba9876543210"));
         assert_eq!(config.get_size("install"), Some(456789));
-        
+
         // Invalid hash should not be extracted
         assert_eq!(config.get_hash("invalid"), None);
-        
+
         // But the raw value should still be there
         assert_eq!(config.get_value("invalid"), Some("not_a_hash 123"));
     }
-    
+
     #[test]
     fn test_build_config() {
         let config_text = r#"
@@ -301,9 +330,9 @@ size = 234567 500
 build-name = 10.0.0.12345
 build-uid = wow/game
         "#;
-        
+
         let build = BuildConfig::parse(config_text).unwrap();
-        
+
         assert_eq!(build.root_hash(), Some("abc123"));
         assert_eq!(build.encoding_hash(), Some("def456"));
         assert_eq!(build.install_hash(), Some("789abc"));
@@ -311,7 +340,7 @@ build-uid = wow/game
         assert_eq!(build.size_hash(), Some("234567"));
         assert_eq!(build.build_name(), Some("10.0.0.12345"));
     }
-    
+
     #[test]
     fn test_cdn_config() {
         let config_text = r#"
@@ -320,19 +349,19 @@ archive-group = abc123def456
 file-index = 789abcdef012
 patch-archives = patch1 patch2
         "#;
-        
+
         let cdn = CdnConfig::parse(config_text).unwrap();
-        
+
         let archives = cdn.archives();
         assert_eq!(archives.len(), 3);
         assert_eq!(archives[0], "archive1");
         assert_eq!(archives[1], "archive2");
         assert_eq!(archives[2], "archive3");
-        
+
         assert_eq!(cdn.archive_group(), Some("abc123def456"));
         assert_eq!(cdn.file_index(), Some("789abcdef012"));
     }
-    
+
     #[test]
     fn test_is_hex_hash() {
         assert!(is_hex_hash("abc123def456"));
@@ -341,5 +370,4 @@ patch-archives = patch1 patch2
         assert!(!is_hex_hash("abc12g")); // 'g' is not hex
         assert!(!is_hex_hash("abc")); // Too short
     }
-    
 }

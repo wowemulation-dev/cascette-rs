@@ -3,10 +3,11 @@ members = [
   "ngdp-bpsv",
   "ngdp-cache",
   "ngdp-cdn",
+  "ngdp-crypto",
   "ribbit-client",
   "tact-client",
   "tact-parser",
-  "ngdp-client",
+  "ngdp-client", "blte",
 ]
 resolver = "2"
 

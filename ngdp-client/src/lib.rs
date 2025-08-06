@@ -221,14 +221,80 @@ pub enum InspectCommands {
         region: String,
     },
 
-    /// Show encoding information
+    /// Inspect encoding file
     Encoding {
-        /// Path to encoding file
-        file: PathBuf,
+        /// Product name
+        product: String,
+
+        /// Region
+        #[arg(short, long, default_value = "us")]
+        region: String,
 
         /// Show statistics
         #[arg(short, long)]
         stats: bool,
+
+        /// Search for specific key (hex string)
+        #[arg(long)]
+        search: Option<String>,
+
+        /// Limit number of entries shown
+        #[arg(long, default_value = "20")]
+        limit: usize,
+    },
+
+    /// Inspect install manifest
+    Install {
+        /// Product name
+        product: String,
+
+        /// Region
+        #[arg(short, long, default_value = "us")]
+        region: String,
+
+        /// Filter by tags (comma-separated)
+        #[arg(long)]
+        tags: Option<String>,
+
+        /// Show all entries (not just summary)
+        #[arg(long)]
+        all: bool,
+    },
+
+    /// Inspect download manifest
+    DownloadManifest {
+        /// Product name
+        product: String,
+
+        /// Region
+        #[arg(short, long, default_value = "us")]
+        region: String,
+
+        /// Show priority files
+        #[arg(long, default_value = "10")]
+        priority_limit: usize,
+
+        /// Filter by tags (comma-separated)
+        #[arg(long)]
+        tags: Option<String>,
+    },
+
+    /// Inspect size file
+    Size {
+        /// Product name
+        product: String,
+
+        /// Region
+        #[arg(short, long, default_value = "us")]
+        region: String,
+
+        /// Show largest files
+        #[arg(long, default_value = "10")]
+        largest: usize,
+
+        /// Calculate size for tags (comma-separated)
+        #[arg(long)]
+        tags: Option<String>,
     },
 }
 
