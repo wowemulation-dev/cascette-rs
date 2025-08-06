@@ -1,0 +1,22 @@
+[package]
+name = "ngdp-crypto"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Encryption and decryption support for NGDP/TACT files"
+
+[dependencies]
+salsa20 = "0.10"
+cipher = "0.4"
+hex.workspace = true
+dirs.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+criterion.workspace = true
+tempfile = "3.0"
