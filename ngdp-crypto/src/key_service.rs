@@ -1,8 +1,8 @@
 //! Key management service for TACT encryption.
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
 use std::fs;
+use std::path::{Path, PathBuf};
 use tracing::{debug, info, warn};
 
 use crate::error::CryptoError;
@@ -19,7 +19,7 @@ impl KeyService {
     pub fn new() -> Self {
         let keys = hardcoded_keys();
         info!("Loaded {} hardcoded encryption keys", keys.len());
-        
+
         Self { keys }
     }
 
@@ -48,12 +48,10 @@ impl KeyService {
     /// Load keys from a file.
     pub fn load_key_file(&mut self, path: &Path) -> Result<usize, CryptoError> {
         let content = fs::read_to_string(path)?;
-        
+
         // Detect format based on file extension or content
-        let ext = path.extension()
-            .and_then(|s| s.to_str())
-            .unwrap_or("");
-        
+        let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("");
+
         match ext {
             "csv" => self.load_csv_keys(&content),
             "tsv" => self.load_tsv_keys(&content),
@@ -74,24 +72,24 @@ impl KeyService {
     /// Load keys from CSV format (keyname,keyhex).
     fn load_csv_keys(&mut self, content: &str) -> Result<usize, CryptoError> {
         let mut loaded = 0;
-        
+
         for (line_num, line) in content.lines().enumerate() {
             let line = line.trim();
-            
+
             // Skip empty lines and comments
             if line.is_empty() || line.starts_with('#') || line.starts_with("//") {
                 continue;
             }
-            
+
             let parts: Vec<&str> = line.split(',').collect();
             if parts.len() < 2 {
                 warn!("Skipping invalid CSV line {}: {}", line_num + 1, line);
                 continue;
             }
-            
+
             let key_name = parts[0].trim();
             let key_hex = parts[1].trim();
-            
+
             match (parse_key_name(key_name), parse_key_hex(key_hex)) {
                 (Ok(key_id), Ok(key)) => {
                     self.add_key(key_id, key);
@@ -105,7 +103,7 @@ impl KeyService {
                 }
             }
         }
-        
+
         info!("Loaded {} keys from CSV file", loaded);
         Ok(loaded)
     }
@@ -113,24 +111,24 @@ impl KeyService {
     /// Load keys from TSV format (keyname\tkeyhex).
     fn load_tsv_keys(&mut self, content: &str) -> Result<usize, CryptoError> {
         let mut loaded = 0;
-        
+
         for (line_num, line) in content.lines().enumerate() {
             let line = line.trim();
-            
+
             // Skip empty lines and comments
             if line.is_empty() || line.starts_with('#') || line.starts_with("//") {
                 continue;
             }
-            
+
             let parts: Vec<&str> = line.split('\t').collect();
             if parts.len() < 2 {
                 warn!("Skipping invalid TSV line {}: {}", line_num + 1, line);
                 continue;
             }
-            
+
             let key_name = parts[0].trim();
             let key_hex = parts[1].trim();
-            
+
             match (parse_key_name(key_name), parse_key_hex(key_hex)) {
                 (Ok(key_id), Ok(key)) => {
                     self.add_key(key_id, key);
@@ -144,7 +142,7 @@ impl KeyService {
                 }
             }
         }
-        
+
         info!("Loaded {} keys from TSV file", loaded);
         Ok(loaded)
     }
@@ -152,24 +150,24 @@ impl KeyService {
     /// Load keys from TXT format (keyname keyhex [description]).
     fn load_txt_keys(&mut self, content: &str) -> Result<usize, CryptoError> {
         let mut loaded = 0;
-        
+
         for (line_num, line) in content.lines().enumerate() {
             let line = line.trim();
-            
+
             // Skip empty lines and comments
             if line.is_empty() || line.starts_with('#') || line.starts_with("//") {
                 continue;
             }
-            
+
             let parts: Vec<&str> = line.split_whitespace().collect();
             if parts.len() < 2 {
                 warn!("Skipping invalid TXT line {}: {}", line_num + 1, line);
                 continue;
             }
-            
+
             let key_name = parts[0];
             let key_hex = parts[1];
-            
+
             match (parse_key_name(key_name), parse_key_hex(key_hex)) {
                 (Ok(key_id), Ok(key)) => {
                     self.add_key(key_id, key);
@@ -183,7 +181,7 @@ impl KeyService {
                 }
             }
         }
-        
+
         info!("Loaded {} keys from TXT file", loaded);
         Ok(loaded)
     }
@@ -191,7 +189,7 @@ impl KeyService {
     /// Load keys from standard directories.
     pub fn load_from_standard_dirs(&mut self) -> Result<usize, CryptoError> {
         let mut total_loaded = 0;
-        
+
         // Check environment variable first
         if let Ok(path) = std::env::var("CASCETTE_KEYS_PATH") {
             let path = PathBuf::from(path);
@@ -211,7 +209,7 @@ impl KeyService {
                 }
             }
         }
-        
+
         // Check home directory locations
         if let Some(home_dir) = dirs::home_dir() {
             // ~/.config/cascette/
@@ -219,33 +217,34 @@ impl KeyService {
             if config_dir.exists() {
                 total_loaded += self.load_keys_from_dir(&config_dir)?;
             }
-            
+
             // ~/.tactkeys/
             let tactkeys_dir = home_dir.join(".tactkeys");
             if tactkeys_dir.exists() {
                 total_loaded += self.load_keys_from_dir(&tactkeys_dir)?;
             }
         }
-        
+
         Ok(total_loaded)
     }
 
     /// Load all key files from a directory.
     fn load_keys_from_dir(&mut self, dir: &Path) -> Result<usize, CryptoError> {
         let mut total_loaded = 0;
-        
+
         for entry in fs::read_dir(dir)? {
             let entry = entry?;
             let path = entry.path();
-            
+
             if path.is_file() {
-                let name = path.file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or("");
-                
+                let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+
                 // Only load files with appropriate extensions
-                if name.ends_with(".csv") || name.ends_with(".tsv") 
-                    || name.ends_with(".txt") || name.contains("key") {
+                if name.ends_with(".csv")
+                    || name.ends_with(".tsv")
+                    || name.ends_with(".txt")
+                    || name.contains("key")
+                {
                     match self.load_key_file(&path) {
                         Ok(count) => {
                             total_loaded += count;
@@ -258,7 +257,7 @@ impl KeyService {
                 }
             }
         }
-        
+
         Ok(total_loaded)
     }
 }
@@ -279,7 +278,7 @@ mod tests {
     fn test_hardcoded_keys() {
         let service = KeyService::new();
         assert!(service.key_count() > 0);
-        
+
         // Test a known key
         let key = service.get_key(0xFA505078126ACB3E);
         assert!(key.is_some());
@@ -290,7 +289,7 @@ mod tests {
         let mut service = KeyService::empty();
         let key_id = 0x1234567890ABCDEF;
         let key = [0u8; 16];
-        
+
         service.add_key(key_id, key);
         assert_eq!(service.get_key(key_id), Some(&key));
     }
@@ -301,14 +300,14 @@ mod tests {
         writeln!(file, "# Comment line")?;
         writeln!(file, "0x1234567890ABCDEF,00112233445566778899AABBCCDDEEFF")?;
         writeln!(file, "FEDCBA0987654321,FFEEDDCCBBAA99887766554433221100")?;
-        
+
         let mut service = KeyService::empty();
         let loaded = service.load_key_file(file.path())?;
         assert_eq!(loaded, 2);
-        
+
         assert!(service.get_key(0x1234567890ABCDEF).is_some());
         assert!(service.get_key(0xFEDCBA0987654321).is_some());
-        
+
         Ok(())
     }
 
@@ -316,16 +315,19 @@ mod tests {
     fn test_load_txt() -> Result<(), Box<dyn std::error::Error>> {
         let mut file = NamedTempFile::new()?;
         writeln!(file, "# Comment line")?;
-        writeln!(file, "0x1234567890ABCDEF 00112233445566778899AABBCCDDEEFF Some description")?;
+        writeln!(
+            file,
+            "0x1234567890ABCDEF 00112233445566778899AABBCCDDEEFF Some description"
+        )?;
         writeln!(file, "FEDCBA0987654321 FFEEDDCCBBAA99887766554433221100")?;
-        
+
         let mut service = KeyService::empty();
         let loaded = service.load_key_file(file.path())?;
         assert_eq!(loaded, 2);
-        
+
         assert!(service.get_key(0x1234567890ABCDEF).is_some());
         assert!(service.get_key(0xFEDCBA0987654321).is_some());
-        
+
         Ok(())
     }
 }

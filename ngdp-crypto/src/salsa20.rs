@@ -3,8 +3,8 @@
 use cipher::{KeyIvInit, StreamCipher};
 use salsa20::Salsa20;
 
-use crate::error::CryptoError;
 use crate::Result;
+use crate::error::CryptoError;
 
 /// Decrypt data using Salsa20 stream cipher.
 ///
@@ -33,11 +33,11 @@ pub fn decrypt_salsa20(
 
     // Extend 4-byte IV to 8 bytes and XOR with block index
     let mut extended_iv = [0u8; 8];
-    
+
     // Copy IV twice
     extended_iv[..4].copy_from_slice(iv);
     extended_iv[4..].copy_from_slice(iv);
-    
+
     // XOR block index with first 4 bytes
     let block_bytes = (block_index as u32).to_le_bytes();
     for i in 0..4 {
@@ -118,7 +118,7 @@ mod tests {
 
         let result = encrypt_salsa20(plaintext, &key, &invalid_iv, 0);
         assert!(result.is_err());
-        
+
         match result.unwrap_err() {
             CryptoError::InvalidIvSize { expected, actual } => {
                 assert_eq!(expected, 4);
@@ -132,8 +132,8 @@ mod tests {
     fn test_key_extension() {
         // Test that the key extension works correctly
         let key = [
-            0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
-            0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF,
+            0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD,
+            0xEE, 0xFF,
         ];
         let iv = [0x01, 0x02, 0x03, 0x04];
         let plaintext = b"Test";

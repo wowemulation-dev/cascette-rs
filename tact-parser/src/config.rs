@@ -193,7 +193,7 @@ impl BuildConfig {
         if let Some(hash) = self.config.get_hash(key) {
             return Some(hash);
         }
-        
+
         // Fall back to single hash value or first hash in multi-hash value
         if let Some(value) = self.config.get_value(key) {
             let parts: Vec<&str> = value.split_whitespace().collect();
@@ -201,7 +201,7 @@ impl BuildConfig {
                 return Some(parts[0]);
             }
         }
-        
+
         None
     }
 

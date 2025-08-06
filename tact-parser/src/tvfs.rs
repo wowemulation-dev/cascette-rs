@@ -50,11 +50,11 @@ impl TVFSHeader {
     pub fn parse<R: Read>(reader: &mut R) -> Result<Self> {
         let mut magic = [0u8; 4];
         reader.read_exact(&mut magic)?;
-        
+
         if &magic != b"TVFS" {
             return Err(Error::IOError(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                format!("Invalid TVFS magic: {:?}", magic),
+                format!("Invalid TVFS magic: {magic:?}"),
             )));
         }
 
@@ -76,7 +76,10 @@ impl TVFSHeader {
 
         // Check for ESpec table (flags bit 2)
         let (espec_table_offset, espec_table_size) = if flags & 0x04 != 0 {
-            (Some(read_uint40_from(reader)?), Some(read_uint40_from(reader)?))
+            (
+                Some(read_uint40_from(reader)?),
+                Some(read_uint40_from(reader)?),
+            )
         } else {
             (None, None)
         };
@@ -186,10 +189,10 @@ impl TVFSManifest {
     /// Parse a TVFS manifest from bytes
     pub fn parse(data: &[u8]) -> Result<Self> {
         let mut cursor = Cursor::new(data);
-        
+
         // Parse header
         let header = TVFSHeader::parse(&mut cursor)?;
-        
+
         debug!(
             "Parsing TVFS v{} with {} bytes, flags: {:#04x}",
             header.version,
@@ -200,18 +203,20 @@ impl TVFSManifest {
         // Parse path table
         cursor.seek(SeekFrom::Start(header.path_table_offset))?;
         let path_table = Self::parse_path_table(&mut cursor, header.path_table_size)?;
-        
+
         // Parse VFS table
         cursor.seek(SeekFrom::Start(header.vfs_table_offset))?;
         let vfs_table = Self::parse_vfs_table(&mut cursor, header.vfs_table_size)?;
-        
+
         // Parse CFT table
         cursor.seek(SeekFrom::Start(header.cft_table_offset))?;
-        let cft_table = Self::parse_cft_table(&mut cursor, header.cft_table_size, header.espec_size)?;
-        
+        let cft_table =
+            Self::parse_cft_table(&mut cursor, header.cft_table_size, header.espec_size)?;
+
         // Parse ESpec table if present
         let espec_table = if header.has_espec_table() {
-            if let (Some(offset), Some(size)) = (header.espec_table_offset, header.espec_table_size) {
+            if let (Some(offset), Some(size)) = (header.espec_table_offset, header.espec_table_size)
+            {
                 cursor.seek(SeekFrom::Start(offset))?;
                 Some(Self::parse_espec_table(&mut cursor, size)?)
             } else {
@@ -244,54 +249,54 @@ impl TVFSManifest {
     fn parse_path_table<R: Read>(reader: &mut R, size: u64) -> Result<Vec<PathEntry>> {
         let mut entries = Vec::new();
         let mut bytes_read = 0u64;
-        
+
         debug!("Parsing path table with size: {}", size);
-        
+
         while bytes_read < size {
             // Read varint for path length from reader
             let mut path_len = 0u32;
             let mut shift = 0;
-            
+
             for _ in 0..5 {
                 let byte = reader.read_u8()?;
                 bytes_read += 1;
-                
+
                 // Extract 7-bit value
                 let value = (byte & 0x7F) as u32;
                 path_len |= value << shift;
-                
+
                 // Check continuation bit
                 if byte & 0x80 == 0 {
                     break;
                 }
-                
+
                 shift += 7;
             }
-            
+
             if path_len == 0 || bytes_read >= size {
                 break; // End of table or empty entry
             }
-            
+
             // Read path string
             let mut path_bytes = vec![0u8; path_len as usize];
             reader.read_exact(&mut path_bytes)?;
             bytes_read += path_len as u64;
-            
+
             let path = String::from_utf8(path_bytes).map_err(|e| {
                 Error::IOError(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
-                    format!("Invalid UTF-8 in path: {}", e),
+                    format!("Invalid UTF-8 in path: {e}"),
                 ))
             })?;
-            
+
             // Calculate path hash (Jenkins3)
             let hash = crate::utils::jenkins3_hashpath(&path);
-            
+
             trace!("Path entry: {} (hash: {:#x})", path, hash);
-            
+
             entries.push(PathEntry { path, hash });
         }
-        
+
         debug!("Parsed {} path entries", entries.len());
         Ok(entries)
     }
@@ -300,16 +305,16 @@ impl TVFSManifest {
     fn parse_vfs_table<R: Read>(reader: &mut R, size: u64) -> Result<Vec<VFSEntry>> {
         let mut entries = Vec::new();
         let mut bytes_read = 0u64;
-        
+
         while bytes_read < size {
             if bytes_read >= size {
                 break;
             }
-            
+
             // Read entry type and flags
             let type_byte = reader.read_u8()?;
             bytes_read += 1;
-            
+
             let entry_type = match type_byte & 0x03 {
                 0 => VFSEntryType::File,
                 1 => VFSEntryType::Deleted,
@@ -317,7 +322,7 @@ impl TVFSManifest {
                 3 => VFSEntryType::Link,
                 _ => unreachable!(),
             };
-            
+
             // Read span info for files
             let (span_offset, span_count) = if entry_type == VFSEntryType::File {
                 // Read varint for span offset directly
@@ -333,7 +338,7 @@ impl TVFSManifest {
                     }
                     shift += 7;
                 }
-                
+
                 // Read varint for span count directly
                 let mut count = 0u32;
                 shift = 0;
@@ -347,12 +352,12 @@ impl TVFSManifest {
                     }
                     shift += 7;
                 }
-                
+
                 (offset, count)
             } else {
                 (0, 0)
             };
-            
+
             // Read path index varint directly
             let mut path_index = 0u32;
             let mut shift = 0;
@@ -366,7 +371,7 @@ impl TVFSManifest {
                 }
                 shift += 7;
             }
-            
+
             // Read inline data info if applicable
             let (file_offset, file_size) = if entry_type == VFSEntryType::Inline {
                 let offset = read_uint40_from(reader)?;
@@ -377,7 +382,7 @@ impl TVFSManifest {
             } else {
                 (None, None)
             };
-            
+
             entries.push(VFSEntry {
                 entry_type,
                 span_offset,
@@ -387,26 +392,30 @@ impl TVFSManifest {
                 file_size,
             });
         }
-        
+
         debug!("Parsed {} VFS entries", entries.len());
         Ok(entries)
     }
 
     /// Parse container file table
-    fn parse_cft_table<R: Read>(reader: &mut R, size: u64, espec_size: u8) -> Result<Vec<CFTEntry>> {
+    fn parse_cft_table<R: Read>(
+        reader: &mut R,
+        size: u64,
+        espec_size: u8,
+    ) -> Result<Vec<CFTEntry>> {
         let mut entries = Vec::new();
         let mut bytes_read = 0u64;
-        
+
         while bytes_read < size {
             // Read encoding key (16 bytes MD5)
             let mut ekey = vec![0u8; 16];
             reader.read_exact(&mut ekey)?;
             bytes_read += 16;
-            
+
             // Read file size (40-bit)
             let file_size = read_uint40_from(reader)?;
             bytes_read += 5;
-            
+
             // Read ESpec index if present
             let espec_index = if espec_size > 0 {
                 let mut index = 0u32;
@@ -419,14 +428,14 @@ impl TVFSManifest {
             } else {
                 None
             };
-            
+
             entries.push(CFTEntry {
                 ekey,
                 file_size,
                 espec_index,
             });
         }
-        
+
         debug!("Parsed {} CFT entries", entries.len());
         Ok(entries)
     }
@@ -435,7 +444,7 @@ impl TVFSManifest {
     fn parse_espec_table<R: Read>(reader: &mut R, size: u64) -> Result<Vec<String>> {
         let mut entries = Vec::new();
         let mut bytes_read = 0u64;
-        
+
         while bytes_read < size {
             // Read varint for string length directly
             let mut spec_len = 0u32;
@@ -450,26 +459,26 @@ impl TVFSManifest {
                 }
                 shift += 7;
             }
-            
+
             if spec_len == 0 || bytes_read >= size {
                 break;
             }
-            
+
             // Read ESpec string
             let mut spec_bytes = vec![0u8; spec_len as usize];
             reader.read_exact(&mut spec_bytes)?;
             bytes_read += spec_len as u64;
-            
+
             let spec = String::from_utf8(spec_bytes).map_err(|e| {
                 Error::IOError(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
-                    format!("Invalid UTF-8 in ESpec: {}", e),
+                    format!("Invalid UTF-8 in ESpec: {e}"),
                 ))
             })?;
-            
+
             entries.push(spec);
         }
-        
+
         debug!("Parsed {} ESpec entries", entries.len());
         Ok(entries)
     }
@@ -479,7 +488,7 @@ impl TVFSManifest {
         // Look up VFS entry by path
         let vfs_index = *self.path_map.get(path)?;
         let vfs_entry = &self.vfs_table[vfs_index];
-        
+
         match vfs_entry.entry_type {
             VFSEntryType::File => {
                 // Collect file spans
@@ -497,7 +506,7 @@ impl TVFSManifest {
                         });
                     }
                 }
-                
+
                 Some(FileInfo {
                     path: path.to_string(),
                     entry_type: vfs_entry.entry_type,
@@ -505,14 +514,12 @@ impl TVFSManifest {
                     inline_data: None,
                 })
             }
-            VFSEntryType::Inline => {
-                Some(FileInfo {
-                    path: path.to_string(),
-                    entry_type: vfs_entry.entry_type,
-                    spans: Vec::new(),
-                    inline_data: Some((vfs_entry.file_offset?, vfs_entry.file_size?)),
-                })
-            }
+            VFSEntryType::Inline => Some(FileInfo {
+                path: path.to_string(),
+                entry_type: vfs_entry.entry_type,
+                spans: Vec::new(),
+                inline_data: Some((vfs_entry.file_offset?, vfs_entry.file_size?)),
+            }),
             _ => None,
         }
     }
@@ -525,25 +532,25 @@ impl TVFSManifest {
         } else if dir_path.is_empty() {
             String::new()
         } else {
-            format!("{}/", dir_path)
+            format!("{dir_path}/")
         };
-        
+
         for path_entry in &self.path_table {
             if path_entry.path.starts_with(&dir_prefix) {
                 let relative_path = &path_entry.path[dir_prefix.len()..];
-                
+
                 // Check if it's a direct child (no additional slashes)
                 if !relative_path.contains('/') && !relative_path.is_empty() {
                     if let Some(vfs_index) = self.path_map.get(&path_entry.path) {
                         let vfs_entry = &self.vfs_table[*vfs_index];
-                        
+
                         let is_directory = false; // TVFS doesn't have explicit directories
                         let size = if vfs_entry.entry_type == VFSEntryType::File {
                             self.calculate_file_size(*vfs_index)
                         } else {
                             0
                         };
-                        
+
                         entries.push(DirEntry {
                             name: relative_path.to_string(),
                             path: path_entry.path.clone(),
@@ -554,7 +561,7 @@ impl TVFSManifest {
                 }
             }
         }
-        
+
         entries
     }
 
@@ -562,36 +569,36 @@ impl TVFSManifest {
     fn calculate_file_size(&self, vfs_index: usize) -> u64 {
         let vfs_entry = &self.vfs_table[vfs_index];
         let mut total_size = 0u64;
-        
+
         for i in 0..vfs_entry.span_count {
             let cft_index = (vfs_entry.span_offset + i) as usize;
             if cft_index < self.cft_table.len() {
                 total_size += self.cft_table[cft_index].file_size;
             }
         }
-        
+
         total_size
     }
 
     /// Get file count
     pub fn file_count(&self) -> usize {
-        self.vfs_table.iter()
+        self.vfs_table
+            .iter()
             .filter(|e| e.entry_type == VFSEntryType::File || e.entry_type == VFSEntryType::Inline)
             .count()
     }
 
     /// Get deleted file count
     pub fn deleted_count(&self) -> usize {
-        self.vfs_table.iter()
+        self.vfs_table
+            .iter()
             .filter(|e| e.entry_type == VFSEntryType::Deleted)
             .count()
     }
 
     /// Get total size of all files
     pub fn total_size(&self) -> u64 {
-        self.cft_table.iter()
-            .map(|e| e.file_size)
-            .sum()
+        self.cft_table.iter().map(|e| e.file_size).sum()
     }
 }
 

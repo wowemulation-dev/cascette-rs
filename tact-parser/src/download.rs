@@ -40,11 +40,11 @@ impl DownloadHeader {
     pub fn parse<R: Read>(reader: &mut R) -> Result<Self> {
         let mut magic = [0u8; 2];
         reader.read_exact(&mut magic)?;
-        
+
         if magic != [b'D', b'L'] {
             return Err(Error::IOError(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                format!("Invalid download manifest magic: {:?}", magic),
+                format!("Invalid download manifest magic: {magic:?}"),
             )));
         }
 
@@ -60,7 +60,7 @@ impl DownloadHeader {
 
         if version >= 2 {
             flag_size = reader.read_u8()?;
-            
+
             if version >= 3 {
                 base_priority = reader.read_i8()?;
                 // Read 24-bit big-endian value
@@ -106,7 +106,7 @@ impl DownloadEntry {
         reader.read_exact(&mut ekey)?;
 
         let compressed_size = read_uint40_from(reader)?;
-        
+
         // Read raw priority and adjust by base
         let raw_priority = reader.read_i8()?;
         let priority = raw_priority - header.base_priority;
@@ -161,10 +161,10 @@ impl DownloadManifest {
     /// Parse a download manifest from bytes
     pub fn parse(data: &[u8]) -> Result<Self> {
         let mut cursor = Cursor::new(data);
-        
+
         // Parse header
         let header = DownloadHeader::parse(&mut cursor)?;
-        
+
         debug!(
             "Parsing download manifest v{} with {} entries and {} tags",
             header.version, header.entry_count, header.tag_count
@@ -173,7 +173,7 @@ impl DownloadManifest {
         // Parse entries
         let mut entries = HashMap::with_capacity(header.entry_count as usize);
         let mut priority_list = Vec::with_capacity(header.entry_count as usize);
-        
+
         for i in 0..header.entry_count {
             let entry = DownloadEntry::parse(&mut cursor, &header)?;
             trace!(
@@ -189,24 +189,22 @@ impl DownloadManifest {
 
         // Sort by priority (0 is highest priority)
         priority_list.sort_by_key(|(priority, _)| *priority);
-        let priority_order: Vec<Vec<u8>> = priority_list
-            .into_iter()
-            .map(|(_, ekey)| ekey)
-            .collect();
+        let priority_order: Vec<Vec<u8>> =
+            priority_list.into_iter().map(|(_, ekey)| ekey).collect();
 
         // Parse tags
         let mut tags = Vec::with_capacity(header.tag_count as usize);
-        let bytes_per_tag = ((header.entry_count + 7) / 8) as usize;
-        
+        let bytes_per_tag = header.entry_count.div_ceil(8) as usize;
+
         for i in 0..header.tag_count {
             let name = read_cstring_from(&mut cursor)?;
             let tag_type = cursor.read_u16::<BigEndian>()?;
-            
+
             let mut mask = vec![0u8; bytes_per_tag];
             cursor.read_exact(&mut mask)?;
-            
+
             trace!("Tag {}: '{}' type={}", i, name, tag_type);
-            
+
             tags.push(DownloadTag {
                 name,
                 tag_type,
@@ -217,7 +215,8 @@ impl DownloadManifest {
         debug!(
             "Parsed {} entries with {} priority levels",
             entries.len(),
-            entries.values()
+            entries
+                .values()
                 .map(|e| e.priority)
                 .collect::<std::collections::HashSet<_>>()
                 .len()
@@ -249,8 +248,8 @@ impl DownloadManifest {
     /// Get files for specific tags
     pub fn get_files_for_tags(&self, tag_names: &[&str]) -> Vec<&DownloadEntry> {
         // Find matching tags
-        let mut combined_mask = vec![0u8; ((self.header.entry_count + 7) / 8) as usize];
-        
+        let mut combined_mask = vec![0u8; self.header.entry_count.div_ceil(8) as usize];
+
         for tag in &self.tags {
             if tag_names.contains(&tag.name.as_str()) {
                 // OR the masks together
@@ -265,7 +264,7 @@ impl DownloadManifest {
         for (index, ekey) in self.priority_order.iter().enumerate() {
             let byte_index = index / 8;
             let bit_index = index % 8;
-            
+
             if byte_index < combined_mask.len() {
                 let bit = (combined_mask[byte_index] >> (7 - bit_index)) & 1;
                 if bit == 1 {
@@ -300,12 +299,12 @@ mod tests {
     #[test]
     fn test_download_header_v1() {
         let data = vec![
-            b'D', b'L',  // Magic
-            1,           // Version
-            16,          // EKey size
-            0,           // No checksum
-            0, 0, 0, 2,  // Entry count (2, big-endian)
-            0, 1,        // Tag count (1, big-endian)
+            b'D', b'L', // Magic
+            1,    // Version
+            16,   // EKey size
+            0,    // No checksum
+            0, 0, 0, 2, // Entry count (2, big-endian)
+            0, 1, // Tag count (1, big-endian)
         ];
 
         let mut cursor = Cursor::new(data);
@@ -323,15 +322,15 @@ mod tests {
     #[test]
     fn test_download_header_v3() {
         let data = vec![
-            b'D', b'L',     // Magic
-            3,              // Version
-            16,             // EKey size
-            1,              // Has checksum
-            0, 0, 0, 10,    // Entry count (10, big-endian)
-            0, 3,           // Tag count (3, big-endian)
-            2,              // Flag size
-            254u8,          // Base priority (-2 as i8)
-            0, 0, 0,        // Unknown (24-bit)
+            b'D', b'L', // Magic
+            3,    // Version
+            16,   // EKey size
+            1,    // Has checksum
+            0, 0, 0, 10, // Entry count (10, big-endian)
+            0, 3,     // Tag count (3, big-endian)
+            2,     // Flag size
+            254u8, // Base priority (-2 as i8)
+            0, 0, 0, // Unknown (24-bit)
         ];
 
         let mut cursor = Cursor::new(data);
@@ -349,27 +348,27 @@ mod tests {
     fn test_priority_sorting() {
         // Create a simple manifest with different priorities
         let mut entries = HashMap::new();
-        
+
         let entry1 = DownloadEntry {
             ekey: vec![1; 16],
             compressed_size: 1000,
-            priority: 2,  // Lower priority
+            priority: 2, // Lower priority
             checksum: None,
             flags: vec![],
         };
-        
+
         let entry2 = DownloadEntry {
             ekey: vec![2; 16],
             compressed_size: 2000,
-            priority: 0,  // Highest priority
+            priority: 0, // Highest priority
             checksum: None,
             flags: vec![],
         };
-        
+
         let entry3 = DownloadEntry {
             ekey: vec![3; 16],
             compressed_size: 3000,
-            priority: 1,  // Medium priority
+            priority: 1, // Medium priority
             checksum: None,
             flags: vec![],
         };
@@ -379,17 +378,11 @@ mod tests {
         entries.insert(entry3.ekey.clone(), entry3);
 
         // Create priority order
-        let mut priority_list = vec![
-            (2, vec![1; 16]),
-            (0, vec![2; 16]),
-            (1, vec![3; 16]),
-        ];
+        let mut priority_list = vec![(2, vec![1; 16]), (0, vec![2; 16]), (1, vec![3; 16])];
         priority_list.sort_by_key(|(p, _)| *p);
-        
-        let priority_order: Vec<Vec<u8>> = priority_list
-            .into_iter()
-            .map(|(_, ekey)| ekey)
-            .collect();
+
+        let priority_order: Vec<Vec<u8>> =
+            priority_list.into_iter().map(|(_, ekey)| ekey).collect();
 
         // Check order is correct (0, 1, 2)
         assert_eq!(priority_order[0], vec![2; 16]); // Priority 0

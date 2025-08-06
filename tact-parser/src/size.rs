@@ -34,11 +34,11 @@ impl SizeHeader {
     pub fn parse<R: Read>(reader: &mut R) -> Result<Self> {
         let mut magic = [0u8; 2];
         reader.read_exact(&mut magic)?;
-        
+
         if magic != [b'D', b'S'] {
             return Err(Error::IOError(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                format!("Invalid size file magic: {:?}", magic),
+                format!("Invalid size file magic: {magic:?}"),
             )));
         }
 
@@ -73,7 +73,7 @@ impl SizeEntry {
     pub fn parse<R: Read>(reader: &mut R, header: &SizeHeader) -> Result<Self> {
         let mut ekey = vec![0u8; header.ekey_size as usize];
         reader.read_exact(&mut ekey)?;
-        
+
         let compressed_size = reader.read_u32::<BigEndian>()?;
 
         Ok(SizeEntry {
@@ -113,10 +113,10 @@ impl SizeFile {
     /// Parse a size file from bytes
     pub fn parse(data: &[u8]) -> Result<Self> {
         let mut cursor = Cursor::new(data);
-        
+
         // Parse header
         let header = SizeHeader::parse(&mut cursor)?;
-        
+
         debug!(
             "Parsing size file v{} with {} entries, total size: {}",
             header.version, header.entry_count, header.total_size
@@ -124,17 +124,17 @@ impl SizeFile {
 
         // Parse tags first (they come before entries in this format)
         let mut tags = Vec::with_capacity(header.tag_count as usize);
-        let bytes_per_tag = ((header.entry_count + 7) / 8) as usize;
-        
+        let bytes_per_tag = header.entry_count.div_ceil(8) as usize;
+
         for i in 0..header.tag_count {
             let name = read_cstring_from(&mut cursor)?;
             let tag_type = cursor.read_u16::<BigEndian>()?;
-            
+
             let mut mask = vec![0u8; bytes_per_tag];
             cursor.read_exact(&mut mask)?;
-            
+
             trace!("Tag {}: '{}' type={}", i, name, tag_type);
-            
+
             tags.push(SizeTag {
                 name,
                 tag_type,
@@ -146,7 +146,7 @@ impl SizeFile {
         let mut entries = HashMap::with_capacity(header.entry_count as usize);
         let mut size_list = Vec::with_capacity(header.entry_count as usize);
         let mut parse_order = Vec::with_capacity(header.entry_count as usize);
-        
+
         for i in 0..header.entry_count {
             let entry = SizeEntry::parse(&mut cursor, &header)?;
             trace!(
@@ -162,16 +162,11 @@ impl SizeFile {
 
         // Sort by size (largest first)
         size_list.sort_by_key(|(size, _)| std::cmp::Reverse(*size));
-        let size_order: Vec<Vec<u8>> = size_list
-            .into_iter()
-            .map(|(_, ekey)| ekey)
-            .collect();
+        let size_order: Vec<Vec<u8>> = size_list.into_iter().map(|(_, ekey)| ekey).collect();
 
         // Verify total size
-        let calculated_total: u64 = entries.values()
-            .map(|e| e.compressed_size as u64)
-            .sum();
-        
+        let calculated_total: u64 = entries.values().map(|e| e.compressed_size as u64).sum();
+
         if calculated_total != header.total_size {
             debug!(
                 "Warning: Calculated total size {} doesn't match header total {}",
@@ -196,7 +191,7 @@ impl SizeFile {
         } else {
             ekey
         };
-        
+
         self.entries.get(key).map(|e| e.compressed_size)
     }
 
@@ -208,8 +203,8 @@ impl SizeFile {
     /// Calculate size for specific tags
     pub fn get_size_for_tags(&self, tag_names: &[&str]) -> u64 {
         // Find matching tags
-        let mut combined_mask = vec![0u8; ((self.header.entry_count + 7) / 8) as usize];
-        
+        let mut combined_mask = vec![0u8; self.header.entry_count.div_ceil(8) as usize];
+
         for tag in &self.tags {
             if tag_names.contains(&tag.name.as_str()) {
                 // OR the masks together
@@ -222,12 +217,12 @@ impl SizeFile {
         // Calculate total size for entries matching the mask
         // Use the parse order to match entries with the mask bits
         let mut total = 0u64;
-        
+
         for (index, ekey) in self.parse_order.iter().enumerate() {
             if let Some(entry) = self.entries.get(ekey) {
                 let byte_index = index / 8;
                 let bit_index = index % 8;
-                
+
                 if byte_index < combined_mask.len() {
                     let bit = (combined_mask[byte_index] >> (7 - bit_index)) & 1;
                     if bit == 1 {
@@ -246,16 +241,16 @@ impl SizeFile {
             .iter()
             .take(count)
             .filter_map(|ekey| {
-                self.entries.get(ekey).map(|entry| (ekey, entry.compressed_size))
+                self.entries
+                    .get(ekey)
+                    .map(|entry| (ekey, entry.compressed_size))
             })
             .collect()
     }
 
     /// Calculate statistics
     pub fn get_statistics(&self) -> SizeStatistics {
-        let sizes: Vec<u32> = self.entries.values()
-            .map(|e| e.compressed_size)
-            .collect();
+        let sizes: Vec<u32> = self.entries.values().map(|e| e.compressed_size).collect();
 
         let total = sizes.iter().map(|&s| s as u64).sum();
         let average = if !sizes.is_empty() {
@@ -294,11 +289,11 @@ mod tests {
     #[test]
     fn test_size_header() {
         let data = vec![
-            b'D', b'S',     // Magic
-            1,              // Version
-            9,              // EKey size (partial MD5)
-            0, 0, 0, 3,     // Entry count (3, big-endian)
-            0, 2,           // Tag count (2, big-endian)
+            b'D', b'S', // Magic
+            1,    // Version
+            9,    // EKey size (partial MD5)
+            0, 0, 0, 3, // Entry count (3, big-endian)
+            0, 2, // Tag count (2, big-endian)
             0, 0x10, 0, 0, 0, // Total size (4096, 40-bit LE)
         ];
 
@@ -317,7 +312,7 @@ mod tests {
     fn test_size_calculation() {
         // Create entries with known sizes
         let mut entries = HashMap::new();
-        
+
         entries.insert(
             vec![1; 9],
             SizeEntry {
@@ -325,7 +320,7 @@ mod tests {
                 compressed_size: 1000,
             },
         );
-        
+
         entries.insert(
             vec![2; 9],
             SizeEntry {
@@ -333,7 +328,7 @@ mod tests {
                 compressed_size: 2000,
             },
         );
-        
+
         entries.insert(
             vec![3; 9],
             SizeEntry {
@@ -342,17 +337,15 @@ mod tests {
             },
         );
 
-        let total: u64 = entries.values()
-            .map(|e| e.compressed_size as u64)
-            .sum();
-        
+        let total: u64 = entries.values().map(|e| e.compressed_size as u64).sum();
+
         assert_eq!(total, 6000);
     }
 
     #[test]
     fn test_partial_ekey_lookup() {
         let mut entries = HashMap::new();
-        
+
         let partial_key = vec![0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x11, 0x22, 0x33];
         entries.insert(
             partial_key.clone(),
@@ -382,12 +375,12 @@ mod tests {
 
         // Lookup with longer key (full MD5) - should truncate and match
         let full_md5 = vec![
-            0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x11, 0x22, 0x33,
-            0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0x00,
+            0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88,
+            0x99, 0x00,
         ];
         assert_eq!(size_file.get_file_size(&full_md5), Some(12345));
 
         // Lookup with non-existent key
-        assert_eq!(size_file.get_file_size(&vec![0xFF; 9]), None);
+        assert_eq!(size_file.get_file_size(&[0xFF; 9]), None);
     }
 }

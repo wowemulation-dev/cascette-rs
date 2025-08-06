@@ -5,50 +5,50 @@ fn create_test_manifest_data() -> Vec<u8> {
     let mut data = Vec::new();
 
     // Header (v3)
-    data.extend_from_slice(b"DL");            // Magic
-    data.push(3);                              // Version
-    data.push(16);                             // EKey size
-    data.push(1);                              // Has checksum
+    data.extend_from_slice(b"DL"); // Magic
+    data.push(3); // Version
+    data.push(16); // EKey size
+    data.push(1); // Has checksum
     data.extend_from_slice(&5u32.to_be_bytes()); // Entry count
     data.extend_from_slice(&2u16.to_be_bytes()); // Tag count
-    data.push(2);                              // Flag size
-    data.push(0i8 as u8);                      // Base priority
-    data.extend_from_slice(&[0, 0, 0]);       // Unknown (24-bit)
+    data.push(2); // Flag size
+    data.push(0i8 as u8); // Base priority
+    data.extend_from_slice(&[0, 0, 0]); // Unknown (24-bit)
 
     // Entry 1: Essential file (priority 0)
-    data.extend_from_slice(&[1; 16]);         // EKey
+    data.extend_from_slice(&[1; 16]); // EKey
     data.extend_from_slice(&1000u64.to_le_bytes()[..5]); // Size (40-bit LE)
-    data.push(0);                              // Priority (raw)
+    data.push(0); // Priority (raw)
     data.extend_from_slice(&0x12345678u32.to_be_bytes()); // Checksum
-    data.extend_from_slice(&[0xFF, 0x00]);    // Flags
+    data.extend_from_slice(&[0xFF, 0x00]); // Flags
 
     // Entry 2: High priority file (priority 1)
-    data.extend_from_slice(&[2; 16]);         // EKey
+    data.extend_from_slice(&[2; 16]); // EKey
     data.extend_from_slice(&2000u64.to_le_bytes()[..5]); // Size
-    data.push(1);                              // Priority
+    data.push(1); // Priority
     data.extend_from_slice(&0x23456789u32.to_be_bytes()); // Checksum
-    data.extend_from_slice(&[0x00, 0xFF]);    // Flags
+    data.extend_from_slice(&[0x00, 0xFF]); // Flags
 
     // Entry 3: Medium priority file (priority 2)
-    data.extend_from_slice(&[3; 16]);         // EKey
+    data.extend_from_slice(&[3; 16]); // EKey
     data.extend_from_slice(&3000u64.to_le_bytes()[..5]); // Size
-    data.push(2);                              // Priority
+    data.push(2); // Priority
     data.extend_from_slice(&0x3456789Au32.to_be_bytes()); // Checksum
-    data.extend_from_slice(&[0xAA, 0xBB]);    // Flags
+    data.extend_from_slice(&[0xAA, 0xBB]); // Flags
 
     // Entry 4: Low priority file (priority 3)
-    data.extend_from_slice(&[4; 16]);         // EKey
+    data.extend_from_slice(&[4; 16]); // EKey
     data.extend_from_slice(&4000u64.to_le_bytes()[..5]); // Size
-    data.push(3);                              // Priority
+    data.push(3); // Priority
     data.extend_from_slice(&0x456789ABu32.to_be_bytes()); // Checksum
-    data.extend_from_slice(&[0xCC, 0xDD]);    // Flags
+    data.extend_from_slice(&[0xCC, 0xDD]); // Flags
 
     // Entry 5: Optional file (priority 10)
-    data.extend_from_slice(&[5; 16]);         // EKey
+    data.extend_from_slice(&[5; 16]); // EKey
     data.extend_from_slice(&5000u64.to_le_bytes()[..5]); // Size
-    data.push(10);                             // Priority
+    data.push(10); // Priority
     data.extend_from_slice(&0x56789ABCu32.to_be_bytes()); // Checksum
-    data.extend_from_slice(&[0xEE, 0xFF]);    // Flags
+    data.extend_from_slice(&[0xEE, 0xFF]); // Flags
 
     // Tags
     // let _bytes_per_tag = (5 + 7) / 8; // 1 byte for 5 entries
@@ -80,7 +80,7 @@ fn test_parse_download_manifest() {
 
     // Check entries
     assert_eq!(manifest.entries.len(), 5);
-    
+
     // Check priority order
     assert_eq!(manifest.priority_order.len(), 5);
     assert_eq!(manifest.priority_order[0], vec![1; 16]); // Priority 0
@@ -161,9 +161,9 @@ fn test_version_compatibility() {
     // Test v1 header (minimal)
     let mut data = Vec::new();
     data.extend_from_slice(b"DL");
-    data.push(1);  // Version 1
+    data.push(1); // Version 1
     data.push(16); // EKey size
-    data.push(0);  // No checksum
+    data.push(0); // No checksum
     data.extend_from_slice(&0u32.to_be_bytes()); // 0 entries
     data.extend_from_slice(&0u16.to_be_bytes()); // 0 tags
 
@@ -176,7 +176,7 @@ fn test_version_compatibility() {
 #[test]
 fn test_entry_with_large_size() {
     let mut data = Vec::new();
-    
+
     // Header
     data.extend_from_slice(b"DL");
     data.push(1);
@@ -198,7 +198,7 @@ fn test_entry_with_large_size() {
 #[test]
 fn test_negative_base_priority() {
     let mut data = Vec::new();
-    
+
     // Header v3 with negative base priority
     data.extend_from_slice(b"DL");
     data.push(3);
@@ -217,7 +217,7 @@ fn test_negative_base_priority() {
 
     let manifest = DownloadManifest::parse(&data).unwrap();
     assert_eq!(manifest.header.base_priority, -2);
-    
+
     let entry = manifest.entries.get(&vec![1; 16]).unwrap();
     assert_eq!(entry.priority, 0 - (-2)); // 0 - (-2) = 2
     assert_eq!(entry.priority, 2);

@@ -5,24 +5,24 @@ fn create_test_size_data() -> Vec<u8> {
     let mut data = Vec::new();
 
     // Header
-    data.extend_from_slice(b"DS");            // Magic
-    data.push(1);                              // Version
-    data.push(9);                              // EKey size (partial MD5)
+    data.extend_from_slice(b"DS"); // Magic
+    data.push(1); // Version
+    data.push(9); // EKey size (partial MD5)
     data.extend_from_slice(&5u32.to_be_bytes()); // Entry count
     data.extend_from_slice(&2u16.to_be_bytes()); // Tag count
-    
+
     // Total size (15000 as 40-bit LE)
     let total_size = 15000u64;
     data.extend_from_slice(&total_size.to_le_bytes()[..5]);
 
     // Tags (come before entries in size file)
     // let _bytes_per_tag = (5 + 7) / 8; // 1 byte for 5 entries
-    
+
     // Tag 1: "Windows"
     data.extend_from_slice(b"Windows\0");
     data.extend_from_slice(&2u16.to_be_bytes()); // Platform type
     data.push(0b11110000); // First 4 entries
-    
+
     // Tag 2: "enUS"
     data.extend_from_slice(b"enUS\0");
     data.extend_from_slice(&1u16.to_be_bytes()); // Locale type
@@ -30,7 +30,7 @@ fn create_test_size_data() -> Vec<u8> {
 
     // Entries (5 total)
     // Entry 1: 5000 bytes
-    data.extend_from_slice(&[0xA1; 9]);       // Partial EKey
+    data.extend_from_slice(&[0xA1; 9]); // Partial EKey
     data.extend_from_slice(&5000u32.to_be_bytes()); // Size
 
     // Entry 2: 4000 bytes
@@ -66,7 +66,7 @@ fn test_parse_size_file() {
 
     // Check entries
     assert_eq!(size_file.entries.len(), 5);
-    
+
     // Check total size matches
     assert_eq!(size_file.get_total_size(), 15000);
 
@@ -84,18 +84,18 @@ fn test_get_file_size() {
     let size_file = SizeFile::parse(&data).unwrap();
 
     // Check individual file sizes
-    assert_eq!(size_file.get_file_size(&vec![0xA1; 9]), Some(5000));
-    assert_eq!(size_file.get_file_size(&vec![0xA2; 9]), Some(4000));
-    assert_eq!(size_file.get_file_size(&vec![0xA3; 9]), Some(3000));
-    assert_eq!(size_file.get_file_size(&vec![0xA4; 9]), Some(2000));
-    assert_eq!(size_file.get_file_size(&vec![0xA5; 9]), Some(1000));
+    assert_eq!(size_file.get_file_size(&[0xA1; 9]), Some(5000));
+    assert_eq!(size_file.get_file_size(&[0xA2; 9]), Some(4000));
+    assert_eq!(size_file.get_file_size(&[0xA3; 9]), Some(3000));
+    assert_eq!(size_file.get_file_size(&[0xA4; 9]), Some(2000));
+    assert_eq!(size_file.get_file_size(&[0xA5; 9]), Some(1000));
 
     // Test with full MD5 (16 bytes) - should truncate to 9
     let full_md5 = vec![0xA1; 16];
     assert_eq!(size_file.get_file_size(&full_md5), Some(5000));
 
     // Test non-existent key
-    assert_eq!(size_file.get_file_size(&vec![0xFF; 9]), None);
+    assert_eq!(size_file.get_file_size(&[0xFF; 9]), None);
 }
 
 #[test]
@@ -121,7 +121,7 @@ fn test_get_statistics() {
     let size_file = SizeFile::parse(&data).unwrap();
 
     let stats = size_file.get_statistics();
-    
+
     assert_eq!(stats.total_size, 15000);
     assert_eq!(stats.file_count, 5);
     assert_eq!(stats.average_size, 3000); // 15000 / 5
@@ -150,7 +150,7 @@ fn test_get_size_for_tags() {
 #[test]
 fn test_empty_size_file() {
     let mut data = Vec::new();
-    
+
     // Minimal header
     data.extend_from_slice(b"DS");
     data.push(1);
@@ -160,11 +160,11 @@ fn test_empty_size_file() {
     data.extend_from_slice(&0u64.to_le_bytes()[..5]); // 0 total size
 
     let size_file = SizeFile::parse(&data).unwrap();
-    
+
     assert_eq!(size_file.header.entry_count, 0);
     assert_eq!(size_file.entries.len(), 0);
     assert_eq!(size_file.get_total_size(), 0);
-    
+
     let stats = size_file.get_statistics();
     assert_eq!(stats.file_count, 0);
     assert_eq!(stats.total_size, 0);
@@ -173,14 +173,14 @@ fn test_empty_size_file() {
 #[test]
 fn test_large_file_sizes() {
     let mut data = Vec::new();
-    
+
     // Header with 1 entry
     data.extend_from_slice(b"DS");
     data.push(1);
     data.push(9);
     data.extend_from_slice(&1u32.to_be_bytes());
     data.extend_from_slice(&0u16.to_be_bytes());
-    
+
     // Total size: max 40-bit value
     let max_size = 0xFFFFFFFFFFu64;
     data.extend_from_slice(&max_size.to_le_bytes()[..5]);
@@ -190,7 +190,7 @@ fn test_large_file_sizes() {
     data.extend_from_slice(&0xFFFFFFFFu32.to_be_bytes());
 
     let size_file = SizeFile::parse(&data).unwrap();
-    
+
     assert_eq!(size_file.get_total_size(), 0xFFFFFFFFFF);
-    assert_eq!(size_file.get_file_size(&vec![0xBB; 9]), Some(0xFFFFFFFF));
+    assert_eq!(size_file.get_file_size(&[0xBB; 9]), Some(0xFFFFFFFF));
 }
