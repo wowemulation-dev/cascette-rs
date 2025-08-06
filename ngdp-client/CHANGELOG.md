@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0](https://github.com/wowemulation-dev/cascette-rs/compare/ngdp-client-v0.2.0...ngdp-client-v0.3.0) - 2025-08-06
+
+### Other
+
+- ✨ feat: integrate tact-parser with build configuration analysis
+- 📝 docs: update changelogs and add module documentation
+- 🎨 style: optimize code and remove unnecessary allocations
+
 ### Added
 
 - **TACT parser integration for build configuration analysis**:
