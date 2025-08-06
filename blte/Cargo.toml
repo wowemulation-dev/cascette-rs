@@ -9,14 +9,14 @@ repository.workspace = true
 homepage.workspace = true
 
 [dependencies]
-flate2 = "1.0"
-lz4_flex = "0.11"
+flate2 = "1.1"
+lz4_flex = "0.11.5"
 ngdp-crypto = { path = "../ngdp-crypto" }
-md5 = "0.7"
-tracing = "0.1"
-thiserror = "2.0"
-byteorder = "1.5"
-hex = "0.4"
+md5 = "0.8"
+tracing.workspace = true
+thiserror.workspace = true
+byteorder.workspace = true
+hex.workspace = true
 
 [dev-dependencies]
-tokio = { version = "1.0", features = ["macros", "rt"] }
+tokio = { workspace = true, features = ["macros", "rt"] }

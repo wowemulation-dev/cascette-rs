@@ -16,29 +16,35 @@ Pipeline) for World of Warcraft emulation.
 
 ## 🎯 Project Status
 
-**Current Version**: 0.1.0 (Ready for Release)
+**Current Version**: 0.4.0 (Ready for Release)
 
 ### Core Components
 
 | Component       | Version | Status      | Description                                        |
 | --------------- | ------- | ----------- | -------------------------------------------------- |
-| `ngdp-bpsv`     | 0.1.0   | ✅ Stable   | BPSV parser/writer for NGDP formats                |
-| `ribbit-client` | 0.1.0   | ✅ Stable   | Ribbit protocol client with signature verification |
-| `tact-client`   | 0.1.0   | ✅ Stable   | TACT HTTP client for version/CDN queries          |
-| `ngdp-cdn`      | 0.1.0   | ✅ Stable   | CDN content delivery with parallel downloads       |
-| `ngdp-cache`    | 0.1.0   | ✅ Stable   | Caching layer for NGDP operations                 |
-| `ngdp-client`   | 0.1.0   | ✅ Stable   | CLI tool for NGDP operations                      |
+| `ngdp-bpsv`     | 0.1.2   | ✅ Stable   | BPSV parser/writer for NGDP formats                |
+| `ribbit-client` | 0.1.2   | ✅ Stable   | Ribbit protocol client with signature verification |
+| `tact-client`   | 0.1.2   | ✅ Stable   | TACT HTTP client for version/CDN queries          |
+| `tact-parser`   | 0.1.0   | ✅ Stable   | TACT file format parser (encoding, install, etc.) |
+| `ngdp-cdn`      | 0.2.1   | ✅ Stable   | CDN content delivery with parallel downloads       |
+| `ngdp-cache`    | 0.1.3   | ✅ Stable   | Caching layer for NGDP operations                 |
+| `blte`          | 0.1.0   | ✅ Stable   | BLTE decompression with encryption support        |
+| `ngdp-crypto`   | 0.1.0   | ✅ Stable   | Encryption/decryption for TACT files              |
+| `ngdp-client`   | 0.2.0   | ✅ Stable   | CLI tool for NGDP operations                      |
 
 ### Implementation Progress
 
 - ✅ **Ribbit Protocol**: Full implementation including V1/V2, signature verification, all endpoints
 - ✅ **TACT Protocol**: HTTP/HTTPS clients for version and CDN queries
 - ✅ **BPSV Format**: Complete parser and builder with zero-copy optimizations
+- ✅ **TACT Parsers**: Full support for encoding, install, download, size, build config, TVFS
+- ✅ **BLTE Decompression**: All compression modes including encrypted content
+- ✅ **Encryption**: Salsa20 and ARC4 cipher support with key management
 - ✅ **CDN Operations**: Parallel downloads, streaming, retry logic, rate limiting
 - ✅ **Caching**: Transparent caching for all protocols with TTL support
-- ✅ **CLI Tool**: Feature-complete command-line interface
-- 🚧 **CASC Storage**: Local storage implementation (planned for v0.2.0)
-- 🚧 **TVFS**: TACT Virtual File System (planned for v0.2.0)
+- ✅ **CLI Tool**: Feature-complete command-line interface with key management
+- 🚧 **CASC Storage**: Local storage implementation (planned for v0.5.0)
+- 🔄 **TVFS**: Basic parser implemented, needs real-world data testing
 
 ## 🚀 Quick Start
 
@@ -50,6 +56,9 @@ Add to your `Cargo.toml`:
 [dependencies]
 ribbit-client = "0.1"
 ngdp-bpsv = "0.1"
+tact-parser = "0.1"
+blte = "0.1"
+ngdp-crypto = "0.1"
 ```
 
 Basic example:
@@ -88,7 +97,7 @@ cargo install ngdp-client
 ### Library Usage
 
 ```bash
-cargo add ribbit-client ngdp-bpsv tact-client ngdp-cdn ngdp-cache
+cargo add ribbit-client ngdp-bpsv tact-client tact-parser ngdp-cdn ngdp-cache blte ngdp-crypto
 ```
 
 ### From source
@@ -157,10 +166,35 @@ cargo build --release
   - ✅ CDN-compatible directory structure
   - ✅ Batch operations for performance
 
+- **TACT File Parsers** (`tact-parser`)
+  - ✅ Encoding files (CKey ↔ EKey mapping)
+  - ✅ Install manifests with tag-based filtering
+  - ✅ Download manifests with priority sorting
+  - ✅ Size files for installation calculations
+  - ✅ Build configurations (key-value format)
+  - ✅ TVFS (TACT Virtual File System)
+  - ✅ 40-bit integer and varint support
+
+- **BLTE Decompression** (`blte`)
+  - ✅ All compression modes (None, ZLib, LZ4, Frame, Encrypted)
+  - ✅ Multi-chunk file support
+  - ✅ Checksum verification
+  - ✅ Integration with ngdp-crypto for encrypted blocks
+  - ✅ Memory-efficient processing
+
+- **Encryption Support** (`ngdp-crypto`)
+  - ✅ Salsa20 stream cipher (modern WoW encryption)
+  - ✅ ARC4/RC4 cipher (legacy content)
+  - ✅ Key management and automatic loading
+  - ✅ Multiple key file formats (CSV, TXT, TSV)
+  - ✅ TACTKeys repository integration
+
 - **CLI Tool** (`ngdp-client`)
   - ✅ Product queries and version information
   - ✅ Certificate operations
-  - ✅ BPSV inspection
+  - ✅ BPSV inspection and build config analysis
+  - ✅ Encryption key management commands
+  - ✅ Enhanced inspect commands with BLTE support
   - ✅ Multiple output formats (text, JSON, BPSV)
   - ✅ Beautiful terminal formatting
 

@@ -5,7 +5,46 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.3.0] - 2025-08-06
+
+### Added
+
+- **Encryption key management commands**:
+  - Added `ngdp keys` command group for managing TACT encryption keys
+  - `ngdp keys update` - Downloads latest keys from TACTKeys repository
+  - `ngdp keys status` - Shows local key database information
+  - Automatic key file creation in `~/.config/cascette/WoW.txt`
+  - Support for forced updates with `--force` flag
+  - Custom output path support with `--output`
+
+- **Enhanced inspect commands with BLTE decompression**:
+  - `inspect encoding` - Inspect encoding files with checksum validation
+  - `inspect install` - Parse install manifests with tag filtering
+  - `inspect download-manifest` - Analyze download priorities
+  - `inspect size` - Calculate installation sizes per platform/tag
+  - All commands now handle BLTE-encoded CDN files automatically
+  - Support for all output formats (text, JSON, BPSV)
+
+- **Download files command structure**:
+  - Added placeholder for `download files` command
+  - Supports downloading by content key or encoding key
+  - Includes automatic BLTE decompression
+  - Full implementation pending API adjustments
+
+### Fixed
+
+- **Inspect command improvements**:
+  - Fixed encoding file checksum validation
+  - Corrected manifest decompression with proper BLTE handling
+  - Added proper error handling for encrypted content
+  - Improved memory efficiency for large files
+
+### Dependencies
+
+- Added `ngdp-crypto` (0.1.0) for encryption support
+- Added `blte` (0.1.0) for BLTE decompression
+
+## [0.2.1] - 2025-08-05
 
 ### Added
 

@@ -12,27 +12,27 @@ keywords = ["ngdp", "cache", "blizzard", "tact", "cdn"]
 categories = ["caching", "filesystem", "games"]
 
 [dependencies]
-bytes = "1.8"
+bytes = "1.10.1"
 dirs = { workspace = true }
-futures = "0.3"
+futures = "0.3.31"
 ngdp-cdn = { path = "../ngdp-cdn", version = "0.2.1" }
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+reqwest = { version = "0.12.22", default-features = false, features = ["rustls-tls"] }
 ribbit-client = { path = "../ribbit-client", version = "0.1.2" }
 serde = { workspace = true, features = ["derive"] }
-serde_json = "1.0"
+serde_json = "1.0.142"
 tact-client = { path = "../tact-client", version = "0.1.2" }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["fs", "io-util"] }
 tracing = { workspace = true }
-walkdir = "2.5"
+walkdir = "2.5.0"
 
 [dev-dependencies]
 criterion = { workspace = true }
 rand = "0.8"
-tempfile = "3.5"
+tempfile = "3.20"
 tokio = { workspace = true, features = ["full", "test-util"] }
 tracing-subscriber = { workspace = true }
-wiremock = "0.6"
+wiremock = "0.6.4"
 
 [[bench]]
 name = "cache_benchmark"

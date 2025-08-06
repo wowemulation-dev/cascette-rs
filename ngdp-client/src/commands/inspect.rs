@@ -689,7 +689,7 @@ async fn inspect_encoding(
     format: OutputFormat,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let style = OutputStyle::new();
-    print_section_header(&format!("Encoding File Inspector - {}", product), &style);
+    print_section_header(&format!("Encoding File Inspector - {product}"), &style);
 
     // Download and decompress encoding file
     let encoding_data = download_and_decompress_manifest(&product, &region, "encoding").await?;
@@ -717,7 +717,7 @@ async fn inspect_encoding(
                 OutputFormat::JsonPretty => serde_json::to_string_pretty(&json_data)?,
                 _ => serde_json::to_string(&json_data)?,
             };
-            println!("{}", output);
+            println!("{output}");
         }
         OutputFormat::Text => {
             print_subsection_header("Encoding File Summary", &style);
@@ -736,7 +736,7 @@ async fn inspect_encoding(
                 let search_bytes = hex::decode(&search_key)?;
 
                 if let Some(entry) = encoding_file.lookup_by_ckey(&search_bytes) {
-                    println!("Found CKey: {}", search_key);
+                    println!("Found CKey: {search_key}");
                     println!("  File size: {} bytes", entry.size);
                     if !entry.encoding_keys.is_empty() {
                         println!("  EKeys:");
@@ -745,10 +745,10 @@ async fn inspect_encoding(
                         }
                     }
                 } else if let Some(ckey) = encoding_file.lookup_by_ekey(&search_bytes) {
-                    println!("Found EKey: {}", search_key);
+                    println!("Found EKey: {search_key}");
                     println!("  Maps to CKey: {}", hex::encode(ckey));
                 } else {
-                    println!("Key not found: {}", search_key);
+                    println!("Key not found: {search_key}");
                 }
             }
 
@@ -778,7 +778,7 @@ async fn inspect_install(
     format: OutputFormat,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let style = OutputStyle::new();
-    print_section_header(&format!("Install Manifest Inspector - {}", product), &style);
+    print_section_header(&format!("Install Manifest Inspector - {product}"), &style);
 
     // Download and decompress install manifest
     let install_data = download_and_decompress_manifest(&product, &region, "install").await?;
@@ -799,7 +799,7 @@ async fn inspect_install(
                 OutputFormat::JsonPretty => serde_json::to_string_pretty(&json_data)?,
                 _ => serde_json::to_string(&json_data)?,
             };
-            println!("{}", output);
+            println!("{output}");
         }
         OutputFormat::Text => {
             print_subsection_header("Install Manifest Summary", &style);
@@ -824,7 +824,7 @@ async fn inspect_install(
                 let filter_tags: Vec<&str> = tag_filter.split(',').collect();
                 let filtered_files = install_manifest.get_files_for_tags(&filter_tags);
 
-                print_subsection_header(&format!("Files for tags: {}", tag_filter), &style);
+                print_subsection_header(&format!("Files for tags: {tag_filter}"), &style);
                 println!(
                     "Found {} files",
                     format_count_badge(filtered_files.len(), "file", &style)
@@ -858,10 +858,7 @@ async fn inspect_download_manifest(
     format: OutputFormat,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let style = OutputStyle::new();
-    print_section_header(
-        &format!("Download Manifest Inspector - {}", product),
-        &style,
-    );
+    print_section_header(&format!("Download Manifest Inspector - {product}"), &style);
 
     // Download and decompress download manifest
     let download_data = download_and_decompress_manifest(&product, &region, "download").await?;
@@ -889,7 +886,7 @@ async fn inspect_download_manifest(
                 OutputFormat::JsonPretty => serde_json::to_string_pretty(&json_data)?,
                 _ => serde_json::to_string(&json_data)?,
             };
-            println!("{}", output);
+            println!("{output}");
         }
         OutputFormat::Text => {
             print_subsection_header("Download Manifest Summary", &style);
@@ -903,7 +900,7 @@ async fn inspect_download_manifest(
                 format_count_badge(download_manifest.tags.len(), "tag", &style)
             );
 
-            print_subsection_header(&format!("Top {} Priority Files", priority_limit), &style);
+            print_subsection_header(&format!("Top {priority_limit} Priority Files"), &style);
             let priority_files =
                 download_manifest.get_priority_files(priority_limit.min(127) as i8);
             for (i, entry) in priority_files.iter().enumerate() {
@@ -919,7 +916,7 @@ async fn inspect_download_manifest(
                 let filter_tags: Vec<&str> = tag_filter.split(',').collect();
                 let filtered_files = download_manifest.get_files_for_tags(&filter_tags);
 
-                print_subsection_header(&format!("Files for tags: {}", tag_filter), &style);
+                print_subsection_header(&format!("Files for tags: {tag_filter}"), &style);
                 println!(
                     "Found {} files",
                     format_count_badge(filtered_files.len(), "file", &style)
@@ -943,7 +940,7 @@ async fn inspect_size(
     format: OutputFormat,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let style = OutputStyle::new();
-    print_section_header(&format!("Size File Inspector - {}", product), &style);
+    print_section_header(&format!("Size File Inspector - {product}"), &style);
 
     // Download and decompress size file
     let size_data = download_and_decompress_manifest(&product, &region, "size").await?;
@@ -977,7 +974,7 @@ async fn inspect_size(
                 OutputFormat::JsonPretty => serde_json::to_string_pretty(&json_data)?,
                 _ => serde_json::to_string(&json_data)?,
             };
-            println!("{}", output);
+            println!("{output}");
         }
         OutputFormat::Text => {
             print_subsection_header("Size File Summary", &style);
@@ -1006,7 +1003,7 @@ async fn inspect_size(
             println!("Minimum file size: {} bytes", stats.min_size);
             println!("Maximum file size: {} MB", stats.max_size / (1024 * 1024));
 
-            print_subsection_header(&format!("Top {} Largest Files", largest), &style);
+            print_subsection_header(&format!("Top {largest} Largest Files"), &style);
             let largest_files = size_file.get_largest_files(largest);
             for (i, (ekey, size)) in largest_files.iter().enumerate() {
                 let size_mb = size / (1024 * 1024);
@@ -1017,7 +1014,7 @@ async fn inspect_size(
                 let filter_tags: Vec<&str> = tag_filter.split(',').collect();
                 let tag_size = size_file.get_size_for_tags(&filter_tags);
 
-                print_subsection_header(&format!("Size for tags: {}", tag_filter), &style);
+                print_subsection_header(&format!("Size for tags: {tag_filter}"), &style);
                 println!("Total size: {} GB", tag_size / (1024 * 1024 * 1024));
             }
         }

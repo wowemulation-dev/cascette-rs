@@ -73,8 +73,11 @@ decisions.
 - [ngdp-bpsv](../ngdp-bpsv/README.md) - BPSV parser/writer implementation
 - [ribbit-client](../ribbit-client/README.md) - Ribbit protocol client
 - [tact-client](../tact-client/README.md) - TACT HTTP/HTTPS client
+- [tact-parser](../tact-parser/README.md) - TACT file format parsers
 - [ngdp-cdn](../ngdp-cdn/README.md) - CDN content delivery
 - [ngdp-cache](../ngdp-cache/README.md) - Caching layer
+- [blte](../blte/README.md) - BLTE decompression library
+- [ngdp-crypto](../ngdp-crypto/README.md) - Encryption/decryption support
 - [ngdp-client](../ngdp-client/README.md) - CLI tool
 
 ## 📖 Reading Order

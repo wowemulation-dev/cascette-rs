@@ -5,7 +5,50 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.0] - 2025-08-06
+
+### Added
+
+- **Complete TACT manifest format support**:
+  - Download manifest parser with priority sorting (versions 1-3)
+  - Size file parser for installation size calculations
+  - TVFS (TACT Virtual File System) parser with correct format handling
+  - Variable-length integer (varint) support for TACT structures
+
+- **Download manifest features**:
+  - Priority-based file ordering for optimized downloads
+  - Tag-based filtering for selective content
+  - Support for all three manifest versions
+  - Methods: `get_priority_files()`, `get_files_for_tags()`, `get_download_size()`
+
+- **Size file features**:
+  - Installation size calculation per platform/tag
+  - File size statistics (min, max, average)
+  - Largest files identification
+  - Methods: `get_total_size()`, `get_size_for_tags()`, `get_largest_files()`
+
+- **TVFS parser features**:
+  - Correct format handling (TVFS/TFVS magic support)
+  - Big-endian byte ordering (fixed from initial little-endian)
+  - 32-bit integer offsets (fixed from 40-bit assumption)
+  - Path resolution and directory listing
+  - EST (Extended Spec Table) support
+  - Methods: `resolve_path()`, `list_directory()`, `file_count()`
+
+### Fixed
+
+- **Encoding file MD5 checksum validation**:
+  - Replaced placeholder with actual MD5 verification using md5 crate
+  - Now properly validates page checksums during parsing
+
+- **TVFS format corrections based on real data**:
+  - Fixed magic bytes handling (supports both TVFS and TFVS)
+  - Corrected byte ordering from little-endian to big-endian
+  - Changed offset fields from 40-bit to 32-bit integers
+  - Fixed path table parsing to use simple length bytes
+  - Corrected EST table detection and parsing
+
+## [0.1.0] - 2025-08-05
 
 ### Added
 

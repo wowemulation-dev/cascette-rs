@@ -15,7 +15,7 @@ thiserror.workspace = true
 tracing.workspace = true
 blte = { path = "../blte" }
 ngdp-crypto = { path = "../ngdp-crypto" }
-md5 = "0.7"
+md5 = "0.8"
 
 [dev-dependencies]
 clap = { workspace = true, features = ["derive", "cargo", "env"] }
@@ -23,7 +23,7 @@ criterion.workspace = true
 hex.workspace = true
 tracing-subscriber.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+reqwest = { version = "0.12.22", default-features = false, features = ["rustls-tls"] }
 ribbit-client = { path = "../ribbit-client" }
 ngdp-bpsv = { path = "../ngdp-bpsv" }
 

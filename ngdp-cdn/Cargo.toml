@@ -13,19 +13,18 @@ categories = ["network-programming", "game-development", "web-programming::http-
 
 [dependencies]
 rand.workspace = true
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream", "gzip", "deflate"] }
+reqwest = { version = "0.12.22", default-features = false, features = ["rustls-tls", "stream", "gzip", "deflate"] }
 thiserror.workspace = true
 tokio = { workspace = true, features = ["full"] }
 tracing.workspace = true
-bytes = "1.9"
-futures-util = "0.3"
-parking_lot = "0.12"
+futures-util = "0.3.31"
+parking_lot = "0.12.4"
 
 [dev-dependencies]
 criterion.workspace = true
 tracing-subscriber.workspace = true
-tokio-test = "0.4"
-wiremock = "0.6"
+tokio-test = "0.4.4"
+wiremock = "0.6.4"
 
 [[bench]]
 name = "cdn_benchmark"

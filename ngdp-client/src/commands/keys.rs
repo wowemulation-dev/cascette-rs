@@ -169,14 +169,15 @@ fn show_key_status() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         let parts: Vec<&str> = line.split_whitespace().collect();
-        if parts.len() >= 2 {
-            if parts[0].len() == 16 && parts[0].chars().all(|c| c.is_ascii_hexdigit()) {
-                if parts[1].len() == 32 && parts[1].chars().all(|c| c.is_ascii_hexdigit()) {
-                    key_count += 1;
-                    if key_count <= 5 {
-                        key_names.push(parts[0].to_string());
-                    }
-                }
+        if parts.len() >= 2
+            && parts[0].len() == 16
+            && parts[0].chars().all(|c| c.is_ascii_hexdigit())
+            && parts[1].len() == 32
+            && parts[1].chars().all(|c| c.is_ascii_hexdigit())
+        {
+            key_count += 1;
+            if key_count <= 5 {
+                key_names.push(parts[0].to_string());
             }
         }
     }

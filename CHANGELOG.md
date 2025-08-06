@@ -7,6 +7,69 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2025-08-06
+
+### Added
+
+#### `ngdp-crypto` crate (new)
+
+- **Complete encryption/decryption support for NGDP/TACT**:
+  - Salsa20 stream cipher for modern BLTE encryption
+  - ARC4 (RC4) cipher for legacy content
+  - KeyService for managing encryption keys
+  - Automatic key loading from standard directories
+  - Support for CSV, TXT, and TSV key file formats
+  - Environment variable support (CASCETTE_KEYS_PATH)
+  - Successfully loads 19,419+ WoW encryption keys
+
+#### `blte` crate (new)
+
+- **BLTE (Block Table Encoded) decompression library**:
+  - Support for all compression modes (None, ZLib, LZ4, Frame, Encrypted)
+  - Multi-chunk file handling with proper block indexing
+  - BLTE header parsing for single and multi-chunk files
+  - Chunk checksum verification (MD5)
+  - Integration with ngdp-crypto for encrypted content
+  - Memory-efficient chunk processing
+
+#### `tact-parser` crate enhancements
+
+- **Complete TACT manifest format support**:
+  - Download manifest parser with priority sorting (versions 1-3)
+  - Size file parser for installation size calculations
+  - TVFS (TACT Virtual File System) parser with correct format
+  - Variable-length integer (varint) support
+  - Fixed encoding file MD5 checksum validation
+  - Corrected TVFS format based on real data analysis
+
+#### `ngdp-client` CLI enhancements
+
+- **Encryption key management commands**:
+  - `ngdp keys update` - Download latest keys from TACTKeys repository
+  - `ngdp keys status` - Show local key database information
+  - Automatic key file creation in ~/.config/cascette/
+
+- **Enhanced inspect commands with BLTE support**:
+  - `inspect encoding` - Inspect encoding files with validation
+  - `inspect install` - Parse install manifests with tag filtering
+  - `inspect download-manifest` - Analyze download priorities
+  - `inspect size` - Calculate installation sizes
+  - All commands now handle BLTE-encoded CDN files
+
+### Fixed
+
+- **TVFS parser corrections**:
+  - Fixed magic bytes handling (TVFS/TFVS support)
+  - Corrected byte ordering (big-endian)
+  - Changed offsets from 40-bit to 32-bit integers
+  - Fixed path table and EST table parsing
+
+- **Encoding file improvements**:
+  - Fixed MD5 checksum validation with proper implementation
+  - Corrected page verification logic
+
+## [0.3.0] - 2025-08-05
+
 ### Added
 
 #### `tact-parser` crate

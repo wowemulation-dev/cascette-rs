@@ -181,7 +181,7 @@ pub struct SizeFile {
 **Testing:** Parse size file, verify total calculation ✅
 **Acceptance:** Can determine installation size requirements ✅
 
-#### 1.1.7 TVFS Parser (Basic Structure) ✅
+#### 1.1.7 TVFS Parser ✅
 
 **Location:** `tact-parser/src/tvfs.rs` ✅
 
@@ -191,26 +191,26 @@ pub struct TVFSManifest {
     path_table: Vec<PathEntry>,
     vfs_table: Vec<VFSEntry>,
     cft_table: Vec<CFTEntry>,
+    espec_table: Option<Vec<String>>,
 }
 ```
 
 **Implementation:**
 
-- [x] Parse TVFS header with magic validation
-- [x] Basic structure for tables (path, VFS, CFT)
+- [x] Parse TVFS header with magic validation (supports both TVFS and TFVS)
+- [x] Complete structure for all tables (path, VFS, CFT, EST)
 - [x] Implement path resolution methods
 - [x] Directory listing functionality
 - [x] File information retrieval
+- [x] Correct format based on real data:
+  - [x] Supports both TVFS and TFVS magic bytes
+  - [x] Uses big-endian byte order
+  - [x] Path table uses simple length bytes
+  - [x] Header uses int32 values for offsets
+- [x] EST (Extended Spec Table) support for additional metadata
 
-**Note:** Current implementation needs revision to match actual TVFS format:
-- Real format uses TFVS magic (not TVFS)
-- Uses big-endian byte order (not little-endian)
-- Path table uses simple length bytes (not varints)
-- Header uses int32 values (not 40-bit integers)
-
-**Testing:** Basic structure tests created ✅
-**Real Data Testing:** Blocked by BLTE encoding requirement
-**Acceptance:** Basic structure complete, needs format fixes with real data
+**Testing:** Comprehensive tests with real header structure ✅
+**Acceptance:** Parser correctly handles real TVFS data ✅
 
 #### 1.1.8 Add Variable-Length Integer Support ✅
 
@@ -732,41 +732,44 @@ pub fn apply_patch(old_data: &[u8], patch_data: &[u8]) -> Result<Vec<u8>>
 
 ---
 
-#### 4.2.1 Keys Update Command 🟡
+#### 4.2.1 Keys Update Command ✅
 
-**Location:** `ngdp-client/src/commands/keys.rs` (new file)
+**Location:** `ngdp-client/src/commands/keys.rs` ✅
 
 ```rust
-pub fn update_keys() -> Result<()>
+pub async fn handle_keys_command(command: KeysCommands) -> Result<()>
 ```
 
 **Implementation:**
 
-- [ ] Download latest TACTKeys from GitHub repository
-- [ ] Parse and validate key format
-- [ ] Save to ~/.config/cascette/WoW.txt
-- [ ] Report number of new keys added
-**Testing:** Download and validate keys
-**Acceptance:** Updates local key database
+- [x] Download latest TACTKeys from GitHub repository
+- [x] Parse and validate key format (CSV format)
+- [x] Save to ~/.config/cascette/WoW.txt (or custom path)
+- [x] Report number of keys found
+- [x] Add `keys status` command to show local database info
+- [x] Support for forced updates with `--force` flag
+**Testing:** Successfully downloads and parses TACTKeys ✅
+**Acceptance:** Updates local key database ✅
 
 #### 4.2.2 File Download Command 🟡
 
-**Location:** `ngdp-client/src/commands/download.rs` (new file)
+**Location:** `ngdp-client/src/commands/download.rs` ✅ (structure)
 
 ```rust
-pub fn download_file(file_id: u32, output: &Path) -> Result<()>
+pub async fn handle(cmd: DownloadCommands, format: OutputFormat) -> Result<()>
 ```
 
 **Implementation:**
 
-- [ ] Resolve FileDataID → CKey (via root)
-- [ ] Resolve CKey → EKey (via encoding)
-- [ ] Download from CDN
-- [ ] Decompress with BLTE
-- [ ] Save to disk
-**Dependencies:** All previous components
-**Testing:** Download known file
-**Acceptance:** File matches expected content
+- [x] Command structure and placeholder implementation
+- [x] Support for content key and encoding key patterns
+- [x] BLTE decompression integration ready
+- [ ] Resolve FileDataID → CKey (via root) - API adjustments needed
+- [ ] Resolve CKey → EKey (via encoding) - API adjustments needed
+- [ ] Full CDN download implementation - pending API finalization
+**Dependencies:** All core components ready ✅
+**Testing:** Structure in place, full testing pending
+**Acceptance:** Placeholder ready for full implementation
 
 #### 4.2.3 Installation Command 🟡
 
@@ -1025,4 +1028,4 @@ Each task is independent within its priority level and can be worked on in paral
 ---
 
 *Last Updated: 2025-08-06*
-*Version: 1.4.0*
+*Version: 1.5.0*
