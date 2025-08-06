@@ -8,13 +8,13 @@ use crate::{
     },
     wago_api,
 };
-use ngdp_cdn::CdnClient;
-use tact_parser::config::BuildConfig;
 use chrono::{Duration, Utc};
+use ngdp_cdn::CdnClient;
 use ribbit_client::{
     CdnEntry, Endpoint, ProductCdnsResponse, ProductVersionsResponse, Region, SummaryResponse,
 };
 use std::str::FromStr;
+use tact_parser::config::BuildConfig;
 
 pub async fn handle(
     cmd: ProductsCommands,
@@ -150,55 +150,70 @@ async fn show_versions(
     let endpoint = Endpoint::ProductVersions(product.clone());
     let response = client.request(&endpoint).await?;
     let versions: ProductVersionsResponse = client.request_typed(&endpoint).await?;
-    
+
     // If parse_config is true, fetch build configs
     let build_configs = if parse_config {
         let cdns_endpoint = Endpoint::ProductCdns(product.clone());
         let cdns: ProductCdnsResponse = client.request_typed(&cdns_endpoint).await?;
-        
+
         // Get CDN configuration for the region
         if let Some(cdn_entry) = cdns.entries.iter().find(|e| e.name == region.as_str()) {
             let cdn_client = CdnClient::new()?;
             let cdn_host = &cdn_entry.hosts[0]; // Use first CDN host
             let cdn_path = &cdn_entry.path;
-            
+
             let mut configs = std::collections::HashMap::new();
-            
+
             // Download build configs for the requested regions
             let entries_to_process: Vec<_> = if all_regions {
                 versions.entries.iter().collect()
             } else {
-                versions.entries.iter().filter(|e| e.region == region.as_str()).collect()
+                versions
+                    .entries
+                    .iter()
+                    .filter(|e| e.region == region.as_str())
+                    .collect()
             };
-            
+
             for entry in entries_to_process {
-                match cdn_client.download_build_config(cdn_host, cdn_path, &entry.build_config).await {
-                    Ok(response) => {
-                        match response.text().await {
-                            Ok(config_text) => {
-                                match BuildConfig::parse(&config_text) {
-                                    Ok(config) => {
-                                        configs.insert(entry.build_config.clone(), config);
-                                    },
-                                    Err(e) => {
-                                        eprintln!("Warning: Failed to parse config {}: {}", entry.build_config, e);
-                                    }
-                                }
-                            },
-                            Err(e) => {
-                                eprintln!("Warning: Failed to read config {}: {}", entry.build_config, e);
+                match cdn_client
+                    .download_build_config(cdn_host, cdn_path, &entry.build_config)
+                    .await
+                {
+                    Ok(response) => match response.text().await {
+                        Ok(config_text) => match BuildConfig::parse(&config_text) {
+                            Ok(config) => {
+                                configs.insert(entry.build_config.clone(), config);
                             }
+                            Err(e) => {
+                                eprintln!(
+                                    "Warning: Failed to parse config {}: {}",
+                                    entry.build_config, e
+                                );
+                            }
+                        },
+                        Err(e) => {
+                            eprintln!(
+                                "Warning: Failed to read config {}: {}",
+                                entry.build_config, e
+                            );
                         }
                     },
                     Err(e) => {
-                        eprintln!("Warning: Failed to download config {}: {}", entry.build_config, e);
+                        eprintln!(
+                            "Warning: Failed to download config {}: {}",
+                            entry.build_config, e
+                        );
                     }
                 }
             }
-            
+
             Some(configs)
         } else {
-            eprintln!("Warning: No CDN configuration found for region {}", region.as_str());
+            eprintln!(
+                "Warning: No CDN configuration found for region {}",
+                region.as_str()
+            );
             None
         }
     } else {
@@ -363,73 +378,128 @@ async fn show_versions(
                 }
 
                 println!("{table}");
-                
+
                 // Show parsed build config information if available
                 if let Some(ref configs) = build_configs {
                     if let Some(build_config) = configs.get(&entry.build_config) {
                         println!();
                         print_subsection_header("Parsed Build Configuration", &style);
-                        
+
                         // Show key build details in a compact format
                         if let Some(build_name) = build_config.build_name() {
                             println!("{}", format_key_value("Build Name", build_name, &style));
                         }
-                        
+
                         if let Some(root_hash) = build_config.root_hash() {
-                            let size_info = if let Some(size) = build_config.config.get_size("root") {
+                            let size_info = if let Some(size) = build_config.config.get_size("root")
+                            {
                                 format!(" ({:.1} MB)", size as f64 / (1024.0 * 1024.0))
                             } else {
                                 String::new()
                             };
-                            println!("{}", format_key_value("Root File", &format!("{}{}", root_hash, size_info), &style));
+                            println!(
+                                "{}",
+                                format_key_value(
+                                    "Root File",
+                                    &format!("{root_hash}{size_info}"),
+                                    &style
+                                )
+                            );
                         }
-                        
+
                         if let Some(encoding_hash) = build_config.encoding_hash() {
-                            let size_info = if let Some(size) = build_config.config.get_size("encoding") {
-                                format!(" ({:.1} MB)", size as f64 / (1024.0 * 1024.0))
-                            } else {
-                                String::new()
-                            };
-                            println!("{}", format_key_value("Encoding File", &format!("{}{}", encoding_hash, size_info), &style));
+                            let size_info =
+                                if let Some(size) = build_config.config.get_size("encoding") {
+                                    format!(" ({:.1} MB)", size as f64 / (1024.0 * 1024.0))
+                                } else {
+                                    String::new()
+                                };
+                            println!(
+                                "{}",
+                                format_key_value(
+                                    "Encoding File",
+                                    &format!("{encoding_hash}{size_info}"),
+                                    &style
+                                )
+                            );
                         }
-                        
+
                         if let Some(install_hash) = build_config.install_hash() {
-                            let size_info = if let Some(size) = build_config.config.get_size("install") {
-                                format!(" ({:.1} KB)", size as f64 / 1024.0)
-                            } else {
-                                String::new()
-                            };
-                            println!("{}", format_key_value("Install Manifest", &format!("{}{}", install_hash, size_info), &style));
-                        }
-                        
-                        if let Some(download_hash) = build_config.download_hash() {
-                            let size_info = if let Some(size) = build_config.config.get_size("download") {
-                                format!(" ({:.1} MB)", size as f64 / (1024.0 * 1024.0))
-                            } else {
-                                String::new()
-                            };
-                            println!("{}", format_key_value("Download Manifest", &format!("{}{}", download_hash, size_info), &style));
-                        }
-                        
-                        // Show patch information
-                        let has_patch = build_config.config.get_value("patch").is_some_and(|v| !v.is_empty());
-                        if has_patch {
-                            if let Some(patch_hash) = build_config.config.get_value("patch") {
-                                let size_info = if let Some(size) = build_config.config.get_size("patch") {
+                            let size_info =
+                                if let Some(size) = build_config.config.get_size("install") {
                                     format!(" ({:.1} KB)", size as f64 / 1024.0)
                                 } else {
                                     String::new()
                                 };
-                                println!("{}", format_key_value("Patch", &format!("{}{}", patch_hash, size_info), &style));
+                            println!(
+                                "{}",
+                                format_key_value(
+                                    "Install Manifest",
+                                    &format!("{install_hash}{size_info}"),
+                                    &style
+                                )
+                            );
+                        }
+
+                        if let Some(download_hash) = build_config.download_hash() {
+                            let size_info =
+                                if let Some(size) = build_config.config.get_size("download") {
+                                    format!(" ({:.1} MB)", size as f64 / (1024.0 * 1024.0))
+                                } else {
+                                    String::new()
+                                };
+                            println!(
+                                "{}",
+                                format_key_value(
+                                    "Download Manifest",
+                                    &format!("{download_hash}{size_info}"),
+                                    &style
+                                )
+                            );
+                        }
+
+                        // Show patch information
+                        let has_patch = build_config
+                            .config
+                            .get_value("patch")
+                            .is_some_and(|v| !v.is_empty());
+                        if has_patch {
+                            if let Some(patch_hash) = build_config.config.get_value("patch") {
+                                let size_info =
+                                    if let Some(size) = build_config.config.get_size("patch") {
+                                        format!(" ({:.1} KB)", size as f64 / 1024.0)
+                                    } else {
+                                        String::new()
+                                    };
+                                println!(
+                                    "{}",
+                                    format_key_value(
+                                        "Patch",
+                                        &format!("{patch_hash}{size_info}"),
+                                        &style
+                                    )
+                                );
                             }
                         } else {
                             println!("{}", format_key_value("Patch", "Not available", &style));
                         }
-                        
+
                         // Count VFS entries
-                        let vfs_count = build_config.config.keys().into_iter().filter(|k| k.starts_with("vfs-") && !k.ends_with("-size")).count();
+                        let vfs_count = build_config
+                            .config
+                            .keys()
+                            .into_iter()
+                            .filter(|k| k.starts_with("vfs-") && !k.ends_with("-size"))
+                            .count();
                         if vfs_count > 0 {
-                            println!("{}", format_key_value("VFS Entries", &format!("{} files", vfs_count), &style));
+                            println!(
+                                "{}",
+                                format_key_value(
+                                    "VFS Entries",
+                                    &format!("{vfs_count} files"),
+                                    &style
+                                )
+                            );
                         }
                     }
                 }

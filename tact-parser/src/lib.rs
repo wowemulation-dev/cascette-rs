@@ -56,12 +56,15 @@
 //! - [`tact-client`](https://docs.rs/tact-client) - TACT protocol client
 //! - [TACT Format Documentation](https://wowdev.wiki/TACT)
 
-mod error;
-mod ioutils;
 pub mod config;
+pub mod download;
 pub mod encoding;
+mod error;
 pub mod install;
+mod ioutils;
 pub mod jenkins3;
+pub mod size;
+pub mod tvfs;
 pub mod utils;
 pub mod wow_root;
 

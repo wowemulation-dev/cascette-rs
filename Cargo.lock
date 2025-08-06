@@ -2342,7 +2342,11 @@ dependencies = [
  "criterion",
  "hex",
  "modular-bitfield",
+ "ngdp-bpsv",
+ "reqwest",
+ "ribbit-client",
  "thiserror",
+ "tokio",
  "tracing",
  "tracing-subscriber",
 ]
