@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.4](https://github.com/wowemulation-dev/cascette-rs/compare/ngdp-cache-v0.1.3...ngdp-cache-v0.1.4) - 2025-08-06
+
+### Fixed
+
+- path tests on non-linux platforms
+
+### Other
+
+- ✨ feat: integrate tact-parser with build configuration analysis
+- 📝 docs: update changelogs and add module documentation
+- Merge pull request #11 from micolous/refactor/bpsv-response
+- Merge pull request #10 from micolous/fix/non-linux-paths
+
 ### Fixed
 
 - Fixed path tests on non-Linux platforms:

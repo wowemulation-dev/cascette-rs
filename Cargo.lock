@@ -246,7 +246,7 @@ dependencies = [
 
 [[package]]
 name = "blte"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "byteorder",
  "flate2",
@@ -1418,7 +1418,7 @@ dependencies = [
 
 [[package]]
 name = "ngdp-cache"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "bytes",
  "criterion",
@@ -1442,7 +1442,7 @@ dependencies = [
 
 [[package]]
 name = "ngdp-cdn"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "bytes",
  "criterion",
@@ -1460,7 +1460,7 @@ dependencies = [
 
 [[package]]
 name = "ngdp-client"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "assert_cmd",
  "base64",
@@ -1493,7 +1493,7 @@ dependencies = [
 
 [[package]]
 name = "ngdp-crypto"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "cipher",
  "criterion",
@@ -2036,7 +2036,7 @@ dependencies = [
 
 [[package]]
 name = "ribbit-client"
-version = "0.1.2"
+version = "0.2.0"
 dependencies = [
  "asn1",
  "base64",
@@ -2407,7 +2407,7 @@ dependencies = [
 
 [[package]]
 name = "tact-client"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "criterion",
  "ngdp-bpsv",
@@ -2421,7 +2421,7 @@ dependencies = [
 
 [[package]]
 name = "tact-parser"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "blte",
  "byteorder",
