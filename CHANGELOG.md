@@ -20,6 +20,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Performance benchmarks for Jenkins3 hashing
   - Example demonstrating WoW root file parsing
 
+- **Build configuration parsing support**:
+  - Complete parser for TACT build configuration files (text-based key=value format)
+  - Support for hash-size pairs parsing from configuration entries
+  - Handles empty values and various configuration formats
+  - Helper methods for accessing common build properties (root, encoding, install, download hashes)
+  - Build name extraction and VFS entry counting
+  - Comprehensive test coverage with real-world configuration data
+
+- **Encoding file parsing with 40-bit integer support**:
+  - Full parser for TACT encoding files (binary format with CKey ↔ EKey mapping)
+  - Native support for 40-bit integers used for file sizes (supports up to 1TB files)
+  - Bidirectional lookup: CKey → EKey entries and EKey → CKey reverse mapping
+  - Helper methods for common operations (get file size, get first encoding key)
+  - Big-endian header parsing for encoding file metadata
+  - Support for multiple encoding keys per content key (different compression methods)
+
+- **Install manifest parsing**:
+  - Parser for TACT install manifest files
+  - Support for file installation metadata and directory structures
+  - Integration with encoding file lookups for complete file resolution
+
+- **Utility functions**:
+  - 40-bit integer reading/writing utilities (little-endian format)
+  - Configuration file text parsing with proper empty value handling
+  - Hash parsing and validation utilities
+
 #### `ngdp-cdn` crate
 
 - **Automatic CDN fallback support**:
@@ -44,6 +70,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Support for JSON, BPSV, and formatted text output
   - Caching support with 30-minute TTL to reduce API load
   - Respects global cache settings (`--no-cache` and `--clear-cache` flags)
+
+- **TACT parser integration for build configuration analysis**:
+  - Added `inspect build-config` command for detailed build configuration analysis
+  - Downloads and parses real build configurations from CDN using tact-parser
+  - Visual tree representation of game build structure with emoji and Unicode box-drawing
+  - Shows core game files (root, encoding, install, download, size) with file sizes
+  - Displays build information (version, UID, product, installer)
+  - Patch status indication with hash display
+  - VFS (Virtual File System) entries listing with file counts
+  - Support for all output formats: text (visual tree), JSON, and raw BPSV
+  - Example: `ngdp inspect build-config wow_classic_era 61582 --region us`
+
+- **Enhanced products versions command with build configuration parsing**:
+  - Added `--parse-config` flag to `products versions` command
+  - Downloads and parses build configurations to show meaningful information
+  - Displays build names instead of just cryptic hashes (e.g., "WOW-62417patch11.2.0_Retail")
+  - Shows patch availability and file size information
+  - Counts VFS entries to indicate build complexity
+  - Maintains full backward compatibility when flag is not used
+  - Works across all WoW products (wow, wow_classic_era, wowt, etc.)
+  - Example: `ngdp products versions wow --parse-config`
 
 ### Changed
 

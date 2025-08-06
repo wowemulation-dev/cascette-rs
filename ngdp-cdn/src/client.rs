@@ -563,7 +563,6 @@ impl CdnClient {
     }
 }
 
-
 /// Builder for configuring CDN client
 #[derive(Debug, Clone)]
 pub struct CdnClientBuilder {

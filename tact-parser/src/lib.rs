@@ -40,9 +40,15 @@
 //!
 //! - ✅ WoW Root file parsing
 //! - ✅ Jenkins3 hash implementation
-//! - ⏳ Encoding table parsing (planned)
-//! - ⏳ BLTE file decoding (planned)
-//! - ⏳ Patch file support (planned)
+//! - ✅ Encoding file parsing (CKey ↔ EKey mapping)
+//! - ✅ Install manifest parsing (with tag-based filtering)
+//! - ✅ Build/CDN config parsing
+//! - ✅ 40-bit integer support
+//! - ✅ Variable-length integer support
+//! - ⏳ Download manifest parsing (planned)
+//! - ⏳ Size file parsing (planned)
+//! - ⏳ TVFS support (planned)
+//! - ⏳ BLTE file decoding (planned - separate crate)
 //!
 //! ## See Also
 //!
@@ -52,6 +58,9 @@
 
 mod error;
 mod ioutils;
+pub mod config;
+pub mod encoding;
+pub mod install;
 pub mod jenkins3;
 pub mod utils;
 pub mod wow_root;

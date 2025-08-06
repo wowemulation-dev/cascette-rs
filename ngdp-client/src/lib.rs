@@ -51,6 +51,10 @@ pub enum ProductsCommands {
         /// Show all regions
         #[arg(short, long)]
         all_regions: bool,
+
+        /// Parse and show build configuration details
+        #[arg(long)]
+        parse_config: bool,
     },
 
     /// Show CDN configuration for a product

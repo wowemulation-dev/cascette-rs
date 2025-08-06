@@ -9,6 +9,7 @@ repository.workspace = true
 homepage.workspace = true
 
 [dependencies]
+byteorder.workspace = true
 modular-bitfield.workspace = true
 thiserror.workspace = true
 tracing.workspace = true

@@ -287,7 +287,6 @@ impl CdnClientWithFallback {
     }
 }
 
-
 /// Builder for configuring CDN client with fallback
 #[derive(Debug, Clone)]
 pub struct CdnClientWithFallbackBuilder {

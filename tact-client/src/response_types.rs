@@ -132,9 +132,7 @@ pub fn parse_versions(content: &str) -> Result<Vec<VersionEntry>> {
                 .ok_or_else(|| Error::missing_field("BuildId"))?
                 .parse()
                 .map_err(|_| {
-                    let build_id_str = row
-                        .get_raw(build_id_idx)
-                        .unwrap_or("<missing>"); // Safe because we checked above
+                    let build_id_str = row.get_raw(build_id_idx).unwrap_or("<missing>"); // Safe because we checked above
                     Error::InvalidManifest {
                         line: 0,
                         reason: format!("Invalid BuildId: {build_id_str}"),
