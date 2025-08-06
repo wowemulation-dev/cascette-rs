@@ -1430,6 +1430,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tact-client",
+ "tact-parser",
  "tempfile",
  "thiserror",
  "tokio",
@@ -2336,6 +2337,7 @@ dependencies = [
 name = "tact-parser"
 version = "0.1.0"
 dependencies = [
+ "byteorder",
  "clap",
  "criterion",
  "hex",

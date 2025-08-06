@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **TACT parser integration for build configuration analysis**:
+  - Added `inspect build-config` command for detailed build configuration analysis
+  - Downloads and parses real build configurations from CDN using tact-parser crate
+  - Visual tree representation of game build structure with emoji and Unicode box-drawing
+  - Shows core game files (root, encoding, install, download, size) with file sizes
+  - Displays build information (version, UID, product, installer)
+  - Patch status indication with hash display
+  - VFS (Virtual File System) entries listing with file counts
+  - Support for all output formats: text (visual tree), JSON, and raw BPSV
+  - Example: `ngdp inspect build-config wow_classic_era 61582 --region us`
+
+- **Enhanced products versions command with build configuration parsing**:
+  - Added `--parse-config` flag to `products versions` command
+  - Downloads and parses build configurations to show meaningful information
+  - Displays build names instead of just cryptic hashes (e.g., "WOW-62417patch11.2.0_Retail")
+  - Shows patch availability and file size information  
+  - Counts VFS entries to indicate build complexity
+  - Maintains full backward compatibility when flag is not used
+  - Works across all WoW products (wow, wow_classic_era, wowt, etc.)
+  - Example: `ngdp products versions wow --parse-config`
+
+- **Dependencies**:
+  - Added `tact-parser` (0.1.0) dependency for TACT file format parsing
+  - Added `ngdp-cdn` client integration for downloading build configurations
+
 ### Fixed
 
 - **Code optimization**:

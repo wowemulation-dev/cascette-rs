@@ -94,9 +94,9 @@ async fn test_cache_file_structure() -> Result<(), Box<dyn std::error::Error>> {
     // Test RibbitCache structure
     let ribbit_cache = RibbitCache::new().await?;
     ribbit_cache
-        .write("us", "versions", "wow", b"version data")
+        .write("us", "wow", "versions", b"version data")
         .await?;
-    ribbit_cache.write("eu", "cdns", "wow", b"cdn data").await?;
+    ribbit_cache.write("eu", "wow", "cdns", b"cdn data").await?;
 
     // Verify directory structure
     let cache_base = temp_dir.path().join("ngdp/ribbit");
@@ -107,8 +107,8 @@ async fn test_cache_file_structure() -> Result<(), Box<dyn std::error::Error>> {
     assert!(eu_dir.exists(), "EU region directory should exist");
 
     // Verify files exist (the exact file structure depends on implementation)
-    let us_versions = us_dir.join("versions").join("wow");
-    let eu_cdns = eu_dir.join("cdns").join("wow");
+    let us_versions = us_dir.join("wow").join("versions");
+    let eu_cdns = eu_dir.join("wow").join("cdns");
 
     assert!(us_versions.exists(), "US versions file should exist");
     assert!(eu_cdns.exists(), "EU cdns file should exist");
