@@ -979,7 +979,9 @@ mod tests {
             Some(1024),
             None,
             None,
-        ).await.unwrap();
+        )
+        .await
+        .unwrap();
 
         // Write 3 entries of 400 bytes each (1200 bytes total)
         let data_400b = vec![42u8; 400];
@@ -1003,11 +1005,15 @@ mod tests {
     async fn test_lru_eviction_by_entries() {
         // Create cache with 2 entry limit
         let cache = GenericCache::with_config_and_path(
-            get_cache_dir().unwrap().join("test_lru_eviction_by_entries"),
+            get_cache_dir()
+                .unwrap()
+                .join("test_lru_eviction_by_entries"),
             None,
             Some(2),
             None,
-        ).await.unwrap();
+        )
+        .await
+        .unwrap();
 
         // Write 3 entries
         cache.write("key1", b"data1").await.unwrap();
@@ -1026,11 +1032,15 @@ mod tests {
     #[tokio::test]
     async fn test_lru_access_order_update() {
         let cache = GenericCache::with_config_and_path(
-            get_cache_dir().unwrap().join("test_lru_access_order_update"),
+            get_cache_dir()
+                .unwrap()
+                .join("test_lru_access_order_update"),
             None,
             Some(2),
             None,
-        ).await.unwrap();
+        )
+        .await
+        .unwrap();
 
         // Write 2 entries
         cache.write("key1", b"data1").await.unwrap();
@@ -1058,11 +1068,15 @@ mod tests {
     #[tokio::test]
     async fn test_cache_statistics_integration() {
         let cache = GenericCache::with_config_and_path(
-            get_cache_dir().unwrap().join("test_cache_statistics_integration"),
+            get_cache_dir()
+                .unwrap()
+                .join("test_cache_statistics_integration"),
             None,
             Some(2),
             None,
-        ).await.unwrap();
+        )
+        .await
+        .unwrap();
         let stats = cache.stats();
 
         // Write some data

@@ -18,6 +18,9 @@ pub enum Error {
     #[error("BPSV parse error: {0}")]
     Bpsv(#[from] ngdp_bpsv::Error),
 
+    #[error("JSON serialization/deserialization error: {0}")]
+    Json(#[from] serde_json::Error),
+
     #[error("Invalid manifest format at line {line}: {reason}")]
     InvalidManifest { line: usize, reason: String },
 

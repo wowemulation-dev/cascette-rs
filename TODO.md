@@ -302,17 +302,44 @@ pub struct CacheStats {
 **Testing:** Unit tests for header formatting, example program ✅
 **Acceptance:** Can download file segments ✅
 
-#### 1.3.2 Resume Support 🟡
+#### 1.3.2 Resume Support ✅
 
-**Location:** `tact-client/src/resumable.rs` (new file)
+**Location:** `tact-client/src/resumable.rs` ✅
+
+```rust
+pub struct DownloadProgress {
+    pub total_size: Option<u64>,
+    pub bytes_downloaded: u64,
+    pub file_hash: String,
+    pub cdn_host: String,
+    pub cdn_path: String,
+    pub target_file: PathBuf,
+    pub progress_file: PathBuf,
+    pub is_complete: bool,
+    pub last_updated: u64,
+}
+
+pub struct ResumableDownload {
+    client: HttpClient,
+    progress: DownloadProgress,
+}
+```
+
 **Implementation:**
 
-- [ ] Track download progress
-- [ ] Persist partial downloads
-- [ ] Resume from last byte
-- [ ] Verify partial content integrity
-**Testing:** Interrupt and resume download
-**Acceptance:** Can resume interrupted downloads
+- [x] Track download progress with persistent state
+- [x] Persist partial downloads to disk as JSON progress files
+- [x] Resume from last byte using HTTP range requests
+- [x] Verify partial content integrity with file size checks
+- [x] Stream downloads with progress saving every 1MB
+- [x] Support cancellation and cleanup of progress files
+- [x] Automatic discovery of resumable downloads in directories
+- [x] Cleanup of old completed progress files
+- [x] Human-readable progress reporting with percentage and byte formatting
+- [x] Integration with existing HttpClient retry logic
+- [x] Graceful handling of servers that don't support range requests
+**Testing:** Comprehensive unit tests with progress persistence and file verification ✅
+**Acceptance:** Can resume interrupted downloads with proper state management ✅
 
 ---
 
