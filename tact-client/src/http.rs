@@ -428,8 +428,8 @@ impl HttpClient {
 
         // Build Range header value
         let range_header = match range {
-            (start, Some(end)) => format!("bytes={}-{}", start, end),
-            (start, None) => format!("bytes={}-", start),
+            (start, Some(end)) => format!("bytes={start}-{end}"),
+            (start, None) => format!("bytes={start}-"),
         };
 
         debug!("Range request: {} Range: {}", url, range_header);
@@ -493,8 +493,8 @@ impl HttpClient {
         let mut range_specs = Vec::new();
         for &(start, end) in ranges {
             match end {
-                Some(end) => range_specs.push(format!("{}-{}", start, end)),
-                None => range_specs.push(format!("{}-", start)),
+                Some(end) => range_specs.push(format!("{start}-{end}")),
+                None => range_specs.push(format!("{start}-")),
             }
         }
         let range_header = format!("bytes={}", range_specs.join(", "));
@@ -659,15 +659,15 @@ mod tests {
         // Test range header formatting
         let range1 = (0, Some(1023));
         let header1 = match range1 {
-            (start, Some(end)) => format!("bytes={}-{}", start, end),
-            (start, None) => format!("bytes={}-", start),
+            (start, Some(end)) => format!("bytes={start}-{end}"),
+            (start, None) => format!("bytes={start}-"),
         };
         assert_eq!(header1, "bytes=0-1023");
 
         let range2 = (1024, None::<u64>);
         let header2 = match range2 {
-            (start, Some(end)) => format!("bytes={}-{}", start, end),
-            (start, None) => format!("bytes={}-", start),
+            (start, Some(end)) => format!("bytes={start}-{end}"),
+            (start, None) => format!("bytes={start}-"),
         };
         assert_eq!(header2, "bytes=1024-");
     }
@@ -679,8 +679,8 @@ mod tests {
 
         for &(start, end) in &ranges {
             match end {
-                Some(end) => range_specs.push(format!("{}-{}", start, end)),
-                None => range_specs.push(format!("{}-", start)),
+                Some(end) => range_specs.push(format!("{start}-{end}")),
+                None => range_specs.push(format!("{start}-")),
             }
         }
 

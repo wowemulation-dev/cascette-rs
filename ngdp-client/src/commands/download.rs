@@ -95,7 +95,7 @@ async fn download_build(
             .entries
             .iter()
             .find(|v| v.build_id.to_string() == build || v.versions_name == build)
-            .ok_or_else(|| format!("Build '{}' not found for product '{}'", build, product))?
+            .ok_or_else(|| format!("Build '{build}' not found for product '{product}'"))?
     };
 
     info!(

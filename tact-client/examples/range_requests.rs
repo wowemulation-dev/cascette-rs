@@ -29,9 +29,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     println!("\n1. Testing Range Request Support");
     println!("================================");
-    println!("CDN Host: {}", cdn_host);
-    println!("Path: {}", path);
-    println!("Hash: {}", test_hash);
+    println!("CDN Host: {cdn_host}");
+    println!("Path: {path}");
+    println!("Hash: {test_hash}");
 
     // First, let's try a small range request to test server support
     match client
@@ -41,15 +41,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
         Ok(response) => {
             println!("\n✅ Range request successful!");
             let status = response.status();
-            println!("Status: {}", status);
+            println!("Status: {status}");
             println!("Content-Length: {:?}", response.content_length());
 
             // Check for range-related headers
             if let Some(content_range) = response.headers().get("content-range") {
-                println!("Content-Range: {:?}", content_range);
+                println!("Content-Range: {content_range:?}");
             }
             if let Some(accept_ranges) = response.headers().get("accept-ranges") {
-                println!("Accept-Ranges: {:?}", accept_ranges);
+                println!("Accept-Ranges: {accept_ranges:?}");
             }
 
             let partial_data = response.bytes().await?;
@@ -66,7 +66,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             }
         }
         Err(e) => {
-            eprintln!("❌ Range request failed: {}", e);
+            eprintln!("❌ Range request failed: {e}");
         }
     }
 
@@ -109,10 +109,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         }
                     }
                 }
-                Err(e) => eprintln!("Failed to download partial content: {}", e),
+                Err(e) => eprintln!("Failed to download partial content: {e}"),
             }
         }
-        Err(e) => eprintln!("Failed to download full file: {}", e),
+        Err(e) => eprintln!("Failed to download full file: {e}"),
     }
 
     println!("\n3. Multiple Range Requests");
@@ -170,7 +170,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             println!("Multi-range request status: {}", response.status());
 
             if let Some(content_type) = response.headers().get("content-type") {
-                println!("Content-Type: {:?}", content_type);
+                println!("Content-Type: {content_type:?}");
 
                 if content_type
                     .to_str()
@@ -187,7 +187,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             let data = response.bytes().await?;
             println!("Multi-range response size: {} bytes", data.len());
         }
-        Err(e) => eprintln!("Multi-range request failed: {}", e),
+        Err(e) => eprintln!("Multi-range request failed: {e}"),
     }
 
     println!("\n📋 Range Request Use Cases:");

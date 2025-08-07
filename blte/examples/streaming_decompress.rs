@@ -97,7 +97,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut decompressed = String::new();
     stream.read_to_string(&mut decompressed)?;
-    println!("   Decompressed content: \"{}\"", decompressed);
+    println!("   Decompressed content: \"{decompressed}\"");
     println!("   Decompressed size: {} bytes", decompressed.len());
 
     // Example 2: Multi-chunk streaming
@@ -113,7 +113,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut multi_decompressed = String::new();
     multi_stream.read_to_string(&mut multi_decompressed)?;
-    println!("   Decompressed content: \"{}\"", multi_decompressed);
+    println!("   Decompressed content: \"{multi_decompressed}\"");
     println!("   Decompressed size: {} bytes", multi_decompressed.len());
 
     // Example 3: Streaming with small buffer reads (simulates processing large files)
@@ -135,14 +135,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         chunks_read += 1;
         total_bytes += bytes_read;
         let chunk_str = String::from_utf8_lossy(&buffer[..bytes_read]);
-        println!(
-            "     Chunk {}: {} bytes -> \"{}\"",
-            chunks_read, bytes_read, chunk_str
-        );
+        println!("     Chunk {chunks_read}: {bytes_read} bytes -> \"{chunk_str}\"");
     }
 
-    println!("   Total bytes read: {}", total_bytes);
-    println!("   Total read operations: {}", chunks_read);
+    println!("   Total bytes read: {total_bytes}");
+    println!("   Total read operations: {chunks_read}");
 
     // Example 4: Using the convenience function
     println!("\n4. Using convenience function:");
@@ -151,7 +148,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut convenience_result = String::new();
     convenience_stream.read_to_string(&mut convenience_result)?;
-    println!("   Result: \"{}\"", convenience_result);
+    println!("   Result: \"{convenience_result}\"");
 
     println!("\n✅ All streaming examples completed successfully!");
     println!("\nStreaming benefits:");
