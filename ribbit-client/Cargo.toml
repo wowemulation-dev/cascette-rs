@@ -28,7 +28,7 @@ rand.workspace = true
 rsa = { version = "0.9", features = ["sha2"] }
 sha2 = "0.10"
 thiserror.workspace = true
-tokio = { workspace = true, features = ["full"] }
+tokio = { workspace = true, features = ["io-util", "rt", "sync", "time", "net"] }
 tracing.workspace = true
 x509-cert = "0.2"
 
