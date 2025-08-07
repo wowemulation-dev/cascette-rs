@@ -1,5 +1,6 @@
 [package]
 name = "tact-parser"
+description = "Parser for TACT (Transfer And Content Transfer) files used in Blizzard's NGDP distribution system"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
