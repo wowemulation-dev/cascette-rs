@@ -402,8 +402,8 @@ mod tests {
         chunk2_full.push(b'Z'); // ZLib compression mode
         chunk2_full.extend_from_slice(&compressed2);
 
-        // Calculate header size
-        let header_size = 8 + 1 + 3 + 2 * 24; // magic + header_size + flags + chunk_count + 2 * chunk_info
+        // Calculate header size (does NOT include magic + header_size field itself)
+        let header_size = 1 + 3 + 2 * 24; // flags + chunk_count + 2 * chunk_info = 52
 
         // Build BLTE file
         let mut blte_data = Vec::new();

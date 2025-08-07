@@ -100,6 +100,50 @@ impl BLTEFile {
     pub fn chunk_count(&self) -> usize {
         self.header.chunk_count()
     }
+
+    /// Get total size of BLTE file (header + data)
+    pub fn total_size(&self) -> usize {
+        self.header.data_offset() + self.data.len()
+    }
+
+    /// Get raw BLTE file data (header + chunk data)
+    pub fn raw_data(&self) -> Vec<u8> {
+        let header_size = self.header.data_offset();
+        let mut raw = Vec::with_capacity(self.total_size());
+
+        // Reconstruct header
+        raw.extend_from_slice(&crate::BLTE_MAGIC);
+        raw.extend_from_slice(&self.header.header_size.to_be_bytes());
+
+        // Add chunk table if multi-chunk
+        if !self.header.is_single_chunk() {
+            // Add chunk table data
+            if self.header.chunks.is_empty() {
+                // This shouldn't happen, but handle gracefully
+                raw.extend_from_slice(&[0x0F, 0x00, 0x00, 0x00]); // flags + 0 chunks
+            } else {
+                raw.push(0x0F); // Standard chunk flags
+                let chunk_count = self.header.chunks.len() as u32;
+                raw.extend_from_slice(&chunk_count.to_be_bytes()[1..]); // 3-byte chunk count
+
+                // Add chunk entries
+                for chunk in &self.header.chunks {
+                    raw.extend_from_slice(&chunk.compressed_size.to_be_bytes());
+                    raw.extend_from_slice(&chunk.decompressed_size.to_be_bytes());
+                    raw.extend_from_slice(&chunk.checksum);
+                }
+            }
+        }
+
+        // Pad to expected header size if needed
+        while raw.len() < header_size {
+            raw.push(0);
+        }
+
+        // Add chunk data
+        raw.extend_from_slice(&self.data);
+        raw
+    }
 }
 
 /// Data for a single chunk
@@ -159,8 +203,9 @@ mod tests {
 
         let mut data = Vec::new();
 
-        // Calculate header size: 4 (magic) + 4 (header_size) + 1 (flags) + 3 (chunk_count) + 2 * 24 (chunk_info)
-        let header_size = 8 + 1 + 3 + 2 * 24; // = 60
+        // Calculate header size: 1 (flags) + 3 (chunk_count) + 2 * 24 (chunk_info)
+        // Note: header_size does NOT include the 8 bytes for magic and header_size field itself
+        let header_size = 1 + 3 + 2 * 24; // = 52
 
         // Header
         data.extend_from_slice(b"BLTE");

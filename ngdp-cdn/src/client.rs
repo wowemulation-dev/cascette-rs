@@ -722,9 +722,9 @@ impl CdnClient {
         tact_client::resumable::find_resumable_downloads(directory)
             .await
             .map_err(|e| {
-                Error::Io(std::io::Error::other(
-                    format!("Failed to find resumable downloads: {e}"),
-                ))
+                Error::Io(std::io::Error::other(format!(
+                    "Failed to find resumable downloads: {e}"
+                )))
             })
     }
 
@@ -765,9 +765,9 @@ impl CdnClient {
         tact_client::resumable::cleanup_old_progress_files(directory, max_age_hours)
             .await
             .map_err(|e| {
-                Error::Io(std::io::Error::other(
-                    format!("Failed to cleanup progress files: {e}"),
-                ))
+                Error::Io(std::io::Error::other(format!(
+                    "Failed to cleanup progress files: {e}"
+                )))
             })
     }
 }

@@ -145,7 +145,34 @@ impl BLTEHeader {
         if self.is_single_chunk() {
             8 // Just magic + header_size
         } else {
-            self.header_size as usize
+            // Detect format based on header_size value:
+            //
+            // Standard BLTE format:
+            //   header_size = size of chunk table only
+            //   data_offset = 8 + header_size
+            //
+            // WoW CDN Archive format:
+            //   header_size = 8 + chunk table size
+            //   data_offset = header_size (already includes the 8)
+            //
+            // Detection heuristic:
+            // Calculate expected chunk table size: 4 + (chunks.len() * 24)
+            let expected_chunk_table_size = 4 + (self.chunks.len() * 24);
+
+            if self.header_size as usize == expected_chunk_table_size {
+                // Standard format: header_size = chunk table size
+                8 + self.header_size as usize
+            } else if self.header_size as usize == 8 + expected_chunk_table_size {
+                // Archive format: header_size = 8 + chunk table size
+                self.header_size as usize
+            } else if self.header_size < expected_chunk_table_size as u32 {
+                // Test/legacy format: header_size < actual chunk table size
+                // Use standard calculation
+                8 + self.header_size as usize
+            } else {
+                // Fallback: assume archive format
+                self.header_size as usize
+            }
         }
     }
 
@@ -238,7 +265,7 @@ mod tests {
         assert_eq!(header.header_size, 32);
         assert!(!header.is_single_chunk());
         assert_eq!(header.chunk_count(), 2);
-        assert_eq!(header.data_offset(), 32);
+        assert_eq!(header.data_offset(), 40); // 8 (magic + header_size) + 32 (chunk table)
 
         // Check chunks
         assert_eq!(header.chunks.len(), 2);

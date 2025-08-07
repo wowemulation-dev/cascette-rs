@@ -3,14 +3,38 @@
 //! BLTE is Blizzard's compression and encryption format used throughout
 //! their content distribution system. This crate provides parsing and
 //! decompression capabilities for all BLTE modes.
+//!
+//! ## Archive Support
+//!
+//! Blizzard's CDN serves content as 256MB archive files containing multiple
+//! concatenated BLTE files. Use the `archive` module for handling these files.
 
+pub mod archive;
+pub mod builder;
 pub mod chunk;
+pub mod compress;
 pub mod decompress;
 pub mod error;
 pub mod header;
 pub mod stream;
 
+pub use archive::{
+    ArchiveEntry, ArchiveMetadata, ArchiveStats, BLTEArchive,
+    builder::{ArchiveBuilder, MultiArchiveBuilder},
+    recreation::{
+        ChunkStructure, ExtractedFile, HeaderFormat, OriginalFileMetadata, PerfectArchiveBuilder,
+        analyze_chunk_structure, detect_compression_mode, detect_header_format,
+        recreate_perfect_blte_file,
+    },
+};
+pub use builder::{
+    BLTEBuilder, ChunkSpec, CompressionStrategy, EncryptionAlgorithm, EncryptionSpec,
+};
 pub use chunk::{BLTEFile, ChunkData};
+pub use compress::{
+    auto_select_compression_mode, compress_chunk, compress_data_multi, compress_data_single,
+    create_single_chunk_blte,
+};
 pub use decompress::{decompress_blte, decompress_chunk};
 pub use error::{Error, Result};
 pub use header::{BLTEHeader, ChunkInfo};
@@ -20,7 +44,7 @@ pub use stream::{BLTEStream, create_streaming_reader};
 pub const BLTE_MAGIC: [u8; 4] = [b'B', b'L', b'T', b'E'];
 
 /// BLTE compression modes
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CompressionMode {
     /// No compression (mode 'N')
     None = b'N' as isize,

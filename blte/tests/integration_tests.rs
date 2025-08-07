@@ -87,7 +87,7 @@ fn test_multi_chunk_with_mixed_compression() {
     chunk3_full.extend_from_slice(chunk3_data);
 
     // Calculate header size
-    let header_size = 8 + 1 + 3 + 3 * 24; // magic + header_size + flags + chunk_count + 3 * chunk_info
+    let header_size = 1 + 3 + 3 * 24; // flags + chunk_count + 3 * chunk_info (NOT including magic + header_size field)
 
     // Build BLTE file
     let mut blte_data = Vec::new();
@@ -191,7 +191,7 @@ fn test_large_file_simulation() {
     let chunk_count = 100;
     let chunk_data = b"This is chunk data that will be repeated many times.";
 
-    let header_size = 8 + 1 + 3 + chunk_count * 24;
+    let header_size = 1 + 3 + chunk_count * 24; // flags + chunk_count + chunk_info (NOT including magic + header_size field)
 
     let mut blte_data = Vec::new();
 
