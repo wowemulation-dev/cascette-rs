@@ -104,7 +104,6 @@ get_latest_version() {
 # Verify binary with ephemeral minisign key
 verify_binary() {
     local file="$1"
-    local sig_file="${file}.sig"  # Changed from .minisig to .sig
     local pubkey_file="$2"
 
     # Check if signature verification tools are available
