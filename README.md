@@ -9,28 +9,28 @@ Pipeline) for World of Warcraft emulation.
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE-APACHE)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE-MIT)
 [![CI Status](https://github.com/wowemulation-dev/cascette-rs/workflows/CI/badge.svg)](https://github.com/wowemulation-dev/cascette-rs/actions)
-[![Crates.io Version](https://img.shields.io/crates/v/cascette)](https://crates.io/crates/cascette)
-[![docs.rs](https://img.shields.io/docsrs/cascette)](https://docs.rs/cascette)
+[![Crates.io Version](https://img.shields.io/crates/v/ngdp-client)](https://crates.io/crates/ngdp-client)
+[![docs.rs](https://img.shields.io/docsrs/ngdp-client)](https://docs.rs/ngdp-client)
 
 </div>
 
 ## 🎯 Project Status
 
-**Current Version**: 0.4.0 (Ready for Release)
+**Current Version**: 0.3.0
 
 ### Core Components
 
 | Component       | Version | Status      | Description                                        |
 | --------------- | ------- | ----------- | -------------------------------------------------- |
-| `ngdp-bpsv`     | 0.1.2   | ✅ Stable   | BPSV parser/writer for NGDP formats                |
-| `ribbit-client` | 0.1.2   | ✅ Stable   | Ribbit protocol client with signature verification |
-| `tact-client`   | 0.1.2   | ✅ Stable   | TACT HTTP client for version/CDN queries          |
-| `tact-parser`   | 0.1.0   | ✅ Stable   | TACT file format parser (encoding, install, etc.) |
-| `ngdp-cdn`      | 0.2.1   | ✅ Stable   | CDN content delivery with parallel downloads       |
-| `ngdp-cache`    | 0.1.3   | ✅ Stable   | Caching layer for NGDP operations                 |
-| `blte`          | 0.1.0   | ✅ Stable   | BLTE decompression with encryption support        |
-| `ngdp-crypto`   | 0.1.0   | ✅ Stable   | Encryption/decryption for TACT files              |
-| `ngdp-client`   | 0.2.0   | ✅ Stable   | CLI tool for NGDP operations                      |
+| `ngdp-bpsv`     | 0.3.0   | ✅ Stable   | BPSV parser/writer for NGDP formats                |
+| `ribbit-client` | 0.3.0   | ✅ Stable   | Ribbit protocol client with signature verification |
+| `tact-client`   | 0.3.0   | ✅ Stable   | TACT HTTP client for version/CDN queries          |
+| `tact-parser`   | 0.3.0   | ✅ Stable   | TACT file format parser (encoding, install, etc.) |
+| `ngdp-cdn`      | 0.3.0   | ✅ Stable   | CDN content delivery with parallel downloads       |
+| `ngdp-cache`    | 0.3.0   | ✅ Stable   | Caching layer for NGDP operations                 |
+| `blte`          | 0.3.0   | ✅ Stable   | BLTE decompression with encryption support        |
+| `ngdp-crypto`   | 0.3.0   | ✅ Stable   | Encryption/decryption for TACT files              |
+| `ngdp-client`   | 0.3.0   | ✅ Stable   | CLI tool for NGDP operations                      |
 
 ### Implementation Progress
 
@@ -43,7 +43,7 @@ Pipeline) for World of Warcraft emulation.
 - ✅ **CDN Operations**: Parallel downloads, streaming, retry logic, rate limiting
 - ✅ **Caching**: Transparent caching for all protocols with TTL support
 - ✅ **CLI Tool**: Feature-complete command-line interface with key management
-- 🚧 **CASC Storage**: Local storage implementation (planned for v0.5.0)
+- 🚧 **CASC Storage**: Local storage implementation (planned for future release)
 - 🔄 **TVFS**: Basic parser implemented, needs real-world data testing
 
 ## 🚀 Quick Start
@@ -54,11 +54,11 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-ribbit-client = "0.1"
-ngdp-bpsv = "0.1"
-tact-parser = "0.1"
-blte = "0.1"
-ngdp-crypto = "0.1"
+ribbit-client = "0.3"
+ngdp-bpsv = "0.3"
+tact-parser = "0.3"
+blte = "0.3"
+ngdp-crypto = "0.3"
 ```
 
 Basic example:
@@ -90,8 +90,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ### CLI Tool
 
+#### Install with Cargo
 ```bash
 cargo install ngdp-client
+```
+
+#### Install with Script (Unix/Linux/macOS)
+```bash
+curl -fsSL https://raw.githubusercontent.com/wowemulation-dev/cascette-rs/main/install.sh | bash
+```
+
+#### Install with Script (Windows PowerShell)
+```powershell
+irm https://raw.githubusercontent.com/wowemulation-dev/cascette-rs/main/install.ps1 | iex
 ```
 
 ### Library Usage

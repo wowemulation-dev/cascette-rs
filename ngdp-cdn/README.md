@@ -20,7 +20,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-ngdp-cdn = "0.1"
+ngdp-cdn = "0.3"
 ```
 
 ### Basic Example

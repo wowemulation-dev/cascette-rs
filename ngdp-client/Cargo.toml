@@ -7,7 +7,7 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "NGDP client CLI for Cascette"
+description = "Command-line interface for Blizzard's NGDP with product queries, certificate management, and key operations"
 keywords = ["ngdp", "cli", "blizzard", "wow", "casc"]
 categories = ["command-line-utilities", "game-development"]
 

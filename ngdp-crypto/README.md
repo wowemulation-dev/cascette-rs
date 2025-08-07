@@ -2,9 +2,18 @@
 
 Encryption and decryption support for Blizzard's NGDP/TACT system.
 
+## Installation
+
+Add this to your `Cargo.toml`:
+
+```toml
+[dependencies]
+ngdp-crypto = "0.3"
+```
+
 ## Overview
 
-This crate provides cryptographic functionality for handling encrypted content in Blizzard's games. It implements the specific cipher configurations and key management required for TACT (Transfer and Content Tracking) files.
+This crate provides cryptographic functionality for handling encrypted content in Blizzard's games. It implements the specific cipher configurations and key management required for TACT (Trusted Application Content Transfer) files.
 
 ## Features
 

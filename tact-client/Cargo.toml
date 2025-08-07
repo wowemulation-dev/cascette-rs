@@ -7,7 +7,7 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "TACT protocol client for Cascette"
+description = "TACT (Trusted Application Content Transfer) HTTP client for Blizzard's NGDP"
 keywords = ["ngdp", "tact", "blizzard", "wow", "http"]
 categories = [
   "network-programming",

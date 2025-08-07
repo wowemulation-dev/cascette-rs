@@ -7,7 +7,7 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "CDN client for NGDP content delivery"
+description = "CDN client with parallel downloads and fallback support for Blizzard's NGDP"
 keywords = ["ngdp", "cdn", "blizzard", "wow", "http"]
 categories = ["network-programming", "game-development", "web-programming::http-client"]
 
