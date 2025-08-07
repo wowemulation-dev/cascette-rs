@@ -132,7 +132,7 @@ jobs:
       - name: Verify versions match
         run: |
           VERSION="${{ needs.determine-release-type.outputs.version }}"
-          for crate in ngdp-bpsv ribbit-client tact-client ngdp-cdn ngdp-cache ngdp-client; do
+          for crate in ngdp-bpsv ribbit-client tact-client tact-parser ngdp-cdn ngdp-cache ngdp-crypto blte ngdp-client; do
             CRATE_VERSION=$(cargo metadata --format-version 1 --no-deps | jq -r ".packages[] | select(.name == \"$crate\") | .version")
             if [[ "$CRATE_VERSION" != "$VERSION" ]]; then
               echo "Version mismatch for $crate: expected $VERSION, found $CRATE_VERSION"
@@ -150,10 +150,13 @@ jobs:
           echo "::warning::DRY RUN MODE - Would publish these packages in order:"
           echo "1. ngdp-bpsv"
           echo "2. ribbit-client"
-          echo "3. tact-client" 
-          echo "4. ngdp-cdn"
-          echo "5. ngdp-cache"
-          echo "6. ngdp-client"
+          echo "3. tact-client"
+          echo "4. tact-parser"
+          echo "5. ngdp-crypto"
+          echo "6. blte"
+          echo "7. ngdp-cdn"
+          echo "8. ngdp-cache"
+          echo "9. ngdp-client"
           echo "::notice::No actual publishing performed"
           
       - name: Publish to crates.io (Production)
@@ -168,6 +171,11 @@ jobs:
           
           cargo publish -p ribbit-client
           cargo publish -p tact-client
+          cargo publish -p tact-parser
+          sleep 30
+          
+          cargo publish -p ngdp-crypto
+          cargo publish -p blte
           sleep 30
           
           cargo publish -p ngdp-cdn
@@ -189,6 +197,9 @@ jobs:
             - ngdp-bpsv
             - ribbit-client
             - tact-client
+            - tact-parser
+            - ngdp-crypto
+            - blte
             - ngdp-cdn
             - ngdp-cache
             - ngdp-client
