@@ -7,7 +7,9 @@ members = [
   "ribbit-client",
   "tact-client",
   "tact-parser",
-  "ngdp-client", "blte",
+  "ngdp-client",
+  "blte",
+  "casc-storage",
 ]
 resolver = "2"
 

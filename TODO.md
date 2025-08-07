@@ -941,7 +941,9 @@ pub async fn handle_compress(cmd: CompressCommands, format: OutputFormat) -> Res
 
 ## Priority 3: Storage Layer
 
-### 3.1 `casc-storage` - Local CASC Storage 🔴
+### 3.1 `casc-storage` - Local CASC Storage 🔴 **CRITICAL**
+
+**Critical Note:** This is the most important missing piece that blocks the "Production Ready" milestone. Without this, cascette-rs cannot store/retrieve game files locally, making it incomplete for real-world use.
 
 #### 3.1.1 Create Crate Structure 🔴
 
@@ -950,117 +952,503 @@ pub async fn handle_compress(cmd: CompressCommands, format: OutputFormat) -> Res
 ```toml
 [package]
 name = "casc-storage"
+version = "0.1.0"
 
 [dependencies]
-blte = { path = "../blte" }
-tact-parser = { path = "../tact-parser" }
-memmap2 = "0.9"  # For memory-mapped files
+blte = { path = "../blte" }              # For BLTE decompression
+tact-parser = { path = "../tact-parser" } # For Jenkins hash
+ngdp-crypto = { path = "../ngdp-crypto" } # For decryption
+memmap2 = "0.9"                          # Memory-mapped files
+lru = "0.12"                             # LRU cache
+thiserror = "2.0"                        # Error handling
+tracing = "0.1"                          # Logging
+hex = "0.4"                              # Hex encoding
+md5 = "0.7"                              # Checksum verification
 ```
 
 **Implementation:**
 
 - [ ] Create crate structure:
-  - [ ] `src/lib.rs` - Storage API
-  - [ ] `src/index.rs` - Index file handling
-  - [ ] `src/archive.rs` - Archive file handling
-  - [ ] `src/bucket.rs` - Bucket calculations
-  - [ ] `src/storage.rs` - Main storage operations
+  - [ ] `src/lib.rs` - Public API exports
+  - [ ] `src/error.rs` - Error types (StorageError, IndexError, ArchiveError)
+  - [ ] `src/types.rs` - Common types (EKey, CKey, ArchiveLocation)
+  - [ ] `src/index/`
+    - [ ] `mod.rs` - Index module exports
+    - [ ] `idx_parser.rs` - .idx file parser (bucket-based)
+    - [ ] `group_index.rs` - .index file parser (group indices)
+    - [ ] `bucket.rs` - Bucket calculation logic
+    - [ ] `entry.rs` - Index entry structures
+  - [ ] `src/archive/`
+    - [ ] `mod.rs` - Archive module exports
+    - [ ] `reader.rs` - Archive file reader with memory mapping
+    - [ ] `writer.rs` - Archive file writer for new content
+    - [ ] `format.rs` - Archive format definitions
+  - [ ] `src/storage/`
+    - [ ] `mod.rs` - Storage module exports
+    - [ ] `casc.rs` - Main CascStorage implementation
+    - [ ] `loose.rs` - Loose file support (individual files)
+    - [ ] `shared_mem.rs` - Shared memory for game client
+  - [ ] `src/utils.rs` - Utility functions (path normalization, etc.)
 
-#### 3.1.2 Index File Parsing 🔴
+#### 3.1.2 Index File Parsing (.idx format) 🔴
 
-**Location:** `casc-storage/src/index.rs`
+**Location:** `casc-storage/src/index/idx_parser.rs`
+
+Based on hex dump analysis from real WoW installations:
 
 ```rust
-pub enum IndexFile {
-    V5(IndexV5),
-    V7(IndexV7),
-    V9(IndexV9),
+#[repr(C)]
+pub struct IdxFileHeader {
+    pub size: u32,              // Header size (LE) - 0x10 typically
+    pub hash: u32,              // Header hash (LE) for validation
+    pub version: u16,           // Format version (7 for WoW Classic)
+    pub bucket: u8,             // Bucket number (0x00-0x0F)
+    pub unused: u8,             // Padding/unused
+    pub length_field_size: u8,  // Size of length fields (4)
+    pub location_field_size: u8, // Size of location fields (5)
+    pub key_field_size: u8,     // Size of key fields (9)
+    pub segment_bits: u8,       // Segment bits (30)
 }
 
-pub struct IndexEntry {
-    ekey: [u8; 9],  // First 9 bytes of EKey
-    archive_index: u32,
-    archive_offset: u32,
-    size: u32,
+pub struct IdxFile {
+    pub header: IdxFileHeader,
+    pub entries: Vec<IdxEntry>,
+    pub bucket: u8,
+}
+
+pub struct IdxEntry {
+    pub ekey: Vec<u8>,          // Encoding key (9 bytes truncated)
+    pub archive_index: u16,     // Archive file number (data.XXX)
+    pub archive_offset: u32,    // Offset in archive file
+    pub size: u32,              // Compressed size in archive
 }
 ```
 
 **Implementation:**
 
-- [ ] Detect index version from header
-- [ ] Parse index V5 (legacy format)
-- [ ] Parse index V7 (modern format)
-- [ ] Parse index V9 (latest format)
-- [ ] Implement bucket-based lookup:
-  - [ ] Calculate bucket: `ekey.iter().fold(0, |a, &b| a ^ b) & 0x0F`
-  - [ ] Binary search within bucket
-- [ ] Memory-map large index files
-**Testing:** Parse all index versions, lookup known EKeys
-**Acceptance:** Can locate files in archives
+- [ ] Parse header with validation (magic, version, checksum)
+- [ ] Read data segment with proper alignment
+- [ ] Parse entries based on field sizes from header
+- [ ] Implement Jenkins lookup3 hash verification
+- [ ] Support for version 7 format (WoW Classic/Era)
+- [ ] Handle bucket assignment for fast lookups
+- [ ] Memory-map large index files for performance
+**Testing:** Test with real .idx files from WoW installations
+**Acceptance:** Can parse all 32 .idx files from test installations
 
-#### 3.1.3 Archive File Reading 🔴
+#### 3.1.3 Group Index Parsing (.index format) 🔴
 
-**Location:** `casc-storage/src/archive.rs`
+**Location:** `casc-storage/src/index/group_index.rs`
+
+Based on analysis of `/Data/indices/*.index` files:
 
 ```rust
+pub struct GroupIndex {
+    pub entries: HashMap<u32, GroupIndexEntry>,
+    pub version: u32,
+    pub bucket: u8,
+}
+
+pub struct GroupIndexEntry {
+    pub ekey_hash: u32,         // Jenkins hash of first 9 bytes
+    pub archive_index: u16,     // Archive file number
+    pub archive_offset: u32,    // Offset in archive
+    pub file_size: u32,         // Compressed size
+}
+
+impl GroupIndex {
+    pub fn parse<P: AsRef<Path>>(path: P) -> Result<Self, IndexError>;
+    pub fn lookup(&self, ekey: &[u8]) -> Option<&GroupIndexEntry>;
+    pub fn get_archive_location(&self, ekey: &[u8]) -> Option<ArchiveLocation>;
+}
+```
+
+**Implementation:**
+
+- [ ] Parse binary format with proper endianness
+- [ ] Build hash table for O(1) lookups
+- [ ] Validate checksums for data integrity
+- [ ] Support all index versions found in test data
+**Testing:** Test with 700+ .index files from WoW installations
+**Acceptance:** Can locate any file by EKey hash
+
+#### 3.1.4 Bucket-Based Lookup System 🔴
+
+**Location:** `casc-storage/src/index/bucket.rs`
+
+Critical for performance - files are distributed across 16 buckets:
+
+```rust
+/// Calculate bucket index for an EKey (0x00-0x0F)
+pub fn calculate_bucket(ekey: &[u8]) -> u8 {
+    let mut xor_result = 0u8;
+    for &byte in ekey.iter().take(9) {  // Only first 9 bytes
+        xor_result ^= byte;
+    }
+    (xor_result & 0x0F) ^ (xor_result >> 4)
+}
+
+/// Jenkins lookup3 hash for EKey lookup
+pub fn ekey_hash(ekey: &[u8]) -> u32 {
+    // Use existing implementation from tact-parser
+    tact_parser::jenkins3::jenkins3_hash(&ekey[..9.min(ekey.len())]) as u32
+}
+
+pub struct BucketIndex {
+    buckets: [Vec<IndexEntry>; 16],
+}
+
+impl BucketIndex {
+    pub fn insert(&mut self, ekey: &[u8], entry: IndexEntry);
+    pub fn lookup(&self, ekey: &[u8]) -> Option<&IndexEntry>;
+    pub fn optimize(&mut self);  // Sort buckets for binary search
+}
+```
+
+**Implementation:**
+
+- [ ] XOR-based bucket calculation matching CascLib
+- [ ] Integration with Jenkins hash from tact-parser
+- [ ] Optimized binary search within buckets
+- [ ] Cache-friendly memory layout
+**Testing:** Verify bucket distribution with real EKeys
+**Acceptance:** Sub-millisecond lookups for any EKey
+
+#### 3.1.5 Archive File Reader 🔴
+
+**Location:** `casc-storage/src/archive/reader.rs`
+
+Handle data.XXX files (up to 1GB each):
+
+```rust
+use memmap2::{Mmap, MmapOptions};
+
 pub struct Archive {
-    file: MemoryMappedFile,
+    mmap: Mmap,
+    file: std::fs::File,
     index: u32,
+    size: u64,
+}
+
+impl Archive {
+    pub fn open(path: &Path, index: u32) -> Result<Self, ArchiveError>;
+    pub fn read_at(&self, offset: u64, size: u32) -> Result<&[u8], ArchiveError>;
+    pub fn read_blte(&self, offset: u64, size: u32) -> Result<Vec<u8>, ArchiveError>;
+    pub fn validate_checksum(&self, offset: u64, size: u32, expected: &[u8]) -> bool;
+}
+
+pub struct ArchiveManager {
+    archives: HashMap<u32, Archive>,
+    base_path: PathBuf,
+}
+
+impl ArchiveManager {
+    pub fn new(base_path: PathBuf) -> Self;
+    pub fn get_archive(&mut self, index: u32) -> Result<&Archive, ArchiveError>;
+    pub fn read_file(&mut self, location: &ArchiveLocation) -> Result<Vec<u8>, ArchiveError>;
 }
 ```
 
 **Implementation:**
 
-- [ ] Open archive files (data.XXX)
-- [ ] Read at specific offsets
-- [ ] Extract BLTE data
-- [ ] Handle archive header if present
-- [ ] Memory-map for performance
-**Dependencies:** blte for decompression
-**Testing:** Extract known files from archives
-**Acceptance:** Can read archive contents
+- [ ] Memory-mapped file access for performance
+- [ ] Lazy loading of archives on demand
+- [ ] BLTE decompression integration
+- [ ] Checksum verification (MD5)
+- [ ] Handle both data.XXX and patch.XXX archives
+**Testing:** Read known files from test archives
+**Acceptance:** Can extract any file from archives
 
-#### 3.1.4 Storage Operations 🔴
+#### 3.1.6 Main Storage API 🔴
 
-**Location:** `casc-storage/src/storage.rs`
+**Location:** `casc-storage/src/storage/casc.rs`
+
+The core API that ties everything together:
 
 ```rust
 pub struct CascStorage {
-    path: PathBuf,
-    indices: HashMap<u8, IndexFile>,
-    archives: Vec<Archive>,
+    // Paths
+    data_path: PathBuf,
+    
+    // Indices
+    idx_files: HashMap<(u8, u32), IdxFile>,      // (bucket, version) -> IdxFile
+    group_indices: HashMap<PathBuf, GroupIndex>,  // .index files
+    bucket_index: BucketIndex,                    // Fast EKey lookup
+    
+    // Archives
+    archive_manager: ArchiveManager,
+    
+    // Loose files
+    loose_files: HashMap<Vec<u8>, PathBuf>,
+    
+    // Cache
+    cache: LruCache<Vec<u8>, Vec<u8>>,
+    
+    // Configuration
+    config: CascConfig,
+}
+
+impl CascStorage {
+    // === Initialization ===
+    pub fn open<P: AsRef<Path>>(path: P) -> Result<Self, StorageError>;
+    pub fn with_config<P: AsRef<Path>>(path: P, config: CascConfig) -> Result<Self, StorageError>;
+    
+    // === Core Read Operations ===
+    pub fn read_by_ekey(&mut self, ekey: &[u8]) -> Result<Vec<u8>, StorageError>;
+    pub fn read_by_ckey(&mut self, ckey: &[u8]) -> Result<Vec<u8>, StorageError>;
+    pub fn exists(&self, ekey: &[u8]) -> bool;
+    pub fn get_file_info(&self, ekey: &[u8]) -> Option<FileInfo>;
+    
+    // === Write Operations ===
+    pub fn write(&mut self, ekey: &[u8], data: &[u8]) -> Result<(), StorageError>;
+    pub fn write_loose(&mut self, ekey: &[u8], data: &[u8]) -> Result<(), StorageError>;
+    pub fn add_to_archive(&mut self, ekey: &[u8], data: &[u8]) -> Result<(), StorageError>;
+    
+    // === Index Management ===
+    pub fn rebuild_indices(&mut self) -> Result<(), StorageError>;
+    pub fn optimize_indices(&mut self) -> Result<(), StorageError>;
+    pub fn add_index_entry(&mut self, ekey: &[u8], location: ArchiveLocation) -> Result<(), StorageError>;
+    
+    // === Verification & Maintenance ===
+    pub fn verify(&self) -> Result<VerifyReport, StorageError>;
+    pub fn verify_file(&mut self, ekey: &[u8]) -> Result<bool, StorageError>;
+    pub fn cleanup_orphaned(&mut self) -> Result<usize, StorageError>;
+    pub fn defragment(&mut self) -> Result<(), StorageError>;
+    
+    // === Statistics ===
+    pub fn get_stats(&self) -> StorageStatistics;
+    pub fn get_total_size(&self) -> u64;
+    pub fn get_file_count(&self) -> usize;
+    pub fn get_archive_count(&self) -> usize;
 }
 ```
 
 **Implementation:**
 
-- [ ] Initialize from game directory
-- [ ] Build index from .idx files
-- [ ] Implement core operations:
-  - [ ] `read_by_ekey(&[u8]) -> Result<Vec<u8>>`
-  - [ ] `read_by_ckey(&[u8]) -> Result<Vec<u8>>` (via encoding)
-  - [ ] `exists(&[u8]) -> bool`
-- [ ] Support loose files (direct file storage)
-- [ ] Add write support for new files
-**Testing:** Full read/write cycle
-**Acceptance:** Can manage local game files
+- [ ] Initialize from game directory structure
+- [ ] Load all .idx and .index files on startup
+- [ ] Build unified bucket index for fast lookups
+- [ ] Implement LRU cache for frequently accessed files
+- [ ] Support both read and write operations
+- [ ] Handle loose files alongside archived content
+- [ ] Thread-safe operations with proper locking
+**Testing:** Full integration tests with real WoW data
+**Acceptance:** Can manage complete WoW installation
 
-#### 3.1.5 Storage Verification 🟡
+#### 3.1.7 Loose File Support 🔴
 
-**Location:** `casc-storage/src/verify.rs` (new file)
+**Location:** `casc-storage/src/storage/loose.rs`
+
+For individual files not in archives:
 
 ```rust
-pub fn verify_storage(storage: &CascStorage) -> VerifyReport
+pub struct LooseFileManager {
+    base_path: PathBuf,
+    index: HashMap<Vec<u8>, PathBuf>,
+}
+
+impl LooseFileManager {
+    pub fn scan_directory(&mut self, path: &Path) -> Result<usize, StorageError>;
+    pub fn add_file(&mut self, ekey: &[u8], path: PathBuf) -> Result<(), StorageError>;
+    pub fn read_file(&self, ekey: &[u8]) -> Result<Vec<u8>, StorageError>;
+    pub fn write_file(&self, ekey: &[u8], data: &[u8]) -> Result<PathBuf, StorageError>;
+    pub fn remove_file(&mut self, ekey: &[u8]) -> Result<(), StorageError>;
+}
 ```
 
 **Implementation:**
 
-- [ ] Check all index files
-- [ ] Verify archive integrity
-- [ ] Report missing/corrupted files
-- [ ] Calculate storage statistics
-**Testing:** Verify known good/bad storage
-**Acceptance:** Detects corruption accurately
+- [ ] Directory scanning for loose files
+- [ ] EKey to filename mapping
+- [ ] Atomic file operations
+- [ ] Integration with main storage
+**Testing:** Mixed archive and loose file access
+**Acceptance:** Seamless handling of both storage types
+
+#### 3.1.8 Shared Memory Support 🟡
+
+**Location:** `casc-storage/src/storage/shared_mem.rs`
+
+For game client communication:
+
+```rust
+#[repr(C)]
+pub struct SharedMemoryHeader {
+    pub version: u32,
+    pub build_number: u32,
+    pub region: [u8; 4],
+    pub flags: u32,
+}
+
+#[repr(C)]
+pub struct SharedMemoryData {
+    pub archive_count: u32,
+    pub index_count: u32,
+    pub total_size: u64,
+    pub free_space: u32,
+    pub data_path: [u8; 256],
+}
+
+pub struct SharedMemory {
+    header: SharedMemoryHeader,
+    data: SharedMemoryData,
+}
+
+impl SharedMemory {
+    pub fn create(path: &Path) -> Result<Self, StorageError>;
+    pub fn open(path: &Path) -> Result<Self, StorageError>;
+    pub fn update(&mut self, storage: &CascStorage) -> Result<(), StorageError>;
+}
+```
+
+**Implementation:**
+
+- [ ] Platform-specific shared memory (Windows/Linux)
+- [ ] Atomic updates for thread safety
+- [ ] Game client compatibility
+**Testing:** Inter-process communication tests
+**Acceptance:** Game client can read storage state
+
+#### 3.1.9 Storage Verification 🟡
+
+**Location:** `casc-storage/src/storage/verify.rs`
+
+Critical for data integrity:
+
+```rust
+pub struct VerifyReport {
+    pub total_files: usize,
+    pub verified_files: usize,
+    pub corrupted_files: Vec<CorruptedFile>,
+    pub missing_files: Vec<Vec<u8>>,
+    pub orphaned_blocks: Vec<OrphanedBlock>,
+    pub total_size: u64,
+    pub errors: Vec<VerifyError>,
+}
+
+pub struct StorageVerifier {
+    storage: Arc<RwLock<CascStorage>>,
+}
+
+impl StorageVerifier {
+    pub fn verify_all(&self) -> Result<VerifyReport, StorageError>;
+    pub fn verify_indices(&self) -> Result<Vec<IndexError>, StorageError>;
+    pub fn verify_archives(&self) -> Result<Vec<ArchiveError>, StorageError>;
+    pub fn verify_checksums(&self) -> Result<Vec<ChecksumError>, StorageError>;
+    pub fn find_orphaned(&self) -> Result<Vec<OrphanedBlock>, StorageError>;
+}
+```
+
+**Implementation:**
+
+- [ ] Comprehensive integrity checking
+- [ ] Parallel verification for speed
+- [ ] Detailed error reporting
+- [ ] Repair suggestions
+**Testing:** Intentionally corrupted test data
+**Acceptance:** Detects all corruption types
+
+#### 3.1.10 Performance Optimizations 🟢
+
+**Location:** Throughout casc-storage
+
+Critical optimizations for production use:
+
+```rust
+// Memory-mapped files for zero-copy reads
+// LRU cache for hot data
+// Parallel processing where possible
+// SIMD operations for checksums
+// Lock-free data structures where safe
+```
+
+**Implementation:**
+
+- [ ] Memory-mapped archives (already planned)
+- [ ] Configurable LRU cache size
+- [ ] Parallel index loading on startup
+- [ ] SIMD MD5 checksums (optional)
+- [ ] Read-ahead prefetching
+- [ ] Write batching for new content
+**Testing:** Benchmark against CascLib
+**Acceptance:** Competitive performance metrics
+
+#### 3.1.11 CLI Integration 🟡
+
+**Location:** `ngdp-client/src/commands/storage.rs`
+
+User-friendly storage management:
+
+```bash
+# Storage commands
+ngdp storage init <path>           # Initialize CASC storage
+ngdp storage info <path>           # Show storage information
+ngdp storage verify <path>         # Verify integrity
+ngdp storage repair <path>         # Attempt repairs
+ngdp storage stats <path>          # Detailed statistics
+ngdp storage read <path> <ekey>   # Read file by EKey
+ngdp storage write <path> <ekey>  # Write file to storage
+ngdp storage list <path>           # List all files
+ngdp storage rebuild <path>       # Rebuild indices
+ngdp storage optimize <path>      # Optimize storage
+```
+
+**Implementation:**
+
+- [ ] All storage operations exposed via CLI
+- [ ] Progress bars for long operations
+- [ ] JSON output for scripting
+- [ ] Interactive repair mode
+**Testing:** CLI integration tests
+**Acceptance:** User-friendly storage management
+
+#### 3.1.12 Testing Strategy 🔴
+
+**Location:** `casc-storage/tests/`
+
+Comprehensive testing with real data:
+
+```rust
+// Test data paths
+const WOW_CLASSIC: &str = "/home/danielsreichenbach/Downloads/wow/1.13.2.31650.windows-win64/Data";
+const WOW_ERA: &str = "/home/danielsreichenbach/Downloads/wow/1.14.2.42597.windows-win64/Data";
+
+#[test]
+fn test_open_real_storage() {
+    let storage = CascStorage::open(WOW_CLASSIC).unwrap();
+    assert!(storage.get_file_count() > 0);
+    assert!(storage.get_archive_count() > 0);
+}
+
+#[test]
+fn test_read_known_files() {
+    // Test with known EKeys from game files
+    let mut storage = CascStorage::open(WOW_ERA).unwrap();
+    let ekey = hex::decode("0089fd913c52e90a").unwrap();
+    let data = storage.read_by_ekey(&ekey).unwrap();
+    assert!(!data.is_empty());
+}
+
+#[test]
+fn test_bucket_distribution() {
+    // Verify even distribution across buckets
+    let storage = CascStorage::open(WOW_CLASSIC).unwrap();
+    let stats = storage.get_stats();
+    for bucket in 0..16 {
+        assert!(stats.bucket_sizes[bucket] > 0);
+    }
+}
+```
+
+**Implementation:**
+
+- [ ] Unit tests for each component
+- [ ] Integration tests with real WoW data
+- [ ] Performance benchmarks
+- [ ] Stress tests with concurrent access
+- [ ] Corruption recovery tests
+**Testing:** 100+ tests covering all functionality
+**Acceptance:** All tests passing with real data
 
 ---
 
