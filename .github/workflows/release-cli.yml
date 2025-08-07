@@ -1,5 +1,5 @@
 ---
-name: Release CLI
+name: Release CLI (Ephemeral)
 
 on:
   workflow_call:
@@ -37,38 +37,41 @@ permissions:
   packages: write
 
 jobs:
-  generate-keypair:
-    name: Generate Signing Keypair
+  generate-ephemeral-keys:
+    name: Generate Ephemeral Signing Keys
     runs-on: ubuntu-latest
     outputs:
-      public-key: ${{ steps.generate.outputs.public-key }}
+      key-id: ${{ steps.generate.outputs.key-id }}
     steps:
-      - name: Install minisign for binary signing
-        run: cargo install minisign
-
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+      
       - name: Generate ephemeral keypair
         id: generate
+        env:
+          AGE_KEY_PUBLIC: ${{ vars.AGE_KEY_PUBLIC }}
         run: |
-          # Generate keypair
-          echo "${{ secrets.MINISIGN_PASSWORD }}" | minisign -G -p minisign.pub -s minisign.key -W
-
-          # Output public key
-          echo "public-key<<EOF" >> $GITHUB_OUTPUT
-          cat minisign.pub >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
-      - uses: actions/upload-artifact@v4
-        name: Upload keypair artifact
+          ./ephemeral-gen.sh
+          
+          # Extract key ID for output
+          KEY_ID=$(head -1 minisign.pub | sed 's/.*: //')
+          echo "key-id=${KEY_ID}" >> $GITHUB_OUTPUT
+      
+      - name: Upload ephemeral keys
+        uses: actions/upload-artifact@v4
         with:
-          name: minisign-keypair
+          name: ephemeral-keys
           path: |
             minisign.pub
-            minisign.key
+            minisign.key.age
           retention-days: 1
 
   build-binaries:
     name: Build ${{ matrix.target }}
-    needs: [generate-keypair]
+    needs: generate-ephemeral-keys
     strategy:
       fail-fast: false
       matrix:
@@ -77,57 +80,72 @@ jobs:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
             use_cross: true
+            archive: tar.gz
           - target: x86_64-unknown-linux-musl
             os: ubuntu-latest
             use_cross: true
+            archive: tar.gz
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-latest
             use_cross: true
+            archive: tar.gz
           - target: aarch64-unknown-linux-musl
             os: ubuntu-latest
             use_cross: true
+            archive: tar.gz
           - target: armv7-unknown-linux-musleabihf
             os: ubuntu-latest
             use_cross: true
+            archive: tar.gz
 
           # Windows
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             use_cross: false
+            archive: zip
           - target: aarch64-pc-windows-msvc
             os: windows-latest
             use_cross: false
+            archive: zip
 
           # macOS
           - target: x86_64-apple-darwin
             os: macos-latest
             use_cross: false
+            archive: tar.gz
           - target: aarch64-apple-darwin
             os: macos-latest
             use_cross: false
+            archive: tar.gz
 
     runs-on: ${{ matrix.os }}
+    
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Install Rust
+      
+      - name: Setup Rust
         uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: stable
           targets: ${{ matrix.target }}
-
+      
       - name: Install cross for cross-compilation
         if: matrix.use_cross
         uses: taiki-e/install-action@v2
         with:
           tool: cross
-
-      - name: Download keypair
+      
+      - name: Download ephemeral keys
         uses: actions/download-artifact@v4
         with:
-          name: minisign-keypair
-
+          name: ephemeral-keys
+      
+      - name: Setup signing tools
+        run: |
+          cargo install rsign2
+          cargo install rage
+      
       - name: Build binary
         run: |
           if [ "${{ matrix.use_cross }}" = "true" ]; then
@@ -135,16 +153,14 @@ jobs:
           else
             cargo build --release --package ngdp-client --bin ngdp --target ${{ matrix.target }}
           fi
-
+      
       - name: Package binary (Unix)
         if: runner.os != 'Windows'
         run: |
           cd target/${{ matrix.target }}/release
-          tar -czf ngdp-${{ inputs.version }}-${{ matrix.target }}.tar.gz ngdp
-          mv ngdp-${{ inputs.version }}-${{ matrix.target }}.tar.gz ../../../
+          tar czf ../../../ngdp-${{ inputs.version }}-${{ matrix.target }}.tar.gz ngdp
           cd ../../../
-          echo "${{ secrets.MINISIGN_PASSWORD }}" | minisign -S -s minisign.key -m ngdp-${{ inputs.version }}-${{ matrix.target }}.tar.gz -t "ngdp-${{ inputs.version }}-${{ matrix.target }}.tar.gz"
-
+      
       - name: Package binary (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -152,101 +168,124 @@ jobs:
           cd target/${{ matrix.target }}/release
           Compress-Archive -Path ngdp.exe -DestinationPath ../../../ngdp-${{ inputs.version }}-${{ matrix.target }}.zip
           cd ../../../
-
-      - name: Sign Windows binary
-        if: runner.os == 'Windows'
+      
+      - name: Sign packages
+        env:
+          AGE_KEY_SECRET: ${{ secrets.AGE_KEY_SECRET }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+        shell: bash
         run: |
-          cargo install minisign
-          echo "${{ secrets.MINISIGN_PASSWORD }}" | minisign -S -s minisign.key -m ngdp-${{ inputs.version }}-${{ matrix.target }}.zip -t "ngdp-${{ inputs.version }}-${{ matrix.target }}.zip"
-
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            bash ./ephemeral-sign.sh ngdp-${{ inputs.version }}-${{ matrix.target }}.zip
+          else
+            ./ephemeral-sign.sh ngdp-${{ inputs.version }}-${{ matrix.target }}.${{ matrix.archive }}
+          fi
+      
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: binaries-${{ matrix.target }}
           path: |
-            ngdp-${{ inputs.version }}-${{ matrix.target }}.tar.gz*
-            ngdp-${{ inputs.version }}-${{ matrix.target }}.zip*
-          retention-days: 7
+            ngdp-*.tar.gz
+            ngdp-*.tar.gz.sig
+            ngdp-*.zip
+            ngdp-*.zip.sig
+            minisign.pub
 
   create-release:
     name: Create Release
-    needs: [build-binaries, generate-keypair]
+    needs: [generate-ephemeral-keys, build-binaries]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
+      
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
-
+      
       - name: Prepare release files
         run: |
           mkdir -p release
-          mv artifacts/binaries-*/* release/
           
-          # Create release notes
-          cat > release/RELEASE_NOTES.md << EOF
-          # ngdp-client v${{ inputs.version }}
+          # Move all binaries and signatures
+          find artifacts -name "ngdp-*" -type f -exec mv {} release/ \;
           
-          ## Installation
+          # Copy public key from any artifact (they're all the same)
+          cp artifacts/binaries-*/minisign.pub release/ 2>/dev/null || cp artifacts/ephemeral-keys/minisign.pub release/
           
-          ### Using install script (Unix-like systems)
-          \`\`\`bash
+          # Create checksums
+          cd release
+          sha256sum ngdp-*.{tar.gz,zip} > SHA256SUMS 2>/dev/null || true
+          cd ..
+          
+          # List release contents
+          ls -la release/
+      
+      - name: Create release notes
+        run: |
+          cat > release/RELEASE_NOTES.md << 'EOF'
+          ## ngdp-client v${{ inputs.version }}
+          
+          ### Verification
+          
+          This release uses ephemeral signing keys. To verify:
+          
+          1. Download the binary, signature (`.sig`), and public key (`minisign.pub`)
+          2. Verify using minisign or rsign:
+          
+          ```bash
+          # Using minisign
+          minisign -V -p minisign.pub -m ngdp-${{ inputs.version }}-<target>.tar.gz
+          
+          # Using rsign
+          rsign verify -p minisign.pub ngdp-${{ inputs.version }}-<target>.tar.gz
+          ```
+          
+          ### Ephemeral Key ID
+          
+          This release was signed with ephemeral key: `${{ needs.generate-ephemeral-keys.outputs.key-id }}`
+          
+          ### Installation
+          
+          #### Unix-like systems
+          ```bash
           curl -fsSL https://raw.githubusercontent.com/wowemulation-dev/cascette-rs/main/install.sh | bash
-          \`\`\`
+          ```
           
-          ### Manual installation
-          1. Download the appropriate binary for your platform
-          2. Extract the archive
-          3. Add the binary to your PATH
+          #### Windows PowerShell
+          ```powershell
+          irm https://raw.githubusercontent.com/wowemulation-dev/cascette-rs/main/install.ps1 | iex
+          ```
           
-          ## Verifying binaries
-          
-          All binaries are signed with minisign. To verify:
-          
-          \`\`\`bash
-          minisign -V -p minisign.pub -m <binary-archive>
-          \`\`\`
-          
-          Public key:
-          \`\`\`
-          ${{ needs.generate-keypair.outputs.public-key }}
-          \`\`\`
-          
-          ## Supported platforms
+          ### Supported Platforms
           
           - Linux: x86_64, aarch64, armv7 (GNU and musl)
           - Windows: x86_64, aarch64 (MSVC)
           - macOS: x86_64, aarch64
           
-          ## Checksums
+          ### Checksums
           
-          \`\`\`
-          $(cd release && sha256sum ngdp-*.{tar.gz,zip} 2>/dev/null || true)
-          \`\`\`
+          SHA256 checksums are available in the `SHA256SUMS` file.
           EOF
-          
-          # Copy the public key to release folder
-          cp artifacts/minisign-keypair/minisign.pub release/
-
+      
       - name: Create GitHub Release
         if: ${{ !inputs.dry-run }}
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ngdp-client-v${{ inputs.version }}
           name: ngdp-client v${{ inputs.version }}
           body_path: release/RELEASE_NOTES.md
-          draft: false
-          prerelease: false
           files: |
             release/ngdp-*.tar.gz
-            release/ngdp-*.tar.gz.minisig
+            release/ngdp-*.tar.gz.sig
             release/ngdp-*.zip
-            release/ngdp-*.zip.minisig
+            release/ngdp-*.zip.sig
             release/minisign.pub
-
+            release/SHA256SUMS
+      
       - name: Dry run summary
         if: ${{ inputs.dry-run }}
         run: |

@@ -676,14 +676,14 @@ mod tests {
     fn test_multirange_header_building() {
         let ranges = [(0, Some(31)), (64, Some(95)), (128, None)];
         let mut range_specs = Vec::new();
-        
+
         for &(start, end) in &ranges {
             match end {
                 Some(end) => range_specs.push(format!("{}-{}", start, end)),
                 None => range_specs.push(format!("{}-", start)),
             }
         }
-        
+
         let range_header = format!("bytes={}", range_specs.join(", "));
         assert_eq!(range_header, "bytes=0-31, 64-95, 128-");
     }

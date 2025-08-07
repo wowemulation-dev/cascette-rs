@@ -3,31 +3,33 @@
 //! This example demonstrates how to use BLTEStream to decompress large BLTE files
 //! without loading everything into memory at once.
 
-use blte::{BLTEStream, create_streaming_reader, CompressionMode};
+use blte::{BLTEStream, CompressionMode, create_streaming_reader};
 use std::io::{Read, Write};
 
 fn create_sample_blte_data() -> Vec<u8> {
     // Create a simple BLTE file with one uncompressed chunk
     let mut blte_data = Vec::new();
-    
+
     // BLTE magic
     blte_data.extend_from_slice(b"BLTE");
-    
+
     // Header size (single chunk, so 0)
     blte_data.extend_from_slice(&0u32.to_be_bytes());
-    
+
     // Compression mode (N = no compression)
     blte_data.push(CompressionMode::None.as_byte());
-    
+
     // Sample data
-    blte_data.extend_from_slice(b"This is a sample BLTE file content that will be streamed chunk by chunk!");
-    
+    blte_data.extend_from_slice(
+        b"This is a sample BLTE file content that will be streamed chunk by chunk!",
+    );
+
     blte_data
 }
 
 fn create_multi_chunk_blte_data() -> Vec<u8> {
     use flate2::{Compression, write::ZlibEncoder};
-    
+
     // Create two compressed chunks
     let chunk1_data = b"First chunk: ";
     let chunk2_data = b"Second chunk with more data to make compression worthwhile!";
@@ -89,10 +91,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n1. Single Chunk Streaming:");
     let simple_data = create_sample_blte_data();
     println!("   Original BLTE data size: {} bytes", simple_data.len());
-    
+
     let mut stream = BLTEStream::new(simple_data, None)?;
     println!("   Stream created with {} chunks", stream.chunk_count());
-    
+
     let mut decompressed = String::new();
     stream.read_to_string(&mut decompressed)?;
     println!("   Decompressed content: \"{}\"", decompressed);
@@ -102,10 +104,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n2. Multi-Chunk Streaming:");
     let multi_data = create_multi_chunk_blte_data();
     println!("   Original BLTE data size: {} bytes", multi_data.len());
-    
+
     let mut multi_stream = BLTEStream::new(multi_data, None)?;
-    println!("   Stream created with {} chunks", multi_stream.chunk_count());
-    
+    println!(
+        "   Stream created with {} chunks",
+        multi_stream.chunk_count()
+    );
+
     let mut multi_decompressed = String::new();
     multi_stream.read_to_string(&mut multi_decompressed)?;
     println!("   Decompressed content: \"{}\"", multi_decompressed);
@@ -115,24 +120,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n3. Small Buffer Streaming (simulating large file processing):");
     let buffer_data = create_multi_chunk_blte_data();
     let mut buffer_stream = BLTEStream::new(buffer_data, None)?;
-    
+
     let mut buffer = [0u8; 8]; // Very small buffer to demonstrate streaming
     let mut total_bytes = 0;
     let mut chunks_read = 0;
-    
+
     println!("   Reading in 8-byte chunks:");
     loop {
         let bytes_read = buffer_stream.read(&mut buffer)?;
         if bytes_read == 0 {
             break; // End of stream
         }
-        
+
         chunks_read += 1;
         total_bytes += bytes_read;
         let chunk_str = String::from_utf8_lossy(&buffer[..bytes_read]);
-        println!("     Chunk {}: {} bytes -> \"{}\"", chunks_read, bytes_read, chunk_str);
+        println!(
+            "     Chunk {}: {} bytes -> \"{}\"",
+            chunks_read, bytes_read, chunk_str
+        );
     }
-    
+
     println!("   Total bytes read: {}", total_bytes);
     println!("   Total read operations: {}", chunks_read);
 
@@ -140,7 +148,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n4. Using convenience function:");
     let convenience_data = create_sample_blte_data();
     let mut convenience_stream = create_streaming_reader(convenience_data, None)?;
-    
+
     let mut convenience_result = String::new();
     convenience_stream.read_to_string(&mut convenience_result)?;
     println!("   Result: \"{}\"", convenience_result);

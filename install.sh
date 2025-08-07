@@ -101,22 +101,30 @@ get_latest_version() {
     echo "$version"
 }
 
-# Verify binary with minisign if available
+# Verify binary with ephemeral minisign key
 verify_binary() {
     local file="$1"
-    local sig_file="${file}.minisig"
+    local sig_file="${file}.sig"  # Changed from .minisig to .sig
     local pubkey_file="$2"
 
-    if command -v minisign >/dev/null 2>&1; then
-        info "Verifying binary signature..."
+    # Check if signature verification tools are available
+    if command -v rsign >/dev/null 2>&1; then
+        info "Verifying signature with rsign..."
+        if rsign verify -p "$pubkey_file" "$file"; then
+            info "Signature verification successful"
+        else
+            error "Signature verification failed"
+        fi
+    elif command -v minisign >/dev/null 2>&1; then
+        info "Verifying signature with minisign..."
         if minisign -V -p "$pubkey_file" -m "$file"; then
             info "Signature verification successful"
         else
             error "Signature verification failed"
         fi
     else
-        warn "minisign not found, skipping signature verification"
-        warn "Install minisign to verify binary signatures"
+        warn "Neither rsign nor minisign found, skipping signature verification"
+        warn "Install minisign or rsign to verify binary signatures"
     fi
 }
 
@@ -159,12 +167,12 @@ install() {
     info "Downloading from: ${download_url}"
     download_file "$download_url" "${temp_dir}/${filename}"
 
-    # Download signature and public key
-    download_file "${download_url}.minisig" "${temp_dir}/${filename}.minisig" || warn "Signature file not found"
+    # Download signature and public key (ephemeral signing uses .sig extension)
+    download_file "${download_url}.sig" "${temp_dir}/${filename}.sig" || warn "Signature file not found"
     download_file "${BASE_URL}/download/ngdp-client-v${version}/minisign.pub" "${temp_dir}/minisign.pub" || warn "Public key not found"
 
     # Verify if signature and public key were downloaded
-    if [[ -f "${temp_dir}/${filename}.minisig" ]] && [[ -f "${temp_dir}/minisign.pub" ]]; then
+    if [[ -f "${temp_dir}/${filename}.sig" ]] && [[ -f "${temp_dir}/minisign.pub" ]]; then
         verify_binary "${temp_dir}/${filename}" "${temp_dir}/minisign.pub"
     fi
 

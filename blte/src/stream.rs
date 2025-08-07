@@ -39,7 +39,7 @@ impl BLTEStream {
     /// Returns an error if the BLTE file cannot be parsed.
     pub fn new(data: Vec<u8>, key_service: Option<KeyService>) -> Result<Self> {
         let blte_file = BLTEFile::parse(data)?;
-        
+
         debug!(
             "Created BLTE stream with {} chunks",
             blte_file.chunk_count()
@@ -76,7 +76,7 @@ impl BLTEStream {
         }
 
         let chunk = self.blte_file.get_chunk_data(self.current_chunk)?;
-        
+
         // Verify checksum if present (skip for zero checksum)
         if !chunk.verify_checksum() {
             return Err(Error::ChecksumMismatch {
@@ -86,8 +86,9 @@ impl BLTEStream {
         }
 
         // Decompress the chunk data
-        let decompressed = decompress_chunk_streaming(&chunk.data, self.current_chunk, self.key_service.as_ref())?;
-        
+        let decompressed =
+            decompress_chunk_streaming(&chunk.data, self.current_chunk, self.key_service.as_ref())?;
+
         self.chunk_buffer = decompressed;
         self.chunk_position = 0;
         self.current_chunk += 1;
@@ -112,12 +113,12 @@ impl Read for BLTEStream {
                 if !self.has_more_chunks() {
                     break; // No more data
                 }
-                
+
                 if let Err(e) = self.prepare_next_chunk() {
                     warn!("Failed to prepare next chunk: {}", e);
                     break;
                 }
-                
+
                 if self.chunk_buffer.is_empty() {
                     continue; // This chunk was empty, try the next one
                 }
@@ -126,14 +127,15 @@ impl Read for BLTEStream {
             // Copy data from current chunk buffer
             let available = self.chunk_buffer.len() - self.chunk_position;
             let to_copy = std::cmp::min(available, buf.len() - bytes_read);
-            
+
             if to_copy == 0 {
                 break;
             }
 
-            buf[bytes_read..bytes_read + to_copy]
-                .copy_from_slice(&self.chunk_buffer[self.chunk_position..self.chunk_position + to_copy]);
-            
+            buf[bytes_read..bytes_read + to_copy].copy_from_slice(
+                &self.chunk_buffer[self.chunk_position..self.chunk_position + to_copy],
+            );
+
             self.chunk_position += to_copy;
             bytes_read += to_copy;
         }
@@ -145,7 +147,10 @@ impl Read for BLTEStream {
 /// Create a streaming reader from BLTE data
 ///
 /// This is a convenience function that creates a BLTEStream for immediate use.
-pub fn create_streaming_reader(data: Vec<u8>, key_service: Option<KeyService>) -> Result<BLTEStream> {
+pub fn create_streaming_reader(
+    data: Vec<u8>,
+    key_service: Option<KeyService>,
+) -> Result<BLTEStream> {
     BLTEStream::new(data, key_service)
 }
 
@@ -185,7 +190,10 @@ fn decompress_chunk_streaming(
 
 /// Mode 'N' - No compression (streaming)
 fn decompress_none_streaming(data: &[u8]) -> Result<Vec<u8>> {
-    trace!("No compression (streaming) - returning {} bytes as-is", data.len());
+    trace!(
+        "No compression (streaming) - returning {} bytes as-is",
+        data.len()
+    );
     Ok(data.to_vec())
 }
 
@@ -200,7 +208,11 @@ fn decompress_zlib_streaming(data: &[u8]) -> Result<Vec<u8>> {
         .read_to_end(&mut result)
         .map_err(|e| Error::DecompressionFailed(format!("ZLib decompression failed: {e}")))?;
 
-    debug!("ZLib (streaming): {} bytes -> {} bytes", data.len(), result.len());
+    debug!(
+        "ZLib (streaming): {} bytes -> {} bytes",
+        data.len(),
+        result.len()
+    );
     Ok(result)
 }
 
@@ -231,13 +243,20 @@ fn decompress_lz4_streaming(data: &[u8]) -> Result<Vec<u8>> {
     let result = lz4_flex::decompress(lz4_data, decompressed_size)
         .map_err(|e| Error::DecompressionFailed(format!("LZ4 decompression failed: {e}")))?;
 
-    debug!("LZ4 (streaming): {} bytes -> {} bytes", data.len(), result.len());
+    debug!(
+        "LZ4 (streaming): {} bytes -> {} bytes",
+        data.len(),
+        result.len()
+    );
     Ok(result)
 }
 
 /// Mode 'F' - Frame/Recursive BLTE (streaming)
 fn decompress_frame_streaming(data: &[u8], key_service: Option<&KeyService>) -> Result<Vec<u8>> {
-    trace!("Frame/recursive decompression (streaming) of {} bytes", data.len());
+    trace!(
+        "Frame/recursive decompression (streaming) of {} bytes",
+        data.len()
+    );
 
     // For now, fall back to the regular decompression for nested BLTE frames
     // This avoids the KeyService cloning issue but still works correctly
@@ -427,11 +446,11 @@ mod tests {
         blte_data.extend_from_slice(b"Hello, BLTE!");
 
         let mut stream = BLTEStream::new(blte_data, None).unwrap();
-        
+
         // Read in small chunks
         let mut result = Vec::new();
         let mut buffer = [0u8; 4];
-        
+
         loop {
             let bytes_read = stream.read(&mut buffer).unwrap();
             if bytes_read == 0 {
