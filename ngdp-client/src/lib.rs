@@ -184,6 +184,24 @@ pub enum DownloadCommands {
         /// Session ID or path
         session: String,
     },
+
+    /// Test resumable download with a known file (for testing)
+    TestResume {
+        /// File hash to download (32 hex chars)
+        hash: String,
+
+        /// CDN host
+        #[arg(short = 'H', long, default_value = "blzddist1-a.akamaihd.net")]
+        host: String,
+
+        /// Output file path
+        #[arg(long, default_value = "test_download.bin")]
+        output: PathBuf,
+
+        /// Enable resumable mode
+        #[arg(short, long)]
+        resumable: bool,
+    },
 }
 
 #[derive(Subcommand)]

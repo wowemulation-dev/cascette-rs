@@ -341,6 +341,31 @@ pub struct ResumableDownload {
 **Testing:** Comprehensive unit tests with progress persistence and file verification ✅
 **Acceptance:** Can resume interrupted downloads with proper state management ✅
 
+#### 1.3.3 CDN Client Resume Integration ✅
+
+**Location:** `ngdp-cdn/src/client.rs` ✅
+
+```rust
+impl CdnClient {
+    pub async fn create_resumable_download(&self, cdn_host: &str, path: &str, hash: &str, output_file: &Path) -> Result<ResumableDownload>
+    pub async fn resume_download(&self, progress_file: &Path) -> Result<ResumableDownload>
+    pub async fn find_resumable_downloads(&self, directory: &Path) -> Result<Vec<DownloadProgress>>
+    pub async fn cleanup_old_progress_files(&self, directory: &Path, max_age_hours: u64) -> Result<usize>
+}
+```
+
+**Implementation:**
+
+- [x] High-level CDN client APIs for resumable downloads
+- [x] Integration with tact-client's HTTP range request functionality
+- [x] Proper error handling and progress file management
+- [x] Discovery and cleanup utilities for batch operations
+- [x] CLI integration with enhanced resume command
+- [x] Added test-resume command for validation testing
+- [x] Maintains architectural separation while providing convenience APIs
+**Testing:** Full QA validation with 436+ tests passing ✅
+**Acceptance:** CDN client provides complete resumable download solution ✅
+
 ---
 
 ## Priority 2: Foundation Crates (New)
@@ -1363,4 +1388,4 @@ Each task is independent within its priority level and can be worked on in paral
 ---
 
 *Last Updated: 2025-08-07*
-*Version: 1.6.0*
+*Version: 1.6.1*

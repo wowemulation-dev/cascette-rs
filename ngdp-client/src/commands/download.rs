@@ -1,8 +1,11 @@
 use crate::{DownloadCommands, OutputFormat};
 use ngdp_cache::cached_cdn_client::CachedCdnClient;
 use ngdp_cache::cached_ribbit_client::CachedRibbitClient;
+use ngdp_cdn::CdnClientWithFallback;
 use ribbit_client::Region;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use tact_client::resumable::{DownloadProgress, ResumableDownload, find_resumable_downloads};
+use tact_client::{HttpClient, ProtocolVersion as TactProtocolVersion, Region as TactRegion};
 use tracing::{error, info, warn};
 
 pub async fn handle(
@@ -54,8 +57,34 @@ pub async fn handle(
             }
         }
         DownloadCommands::Resume { session } => {
-            warn!("Resume download not yet implemented");
-            info!("Session: {}", session);
+            info!("Resuming download: session={}", session);
+
+            match resume_download(&session).await {
+                Ok(_) => info!("✅ Resume download completed successfully!"),
+                Err(e) => {
+                    error!("❌ Resume download failed: {}", e);
+                    return Err(e);
+                }
+            }
+        }
+        DownloadCommands::TestResume {
+            hash,
+            host,
+            output,
+            resumable,
+        } => {
+            info!(
+                "Testing resumable download: hash={}, host={}, output={:?}, resumable={}",
+                hash, host, output, resumable
+            );
+
+            match test_resumable_download(&hash, &host, &output, resumable).await {
+                Ok(_) => info!("✅ Test download completed successfully!"),
+                Err(e) => {
+                    error!("❌ Test download failed: {}", e);
+                    return Err(e);
+                }
+            }
         }
     }
     Ok(())
@@ -216,4 +245,127 @@ async fn download_files(
     warn!("🚧 Full file download implementation pending API integration refinement");
 
     Ok(())
+}
+
+/// Resume a download from a progress file or directory
+async fn resume_download(session: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let session_path = PathBuf::from(session);
+
+    if session_path.is_dir() {
+        // Find all resumable downloads in the directory
+        info!(
+            "🔍 Searching for resumable downloads in: {:?}",
+            session_path
+        );
+        let downloads = find_resumable_downloads(&session_path).await?;
+
+        if downloads.is_empty() {
+            warn!("No resumable downloads found in directory");
+            return Ok(());
+        }
+
+        info!("Found {} resumable download(s):", downloads.len());
+        for (i, progress) in downloads.iter().enumerate() {
+            info!(
+                "  {}: {} - {}",
+                i + 1,
+                progress.file_hash,
+                progress.progress_string()
+            );
+        }
+
+        // Resume the first one (in a real CLI, you'd prompt for choice)
+        let progress = &downloads[0];
+        info!("Resuming first download: {}", progress.file_hash);
+
+        let client = create_tact_client().await?;
+        let mut resumable_download = ResumableDownload::new(client, progress.clone());
+        resumable_download.start_or_resume().await?;
+        resumable_download.cleanup_completed().await?;
+    } else if session_path.extension().and_then(|s| s.to_str()) == Some("download") {
+        // Resume specific progress file
+        info!("📂 Loading progress from: {:?}", session_path);
+        let progress = DownloadProgress::load_from_file(&session_path).await?;
+
+        info!(
+            "Resuming: {} - {}",
+            progress.file_hash,
+            progress.progress_string()
+        );
+
+        let client = create_tact_client().await?;
+        let mut resumable_download = ResumableDownload::new(client, progress);
+        resumable_download.start_or_resume().await?;
+        resumable_download.cleanup_completed().await?;
+    } else {
+        return Err(format!(
+            "Invalid session path: {session}. Must be a directory or .download file"
+        )
+        .into());
+    }
+
+    Ok(())
+}
+
+/// Test resumable download functionality
+async fn test_resumable_download(
+    hash: &str,
+    _host: &str,
+    output: &Path,
+    resumable: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    // Validate hash format
+    if hash.len() != 32 || !hash.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err("Invalid hash format. Expected 32 hex characters.".into());
+    }
+
+    info!("🚀 Starting test download");
+    info!("📋 Hash: {}", hash);
+    info!("📁 Output: {:?}", output);
+    info!("🔄 Resumable: {}", resumable);
+
+    if resumable {
+        // Use resumable download
+        info!("📥 Starting resumable download...");
+
+        let progress = DownloadProgress::new(
+            hash.to_string(),
+            "blzddist1-a.akamaihd.net".to_string(),
+            "/tpr/wow/data".to_string(),
+            output.to_path_buf(),
+        );
+
+        let client = create_tact_client().await?;
+        let mut resumable_download = ResumableDownload::new(client, progress);
+
+        resumable_download.start_or_resume().await?;
+        resumable_download.cleanup_completed().await?;
+    } else {
+        // Use CDN client with fallback for regular download
+        info!("📥 Starting regular CDN download with fallback...");
+
+        let cdn_client = CdnClientWithFallback::new()?;
+        let response = cdn_client.download_data("/tpr/wow", hash).await?;
+        let bytes = response.bytes().await?;
+
+        tokio::fs::write(output, bytes).await?;
+        info!("💾 Saved to: {:?}", output);
+    }
+
+    // Show file info
+    if let Ok(metadata) = tokio::fs::metadata(output).await {
+        info!("📊 Downloaded {} bytes", metadata.len());
+    }
+
+    Ok(())
+}
+
+/// Create a TACT HTTP client configured for downloads
+async fn create_tact_client() -> Result<HttpClient, Box<dyn std::error::Error>> {
+    let client = HttpClient::new(TactRegion::US, TactProtocolVersion::V2)?
+        .with_max_retries(3)
+        .with_initial_backoff_ms(1000)
+        .with_user_agent("ngdp-client/0.3.1");
+
+    Ok(client)
 }

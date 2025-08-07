@@ -399,11 +399,13 @@ pub async fn cleanup_old_progress_files(dir: &Path, max_age_hours: u64) -> Resul
                 Ok(progress) => {
                     let age = current_time.saturating_sub(progress.last_updated);
 
-                    if progress.is_complete && age > max_age_secs
-                        && tokio::fs::remove_file(&path).await.is_ok() {
-                            cleaned_count += 1;
-                            debug!("Cleaned up old progress file: {:?}", path);
-                        }
+                    if progress.is_complete
+                        && age > max_age_secs
+                        && tokio::fs::remove_file(&path).await.is_ok()
+                    {
+                        cleaned_count += 1;
+                        debug!("Cleaned up old progress file: {:?}", path);
+                    }
                 }
                 Err(_) => {
                     // If we can't parse the progress file, it might be corrupted
@@ -416,10 +418,11 @@ pub async fn cleanup_old_progress_files(dir: &Path, max_age_hours: u64) -> Resul
                                 .as_secs();
 
                             if file_age > max_age_secs
-                                && tokio::fs::remove_file(&path).await.is_ok() {
-                                    cleaned_count += 1;
-                                    debug!("Cleaned up corrupted progress file: {:?}", path);
-                                }
+                                && tokio::fs::remove_file(&path).await.is_ok()
+                            {
+                                cleaned_count += 1;
+                                debug!("Cleaned up corrupted progress file: {:?}", path);
+                            }
                         }
                     }
                 }

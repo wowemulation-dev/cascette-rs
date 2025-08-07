@@ -561,6 +561,215 @@ impl CdnClient {
 
         Ok(total_bytes)
     }
+
+    /// Create a resumable download for a data file
+    ///
+    /// This creates a resumable download that can be paused and resumed from interruption.
+    /// Progress is saved to disk and the download can survive application crashes.
+    ///
+    /// # Arguments
+    ///
+    /// * `cdn_host` - CDN server hostname
+    /// * `path` - Base path on the CDN (e.g., "tpr/wow")
+    /// * `hash` - Content hash to download
+    /// * `output_file` - Local file path where content should be saved
+    ///
+    /// # Returns
+    ///
+    /// Returns a `ResumableDownload` instance that can be used to start, pause, and resume the download.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use ngdp_cdn::CdnClient;
+    /// use std::path::PathBuf;
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let client = CdnClient::new()?;
+    /// let mut resumable = client.create_resumable_download(
+    ///     "blzddist1-a.akamaihd.net",
+    ///     "tpr/wow",
+    ///     "2e9c1e3b5f5a0c9d9e8f1234567890ab",
+    ///     &PathBuf::from("game_file.bin")
+    /// ).await?;
+    ///
+    /// // Start or resume the download
+    /// resumable.start_or_resume().await?;
+    ///
+    /// // Clean up progress file when complete
+    /// resumable.cleanup_completed().await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn create_resumable_download(
+        &self,
+        cdn_host: &str,
+        path: &str,
+        hash: &str,
+        output_file: &std::path::Path,
+    ) -> Result<tact_client::resumable::ResumableDownload> {
+        use tact_client::resumable::{DownloadProgress, ResumableDownload};
+        use tact_client::{HttpClient, ProtocolVersion, Region};
+
+        // Create a TACT HTTP client configured with CDN client settings
+        let mut tact_client = HttpClient::new(Region::US, ProtocolVersion::V2)
+            .map_err(|e| Error::invalid_response(format!("Failed to create TACT client: {e}")))?
+            .with_max_retries(self.max_retries)
+            .with_initial_backoff_ms(self.initial_backoff_ms);
+
+        if let Some(user_agent) = &self.user_agent {
+            tact_client = tact_client.with_user_agent(user_agent);
+        }
+
+        let progress = DownloadProgress::new(
+            hash.to_string(),
+            cdn_host.to_string(),
+            path.to_string(),
+            output_file.to_path_buf(),
+        );
+
+        Ok(ResumableDownload::new(tact_client, progress))
+    }
+
+    /// Resume an existing download from a progress file
+    ///
+    /// This method loads an existing progress file and creates a `ResumableDownload`
+    /// instance that can continue from where the previous download left off.
+    ///
+    /// # Arguments
+    ///
+    /// * `progress_file` - Path to the `.download` progress file
+    ///
+    /// # Returns
+    ///
+    /// Returns a `ResumableDownload` instance ready to resume the download.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use ngdp_cdn::CdnClient;
+    /// use std::path::PathBuf;
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let client = CdnClient::new()?;
+    ///
+    /// // Resume from existing progress file
+    /// let mut resumable = client.resume_download(&PathBuf::from("file.bin.download")).await?;
+    /// resumable.start_or_resume().await?;
+    /// resumable.cleanup_completed().await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn resume_download(
+        &self,
+        progress_file: &std::path::Path,
+    ) -> Result<tact_client::resumable::ResumableDownload> {
+        use tact_client::resumable::{DownloadProgress, ResumableDownload};
+        use tact_client::{HttpClient, ProtocolVersion, Region};
+
+        let progress = DownloadProgress::load_from_file(progress_file)
+            .await
+            .map_err(|e| Error::invalid_response(format!("Failed to load progress: {e}")))?;
+
+        // Create a TACT HTTP client configured with CDN client settings
+        let mut tact_client = HttpClient::new(Region::US, ProtocolVersion::V2)
+            .map_err(|e| Error::invalid_response(format!("Failed to create TACT client: {e}")))?
+            .with_max_retries(self.max_retries)
+            .with_initial_backoff_ms(self.initial_backoff_ms);
+
+        if let Some(user_agent) = &self.user_agent {
+            tact_client = tact_client.with_user_agent(user_agent);
+        }
+
+        Ok(ResumableDownload::new(tact_client, progress))
+    }
+
+    /// Find all resumable downloads in a directory
+    ///
+    /// This is a convenience method that scans a directory for `.download` progress files
+    /// and returns information about incomplete downloads.
+    ///
+    /// # Arguments
+    ///
+    /// * `directory` - Directory to scan for progress files
+    ///
+    /// # Returns
+    ///
+    /// Returns a vector of `DownloadProgress` instances for incomplete downloads.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use ngdp_cdn::CdnClient;
+    /// use std::path::PathBuf;
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let client = CdnClient::new()?;
+    ///
+    /// // Find all resumable downloads in Downloads folder
+    /// let downloads = client.find_resumable_downloads(&PathBuf::from("Downloads")).await?;
+    ///
+    /// for download in downloads {
+    ///     println!("Found: {} - {}", download.file_hash, download.progress_string());
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn find_resumable_downloads(
+        &self,
+        directory: &std::path::Path,
+    ) -> Result<Vec<tact_client::resumable::DownloadProgress>> {
+        tact_client::resumable::find_resumable_downloads(directory)
+            .await
+            .map_err(|e| {
+                Error::Io(std::io::Error::other(
+                    format!("Failed to find resumable downloads: {e}"),
+                ))
+            })
+    }
+
+    /// Clean up old completed progress files in a directory
+    ///
+    /// This method scans for `.download` progress files that are marked as completed
+    /// and are older than the specified age, then removes them to free up disk space.
+    ///
+    /// # Arguments
+    ///
+    /// * `directory` - Directory to scan and clean up
+    /// * `max_age_hours` - Maximum age in hours for completed progress files
+    ///
+    /// # Returns
+    ///
+    /// Returns the number of files that were cleaned up.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use ngdp_cdn::CdnClient;
+    /// use std::path::PathBuf;
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let client = CdnClient::new()?;
+    ///
+    /// // Clean up progress files older than 24 hours
+    /// let cleaned = client.cleanup_old_progress_files(&PathBuf::from("Downloads"), 24).await?;
+    /// println!("Cleaned up {} old progress files", cleaned);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn cleanup_old_progress_files(
+        &self,
+        directory: &std::path::Path,
+        max_age_hours: u64,
+    ) -> Result<usize> {
+        tact_client::resumable::cleanup_old_progress_files(directory, max_age_hours)
+            .await
+            .map_err(|e| {
+                Error::Io(std::io::Error::other(
+                    format!("Failed to cleanup progress files: {e}"),
+                ))
+            })
+    }
 }
 
 /// Builder for configuring CDN client
