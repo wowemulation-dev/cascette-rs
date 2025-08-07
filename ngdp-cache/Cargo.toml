@@ -7,7 +7,7 @@ authors.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "Generic caching functionality for NGDP components"
+description = "Transparent caching layer with TTL support for all NGDP operations"
 keywords = ["ngdp", "cache", "blizzard", "tact", "cdn"]
 categories = ["caching", "filesystem", "games"]
 

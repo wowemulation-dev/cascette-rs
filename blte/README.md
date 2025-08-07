@@ -2,6 +2,16 @@
 
 BLTE (Block Table Encoded) decompression library for Blizzard's NGDP/CASC system.
 
+## Installation
+
+Add this to your `Cargo.toml`:
+
+```toml
+[dependencies]
+blte = "0.3"
+ngdp-crypto = "0.3"  # Required for encrypted content
+```
+
 ## Overview
 
 This crate provides complete support for decompressing BLTE-encoded files used in Blizzard's content distribution system. BLTE is a container format that supports multiple compression algorithms and encryption.

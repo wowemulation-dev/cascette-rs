@@ -1,6 +1,16 @@
 # TACT Client
 
-HTTP client for Blizzard's TACT (Transfer And Content Transfer) protocol.
+HTTP client for Blizzard's TACT (Trusted Application Content Transfer) protocol.
+
+## Installation
+
+Add this to your `Cargo.toml`:
+
+```toml
+[dependencies]
+tact-client = "0.3"
+tokio = { version = "1", features = ["full"] }
+```
 
 ## Protocol Versions
 

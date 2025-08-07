@@ -24,7 +24,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-ribbit-client = "0.1"
+ribbit-client = "0.3"
 tokio = { version = "1", features = ["full"] }
 ```
 

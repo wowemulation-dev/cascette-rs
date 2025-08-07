@@ -7,7 +7,7 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "Ribbit protocol client for Cascette"
+description = "Ribbit protocol client with signature verification for Blizzard's NGDP system"
 keywords = ["ngdp", "ribbit", "blizzard", "wow", "tcp"]
 categories = [
   "network-programming",

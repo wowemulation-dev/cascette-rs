@@ -19,7 +19,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-ngdp-bpsv = "0.1"
+ngdp-bpsv = "0.3"
 ```
 
 ## Quick Start

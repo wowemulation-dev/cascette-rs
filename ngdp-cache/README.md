@@ -20,7 +20,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-ngdp-cache = "0.1.0"
+ngdp-cache = "0.3"
 ```
 
 ### Example

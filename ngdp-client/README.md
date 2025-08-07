@@ -17,8 +17,26 @@ Distribution Pipeline) services.
 
 ## Installation
 
+### Install from crates.io
 ```bash
-cargo install --path .
+cargo install ngdp-client
+```
+
+### Install with Script (Unix/Linux/macOS)
+```bash
+curl -fsSL https://raw.githubusercontent.com/wowemulation-dev/cascette-rs/main/install.sh | bash
+```
+
+### Install with Script (Windows PowerShell)
+```powershell
+irm https://raw.githubusercontent.com/wowemulation-dev/cascette-rs/main/install.ps1 | iex
+```
+
+### Build from source
+```bash
+git clone https://github.com/wowemulation-dev/cascette-rs
+cd cascette-rs
+cargo install --path ngdp-client
 ```
 
 ## Usage
