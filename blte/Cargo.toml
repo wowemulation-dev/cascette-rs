@@ -1,5 +1,6 @@
 [package]
 name = "blte"
+description = "BLTE (Block Table Encoded) compression/decompression for World of Warcraft CASC files"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
