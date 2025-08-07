@@ -4,9 +4,18 @@ name: Cross-Platform Build
 on:
   push:
     branches: [main]
+    tags:
+      - 'v[0-9]+.*'
+      - 'ngdp-client-v[0-9]+.*' 
+      - 'libs-v[0-9]+.*'
 
   pull_request:
     branches: [main]
+    paths:
+      - 'src/**'
+      - '**/Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/cross-build.yml'
 
   workflow_dispatch:
 
