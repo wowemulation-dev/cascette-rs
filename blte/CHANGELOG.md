@@ -2,6 +2,14 @@
 
 All notable changes to the `blte` crate will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- Streaming decompression support with `BLTEStream` struct
+- `create_streaming_reader()` convenience function
+- Read trait implementation for memory-efficient processing
+- Example demonstrating streaming decompression usage
+
 ## [0.1.0] - 2025-08-06
 
 ### Added

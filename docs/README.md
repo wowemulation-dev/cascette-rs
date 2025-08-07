@@ -40,6 +40,8 @@ servers. This document covers:
 - CDN content URL structure and hash-based paths
 - File formats (manifests, configurations, archives)
 - BLTE encoding and encryption details
+- **NEW**: HTTP range request support for partial downloads
+- **NEW**: Streaming decompression for memory-efficient processing
 - Integration with CASC for local storage
 
 ### Additional Resources
@@ -50,8 +52,18 @@ Detailed analysis of performance improvements implemented across all crates:
 
 - Zero-copy parsing optimizations
 - Parallel download strategies
-- Streaming I/O operations
+- Streaming I/O operations with BLTE decompression
+- HTTP range requests for bandwidth optimization
 - Benchmark results and metrics
+
+#### [API Reference Guide](api-reference.md)
+
+Comprehensive API documentation for key features:
+
+- Streaming BLTE decompression with BLTEStream
+- HTTP range request methods for partial downloads
+- File download command implementation
+- Cache management and statistics
 
 #### Temporary Research Notes (temp/)
 
@@ -72,13 +84,13 @@ decisions.
 
 - [ngdp-bpsv](../ngdp-bpsv/README.md) - BPSV parser/writer implementation
 - [ribbit-client](../ribbit-client/README.md) - Ribbit protocol client
-- [tact-client](../tact-client/README.md) - TACT HTTP/HTTPS client
-- [tact-parser](../tact-parser/README.md) - TACT file format parsers
-- [ngdp-cdn](../ngdp-cdn/README.md) - CDN content delivery
-- [ngdp-cache](../ngdp-cache/README.md) - Caching layer
-- [blte](../blte/README.md) - BLTE decompression library
-- [ngdp-crypto](../ngdp-crypto/README.md) - Encryption/decryption support
-- [ngdp-client](../ngdp-client/README.md) - CLI tool
+- [tact-client](../tact-client/README.md) - TACT HTTP/HTTPS client with range requests
+- [tact-parser](../tact-parser/README.md) - TACT file format parsers (all formats complete)
+- [ngdp-cdn](../ngdp-cdn/README.md) - CDN content delivery with fallback support
+- [ngdp-cache](../ngdp-cache/README.md) - Caching layer with TTL management
+- [blte](../blte/README.md) - BLTE decompression library with streaming support
+- [ngdp-crypto](../ngdp-crypto/README.md) - Encryption/decryption with 19,000+ keys
+- [ngdp-client](../ngdp-client/README.md) - CLI tool with download and inspect commands
 
 ## 📖 Reading Order
 

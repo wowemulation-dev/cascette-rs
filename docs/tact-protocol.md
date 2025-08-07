@@ -39,6 +39,8 @@ Addressable Storage Container) for local storage.
 - Region and locale-specific content delivery
 - Multi-platform support (Windows, Mac, etc.)
 - Supports multiple Blizzard games
+- **NEW**: HTTP range request support for partial downloads
+- **NEW**: Streaming decompression for memory-efficient processing
 
 ### File Management
 
@@ -144,6 +146,25 @@ CDN content is organized using a specific URL pattern:
 ```text
 http://{cdnsHost}/{cdnsPath}/{pathType}/{firstTwoHex}/{secondTwoHex}/{fullHash}
 ```
+
+### HTTP Range Requests
+
+The CDN servers support HTTP range requests for partial content downloads:
+
+```text
+GET http://{cdnsHost}/{cdnsPath}/data/{firstTwoHex}/{secondTwoHex}/{fullHash}
+Range: bytes=0-1023
+```
+
+Response codes:
+- **206 Partial Content**: Server supports range requests and returns requested bytes
+- **200 OK**: Server doesn't support range requests, returns full file
+
+Use cases:
+- Download file headers for format detection
+- Implement pause/resume functionality  
+- Stream large files in chunks
+- Reduce bandwidth for partial updates
 
 Where:
 
@@ -286,8 +307,33 @@ BLTE (Block Table Encoding) is TACT's compression format:
 - **Encoding Types**:
   - `N` (0x4E): None - Uncompressed
   - `Z` (0x5A): ZLib - Standard compression
+  - `4` (0x34): LZ4 - Fast compression
   - `F` (0x46): Frame - Frame-based encoding
   - `E` (0x45): Encrypted - Encrypted blocks
+
+### Streaming Decompression
+
+BLTE files can now be decompressed using streaming I/O:
+
+```rust
+use blte::create_streaming_reader;
+
+// Create streaming reader
+let mut stream = create_streaming_reader(blte_data, key_service)?;
+
+// Process in chunks without loading entire file
+let mut buffer = vec![0u8; 8192];
+while let Ok(n) = stream.read(&mut buffer) {
+    if n == 0 { break; }
+    process_chunk(&buffer[..n]);
+}
+```
+
+Benefits:
+- Constant memory usage regardless of file size
+- Process data on-the-fly
+- Suitable for large game assets
+- Supports all compression modes including encryption
 
 ### ESpec Format
 
@@ -376,6 +422,26 @@ http://blzddist1-a.akamaihd.net/tpr/wow/data/00/52/0052ea9a56fd7b3b6fe7d1d906e6c
    - `/blobs` - Returns "Bad Request: Request contains invalid file type"
    - `/blob/game` - Returns "Not Found"
    - `/blob/install` - Returns "Not Found"
+
+### Download Optimization
+
+1. **Range Request Support**:
+   - Most CDN hosts support HTTP range requests
+   - Use 206 status code to verify support
+   - Fall back to full download if not supported
+   - Implement retry logic with exponential backoff
+
+2. **Streaming Decompression**:
+   - All manifest files are BLTE-encoded on CDN
+   - Use streaming API for files > 10MB
+   - Process chunks as they arrive
+   - Reduces memory footprint significantly
+
+3. **Caching Strategy**:
+   - Cache build configurations indefinitely
+   - Cache encoding/root files with 1-hour TTL
+   - Don't cache large content files
+   - Use ETags for cache validation
 
 ### Response Variations
 

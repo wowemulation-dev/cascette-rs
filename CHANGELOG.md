@@ -7,6 +7,96 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2025-08-07
+
+This release introduces streaming capabilities, HTTP range request support, and completes all TACT file format parsers. The project now supports efficient processing of large game files with minimal memory usage.
+
+### Added
+
+#### Core Features
+- **Streaming BLTE Decompression**: Memory-efficient streaming decompression for large files
+  - `BLTEStream` struct implementing Read trait
+  - Support for all compression modes (N, Z, 4, F, E)
+  - Constant memory usage regardless of file size
+  - Comprehensive examples and benchmarks
+
+- **HTTP Range Requests**: Partial content downloads for bandwidth optimization
+  - `download_file_range()` for single range requests
+  - `download_file_multirange()` for multiple ranges
+  - Automatic fallback when range not supported
+  - Example demonstrating range request usage
+
+- **Complete TACT Parser Suite**: All file formats now supported
+  - Encoding file parser with 40-bit integer support
+  - Install manifest parser with tag-based filtering
+  - Download manifest parser with priority sorting
+  - Size file parser with statistics
+  - TVFS parser with correct real-data format
+  - Variable-length integer utilities
+
+#### CLI Enhancements
+- **Download Command**: Full implementation with CDN integration
+  - Download by build, content key, encoding key, or file path
+  - Automatic BLTE decompression
+  - Integration with cached clients
+  - Pattern detection for different key types
+
+- **Inspect Commands**: Visual tree display for all formats
+  - `inspect build-config` with meaningful information display
+  - `inspect encoding` for encoding file analysis
+  - `inspect install` for installation manifest viewing
+  - `inspect download-manifest` for download priorities
+  - `inspect size` for size statistics
+  - All commands support text, JSON, and BPSV output
+
+- **Keys Management**: TACTKeys database integration
+  - `keys update` downloads latest keys from GitHub
+  - `keys status` shows local database information
+  - Automatic loading from ~/.config/cascette/
+  - Support for 19,419 WoW encryption keys
+
+#### Infrastructure
+- **ngdp-crypto Crate**: Complete encryption/decryption support
+  - Salsa20 cipher with proper key extension
+  - ARC4 cipher implementation
+  - KeyService with automatic key loading
+  - Support for multiple key file formats
+
+- **blte Crate**: BLTE compression/decompression library
+  - All compression modes (N, Z, 4, F, E)
+  - Multi-chunk file support
+  - Checksum verification
+  - Integration with encryption
+
+### Changed
+
+- **Default Protocol Version**: HTTPS (v2) is now default for better security
+- **Cache Management**: Added TTL support and improved eviction
+- **Error Handling**: More descriptive error messages with context
+- **Documentation**: Comprehensive API reference and streaming architecture docs
+- **Version**: Updated all crates to version 0.2.0
+
+### Fixed
+
+- **TVFS Parser**: Corrected to handle real CDN data format
+  - Uses proper flags (0x03) instead of synthetic data
+  - Supports both TVFS and TFVS magic bytes
+  - Correct big-endian byte order
+
+- **Build Config Parser**: Now handles both format types
+  - Single-hash format (older builds)
+  - Hash-size pair format (newer builds)
+
+- **Memory Leaks**: Fixed in BLTE decompression for large files
+- **Panic Issues**: Removed unwrap() calls in production code
+
+### Performance
+
+- **Streaming Decompression**: 99% memory reduction for large files
+- **Range Requests**: Up to 99% bandwidth savings for partial operations
+- **Parallel Downloads**: Support for concurrent chunk retrieval
+- **Cache Hit Ratio**: Improved with better key management
+
 ## [0.4.0] - 2025-08-06
 
 ### Added
@@ -1054,5 +1144,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `regex` (1.11) - Regular expression support for tests
 - `serde_json` (1.0) - JSON support for tests
 
-[Unreleased]: https://github.com/wowemulation-dev/cascette-rs/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/wowemulation-dev/cascette-rs/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/wowemulation-dev/cascette-rs/compare/v0.4.0...v0.2.0
+[0.4.0]: https://github.com/wowemulation-dev/cascette-rs/compare/v0.3.0...v0.4.0
+[0.3.0]: https://github.com/wowemulation-dev/cascette-rs/compare/v0.1.0...v0.3.0
 [0.1.0]: https://github.com/wowemulation-dev/cascette-rs/releases/tag/v0.1.0

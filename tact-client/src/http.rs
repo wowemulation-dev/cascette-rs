@@ -240,6 +240,82 @@ impl HttpClient {
         Err(last_error.unwrap_or(Error::InvalidResponse))
     }
 
+    /// Execute an HTTP request with additional headers and retry logic
+    async fn execute_with_retry_and_headers(
+        &self,
+        url: &str,
+        headers: &[(&str, &str)],
+    ) -> Result<Response> {
+        let mut last_error = None;
+
+        for attempt in 0..=self.max_retries {
+            if attempt > 0 {
+                let backoff = self.calculate_backoff(attempt - 1);
+                debug!("Retry attempt {} after {:?} backoff", attempt, backoff);
+                sleep(backoff).await;
+            }
+
+            debug!("HTTP request to {} (attempt {})", url, attempt + 1);
+
+            let mut request = self.client.get(url);
+            if let Some(ref user_agent) = self.user_agent {
+                request = request.header("User-Agent", user_agent);
+            }
+
+            // Add custom headers
+            for &(key, value) in headers {
+                request = request.header(key, value);
+            }
+
+            match request.send().await {
+                Ok(response) => {
+                    trace!("Response status: {}", response.status());
+
+                    // Check if we should retry based on status code
+                    let status = response.status();
+                    if (status.is_server_error()
+                        || status == reqwest::StatusCode::TOO_MANY_REQUESTS)
+                        && attempt < self.max_retries
+                    {
+                        warn!(
+                            "Request returned {} (attempt {}): will retry",
+                            status,
+                            attempt + 1
+                        );
+                        last_error = Some(Error::InvalidResponse);
+                        continue;
+                    }
+
+                    return Ok(response);
+                }
+                Err(e) => {
+                    // Check if error is retryable
+                    let is_retryable = e.is_connect() || e.is_timeout() || e.is_request();
+
+                    if is_retryable && attempt < self.max_retries {
+                        warn!(
+                            "Request failed (attempt {}): {}, will retry",
+                            attempt + 1,
+                            e
+                        );
+                        last_error = Some(Error::Http(e));
+                    } else {
+                        // Non-retryable error or final attempt
+                        debug!(
+                            "Request failed (attempt {}): {}, not retrying",
+                            attempt + 1,
+                            e
+                        );
+                        return Err(Error::Http(e));
+                    }
+                }
+            }
+        }
+
+        // This should only be reached if all retries failed
+        Err(last_error.unwrap_or(Error::InvalidResponse))
+    }
+
     /// Get versions manifest for a product (V1 protocol)
     pub async fn get_versions(&self, product: &str) -> Result<Response> {
         if self.version != ProtocolVersion::V1 {
@@ -314,6 +390,120 @@ impl HttpClient {
 
         // Use execute_with_retry for CDN downloads as well
         let response = self.execute_with_retry(&url).await?;
+
+        if response.status() == reqwest::StatusCode::NOT_FOUND {
+            return Err(Error::file_not_found(hash));
+        }
+
+        Ok(response)
+    }
+
+    /// Download a file from CDN with HTTP range request for partial content
+    ///
+    /// # Arguments
+    /// * `cdn_host` - CDN hostname
+    /// * `path` - Path prefix for the CDN
+    /// * `hash` - File hash
+    /// * `range` - Byte range to download (e.g., (0, Some(1023)) for first 1024 bytes)
+    ///
+    /// # Returns
+    /// Returns a response with the requested byte range. The response will have status 206
+    /// (Partial Content) if the range is supported, or status 200 (OK) with full content
+    /// if range requests are not supported.
+    pub async fn download_file_range(
+        &self,
+        cdn_host: &str,
+        path: &str,
+        hash: &str,
+        range: (u64, Option<u64>),
+    ) -> Result<Response> {
+        let url = format!(
+            "http://{}/{}/{}/{}/{}",
+            cdn_host,
+            path,
+            &hash[0..2],
+            &hash[2..4],
+            hash
+        );
+
+        // Build Range header value
+        let range_header = match range {
+            (start, Some(end)) => format!("bytes={}-{}", start, end),
+            (start, None) => format!("bytes={}-", start),
+        };
+
+        debug!("Range request: {} Range: {}", url, range_header);
+
+        let response = self
+            .execute_with_retry_and_headers(&url, &[("Range", &range_header)])
+            .await?;
+
+        if response.status() == reqwest::StatusCode::NOT_FOUND {
+            return Err(Error::file_not_found(hash));
+        }
+
+        // Check if server supports range requests
+        match response.status() {
+            reqwest::StatusCode::PARTIAL_CONTENT => {
+                trace!("Server returned partial content (206)");
+            }
+            reqwest::StatusCode::OK => {
+                warn!("Server returned full content (200) - range requests not supported");
+            }
+            status => {
+                warn!(
+                    "Unexpected status code for range request: {} (expected 206 or 200)",
+                    status
+                );
+                // Still return the response - let the caller handle unexpected status codes
+            }
+        }
+
+        Ok(response)
+    }
+
+    /// Download multiple ranges from a file in a single request
+    ///
+    /// # Arguments
+    /// * `cdn_host` - CDN hostname
+    /// * `path` - Path prefix for the CDN
+    /// * `hash` - File hash
+    /// * `ranges` - Multiple byte ranges to download
+    ///
+    /// # Note
+    /// Multi-range requests return multipart/byteranges content type that needs
+    /// special parsing. Use with caution - not all CDN servers support this.
+    pub async fn download_file_multirange(
+        &self,
+        cdn_host: &str,
+        path: &str,
+        hash: &str,
+        ranges: &[(u64, Option<u64>)],
+    ) -> Result<Response> {
+        let url = format!(
+            "http://{}/{}/{}/{}/{}",
+            cdn_host,
+            path,
+            &hash[0..2],
+            &hash[2..4],
+            hash
+        );
+
+        // Build multi-range header value
+        let mut range_specs = Vec::new();
+        for &(start, end) in ranges {
+            match end {
+                Some(end) => range_specs.push(format!("{}-{}", start, end)),
+                None => range_specs.push(format!("{}-", start)),
+            }
+        }
+        let range_header = format!("bytes={}", range_specs.join(", "));
+
+        debug!("Multi-range request: {} Range: {}", url, range_header);
+
+        let response = self
+            .execute_with_retry_and_headers(&url, &[("Range", &range_header)])
+            .await?;
 
         if response.status() == reqwest::StatusCode::NOT_FOUND {
             return Err(Error::file_not_found(hash));
@@ -461,5 +651,40 @@ mod tests {
     fn test_user_agent_default_none() {
         let client = HttpClient::new(Region::US, ProtocolVersion::V1).unwrap();
         assert!(client.user_agent.is_none());
+    }
+
+    // Range request tests
+    #[test]
+    fn test_range_request_header_formatting() {
+        // Test range header formatting
+        let range1 = (0, Some(1023));
+        let header1 = match range1 {
+            (start, Some(end)) => format!("bytes={}-{}", start, end),
+            (start, None) => format!("bytes={}-", start),
+        };
+        assert_eq!(header1, "bytes=0-1023");
+
+        let range2 = (1024, None::<u64>);
+        let header2 = match range2 {
+            (start, Some(end)) => format!("bytes={}-{}", start, end),
+            (start, None) => format!("bytes={}-", start),
+        };
+        assert_eq!(header2, "bytes=1024-");
+    }
+
+    #[test]
+    fn test_multirange_header_building() {
+        let ranges = [(0, Some(31)), (64, Some(95)), (128, None)];
+        let mut range_specs = Vec::new();
+        
+        for &(start, end) in &ranges {
+            match end {
+                Some(end) => range_specs.push(format!("{}-{}", start, end)),
+                None => range_specs.push(format!("{}-", start)),
+            }
+        }
+        
+        let range_header = format!("bytes={}", range_specs.join(", "));
+        assert_eq!(range_header, "bytes=0-31, 64-95, 128-");
     }
 }

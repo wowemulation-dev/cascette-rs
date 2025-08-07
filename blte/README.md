@@ -32,6 +32,20 @@ let decompressed = decompress_blte(data, None)?;
 // For encrypted content
 let key_service = KeyService::new();
 let decompressed = decompress_blte(data, Some(&key_service))?;
+
+// Streaming decompression for large files
+use blte::{BLTEStream, create_streaming_reader};
+use std::io::Read;
+
+let mut stream = create_streaming_reader(data, Some(key_service))?;
+let mut buffer = [0u8; 8192];
+let mut decompressed = Vec::new();
+
+loop {
+    let bytes_read = stream.read(&mut buffer)?;
+    if bytes_read == 0 { break; }
+    decompressed.extend_from_slice(&buffer[..bytes_read]);
+}
 ```
 
 ## Compression Modes
