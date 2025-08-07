@@ -7,6 +7,65 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2025-08-07
+
+### Fixed
+
+- **Clippy warnings**: Resolved all uninlined format arguments warnings across multiple files
+  - Updated format strings to use inline variable syntax (e.g., `{var}` instead of `"{}", var`)
+  - Affected files: blte/examples, tact-client/examples, tact-client/src, ngdp-client/src
+  - Ensures code quality and consistency with modern Rust idioms
+
+- **Release workflow**: Fixed missing crates in GitHub Actions release workflow
+  - Added ngdp-crypto, tact-parser, and blte to version verification
+  - Corrected publishing order to respect dependency requirements
+  - Ensures all crates are properly published to crates.io
+
+- **Documentation improvements**:
+  - Corrected TACT acronym to "Trusted Application Content Transfer" across all documentation
+  - Added missing crate descriptions for crates.io publishing
+  - Updated all README files with proper installation instructions and version badges
+  - Improved crate descriptions to be more informative and searchable
+
+### Changed
+
+- **Version bump**: Updated all crates from 0.3.0 to 0.3.1
+- **Workflow stability**: Implemented long-term stability fixes for CI/CD pipelines
+
+### Added
+
+- **QA command documentation**: Created comprehensive rust-qa.md command file
+  - Covers all GitHub Actions CI checks
+  - Includes format, compilation, clippy, test, and documentation checks
+  - Provides environment variables for CI-like behavior
+
+## [0.3.0] - 2025-08-06
+
+### Added
+
+- **Ephemeral signing support**: Implemented ephemeral key signing following cargo-binstall approach
+  - Per-release minisign key generation for enhanced security
+  - Automatic signature verification in install scripts
+  - Compatible with cargo-binstall's ephemeral signing model
+  - Includes ephemeral-gen.sh script for key management
+
+- **Installation script improvements**:
+  - Added minisign signature verification
+  - Support for both persistent and ephemeral signing keys
+  - Automatic architecture detection
+  - Platform-specific package format selection (tar.gz for Unix, zip for Windows)
+
+### Fixed
+
+- **Windows PowerShell compatibility**: Fixed install script execution on Windows
+  - Removed unused sig_file variable that caused PowerShell errors
+  - Improved cross-platform compatibility
+
+### Changed
+
+- **Version bump**: Updated all crates to version 0.3.0
+- **Build workflow**: Added shell specification for build binary step
+
 ## [0.2.0] - 2025-08-07
 
 This release introduces streaming capabilities, HTTP range request support, and completes all TACT file format parsers. The project now supports efficient processing of large game files with minimal memory usage.
@@ -97,9 +156,7 @@ This release introduces streaming capabilities, HTTP range request support, and 
 - **Parallel Downloads**: Support for concurrent chunk retrieval
 - **Cache Hit Ratio**: Improved with better key management
 
-## [0.4.0] - 2025-08-06
-
-### Added
+### Also Added in 0.2.0
 
 #### `ngdp-crypto` crate (new)
 
@@ -158,9 +215,7 @@ This release introduces streaming capabilities, HTTP range request support, and 
   - Fixed MD5 checksum validation with proper implementation
   - Corrected page verification logic
 
-## [0.3.0] - 2025-08-05
-
-### Added
+### Previous Release Content
 
 #### `tact-parser` crate
 
@@ -1144,8 +1199,8 @@ This release introduces streaming capabilities, HTTP range request support, and 
 - `regex` (1.11) - Regular expression support for tests
 - `serde_json` (1.0) - JSON support for tests
 
-[Unreleased]: https://github.com/wowemulation-dev/cascette-rs/compare/v0.2.0...HEAD
-[0.2.0]: https://github.com/wowemulation-dev/cascette-rs/compare/v0.4.0...v0.2.0
-[0.4.0]: https://github.com/wowemulation-dev/cascette-rs/compare/v0.3.0...v0.4.0
-[0.3.0]: https://github.com/wowemulation-dev/cascette-rs/compare/v0.1.0...v0.3.0
+[Unreleased]: https://github.com/wowemulation-dev/cascette-rs/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/wowemulation-dev/cascette-rs/compare/v0.3.0...v0.3.1
+[0.3.0]: https://github.com/wowemulation-dev/cascette-rs/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/wowemulation-dev/cascette-rs/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/wowemulation-dev/cascette-rs/releases/tag/v0.1.0

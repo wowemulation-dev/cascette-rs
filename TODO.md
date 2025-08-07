@@ -521,6 +521,271 @@ pub struct BLTEStream {
 **Testing:** Stream decompress single and multi-chunk files ✅
 **Acceptance:** Memory usage stays constant ✅
 
+#### 2.2.6 BLTE Compression Support 🟡
+
+**Location:** `blte/src/compress.rs` (new file) 🟡
+
+```rust
+pub fn compress_chunk(data: &[u8], mode: CompressionMode, level: Option<u8>) -> Result<Vec<u8>>
+pub fn compress_data_single(data: Vec<u8>, mode: CompressionMode, level: Option<u8>) -> Result<Vec<u8>>
+```
+
+**Implementation:**
+
+- [ ] **Core Compression Functions**:
+  - [ ] Mode 'N' (0x4E): Pass-through with mode byte prefix
+  - [ ] Mode 'Z' (0x5A): ZLib compression with configurable levels (1-9)
+  - [ ] Mode '4' (0x34): LZ4HC compression with size headers
+  - [ ] Mode 'F' (0x46): Recursive BLTE compression support
+- [ ] **Compression Level Support**:
+  - [ ] ZLib: levels 1-9 (6 default for balance)
+  - [ ] LZ4: HC variant for better compression ratios
+  - [ ] Auto-selection based on data characteristics
+- [ ] **Basic Multi-Chunk Support**:
+  - [ ] Split data into chunks for multi-chunk files
+  - [ ] Calculate MD5 checksums for each chunk
+  - [ ] Simple chunking algorithm (fixed size)
+**Dependencies:** flate2, lz4_flex (already available) ✅
+**Testing:** Round-trip compress/decompress tests for all modes
+**Acceptance:** Compressed files decompress to original data
+
+#### 2.2.7 BLTE Encryption Support 🟡
+
+**Location:** `blte/src/encrypt.rs` (new file) 🟡
+
+```rust
+pub fn encrypt_chunk(data: &[u8], key_name: u64, key_service: &KeyService, block_index: usize) -> Result<Vec<u8>>
+```
+
+**Implementation:**
+
+- [ ] **Encrypted Block Construction**:
+  - [ ] Build encrypted block header (0x45 magic byte)
+  - [ ] Key name size (8 bytes) + key name (8 bytes)
+  - [ ] IV size (4 bytes) + random IV (4 bytes)
+  - [ ] Encryption type byte (0x53 Salsa20, 0x41 ARC4)
+- [ ] **Encryption Algorithm Integration**:
+  - [ ] Call existing `encrypt_salsa20()` from ngdp-crypto
+  - [ ] Call existing `encrypt_arc4()` from ngdp-crypto  
+  - [ ] Proper block index handling for multi-chunk files
+- [ ] **IV Generation**:
+  - [ ] Secure random IV generation for each chunk
+  - [ ] IV uniqueness validation
+  - [ ] Integration with block index for multi-chunk
+**Dependencies:** ngdp-crypto (already available) ✅
+**Testing:** Encrypt -> decrypt round-trip verification
+**Acceptance:** Encrypted chunks decrypt to original data
+
+#### 2.2.8 BLTE Builder Pattern 🟡
+
+**Location:** `blte/src/builder.rs` (new file) 🟡
+
+```rust
+pub struct BLTEBuilder {
+    chunks: Vec<ChunkSpec>,
+    flags: ChunkTableFlags,
+    compression_strategy: CompressionStrategy,
+}
+
+pub struct ChunkSpec {
+    data: Vec<u8>,
+    compression: CompressionMode,
+    encryption: Option<EncryptionSpec>,
+    target_size: Option<usize>,
+}
+```
+
+**Implementation:**
+
+- [ ] **Builder API**:
+  - [ ] `new()` - Create empty builder
+  - [ ] `add_chunk(data, spec)` - Add data chunk with compression/encryption spec
+  - [ ] `with_compression_strategy(strategy)` - Set overall compression approach
+  - [ ] `with_encryption(key_name, algorithm)` - Enable encryption for all chunks
+  - [ ] `build()` -> `Result<Vec<u8>>` - Construct final BLTE file
+- [ ] **Compression Strategies**:
+  - [ ] `Auto` - Choose best compression per chunk
+  - [ ] `Uniform(mode)` - Use same mode for all chunks
+  - [ ] `Custom` - Per-chunk specifications
+- [ ] **Header Construction**:
+  - [ ] Single-chunk mode (headerSize = 0) for small files
+  - [ ] Multi-chunk mode with chunk table for large files
+  - [ ] Proper chunk info format (0x0F standard, 0x10 extended)
+  - [ ] MD5 checksum calculation for each chunk
+**Dependencies:** Core compression (2.2.6) and encryption (2.2.7) functions
+**Testing:** Build various BLTE file configurations
+**Acceptance:** Built files parse correctly with existing header parser
+
+#### 2.2.9 ESpec Parser and Processor 🟢
+
+**Location:** `blte/src/espec.rs` (new file) 🟡
+
+```rust
+pub struct ESpecProcessor {
+    strategies: Vec<CompressionStrategy>,
+}
+
+pub enum CompressionStrategy {
+    ZLib { level: u8, chunk_size: usize },
+    LZ4 { chunk_size: usize },
+    None { chunk_size: usize },
+    Encrypted { algorithm: EncryptionType, key_name: u64 },
+}
+```
+
+**Implementation:**
+
+- [ ] **ESpec String Parsing**:
+  - [ ] Parse format: `z,9,{512*1024}` (ZLib level 9, 512KB chunks)
+  - [ ] Parse format: `4,{1024*1024}` (LZ4, 1MB chunks)
+  - [ ] Parse format: `e,s,12345678,{256*1024}` (Encrypted Salsa20, key, 256KB chunks)
+  - [ ] Support multiple strategies: `z,6,{512*1024}:4,{256*1024}`
+- [ ] **Size Expression Evaluation**:
+  - [ ] Support arithmetic: `{512*1024}`, `{1024*1024}`
+  - [ ] Named constants: `{DEFAULT_CHUNK_SIZE}`
+  - [ ] Validation of chunk sizes (minimum/maximum limits)
+- [ ] **Strategy Application**:
+  - [ ] Apply strategies in sequence to data
+  - [ ] Fallback handling when compression increases size
+  - [ ] Integration with BLTEBuilder
+**Dependencies:** None (string parsing only)
+**Testing:** Parse real ESpec strings from encoding files
+**Acceptance:** Correctly interprets and applies compression strategies
+
+#### 2.2.10 Parallel Compression Support 🟢
+
+**Location:** `blte/src/parallel.rs` (new file) 🟢
+
+```rust
+pub fn compress_parallel(data: Vec<u8>, spec: &CompressionSpec, thread_count: Option<usize>) -> Result<Vec<u8>>
+```
+
+**Implementation:**
+
+- [ ] **Parallel Chunk Processing**:
+  - [ ] Split data into chunks for parallel compression
+  - [ ] Thread pool management with configurable size
+  - [ ] Maintain chunk order in final output
+- [ ] **Thread-Safe Compression**:
+  - [ ] Ensure compression libraries are thread-safe
+  - [ ] Separate KeyService instances for encryption
+  - [ ] Memory management across threads
+- [ ] **Performance Optimization**:
+  - [ ] CPU core detection for optimal thread count
+  - [ ] Work-stealing for balanced load
+  - [ ] Memory usage monitoring
+**Dependencies:** rayon (new dependency)
+**Testing:** Compare single-threaded vs parallel performance
+**Acceptance:** Significant speedup on multi-core systems
+
+#### 2.2.11 Write Trait Implementation 🟢
+
+**Location:** `blte/src/writer.rs` (new file) 🟢
+
+```rust
+pub struct BLTEWriter<W: Write> {
+    writer: W,
+    builder: BLTEBuilder,
+    current_chunk: Vec<u8>,
+    chunk_size: usize,
+}
+```
+
+**Implementation:**
+
+- [ ] **Write Trait Implementation**:
+  - [ ] `write(&mut self, buf: &[u8])` - Accumulate data for chunking
+  - [ ] `flush(&mut self)` - Finalize current chunk
+  - [ ] Automatic chunking when size limits reached
+- [ ] **Streaming Compression**:
+  - [ ] Compress chunks as they're filled
+  - [ ] Write BLTE headers and chunks incrementally
+  - [ ] Memory-efficient for large file creation
+- [ ] **Configuration Options**:
+  - [ ] Configurable chunk size thresholds
+  - [ ] Compression mode selection per chunk
+  - [ ] Encryption parameters
+**Dependencies:** std::io::Write
+**Testing:** Stream large data through writer, verify output
+**Acceptance:** Streaming writes create valid BLTE files
+
+#### 2.2.12 Compression Examples and Benchmarks 🟢
+
+**Location:** `blte/examples/` and `blte/benches/` 🟢
+
+**Implementation:**
+
+- [ ] **Example Programs**:
+  - [ ] `compress_file.rs` - Compress single file with various modes
+  - [ ] `create_encrypted_blte.rs` - Create encrypted BLTE files
+  - [ ] `batch_compress.rs` - Compress multiple files efficiently
+  - [ ] `streaming_compress.rs` - Memory-efficient compression of large files
+- [ ] **Benchmark Suite**:
+  - [ ] Compression speed benchmarks for all modes
+  - [ ] Memory usage profiling during compression
+  - [ ] Compare with reference implementations
+  - [ ] Parallel vs sequential compression performance
+- [ ] **Integration Tests**:
+  - [ ] Round-trip testing (compress -> decompress)
+  - [ ] Cross-compatibility with existing decompression
+  - [ ] Stress testing with various file sizes
+**Dependencies:** criterion (already available) ✅
+**Testing:** All examples run successfully
+**Acceptance:** Benchmarks show competitive performance
+
+#### 2.2.13 CLI Integration for Compression 🟢
+
+**Location:** `ngdp-client/src/commands/compress.rs` (new file) 🟢
+
+```rust
+pub async fn handle_compress(cmd: CompressCommands, format: OutputFormat) -> Result<()>
+```
+
+**Implementation:**
+
+- [ ] **Compress Command**:
+  - [ ] `ngdp compress file <input> <output>` - Compress single file
+  - [ ] `--mode <mode>` - Specify compression mode (auto, zlib, lz4, none)
+  - [ ] `--encrypt <key-name>` - Encrypt with specified key
+  - [ ] `--chunk-size <size>` - Custom chunk size
+- [ ] **Batch Operations**:
+  - [ ] `ngdp compress batch <directory>` - Compress all files in directory
+  - [ ] `--recursive` - Process subdirectories
+  - [ ] `--filter <pattern>` - File pattern matching
+- [ ] **Analysis Commands**:
+  - [ ] `ngdp compress analyze <file>` - Show compression statistics
+  - [ ] Compare original vs compressed sizes
+  - [ ] Recommend optimal compression settings
+**Dependencies:** clap (already available) ✅
+**Testing:** CLI commands work with various file types
+**Acceptance:** User-friendly compression interface
+
+#### 2.2.14 Advanced Compression Features 🔵
+
+**Location:** `blte/src/advanced.rs` (new file) 🔵
+
+**Implementation:**
+
+- [ ] **Adaptive Compression**:
+  - [ ] Analyze data characteristics to choose optimal compression
+  - [ ] Detect incompressible data and use 'N' mode automatically
+  - [ ] Switch compression modes mid-stream based on effectiveness
+- [ ] **Compression Presets**:
+  - [ ] Fast: Minimal compression for speed
+  - [ ] Balanced: Good compression with reasonable speed
+  - [ ] Maximum: Best compression regardless of time
+- [ ] **Content-Aware Compression**:
+  - [ ] Detect file types and apply appropriate strategies
+  - [ ] Special handling for already-compressed formats
+  - [ ] Text vs binary optimization
+- [ ] **Compression Statistics**:
+  - [ ] Track compression ratios across different modes
+  - [ ] Performance metrics collection
+  - [ ] Recommendations for optimal settings
+**Dependencies:** None (analysis only)
+**Testing:** Verify adaptive strategies improve overall results
+**Acceptance:** Better compression ratios than static modes
+
 ---
 
 ## Priority 3: Storage Layer
@@ -922,6 +1187,17 @@ Each component MUST have:
 - [x] Key service with automatic loading from ~/.config/cascette/
 - [x] 19,419 WoW encryption keys loaded and working
 
+### Milestone 3.5: BLTE Compression/Encryption 🟡
+
+- [ ] BLTE compression support (all modes: N, Z, 4, F, E)
+- [ ] BLTE encryption support (Salsa20 and ARC4)
+- [ ] Builder pattern for BLTE file construction
+- [ ] ESpec parser for compression strategies
+- [ ] Parallel compression support
+- [ ] Write trait implementation for streaming
+- [ ] CLI integration for compression operations
+- [ ] Examples and benchmarks
+
 ### Milestone 4: Storage 🔴
 
 - [ ] casc-storage crate
@@ -951,7 +1227,9 @@ Each component MUST have:
 
 - [ ] Can download any WoW game file
 - [ ] Can decrypt encrypted content
-- [ ] Can parse all TACT formats
+- [x] Can parse all TACT formats ✅
+- [ ] **Can create BLTE files with compression and encryption**
+- [ ] **Can round-trip compress/decompress all BLTE modes**
 - [ ] Can manage CASC storage
 - [ ] Can apply patches
 
@@ -1010,6 +1288,10 @@ Each component MUST have:
 5. **Jenkins hash** - Must normalize paths (uppercase, backslash)
 6. **TVFS format** - Uses TFVS magic, big-endian, int32 offsets (not 40-bit)
 7. **All CDN files are BLTE-encoded** - Must decompress before parsing
+8. **BLTE compression** - Must mirror decompression logic exactly for compatibility
+9. **IV generation** - Use secure random IVs for encryption, must be unique per chunk
+10. **ESpec strings** - Follow exact format from encoding files: `z,level,{size}`
+11. **Chunk checksums** - MD5 of compressed data, calculated before encryption
 
 ### Reference Implementations
 
@@ -1037,5 +1319,5 @@ Each task is independent within its priority level and can be worked on in paral
 
 ---
 
-*Last Updated: 2025-08-06*
-*Version: 1.5.0*
+*Last Updated: 2025-08-07*
+*Version: 1.6.0*

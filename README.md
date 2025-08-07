@@ -16,21 +16,21 @@ Pipeline) for World of Warcraft emulation.
 
 ## 🎯 Project Status
 
-**Current Version**: 0.3.0
+**Current Version**: 0.3.1
 
 ### Core Components
 
 | Component       | Version | Status      | Description                                        |
 | --------------- | ------- | ----------- | -------------------------------------------------- |
-| `ngdp-bpsv`     | 0.3.0   | ✅ Stable   | BPSV parser/writer for NGDP formats                |
-| `ribbit-client` | 0.3.0   | ✅ Stable   | Ribbit protocol client with signature verification |
-| `tact-client`   | 0.3.0   | ✅ Stable   | TACT HTTP client for version/CDN queries          |
-| `tact-parser`   | 0.3.0   | ✅ Stable   | TACT file format parser (encoding, install, etc.) |
-| `ngdp-cdn`      | 0.3.0   | ✅ Stable   | CDN content delivery with parallel downloads       |
-| `ngdp-cache`    | 0.3.0   | ✅ Stable   | Caching layer for NGDP operations                 |
-| `blte`          | 0.3.0   | ✅ Stable   | BLTE decompression with encryption support        |
-| `ngdp-crypto`   | 0.3.0   | ✅ Stable   | Encryption/decryption for TACT files              |
-| `ngdp-client`   | 0.3.0   | ✅ Stable   | CLI tool for NGDP operations                      |
+| `ngdp-bpsv`     | 0.3.1   | ✅ Stable   | BPSV parser/writer for NGDP formats                |
+| `ribbit-client` | 0.3.1   | ✅ Stable   | Ribbit protocol client with signature verification |
+| `tact-client`   | 0.3.1   | ✅ Stable   | TACT HTTP client for version/CDN queries          |
+| `tact-parser`   | 0.3.1   | ✅ Stable   | TACT file format parser (encoding, install, etc.) |
+| `ngdp-cdn`      | 0.3.1   | ✅ Stable   | CDN content delivery with parallel downloads       |
+| `ngdp-cache`    | 0.3.1   | ✅ Stable   | Caching layer for NGDP operations                 |
+| `blte`          | 0.3.1   | ✅ Stable   | BLTE decompression with encryption support        |
+| `ngdp-crypto`   | 0.3.1   | ✅ Stable   | Encryption/decryption for TACT files              |
+| `ngdp-client`   | 0.3.1   | ✅ Stable   | CLI tool for NGDP operations                      |
 
 ### Implementation Progress
 
