@@ -11,6 +11,7 @@ use tracing::{debug, trace};
 
 /// Header for .idx files
 #[derive(Debug)]
+#[allow(dead_code)]
 struct IdxHeader {
     data_size: u32,
     data_hash: u32,
@@ -43,11 +44,14 @@ impl IdxParser {
         let data_size = reader.read_u32::<LittleEndian>()?;
         let data_hash = reader.read_u32::<LittleEndian>()?;
 
-        debug!("Parsing .idx file: size={}, hash={:08x}", data_size, data_hash);
+        debug!(
+            "Parsing .idx file: size={}, hash={:08x}",
+            data_size, data_hash
+        );
 
         // TODO: Verify header hash using Jenkins lookup3
         // For now, skip the hash verification
-        
+
         // Read header fields
         let version = reader.read_u16::<LittleEndian>()?;
         let bucket = reader.read_u8()?;
@@ -63,9 +67,9 @@ impl IdxParser {
 
         // Validate field sizes
         if key_field_size != 9 && key_field_size != 16 {
-            return Err(CascError::InvalidIndexFormat(
-                format!("Invalid key field size: {}", key_field_size)
-            ));
+            return Err(CascError::InvalidIndexFormat(format!(
+                "Invalid key field size: {key_field_size}"
+            )));
         }
 
         // Read block table (for now we skip it as we don't use it directly)
@@ -86,32 +90,43 @@ impl IdxParser {
         let data_section_size = reader.read_u32::<LittleEndian>()?;
         let data_section_hash = reader.read_u32::<LittleEndian>()?;
 
-        debug!("Data section: size={}, hash={:08x}", data_section_size, data_section_hash);
+        debug!(
+            "Data section: size={}, hash={:08x}",
+            data_section_size, data_section_hash
+        );
 
         // Calculate entry size and count
         let entry_size = key_field_size + location_field_size + length_field_size;
         let entry_count = data_section_size / entry_size as u32;
 
-        debug!("Parsing {} entries of {} bytes each", entry_count, entry_size);
+        debug!(
+            "Parsing {} entries of {} bytes each",
+            entry_count, entry_size
+        );
 
         // Parse entries
         let mut entries = HashMap::new();
-        
+
         for i in 0..entry_count {
             let entry = Self::parse_entry(
                 reader,
                 key_field_size,
                 location_field_size,
                 length_field_size,
-                segment_bits
+                segment_bits,
             )?;
-            
+
             if i < 5 {
-                trace!("Entry {}: ekey={}, archive={}, offset={:x}, size={}", 
-                    i, entry.ekey, entry.location.archive_id, 
-                    entry.location.offset, entry.location.size);
+                trace!(
+                    "Entry {}: ekey={}, archive={}, offset={:x}, size={}",
+                    i,
+                    entry.ekey,
+                    entry.location.archive_id,
+                    entry.location.offset,
+                    entry.location.size
+                );
             }
-            
+
             entries.insert(entry.ekey, entry.location);
         }
 
@@ -146,7 +161,7 @@ impl IdxParser {
         };
 
         // Calculate field sizes
-        let offset_size = (segment_bits + 7) / 8;
+        let offset_size = segment_bits.div_ceil(8);
         let file_size = location_size - offset_size;
 
         // Read file number (little-endian)
@@ -182,9 +197,11 @@ impl IdxParser {
             }
             2 => reader.read_u16::<LittleEndian>()? as u32,
             1 => reader.read_u8()? as u32,
-            _ => return Err(CascError::InvalidIndexFormat(
-                format!("Invalid length field size: {}", length_size)
-            )),
+            _ => {
+                return Err(CascError::InvalidIndexFormat(format!(
+                    "Invalid length field size: {length_size}"
+                )));
+            }
         };
 
         Ok(IndexEntry {

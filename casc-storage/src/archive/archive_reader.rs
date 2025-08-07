@@ -74,7 +74,7 @@ impl ArchiveReader {
             Ok(buffer)
         } else {
             Err(CascError::InvalidArchiveFormat(
-                "Archive reader not initialized".into()
+                "Archive reader not initialized".into(),
             ))
         }
     }
@@ -92,7 +92,7 @@ impl ArchiveReader {
             Ok(&mmap[offset as usize..(offset as usize + length)])
         } else {
             Err(CascError::InvalidArchiveFormat(
-                "Memory mapping not available for slice access".into()
+                "Memory mapping not available for slice access".into(),
             ))
         }
     }
@@ -112,7 +112,7 @@ impl ArchiveReader {
         if let Some(ref mmap) = self.mmap {
             let start = offset as usize;
             let end = (offset as usize).saturating_add(length).min(mmap.len());
-            
+
             // Advise the OS that we'll need this data soon
             #[cfg(unix)]
             {

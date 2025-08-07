@@ -17,13 +17,13 @@ impl ArchiveWriter {
     /// Create a new archive file
     pub fn create(path: &Path, archive_id: u16) -> Result<Self> {
         debug!("Creating new archive: {:?}", path);
-        
+
         let file = OpenOptions::new()
             .create(true)
             .write(true)
             .truncate(true)
             .open(path)?;
-            
+
         Ok(Self {
             writer: BufWriter::new(file),
             current_offset: 0,
@@ -34,14 +34,11 @@ impl ArchiveWriter {
     /// Open an existing archive for appending
     pub fn append(path: &Path, archive_id: u16) -> Result<Self> {
         debug!("Opening archive for append: {:?}", path);
-        
-        let file = OpenOptions::new()
-            .write(true)
-            .append(true)
-            .open(path)?;
-            
+
+        let file = OpenOptions::new().append(true).open(path)?;
+
         let current_offset = file.metadata()?.len();
-        
+
         Ok(Self {
             writer: BufWriter::new(file),
             current_offset,
@@ -52,17 +49,17 @@ impl ArchiveWriter {
     /// Write data to the archive and return the offset
     pub fn write(&mut self, data: &[u8]) -> Result<u64> {
         let offset = self.current_offset;
-        
+
         self.writer.write_all(data)?;
         self.current_offset += data.len() as u64;
-        
+
         debug!(
             "Wrote {} bytes to archive {} at offset {:x}",
             data.len(),
             self.archive_id,
             offset
         );
-        
+
         Ok(offset)
     }
 
@@ -74,13 +71,13 @@ impl ArchiveWriter {
         } else {
             0
         };
-        
+
         if padding_needed > 0 {
             let padding = vec![0u8; padding_needed as usize];
             self.writer.write_all(&padding)?;
             self.current_offset += padding_needed;
         }
-        
+
         self.write(data)
     }
 

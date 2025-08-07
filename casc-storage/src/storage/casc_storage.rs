@@ -16,19 +16,19 @@ use tracing::{debug, info, warn};
 pub struct CascStorage {
     /// Configuration
     config: CascConfig,
-    
+
     /// Bucket-based indices (0x00-0x0F)
     indices: Arc<DashMap<u8, IndexFile>>,
-    
+
     /// Archive files
     archives: Arc<RwLock<HashMap<u16, Archive>>>,
-    
+
     /// LRU cache for decompressed content
     cache: Arc<RwLock<LruCache<EKey, Vec<u8>>>>,
-    
+
     /// Current archive for writing
     current_archive: Arc<RwLock<Option<ArchiveWriter>>>,
-    
+
     /// Storage statistics
     stats: Arc<RwLock<StorageStats>>,
 }
@@ -40,13 +40,13 @@ impl CascStorage {
         let data_path = &config.data_path;
         let indices_path = data_path.join("indices");
         let data_subpath = data_path.join("data");
-        
+
         std::fs::create_dir_all(&indices_path)?;
         std::fs::create_dir_all(&data_subpath)?;
-        
+
         let cache_size = NonZeroUsize::new((config.cache_size_mb as usize) * 1024 * 1024)
             .unwrap_or(NonZeroUsize::new(256 * 1024 * 1024).unwrap());
-        
+
         Ok(Self {
             config,
             indices: Arc::new(DashMap::new()),
@@ -60,25 +60,29 @@ impl CascStorage {
     /// Load indices from disk
     pub fn load_indices(&self) -> Result<()> {
         info!("Loading CASC indices from {:?}", self.config.data_path);
-        
+
         let indices_path = self.config.data_path.join("indices");
-        
+
         // Load .idx files (bucket-based indices)
         for entry in std::fs::read_dir(&indices_path)? {
             let entry = entry?;
             let path = entry.path();
-            
+
             if path.extension().and_then(|s| s.to_str()) == Some("idx") {
                 match IdxParser::parse_file(&path) {
                     Ok(parser) => {
                         let bucket = parser.bucket();
-                        debug!("Loaded .idx file for bucket {:02x}: {} entries", bucket, parser.len());
-                        
+                        debug!(
+                            "Loaded .idx file for bucket {:02x}: {} entries",
+                            bucket,
+                            parser.len()
+                        );
+
                         let mut index = IndexFile::new(crate::index::IndexVersion::V7);
                         for (ekey, location) in parser.entries() {
                             index.add_entry(*ekey, *location);
                         }
-                        
+
                         self.indices.insert(bucket, index);
                     }
                     Err(e) => {
@@ -87,30 +91,37 @@ impl CascStorage {
                 }
             }
         }
-        
+
         // Load .index files (group indices)
         for entry in std::fs::read_dir(&indices_path)? {
             let entry = entry?;
             let path = entry.path();
-            
+
             if path.extension().and_then(|s| s.to_str()) == Some("index") {
                 match GroupIndex::parse_file(&path) {
                     Ok(group) => {
                         let bucket = group.bucket_index();
-                        debug!("Loaded .index file for bucket {:02x}: {} entries", bucket, group.len());
-                        
+                        debug!(
+                            "Loaded .index file for bucket {:02x}: {} entries",
+                            bucket,
+                            group.len()
+                        );
+
                         // Merge with existing index or create new
-                        self.indices.entry(bucket).and_modify(|index| {
-                            for (ekey, location) in group.entries() {
-                                index.add_entry(*ekey, *location);
-                            }
-                        }).or_insert_with(|| {
-                            let mut index = IndexFile::new(crate::index::IndexVersion::V7);
-                            for (ekey, location) in group.entries() {
-                                index.add_entry(*ekey, *location);
-                            }
-                            index
-                        });
+                        self.indices
+                            .entry(bucket)
+                            .and_modify(|index| {
+                                for (ekey, location) in group.entries() {
+                                    index.add_entry(*ekey, *location);
+                                }
+                            })
+                            .or_insert_with(|| {
+                                let mut index = IndexFile::new(crate::index::IndexVersion::V7);
+                                for (ekey, location) in group.entries() {
+                                    index.add_entry(*ekey, *location);
+                                }
+                                index
+                            });
                     }
                     Err(e) => {
                         warn!("Failed to load group index {:?}: {}", path, e);
@@ -118,7 +129,7 @@ impl CascStorage {
                 }
             }
         }
-        
+
         info!("Loaded {} bucket indices", self.indices.len());
         Ok(())
     }
@@ -126,17 +137,15 @@ impl CascStorage {
     /// Load archive files
     pub fn load_archives(&self) -> Result<()> {
         info!("Loading CASC archives from {:?}", self.config.data_path);
-        
+
         let data_path = self.config.data_path.join("data");
         let mut archives = self.archives.write();
-        
+
         for entry in std::fs::read_dir(&data_path)? {
             let entry = entry?;
             let path = entry.path();
-            let filename = path.file_name()
-                .and_then(|s| s.to_str())
-                .unwrap_or("");
-            
+            let filename = path.file_name().and_then(|s| s.to_str()).unwrap_or("");
+
             if filename.starts_with("data.") {
                 // Extract archive ID from filename (data.XXX)
                 if let Some(id_str) = filename.strip_prefix("data.") {
@@ -154,7 +163,7 @@ impl CascStorage {
                 }
             }
         }
-        
+
         info!("Loaded {} archives", archives.len());
         Ok(())
     }
@@ -169,35 +178,39 @@ impl CascStorage {
                 return Ok(data.clone());
             }
         }
-        
+
         // Find the file in indices
         let bucket = ekey.bucket_index();
-        let location = self.indices
+        let location = self
+            .indices
             .get(&bucket)
             .and_then(|index| index.lookup(ekey).copied())
             .ok_or_else(|| CascError::EntryNotFound(ekey.to_string()))?;
-        
-        debug!("Found {} in archive {} at offset {:x}", ekey, location.archive_id, location.offset);
-        
+
+        debug!(
+            "Found {} in archive {} at offset {:x}",
+            ekey, location.archive_id, location.offset
+        );
+
         // Read from archive
         let compressed_data = {
             let mut archives = self.archives.write();
             let archive = archives
                 .get_mut(&location.archive_id)
-                .ok_or_else(|| CascError::ArchiveNotFound(location.archive_id))?;
-            
+                .ok_or(CascError::ArchiveNotFound(location.archive_id))?;
+
             archive.read_at(&location)?
         };
-        
+
         // Decompress using BLTE (no key service needed for now)
         let decompressed = blte::decompress_blte(compressed_data, None)?;
-        
+
         // Update cache
         {
             let mut cache = self.cache.write();
             cache.put(*ekey, decompressed.clone());
         }
-        
+
         Ok(decompressed)
     }
 
@@ -206,7 +219,7 @@ impl CascStorage {
         if self.config.read_only {
             return Err(CascError::ReadOnly);
         }
-        
+
         // Check if already exists
         let bucket = ekey.bucket_index();
         if let Some(index) = self.indices.get(&bucket) {
@@ -215,52 +228,60 @@ impl CascStorage {
                 return Ok(());
             }
         }
-        
+
         // Compress data using BLTE
-        let compressed = blte::compress_data_single(data.to_vec(), blte::CompressionMode::ZLib, None)?;
-        
+        let compressed =
+            blte::compress_data_single(data.to_vec(), blte::CompressionMode::ZLib, None)?;
+
         // Get or create current archive
         let location = self.write_to_archive(&compressed)?;
-        
+
         // Update index
         self.indices
             .entry(bucket)
             .or_insert_with(|| IndexFile::new(crate::index::IndexVersion::V7))
             .add_entry(*ekey, location);
-        
+
         // Update cache
         {
             let mut cache = self.cache.write();
             cache.put(*ekey, data.to_vec());
         }
-        
-        debug!("Wrote {} to archive {} at offset {:x}", ekey, location.archive_id, location.offset);
+
+        debug!(
+            "Wrote {} to archive {} at offset {:x}",
+            ekey, location.archive_id, location.offset
+        );
         Ok(())
     }
 
     /// Write compressed data to the current archive
     fn write_to_archive(&self, data: &[u8]) -> Result<ArchiveLocation> {
         let mut current_archive = self.current_archive.write();
-        
+
         // Check if we need a new archive
-        if current_archive.is_none() || 
-           current_archive.as_ref().unwrap().current_offset() + data.len() as u64 > self.config.max_archive_size {
+        if current_archive.is_none()
+            || current_archive.as_ref().unwrap().current_offset() + data.len() as u64
+                > self.config.max_archive_size
+        {
             // Create new archive
             let archive_id = self.get_next_archive_id();
-            let archive_path = self.config.data_path
+            let archive_path = self
+                .config
+                .data_path
                 .join("data")
-                .join(format!("data.{:03}", archive_id));
-            
+                .join(format!("data.{archive_id:03}"));
+
             *current_archive = Some(ArchiveWriter::create(&archive_path, archive_id)?);
-            
+
             // Register the new archive
             let mut archives = self.archives.write();
             archives.insert(archive_id, Archive::new(archive_id, archive_path)?);
         }
-        
+
         let writer = current_archive.as_mut().unwrap();
         let offset = writer.write(data)?;
-        
+
         Ok(ArchiveLocation {
             archive_id: writer.archive_id(),
             offset,
@@ -278,7 +299,7 @@ impl CascStorage {
     pub fn verify(&self) -> Result<Vec<EKey>> {
         info!("Verifying CASC storage integrity");
         let mut errors = Vec::new();
-        
+
         for index_ref in self.indices.iter() {
             let index = index_ref.value();
             for (ekey, _location) in index.entries() {
@@ -294,13 +315,13 @@ impl CascStorage {
                 }
             }
         }
-        
+
         if errors.is_empty() {
             info!("Storage verification complete: all files OK");
         } else {
             warn!("Storage verification found {} errors", errors.len());
         }
-        
+
         Ok(errors)
     }
 
@@ -309,20 +330,23 @@ impl CascStorage {
         if self.config.read_only {
             return Err(CascError::ReadOnly);
         }
-        
+
         info!("Rebuilding CASC indices");
-        
+
         // Clear existing indices
         self.indices.clear();
-        
+
         // Scan all archives
         let archives = self.archives.read();
         for (_id, archive) in archives.iter() {
             // This would require parsing the archive format
             // For now, this is a placeholder
-            warn!("Archive scanning not yet implemented for {:?}", archive.path());
+            warn!(
+                "Archive scanning not yet implemented for {:?}",
+                archive.path()
+            );
         }
-        
+
         Ok(())
     }
 

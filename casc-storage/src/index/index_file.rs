@@ -7,8 +7,8 @@ use std::path::Path;
 /// Version of the index format
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IndexVersion {
-    V5,  // Older format
-    V7,  // Current format
+    V5, // Older format
+    V7, // Current format
 }
 
 /// Generic index file interface
@@ -50,9 +50,10 @@ impl IndexFile {
                 entries,
             })
         } else {
-            Err(crate::error::CascError::InvalidIndexFormat(
-                format!("Unknown index file extension: {:?}", path.extension())
-            ))
+            Err(crate::error::CascError::InvalidIndexFormat(format!(
+                "Unknown index file extension: {:?}",
+                path.extension()
+            )))
         }
     }
 

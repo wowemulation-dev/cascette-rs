@@ -146,9 +146,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Compare sizes
     let size_diff = recompressed.len() as i64 - data.len() as i64;
     let size_diff_pct = (size_diff as f64 / data.len() as f64) * 100.0;
-    println!(
-        "\nSize difference: {size_diff} bytes ({size_diff_pct:+.2}%)"
-    );
+    println!("\nSize difference: {size_diff} bytes ({size_diff_pct:+.2}%)");
 
     // Verify round-trip
     println!("\n=== Verifying Round-Trip ===");

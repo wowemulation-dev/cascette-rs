@@ -55,8 +55,7 @@ impl Archive {
 
     /// Check if a file exists at the given location
     pub fn contains(&self, location: &ArchiveLocation) -> bool {
-        location.archive_id == self.id && 
-        location.offset + location.size as u64 <= self.size
+        location.archive_id == self.id && location.offset + location.size as u64 <= self.size
     }
 
     /// Get the archive filename (e.g., "data.001")

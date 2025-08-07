@@ -20,13 +20,13 @@ impl LooseFileStorage {
         if filename.len() != 32 {
             return None;
         }
-        
+
         let mut bytes = [0u8; 16];
         for i in 0..16 {
             let hex_pair = &filename[i * 2..i * 2 + 2];
             bytes[i] = u8::from_str_radix(hex_pair, 16).ok()?;
         }
-        
+
         EKey::from_slice(&bytes)
     }
 
@@ -42,14 +42,14 @@ impl LooseFileStorage {
     /// Scan directory for loose files
     pub fn scan(&mut self) -> Result<()> {
         info!("Scanning for loose files in {:?}", self.base_path);
-        
+
         self.files.clear();
-        
+
         // Look for files with EKey-based names
         for entry in std::fs::read_dir(&self.base_path)? {
             let entry = entry?;
             let path = entry.path();
-            
+
             if path.is_file() {
                 if let Some(filename) = path.file_stem().and_then(|s| s.to_str()) {
                     // Try to parse filename as hex EKey
@@ -62,22 +62,23 @@ impl LooseFileStorage {
                 }
             }
         }
-        
+
         info!("Found {} loose files", self.files.len());
         Ok(())
     }
 
     /// Read a loose file
     pub fn read(&self, ekey: &EKey) -> Result<Vec<u8>> {
-        let path = self.files
+        let path = self
+            .files
             .get(ekey)
             .ok_or_else(|| CascError::EntryNotFound(ekey.to_string()))?;
-        
+
         debug!("Reading loose file {} from {:?}", ekey, path);
         let data = std::fs::read(path)?;
-        
+
         // Decompress if needed
-        if data.len() >= 4 && &data[0..4] == blte::BLTE_MAGIC {
+        if data.len() >= 4 && data[0..4] == blte::BLTE_MAGIC {
             Ok(blte::decompress_blte(data, None)?)
         } else {
             Ok(data)
@@ -86,21 +87,21 @@ impl LooseFileStorage {
 
     /// Write a loose file
     pub fn write(&mut self, ekey: &EKey, data: &[u8], compress: bool) -> Result<()> {
-        let filename = format!("{}", ekey);
+        let filename = format!("{ekey}");
         let path = self.base_path.join(&filename);
-        
+
         debug!("Writing loose file {} to {:?}", ekey, path);
-        
+
         // Optionally compress
         let output = if compress {
             blte::compress_data_single(data.to_vec(), blte::CompressionMode::ZLib, None)?
         } else {
             data.to_vec()
         };
-        
+
         std::fs::write(&path, output)?;
         self.files.insert(*ekey, path);
-        
+
         Ok(())
     }
 

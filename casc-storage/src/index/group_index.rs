@@ -14,6 +14,7 @@ use tracing::{debug, trace};
 struct GroupIndexHeader {
     version: u16,
     bucket_index: u8,
+    #[allow(dead_code)]
     extra_bytes: u8,
     span_size_bytes: u8,
     span_offset_bytes: u8,
@@ -40,15 +41,17 @@ impl GroupIndex {
     pub fn parse<R: Read>(reader: &mut R) -> Result<Self> {
         // Read header
         let header = Self::read_header(reader)?;
-        
+
         debug!(
             "Parsing group index: version={}, bucket={:02x}, ekey_size={}",
             header.version, header.bucket_index, header.ekey_bytes
         );
 
         // Calculate entry size
-        let entry_size = header.ekey_bytes + header.archive_bytes + 
-                        header.span_offset_bytes + header.span_size_bytes;
+        let entry_size = header.ekey_bytes
+            + header.archive_bytes
+            + header.span_offset_bytes
+            + header.span_size_bytes;
 
         // Read all remaining data
         let mut data = Vec::new();
@@ -56,7 +59,10 @@ impl GroupIndex {
 
         // Parse entries
         let entry_count = data.len() / entry_size as usize;
-        debug!("Parsing {} entries of {} bytes each", entry_count, entry_size);
+        debug!(
+            "Parsing {} entries of {} bytes each",
+            entry_count, entry_size
+        );
 
         let mut entries = HashMap::new();
         let mut offset = 0;
@@ -68,8 +74,11 @@ impl GroupIndex {
             if i < 5 {
                 trace!(
                     "Entry {}: ekey={}, archive={}, offset={:x}, size={}",
-                    i, entry.ekey, entry.location.archive_id,
-                    entry.location.offset, entry.location.size
+                    i,
+                    entry.ekey,
+                    entry.location.archive_id,
+                    entry.location.offset,
+                    entry.location.size
                 );
             }
 
@@ -109,9 +118,10 @@ impl GroupIndex {
             EKey::from_slice(key_bytes)
                 .ok_or_else(|| CascError::InvalidIndexFormat("Invalid key size".into()))?
         } else {
-            return Err(CascError::InvalidIndexFormat(
-                format!("Unsupported ekey size: {}", header.ekey_bytes)
-            ));
+            return Err(CascError::InvalidIndexFormat(format!(
+                "Unsupported ekey size: {}",
+                header.ekey_bytes
+            )));
         };
 
         // Read archive ID
@@ -126,15 +136,23 @@ impl GroupIndex {
                 offset += 2;
                 id
             }
-            _ => return Err(CascError::InvalidIndexFormat(
-                format!("Unsupported archive bytes: {}", header.archive_bytes)
-            )),
+            _ => {
+                return Err(CascError::InvalidIndexFormat(format!(
+                    "Unsupported archive bytes: {}",
+                    header.archive_bytes
+                )));
+            }
         };
 
         // Read offset
         let file_offset = match header.span_offset_bytes {
             4 => {
-                let bytes = [data[offset], data[offset + 1], data[offset + 2], data[offset + 3]];
+                let bytes = [
+                    data[offset],
+                    data[offset + 1],
+                    data[offset + 2],
+                    data[offset + 3],
+                ];
                 offset += 4;
                 u32::from_le_bytes(bytes) as u64
             }
@@ -150,15 +168,23 @@ impl GroupIndex {
                 offset += 6;
                 u64::from_le_bytes(bytes)
             }
-            _ => return Err(CascError::InvalidIndexFormat(
-                format!("Unsupported offset bytes: {}", header.span_offset_bytes)
-            )),
+            _ => {
+                return Err(CascError::InvalidIndexFormat(format!(
+                    "Unsupported offset bytes: {}",
+                    header.span_offset_bytes
+                )));
+            }
         };
 
         // Read size
         let size = match header.span_size_bytes {
             4 => {
-                let bytes = [data[offset], data[offset + 1], data[offset + 2], data[offset + 3]];
+                let bytes = [
+                    data[offset],
+                    data[offset + 1],
+                    data[offset + 2],
+                    data[offset + 3],
+                ];
                 u32::from_le_bytes(bytes)
             }
             3 => {
@@ -170,9 +196,12 @@ impl GroupIndex {
                 let bytes = [data[offset], data[offset + 1]];
                 u16::from_le_bytes(bytes) as u32
             }
-            _ => return Err(CascError::InvalidIndexFormat(
-                format!("Unsupported size bytes: {}", header.span_size_bytes)
-            )),
+            _ => {
+                return Err(CascError::InvalidIndexFormat(format!(
+                    "Unsupported size bytes: {}",
+                    header.span_size_bytes
+                )));
+            }
         };
 
         Ok(IndexEntry {

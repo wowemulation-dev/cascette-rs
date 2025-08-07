@@ -111,9 +111,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let expected_file_size = data_start + total_chunk_size as usize;
         let actual_file_size = data.len();
 
-        println!(
-            "Expected file size (header + chunks): {expected_file_size} bytes"
-        );
+        println!("Expected file size (header + chunks): {expected_file_size} bytes");
         println!("Actual file size: {actual_file_size} bytes");
 
         if actual_file_size > expected_file_size {

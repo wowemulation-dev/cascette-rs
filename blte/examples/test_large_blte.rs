@@ -152,9 +152,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             256 * 1024 // Default 256KB
         };
 
-        println!(
-            "Using multi-chunk compression with {avg_chunk_size} byte chunks..."
-        );
+        println!("Using multi-chunk compression with {avg_chunk_size} byte chunks...");
         let start = Instant::now();
 
         // Show progress for large files
@@ -231,11 +229,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!(
         "Compression speed: {:.2} MB/s",
         (decompressed.len() as f64
-            / if blte.is_single_chunk() {
-                recompressed.len() as f64 / (decompressed.len() as f64 / 1_048_576.0)
-            } else {
-                recompressed.len() as f64 / (decompressed.len() as f64 / 1_048_576.0)
-            })
+            / (recompressed.len() as f64 / (decompressed.len() as f64 / 1_048_576.0)))
             / 1_048_576.0
     );
 

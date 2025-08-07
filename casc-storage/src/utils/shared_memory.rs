@@ -51,7 +51,7 @@ impl SharedMemory {
     /// Write shared memory to a file
     pub fn write_to_file(&self, path: &Path) -> Result<()> {
         debug!("Writing shared memory to {:?}", path);
-        
+
         // For now, we just write a simple JSON representation
         // In production, this would be a binary format or actual shared memory
         let json = serde_json::json!({
@@ -69,7 +69,7 @@ impl SharedMemory {
             "free_space": self.free_space,
             "data_path": self.data_path,
         });
-        
+
         std::fs::write(path, json.to_string())?;
         Ok(())
     }
@@ -77,15 +77,15 @@ impl SharedMemory {
     /// Read shared memory from a file
     pub fn read_from_file(path: &Path) -> Result<Self> {
         debug!("Reading shared memory from {:?}", path);
-        
+
         let content = std::fs::read_to_string(path)?;
         let json: serde_json::Value = serde_json::from_str(&content)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
-        
+
         let region_str = json["region"].as_str().unwrap_or("US");
         let mut region = [0u8; 4];
         region[..region_str.len().min(4)].copy_from_slice(region_str.as_bytes());
-        
+
         Ok(Self {
             version: json["version"].as_u64().unwrap_or(1) as u32,
             build_number: json["build_number"].as_u64().unwrap_or(0) as u32,
