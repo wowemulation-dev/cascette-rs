@@ -25,6 +25,7 @@ thiserror = { workspace = true }
 tokio = { workspace = true, features = ["fs", "io-util"] }
 tracing = { workspace = true }
 walkdir = "2.5.0"
+parking_lot = "0.12"
 
 [dev-dependencies]
 criterion = { workspace = true }
