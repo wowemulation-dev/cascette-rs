@@ -2,6 +2,44 @@
 
 All notable changes to this project will be documented in this file.
 
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [0.3.0](https://github.com/wowemulation-dev/cascette-rs/releases/tag/tact-parser-v0.3.0) - 2025-08-07
+
+### Added
+
+- complete TACT parser implementation with encryption and BLTE support
+
+### Fixed
+
+- clippy/fmt
+
+### Other
+
+- bump version to 0.3.0 for ephemeral signing release
+- Release v0.2.0 - Streaming and HTTP Range Requests
+- 🔧 deps: upgrade dependencies and improve project quality
+- ✨ feat: integrate tact-parser with build configuration analysis
+- 📝 docs: update changelogs and add module documentation
+- 🎨 style: optimize code and remove unnecessary allocations
+- 🚨 fix: remove panicking Default impls and fix unwrap() calls
+- Move tact-parser dependencies into workspace
+- fmt
+- tidy up old stuff
+- Implement support for pre-8.2 roots
+- Use bufread to improve performance
+- Docs
+- fmt
+- Move all the tests into separate files like the rest of the packages
+- Sort ReadInt implementations
+- Initial wow TACT root parser
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
