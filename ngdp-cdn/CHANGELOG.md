@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1](https://github.com/wowemulation-dev/cascette-rs/compare/ngdp-cdn-v0.3.0...ngdp-cdn-v0.3.1) - 2025-08-07
+
+### Other
+
+- update all README files and improve crate descriptions
+
 ### Fixed
 
 - **Removed panicking Default implementation**:

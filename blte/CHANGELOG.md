@@ -1,5 +1,23 @@
 # Changelog
 
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [0.3.1](https://github.com/wowemulation-dev/cascette-rs/compare/blte-v0.3.0...blte-v0.3.1) - 2025-08-07
+
+### Fixed
+
+- resolve clippy uninlined format args warnings
+
+### Other
+
+- update all README files and improve crate descriptions
+# Changelog
+
 All notable changes to the `blte` crate will be documented in this file.
 
 ## [Unreleased]
