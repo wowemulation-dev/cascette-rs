@@ -289,7 +289,6 @@ impl ArchiveEntry {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

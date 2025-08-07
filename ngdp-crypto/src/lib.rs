@@ -16,5 +16,9 @@ pub mod salsa20;
 pub use error::CryptoError;
 pub use key_service::KeyService;
 
+// Re-export encryption/decryption functions
+pub use arc4::{decrypt_arc4, encrypt_arc4};
+pub use salsa20::{decrypt_salsa20, encrypt_salsa20};
+
 /// Result type for crypto operations.
 pub type Result<T> = std::result::Result<T, CryptoError>;

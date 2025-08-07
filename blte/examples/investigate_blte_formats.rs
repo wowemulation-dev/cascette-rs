@@ -7,6 +7,7 @@ use std::path::Path;
 #[derive(Debug)]
 struct BLTEAnalysis {
     product: String,
+    #[allow(dead_code)]
     url: String,
     file_size: usize,
     magic: [u8; 4],
@@ -29,7 +30,7 @@ fn download_blte(url: &str, path: &Path) -> Result<Vec<u8>, Box<dyn std::error::
         return Ok(fs::read(path)?);
     }
 
-    println!("  Downloading: {}", url);
+    println!("  Downloading: {url}");
     let response = ureq::get(url)
         .timeout(std::time::Duration::from_secs(30))
         .call()?;
@@ -193,7 +194,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     fs::create_dir_all(cache_dir)?;
 
     for (product, url, filename) in &test_cases {
-        println!("Testing {}", product);
+        println!("Testing {product}");
         let cache_path = cache_dir.join(filename);
 
         match download_blte(url, &cache_path) {
@@ -232,7 +233,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 analyses.push(analysis);
             }
             Err(e) => {
-                println!("  Failed to download: {}", e);
+                println!("  Failed to download: {e}");
             }
         }
         println!();
@@ -267,9 +268,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     println!("Results:");
-    println!("  Offset matches: {}", offset_matches);
-    println!("  Offset mismatches: {}", offset_mismatches);
-    println!("  Unknown: {}", unknowns);
+    println!("  Offset matches: {offset_matches}");
+    println!("  Offset mismatches: {offset_mismatches}");
+    println!("  Unknown: {unknowns}");
 
     // Test actual decompression with our library
     println!("\n=== Testing Decompression ===\n");
@@ -280,7 +281,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             continue;
         }
 
-        print!("Testing {} decompression... ", product);
+        print!("Testing {product} decompression... ");
         std::io::stdout().flush()?;
 
         let data = fs::read(&cache_path)?;
@@ -292,7 +293,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!("✓ Parsed ({} chunks)", blte.chunk_count());
                 }
                 Err(e) => {
-                    println!("✗ Parse failed: {}", e);
+                    println!("✗ Parse failed: {e}");
                 }
             }
         } else {
@@ -302,7 +303,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!("✓ Success ({} bytes)", decompressed.len());
                 }
                 Err(e) => {
-                    println!("✗ Failed: {}", e);
+                    println!("✗ Failed: {e}");
 
                     // If it's a checksum error, try with offset adjustment
                     if e.to_string().contains("ChecksumMismatch") {

@@ -9,13 +9,13 @@ fn main() -> Result<()> {
     let path = "test_blte/real_full.blte";
 
     if !std::path::Path::new(path).exists() {
-        println!("File not found: {}", path);
+        println!("File not found: {path}");
         println!("Please run: cargo run --example test_large_blte");
         return Ok(());
     }
 
     println!("=== Testing Compression Mode Detection ===");
-    println!("Loading 256MB archive: {}", path);
+    println!("Loading 256MB archive: {path}");
 
     let data = fs::read(path)?;
     println!("Loaded {} bytes", data.len());
@@ -31,7 +31,7 @@ fn main() -> Result<()> {
     let mut detection_errors = 0;
     let mut total_time = std::time::Duration::new(0, 0);
 
-    println!("Testing first {} files...", sample_size);
+    println!("Testing first {sample_size} files...");
 
     for i in 0..sample_size {
         let start = Instant::now();
@@ -54,12 +54,12 @@ fn main() -> Result<()> {
                 Err(e) => {
                     detection_errors += 1;
                     if detection_errors <= 5 {
-                        println!("File {}: Detection error: {}", i, e);
+                        println!("File {i}: Detection error: {e}");
                     }
                 }
             },
             Err(e) => {
-                println!("File {}: Failed to load: {}", i, e);
+                println!("File {i}: Failed to load: {e}");
                 detection_errors += 1;
             }
         }
@@ -81,9 +81,9 @@ fn main() -> Result<()> {
     }
 
     println!("\nSummary:");
-    println!("  Total files analyzed: {}", sample_size);
-    println!("  Successfully detected: {}", total_detected);
-    println!("  Detection errors: {}", detection_errors);
+    println!("  Total files analyzed: {sample_size}");
+    println!("  Successfully detected: {total_detected}");
+    println!("  Detection errors: {detection_errors}");
     println!(
         "  Success rate: {:.1}%",
         (total_detected as f64 / sample_size as f64) * 100.0
@@ -96,7 +96,7 @@ fn main() -> Result<()> {
     // Test extraction with metadata on a few files
     println!("\n=== Testing Metadata Extraction ===");
     for i in 0..5.min(archive.file_count()) {
-        println!("Testing file {}...", i);
+        println!("Testing file {i}...");
 
         let start = Instant::now();
         match archive.extract_file_with_metadata(i) {
@@ -104,7 +104,7 @@ fn main() -> Result<()> {
                 let extraction_time = start.elapsed();
                 let meta = &extracted.metadata;
 
-                println!("  ✓ Extracted file {} in {:?}", i, extraction_time);
+                println!("  ✓ Extracted file {i} in {extraction_time:?}");
                 println!("    Original index: {}", extracted.original_index);
                 println!("    Data size: {} bytes", extracted.data.len());
                 println!("    Compression mode: {:?}", meta.compression_mode);
@@ -114,7 +114,7 @@ fn main() -> Result<()> {
 
                 match &meta.chunk_structure {
                     blte::ChunkStructure::SingleChunk { decompressed_size } => {
-                        println!("    Chunk structure: Single ({} bytes)", decompressed_size);
+                        println!("    Chunk structure: Single ({decompressed_size} bytes)");
                     }
                     blte::ChunkStructure::MultiChunk {
                         chunk_count,
@@ -122,8 +122,7 @@ fn main() -> Result<()> {
                         ..
                     } => {
                         println!(
-                            "    Chunk structure: Multi ({} chunks, {:?} bytes)",
-                            chunk_count, decompressed_sizes
+                            "    Chunk structure: Multi ({chunk_count} chunks, {decompressed_sizes:?} bytes)"
                         );
                     }
                 }
@@ -133,7 +132,7 @@ fn main() -> Result<()> {
                 println!();
             }
             Err(e) => {
-                println!("  ✗ Failed to extract file {}: {}", i, e);
+                println!("  ✗ Failed to extract file {i}: {e}");
             }
         }
     }
@@ -153,11 +152,11 @@ fn main() -> Result<()> {
 
     let success_rate = (total_detected as f64 / sample_size as f64) * 100.0;
     if success_rate > 90.0 {
-        println!("🎉 Excellent detection rate: {:.1}%", success_rate);
+        println!("🎉 Excellent detection rate: {success_rate:.1}%");
     } else if success_rate > 75.0 {
-        println!("✅ Good detection rate: {:.1}%", success_rate);
+        println!("✅ Good detection rate: {success_rate:.1}%");
     } else {
-        println!("⚠️  Detection rate needs improvement: {:.1}%", success_rate);
+        println!("⚠️  Detection rate needs improvement: {success_rate:.1}%");
     }
 
     Ok(())

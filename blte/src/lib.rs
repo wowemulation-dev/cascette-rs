@@ -32,7 +32,15 @@ pub use builder::{
 };
 pub use chunk::{BLTEFile, ChunkData};
 pub use compress::{
-    auto_select_compression_mode, compress_chunk, compress_data_multi, compress_data_single,
+    EncryptionMethod,
+    auto_select_compression_mode,
+    compress_chunk,
+    compress_data_encrypted_multi,
+    compress_data_encrypted_single,
+    compress_data_multi,
+    compress_data_single,
+    // Encryption support
+    compress_encrypted,
     create_single_chunk_blte,
 };
 pub use decompress::{decompress_blte, decompress_chunk};

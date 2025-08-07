@@ -80,7 +80,7 @@ fn main() -> Result<()> {
     let path = "test_blte/real_full.blte";
 
     if !std::path::Path::new(path).exists() {
-        println!("❌ File not found: {}", path);
+        println!("❌ File not found: {path}");
         println!("Please run: cargo run --example test_large_blte");
         return Ok(());
     }
@@ -100,11 +100,11 @@ fn main() -> Result<()> {
     println!("\n🔍 Parsing original archive structure...");
     let mut original_archive = BLTEArchive::parse(original_data.clone())?;
     let file_count = original_archive.file_count();
-    println!("✅ Found {} BLTE files in archive", file_count);
+    println!("✅ Found {file_count} BLTE files in archive");
 
     // Step 3: Extract ALL files with complete metadata preservation
     println!("\n📤 Extracting ALL files with metadata preservation...");
-    println!("This may take a few minutes for {} files...", file_count);
+    println!("This may take a few minutes for {file_count} files...");
 
     let extract_start = Instant::now();
     let extracted_files = original_archive.extract_all_with_metadata()?;
@@ -129,7 +129,7 @@ fn main() -> Result<()> {
     } else {
         0.0
     };
-    println!("   Overall compression ratio: {:.2}x", compression_ratio);
+    println!("   Overall compression ratio: {compression_ratio:.2}x");
 
     // Step 4: Build perfect archive
     println!("\n🔧 Building perfect archive...");
@@ -147,7 +147,7 @@ fn main() -> Result<()> {
         if builder.add_extracted_file(file)? {
             files_added += 1;
         } else {
-            println!("⚠️  Archive capacity reached at {} files", files_added);
+            println!("⚠️  Archive capacity reached at {files_added} files");
             break;
         }
     }
@@ -191,7 +191,7 @@ fn main() -> Result<()> {
     println!("Byte differences: {}", report.byte_differences);
 
     if let Some(offset) = report.first_difference_offset {
-        println!("First difference: at offset {}", offset);
+        println!("First difference: at offset {offset}");
     }
 
     println!("\n⏱️  PERFORMANCE");
@@ -202,7 +202,7 @@ fn main() -> Result<()> {
     println!("Total time:       {:?}", report.total_time);
 
     let throughput = report.original_size as f64 / report.total_time.as_secs_f64() / 1_048_576.0;
-    println!("Overall throughput: {:.2} MB/s", throughput);
+    println!("Overall throughput: {throughput:.2} MB/s");
 
     println!("\n🎯 RECREATION QUALITY");
     println!("=====================");
@@ -248,7 +248,7 @@ fn main() -> Result<()> {
         println!("\n💾 Saving recreated archive for inspection...");
         let output_path = "test_blte/perfect_recreation.blte";
         fs::write(output_path, &recreated_data)?;
-        println!("✅ Saved to: {}", output_path);
+        println!("✅ Saved to: {output_path}");
 
         // Quick verification that our recreated file can be parsed
         println!("\n🔍 Verifying recreated archive can be parsed...");
@@ -258,7 +258,7 @@ fn main() -> Result<()> {
                 println!("   Contains {} files", recreated_archive.file_count());
             }
             Err(e) => {
-                println!("❌ Recreated archive parsing failed: {}", e);
+                println!("❌ Recreated archive parsing failed: {e}");
             }
         }
     }

@@ -7,7 +7,7 @@ use std::time::Instant;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let path = "test_blte/real_full.blte";
 
-    println!("Analyzing real WoW BLTE file: {}", path);
+    println!("Analyzing real WoW BLTE file: {path}");
     let data = fs::read(path)?;
     println!(
         "File size: {} bytes ({:.2} MB)",
@@ -34,7 +34,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let blte = BLTEFile::parse(data.clone())?;
     let parse_time = start.elapsed();
 
-    println!("Parse time: {:?}", parse_time);
+    println!("Parse time: {parse_time:?}");
     println!("Magic: {:?}", &data[0..4]);
     println!(
         "Header size field: {} (0x{:08x})",
@@ -53,11 +53,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let chunk_count = ((header_data[1] as u32) << 16)
             | ((header_data[2] as u32) << 8)
             | (header_data[3] as u32);
-        println!("Chunk count from header: {}", chunk_count);
+        println!("Chunk count from header: {chunk_count}");
 
         // Show all chunks (since there's only 1)
         for (i, chunk_info) in blte.header.chunks.iter().enumerate() {
-            println!("\nChunk {}:", i);
+            println!("\nChunk {i}:");
             println!("  Compressed size: {} bytes", chunk_info.compressed_size);
             println!(
                 "  Decompressed size: {} bytes",
@@ -73,7 +73,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Check if the data section looks correct
         let data_start = blte.header.data_offset();
         println!("\n=== Data Section ===");
-        println!("Data starts at byte: {}", data_start);
+        println!("Data starts at byte: {data_start}");
         println!("Expected data size: {} bytes", data.len() - data_start);
 
         if data_start < data.len() {
@@ -92,7 +92,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // Check compression mode of first chunk
             if data_start < data.len() {
                 let mode_byte = data[data_start];
-                print!("First byte of chunk data: 0x{:02x} ", mode_byte);
+                print!("First byte of chunk data: 0x{mode_byte:02x} ");
                 match mode_byte {
                     b'N' => println!("(No compression)"),
                     b'Z' => println!("(ZLib compression)"),
@@ -112,10 +112,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let actual_file_size = data.len();
 
         println!(
-            "Expected file size (header + chunks): {} bytes",
-            expected_file_size
+            "Expected file size (header + chunks): {expected_file_size} bytes"
         );
-        println!("Actual file size: {} bytes", actual_file_size);
+        println!("Actual file size: {actual_file_size} bytes");
 
         if actual_file_size > expected_file_size {
             println!(
@@ -129,10 +128,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             if next_blte_pos + 4 < data.len() {
                 let next_magic = &data[next_blte_pos..next_blte_pos + 4];
                 if next_magic == b"BLTE" {
-                    println!("\n✓ Found another BLTE file at offset {}!", next_blte_pos);
+                    println!("\n✓ Found another BLTE file at offset {next_blte_pos}!");
                     println!("This is definitely an archive file containing multiple BLTEs.");
                 } else {
-                    println!("\nNext 4 bytes at expected position: {:02x?}", next_magic);
+                    println!("\nNext 4 bytes at expected position: {next_magic:02x?}");
                 }
             }
         }

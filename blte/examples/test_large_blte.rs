@@ -10,7 +10,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Check if file exists
     if !std::path::Path::new(path).exists() {
-        println!("File not found: {}", path);
+        println!("File not found: {path}");
         println!("Please download a real BLTE file first:");
         println!(
             "  curl -s \"http://level3.blizzard.com/tpr/wow/data/00/17/0017a402f556fbece46c38dc431a2c9b\" -o test_blte/real_full.blte"
@@ -18,7 +18,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
-    println!("Loading real WoW BLTE file: {}", path);
+    println!("Loading real WoW BLTE file: {path}");
     let start = Instant::now();
     let data = fs::read(path)?;
     let load_time = start.elapsed();
@@ -32,7 +32,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let blte = BLTEFile::parse(data.clone())?;
     let parse_time = start.elapsed();
 
-    println!("Parse time: {:?}", parse_time);
+    println!("Parse time: {parse_time:?}");
     println!("Header size: {} bytes", blte.header.header_size);
     println!("Single chunk: {}", blte.is_single_chunk());
     println!("Chunk count: {}", blte.chunk_count());
@@ -64,9 +64,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             total_decompressed,
             total_decompressed as f64 / 1_048_576.0
         );
-        println!("  Average chunk size: {} bytes", avg_chunk);
-        println!("  Min chunk size: {} bytes", min_chunk);
-        println!("  Max chunk size: {} bytes", max_chunk);
+        println!("  Average chunk size: {avg_chunk} bytes");
+        println!("  Min chunk size: {min_chunk} bytes");
+        println!("  Max chunk size: {max_chunk} bytes");
         println!(
             "  Compression ratio: {:.2}%",
             (total_compressed as f64 / total_decompressed as f64) * 100.0
@@ -96,14 +96,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         decompressed.len(),
         decompressed.len() as f64 / 1_048_576.0
     );
-    println!("Decompression time: {:?}", decompress_time);
+    println!("Decompression time: {decompress_time:?}");
 
     let decompress_speed = (data.len() as f64 / decompress_time.as_secs_f64()) / 1_048_576.0;
-    println!("Decompression speed: {:.2} MB/s", decompress_speed);
+    println!("Decompression speed: {decompress_speed:.2} MB/s");
 
     // Determine compression mode from first chunk
     let mode = if let Ok(chunk) = blte.get_chunk_data(0) {
-        match chunk.data.get(0) {
+        match chunk.data.first() {
             Some(b'Z') => {
                 println!("Detected compression: ZLib");
                 CompressionMode::ZLib
@@ -137,11 +137,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let start = Instant::now();
         let result = compress_data_single(decompressed.clone(), mode, None)?;
         let compress_time = start.elapsed();
-        println!("Compression time: {:?}", compress_time);
+        println!("Compression time: {compress_time:?}");
 
         let compress_speed =
             (decompressed.len() as f64 / compress_time.as_secs_f64()) / 1_048_576.0;
-        println!("Compression speed: {:.2} MB/s", compress_speed);
+        println!("Compression speed: {compress_speed:.2} MB/s");
         result
     } else {
         // Calculate average chunk size from original
@@ -153,22 +153,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         };
 
         println!(
-            "Using multi-chunk compression with {} byte chunks...",
-            avg_chunk_size
+            "Using multi-chunk compression with {avg_chunk_size} byte chunks..."
         );
         let start = Instant::now();
 
         // Show progress for large files
-        let total_chunks = (decompressed.len() + avg_chunk_size - 1) / avg_chunk_size;
-        println!("Expected chunks: {}", total_chunks);
+        let total_chunks = decompressed.len().div_ceil(avg_chunk_size);
+        println!("Expected chunks: {total_chunks}");
 
         let result = compress_data_multi(decompressed.clone(), avg_chunk_size, mode, None)?;
         let compress_time = start.elapsed();
 
-        println!("Compression time: {:?}", compress_time);
+        println!("Compression time: {compress_time:?}");
         let compress_speed =
             (decompressed.len() as f64 / compress_time.as_secs_f64()) / 1_048_576.0;
-        println!("Compression speed: {:.2} MB/s", compress_speed);
+        println!("Compression speed: {compress_speed:.2} MB/s");
         result
     };
 
@@ -184,7 +183,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\nSize comparison:");
     println!("  Original: {} bytes", data.len());
     println!("  Recompressed: {} bytes", recompressed.len());
-    println!("  Difference: {} bytes ({:+.2}%)", size_diff, size_diff_pct);
+    println!("  Difference: {size_diff} bytes ({size_diff_pct:+.2}%)");
 
     // Verify round-trip
     println!("\n=== Verifying Round-Trip ===");
@@ -194,7 +193,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let start = Instant::now();
     let re_decompressed = decompress_blte(recompressed.clone(), None)?;
     let verify_time = start.elapsed();
-    println!(" done in {:?}", verify_time);
+    println!(" done in {verify_time:?}");
 
     if re_decompressed == decompressed {
         println!("✓ Round-trip successful! Data matches perfectly.");
@@ -208,7 +207,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Find first difference
         for (i, (a, b)) in decompressed.iter().zip(re_decompressed.iter()).enumerate() {
             if a != b {
-                println!("  First difference at byte {}: {} vs {}", i, a, b);
+                println!("  First difference at byte {i}: {a} vs {b}");
                 break;
             }
         }

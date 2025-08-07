@@ -84,7 +84,6 @@ impl BLTEArchive {
 }
 
 impl ValidationReport {
-
     /// Check if all files are valid
     pub fn is_all_valid(&self) -> bool {
         self.invalid_files == 0 && self.total_files > 0

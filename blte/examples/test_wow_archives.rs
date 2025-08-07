@@ -5,14 +5,14 @@ use std::time::Instant;
 
 fn analyze_archive_blte(data: &[u8], name: &str) -> Result<(), Box<dyn std::error::Error>> {
     if data.len() < 44 {
-        println!("{}: File too small", name);
+        println!("{name}: File too small");
         return Ok(());
     }
 
     // Parse header
-    let magic = &data[0..4];
+    let _magic = &data[0..4];
     let header_size = u32::from_be_bytes([data[4], data[5], data[6], data[7]]);
-    let flags = data[8];
+    let _flags = data[8];
     let chunk_count = ((data[9] as u32) << 16) | ((data[10] as u32) << 8) | (data[11] as u32);
 
     println!(
@@ -29,13 +29,13 @@ fn analyze_archive_blte(data: &[u8], name: &str) -> Result<(), Box<dyn std::erro
         let decomp_size = u32::from_be_bytes([data[16], data[17], data[18], data[19]]);
         let stored_checksum = &data[20..36];
 
-        println!("  First chunk: {} -> {} bytes", comp_size, decomp_size);
+        println!("  First chunk: {comp_size} -> {decomp_size} bytes");
 
         // Test data at different offsets
         let offset_36 = 36;
         let offset_44 = 8 + header_size as usize;
 
-        println!("  Expected offset (8 + header_size): {}", offset_44);
+        println!("  Expected offset (8 + header_size): {offset_44}");
 
         // Check checksums
         if data.len() >= offset_36 + comp_size as usize {
@@ -68,7 +68,7 @@ fn analyze_archive_blte(data: &[u8], name: &str) -> Result<(), Box<dyn std::erro
                 println!("    ✓ Success: {} bytes decompressed", decompressed.len());
             }
             Err(e) => {
-                println!("    ✗ Failed: {}", e);
+                println!("    ✗ Failed: {e}");
 
                 if e.to_string().contains("ChecksumMismatch") {
                     println!("    This confirms offset 44 is wrong, should be 36");
@@ -97,11 +97,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     for (i, hash) in test_hashes.iter().enumerate() {
         let filename = format!("archive_{}.blte", i + 1);
-        let path = format!("test_blte/archives/{}", filename);
+        let path = format!("test_blte/archives/{filename}");
 
         // Download if not cached
         let data = if std::path::Path::new(&path).exists() {
-            println!("Using cached {}", filename);
+            println!("Using cached {filename}");
             fs::read(&path)?
         } else {
             let url = format!(
@@ -111,7 +111,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 hash
             );
 
-            println!("Downloading {}", filename);
+            println!("Downloading {filename}");
             match ureq::get(&url).call() {
                 Ok(response) => {
                     let mut data = Vec::new();
@@ -126,7 +126,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     data
                 }
                 Err(e) => {
-                    println!("  Failed to download: {}", e);
+                    println!("  Failed to download: {e}");
                     continue;
                 }
             }
@@ -149,7 +149,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         match blte::BLTEFile::parse(data.clone()) {
             Ok(blte) => {
                 let parse_time = start.elapsed();
-                println!("Parse time: {:?}", parse_time);
+                println!("Parse time: {parse_time:?}");
                 println!("Chunks: {}", blte.chunk_count());
 
                 // Get chunk data (will fail on checksum)
@@ -158,12 +158,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         println!("Chunk data retrieved: {} bytes", chunk.data.len());
                     }
                     Err(e) => {
-                        println!("Expected checksum error: {}", e);
+                        println!("Expected checksum error: {e}");
                     }
                 }
             }
             Err(e) => {
-                println!("Parse failed: {}", e);
+                println!("Parse failed: {e}");
             }
         }
     }

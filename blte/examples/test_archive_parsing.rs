@@ -8,20 +8,20 @@ fn main() -> Result<()> {
     let path = "test_blte/real_full.blte";
 
     if !std::path::Path::new(path).exists() {
-        println!("File not found: {}", path);
+        println!("File not found: {path}");
         println!("Please run: cargo run --example test_large_blte");
         return Ok(());
     }
 
     println!("=== Testing BLTE Archive Parsing ===");
-    println!("Loading 256MB archive: {}", path);
+    println!("Loading 256MB archive: {path}");
 
     let start = Instant::now();
     let data = fs::read(path)?;
     let load_time = start.elapsed();
 
     let data_len = data.len();
-    println!("Loaded {} bytes in {:?}", data_len, load_time);
+    println!("Loaded {data_len} bytes in {load_time:?}");
 
     // Parse archive
     println!("\n=== Parsing Archive Structure ===");
@@ -29,7 +29,7 @@ fn main() -> Result<()> {
     let archive = BLTEArchive::parse(data)?;
     let parse_time = start.elapsed();
 
-    println!("Parse time: {:?}", parse_time);
+    println!("Parse time: {parse_time:?}");
     println!("Found {} BLTE files in archive", archive.file_count());
 
     // Get archive statistics
@@ -55,7 +55,7 @@ fn main() -> Result<()> {
         );
 
         if let Some(ratio) = stats.compression_ratio {
-            println!("Compression ratio: {:.2}%", ratio);
+            println!("Compression ratio: {ratio:.2}%");
         }
     }
 

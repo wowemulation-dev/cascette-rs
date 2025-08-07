@@ -21,6 +21,9 @@ async fn test_cache_ttl_and_validity() -> Result<(), Box<dyn std::error::Error>>
         .write("us", "certs", "test-cert-hash", test_data)
         .await?;
 
+    // Small delay to ensure filesystem operations complete
+    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+
     // First read to verify data is written
     let data1 = cache.read("us", "certs", "test-cert-hash").await?;
     assert_eq!(data1, test_data);

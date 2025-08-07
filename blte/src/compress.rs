@@ -5,6 +5,7 @@
 //! - Mode 'Z' (ZLib): ZLib compression with configurable levels
 //! - Mode '4' (LZ4): LZ4 compression
 //! - Mode 'F' (Frame): Recursive BLTE compression
+//! - Mode 'E' (Encrypted): Encryption with Salsa20 or ARC4
 
 use crate::{BLTE_MAGIC, CompressionMode, Error, Result};
 use flate2::Compression;
@@ -27,7 +28,7 @@ pub fn compress_chunk(data: &[u8], mode: CompressionMode, level: Option<u8>) -> 
         CompressionMode::LZ4 => compress_lz4(data),
         CompressionMode::Frame => compress_frame(data, level),
         CompressionMode::Encrypted => Err(Error::DecompressionFailed(
-            "Encryption must be applied after compression".into(),
+            "Use compress_encrypted() for encryption mode".into(),
         )),
     }
 }
@@ -278,6 +279,163 @@ fn is_likely_compressed(data: &[u8]) -> bool {
     unique_bytes > 200
 }
 
+/// Encryption method for BLTE mode 'E'
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum EncryptionMethod {
+    /// Salsa20 stream cipher (modern)
+    Salsa20,
+    /// ARC4/RC4 stream cipher (legacy)
+    ARC4,
+}
+
+/// Encrypt data using BLTE mode 'E' with specified encryption method
+///
+/// # Arguments
+/// * `data` - Raw data to encrypt (can be pre-compressed)
+/// * `method` - Encryption method (Salsa20 or ARC4)
+/// * `key` - 16-byte TACT encryption key
+/// * `iv` - 4-byte initialization vector
+/// * `block_index` - Block index for multi-chunk files
+///
+/// # Returns
+/// Encrypted data with mode byte 'E' prefix
+pub fn compress_encrypted(
+    data: &[u8],
+    method: EncryptionMethod,
+    key: &[u8; 16],
+    iv: &[u8; 4],
+    block_index: usize,
+) -> Result<Vec<u8>> {
+    let encrypted = match method {
+        EncryptionMethod::Salsa20 => ngdp_crypto::encrypt_salsa20(data, key, iv, block_index)
+            .map_err(|e| Error::DecompressionFailed(format!("Salsa20 encryption failed: {e}")))?,
+        EncryptionMethod::ARC4 => ngdp_crypto::encrypt_arc4(data, key, iv, block_index)
+            .map_err(|e| Error::DecompressionFailed(format!("ARC4 encryption failed: {e}")))?,
+    };
+
+    let mut result = Vec::with_capacity(encrypted.len() + 1);
+    result.push(b'E');
+    result.extend_from_slice(&encrypted);
+    Ok(result)
+}
+
+/// Create encrypted single-chunk BLTE file
+///
+/// This compresses the data first (if needed), then encrypts it.
+///
+/// # Arguments
+/// * `data` - Raw data to process
+/// * `compression` - Optional compression mode to apply before encryption
+/// * `compression_level` - Compression level (for ZLib)
+/// * `encryption` - Encryption method
+/// * `key` - 16-byte TACT key
+/// * `iv` - 4-byte IV
+///
+/// # Returns
+/// Complete BLTE file with encrypted content
+pub fn compress_data_encrypted_single(
+    data: Vec<u8>,
+    compression: Option<CompressionMode>,
+    compression_level: Option<u8>,
+    encryption: EncryptionMethod,
+    key: &[u8; 16],
+    iv: &[u8; 4],
+) -> Result<Vec<u8>> {
+    // Step 1: Apply compression if requested
+    let processed_data = if let Some(comp_mode) = compression {
+        if comp_mode == CompressionMode::Encrypted {
+            return Err(Error::DecompressionFailed(
+                "Cannot use Encrypted mode as compression before encryption".into(),
+            ));
+        }
+
+        compress_chunk(&data, comp_mode, compression_level)?
+    } else {
+        data
+    };
+
+    // Step 2: Encrypt the data (with mode 'E' prefix)
+    let encrypted_chunk = compress_encrypted(&processed_data, encryption, key, iv, 0)?;
+
+    // Step 3: Create single-chunk BLTE file
+    create_single_chunk_blte(&encrypted_chunk)
+}
+
+/// Create encrypted multi-chunk BLTE file
+///
+/// Splits data into chunks, compresses each (if needed), then encrypts each chunk.
+///
+/// # Arguments
+/// * `data` - Raw data to process
+/// * `chunk_size` - Size of each chunk before processing
+/// * `compression` - Optional compression mode
+/// * `compression_level` - Compression level
+/// * `encryption` - Encryption method
+/// * `key` - 16-byte TACT key
+/// * `iv` - 4-byte IV
+///
+/// # Returns
+/// Complete multi-chunk BLTE file with encrypted chunks
+pub fn compress_data_encrypted_multi(
+    data: Vec<u8>,
+    chunk_size: usize,
+    compression: Option<CompressionMode>,
+    compression_level: Option<u8>,
+    encryption: EncryptionMethod,
+    key: &[u8; 16],
+    iv: &[u8; 4],
+) -> Result<Vec<u8>> {
+    if data.is_empty() {
+        return Err(Error::DecompressionFailed(
+            "Cannot encrypt empty data".into(),
+        ));
+    }
+
+    if chunk_size == 0 {
+        return Err(Error::InvalidChunkCount(0));
+    }
+
+    // Validate compression mode
+    if let Some(comp_mode) = compression {
+        if comp_mode == CompressionMode::Encrypted {
+            return Err(Error::DecompressionFailed(
+                "Cannot use Encrypted mode as compression before encryption".into(),
+            ));
+        }
+    }
+
+    // Split data into chunks
+    let chunks: Vec<&[u8]> = data.chunks(chunk_size).collect();
+    let mut compressed_chunks = Vec::with_capacity(chunks.len());
+    let mut chunk_infos = Vec::with_capacity(chunks.len());
+
+    for (i, chunk) in chunks.iter().enumerate() {
+        // Step 1: Compress if requested
+        let processed_chunk = if let Some(comp_mode) = compression {
+            compress_chunk(chunk, comp_mode, compression_level)?
+        } else {
+            chunk.to_vec()
+        };
+
+        // Step 2: Encrypt the chunk (with block index)
+        let encrypted_chunk = compress_encrypted(&processed_chunk, encryption, key, iv, i)?;
+
+        // Calculate checksum on encrypted data
+        let checksum = md5::compute(&encrypted_chunk).0;
+
+        let info = ChunkTableEntry {
+            compressed_size: encrypted_chunk.len() as u32,
+            decompressed_size: chunk.len() as u32,
+            checksum,
+        };
+
+        compressed_chunks.push(encrypted_chunk);
+        chunk_infos.push(info);
+    }
+
+    build_multi_chunk_blte(&chunk_infos, &compressed_chunks)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -379,5 +537,283 @@ mod tests {
         // Normal data -> ZLib
         let normal = vec![b'A'; 10000];
         assert_eq!(auto_select_compression_mode(&normal), CompressionMode::ZLib);
+    }
+
+    #[test]
+    fn test_encrypt_salsa20() {
+        let data = b"Hello, encrypted BLTE world!";
+        let key = [0x01u8; 16];
+        let iv = [0x02, 0x03, 0x04, 0x05];
+        let block_index = 0;
+
+        let encrypted =
+            compress_encrypted(data, EncryptionMethod::Salsa20, &key, &iv, block_index).unwrap();
+
+        // Should have 'E' prefix
+        assert_eq!(encrypted[0], b'E');
+
+        // Should be different from original
+        assert_ne!(&encrypted[1..], data);
+
+        // Length should be original length + 1 (for mode byte)
+        assert_eq!(encrypted.len(), data.len() + 1);
+    }
+
+    #[test]
+    fn test_encrypt_arc4() {
+        let data = b"Hello, encrypted BLTE world!";
+        let key = [0x01u8; 16];
+        let iv = [0x02, 0x03, 0x04, 0x05];
+        let block_index = 0;
+
+        let encrypted =
+            compress_encrypted(data, EncryptionMethod::ARC4, &key, &iv, block_index).unwrap();
+
+        // Should have 'E' prefix
+        assert_eq!(encrypted[0], b'E');
+
+        // Should be different from original
+        assert_ne!(&encrypted[1..], data);
+
+        // Length should be original length + 1 (for mode byte)
+        assert_eq!(encrypted.len(), data.len() + 1);
+    }
+
+    #[test]
+    fn test_encrypted_single_chunk_blte() {
+        let data = b"Test data for encrypted BLTE".to_vec();
+        let key = [0xAAu8; 16];
+        let iv = [0xBB, 0xCC, 0xDD, 0xEE];
+
+        let encrypted_blte = compress_data_encrypted_single(
+            data.clone(),
+            None,
+            None,
+            EncryptionMethod::Salsa20,
+            &key,
+            &iv,
+        )
+        .unwrap();
+
+        // Should be a valid BLTE file
+        assert_eq!(&encrypted_blte[0..4], &BLTE_MAGIC);
+
+        // Header size should be 0 for single chunk
+        assert_eq!(&encrypted_blte[4..8], &[0, 0, 0, 0]);
+
+        // Data should start with 'E' mode byte
+        assert_eq!(encrypted_blte[8], b'E');
+    }
+
+    #[test]
+    fn test_encrypted_with_compression() {
+        let data = b"This is test data that compresses well: AAAAAAAAAAAABBBBBBBBBBBBCCCCCCCCCCCC"
+            .to_vec();
+        let key = [0x12u8; 16];
+        let iv = [0x34, 0x56, 0x78, 0x9A];
+
+        let encrypted_blte = compress_data_encrypted_single(
+            data.clone(),
+            Some(CompressionMode::ZLib),
+            Some(6),
+            EncryptionMethod::Salsa20,
+            &key,
+            &iv,
+        )
+        .unwrap();
+
+        // Should be a valid BLTE file
+        assert_eq!(&encrypted_blte[0..4], &BLTE_MAGIC);
+
+        // Data should start with 'E' mode byte
+        assert_eq!(encrypted_blte[8], b'E');
+    }
+
+    #[test]
+    fn test_encrypted_multi_chunk() {
+        let data = vec![b'X'; 1000]; // 1KB of data
+        let key = [0x55u8; 16];
+        let iv = [0x11, 0x22, 0x33, 0x44];
+
+        let encrypted_blte = compress_data_encrypted_multi(
+            data.clone(),
+            256, // 256 byte chunks
+            Some(CompressionMode::ZLib),
+            Some(6),
+            EncryptionMethod::ARC4,
+            &key,
+            &iv,
+        )
+        .unwrap();
+
+        // Should be a valid BLTE file
+        assert_eq!(&encrypted_blte[0..4], &BLTE_MAGIC);
+
+        // Header size should be non-zero for multi-chunk
+        let header_size = u32::from_be_bytes([
+            encrypted_blte[4],
+            encrypted_blte[5],
+            encrypted_blte[6],
+            encrypted_blte[7],
+        ]);
+        assert!(header_size > 0);
+    }
+
+    #[test]
+    fn test_encryption_integration() {
+        // Test that our encryption functions work with the crypto library
+        let data = b"Round-trip test data for encryption";
+        let key = [0x99u8; 16];
+        let iv = [0x88, 0x77, 0x66, 0x55];
+
+        // Test Salsa20 encryption/decryption directly
+        let salsa20_encrypted =
+            compress_encrypted(data, EncryptionMethod::Salsa20, &key, &iv, 0).unwrap();
+        assert_eq!(salsa20_encrypted[0], b'E'); // Mode byte
+
+        // Decrypt using ngdp-crypto functions directly
+        let salsa20_decrypted =
+            ngdp_crypto::decrypt_salsa20(&salsa20_encrypted[1..], &key, &iv, 0).unwrap();
+        assert_eq!(&salsa20_decrypted, data);
+
+        // Test ARC4 encryption/decryption directly
+        let arc4_encrypted =
+            compress_encrypted(data, EncryptionMethod::ARC4, &key, &iv, 0).unwrap();
+        assert_eq!(arc4_encrypted[0], b'E'); // Mode byte
+
+        // Decrypt using ngdp-crypto functions directly
+        let arc4_decrypted = ngdp_crypto::decrypt_arc4(&arc4_encrypted[1..], &key, &iv, 0).unwrap();
+        assert_eq!(&arc4_decrypted, data);
+    }
+
+    #[test]
+    fn test_full_round_trip_encryption() {
+        use ngdp_crypto::KeyService;
+
+        let original_data =
+            b"Full round-trip test for BLTE encryption and decryption workflow".to_vec();
+        let test_key = [
+            0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66,
+            0x77, 0x88,
+        ];
+        let test_iv = [0xAA, 0xBB, 0xCC, 0xDD];
+        let test_key_id = 0x1234567890ABCDEF_u64;
+
+        // Test 1: Single-chunk Salsa20 round-trip
+        println!("Testing single-chunk Salsa20 round-trip...");
+
+        // Create encrypted BLTE
+        let encrypted_blte = compress_data_encrypted_single(
+            original_data.clone(),
+            Some(CompressionMode::ZLib), // Apply compression first
+            Some(6),
+            EncryptionMethod::Salsa20,
+            &test_key,
+            &test_iv,
+        )
+        .unwrap();
+
+        // Create KeyService with our test key
+        let mut key_service = KeyService::empty();
+        key_service.add_key(test_key_id, test_key);
+
+        // Parse and manually decrypt to verify the encryption worked
+        let blte_file = crate::BLTEFile::parse(encrypted_blte.clone()).unwrap();
+        assert_eq!(blte_file.chunk_count(), 1);
+
+        let chunk = blte_file.get_chunk_data(0).unwrap();
+        assert_eq!(chunk.data[0], b'E'); // Should be encrypted
+
+        // Manually decrypt the chunk to verify
+        let decrypted_chunk =
+            ngdp_crypto::decrypt_salsa20(&chunk.data[1..], &test_key, &test_iv, 0).unwrap();
+
+        // The decrypted chunk should be ZLib compressed data
+        let decompressed = crate::decompress::decompress_chunk(&decrypted_chunk, 0, None).unwrap();
+        assert_eq!(decompressed, original_data);
+
+        println!("✅ Single-chunk Salsa20 round-trip successful");
+
+        // Test 2: Multi-chunk ARC4 round-trip
+        println!("Testing multi-chunk ARC4 round-trip...");
+
+        let large_data = vec![b'X'; 300]; // 300 bytes to create multiple chunks
+
+        let encrypted_multi_blte = compress_data_encrypted_multi(
+            large_data.clone(),
+            100, // 100-byte chunks -> 3 chunks
+            Some(CompressionMode::LZ4),
+            None,
+            EncryptionMethod::ARC4,
+            &test_key,
+            &test_iv,
+        )
+        .unwrap();
+
+        // Parse and verify multi-chunk structure
+        let multi_blte_file = crate::BLTEFile::parse(encrypted_multi_blte.clone()).unwrap();
+        assert_eq!(multi_blte_file.chunk_count(), 3);
+
+        // Manually decrypt each chunk and verify
+        let mut reconstructed = Vec::new();
+        for i in 0..3 {
+            let chunk = multi_blte_file.get_chunk_data(i).unwrap();
+            assert_eq!(chunk.data[0], b'E'); // Should be encrypted
+
+            // Decrypt with correct block index
+            let decrypted_chunk =
+                ngdp_crypto::decrypt_arc4(&chunk.data[1..], &test_key, &test_iv, i).unwrap();
+
+            // Decompress the LZ4 data
+            let decompressed =
+                crate::decompress::decompress_chunk(&decrypted_chunk, i, None).unwrap();
+            reconstructed.extend_from_slice(&decompressed);
+        }
+
+        assert_eq!(reconstructed, large_data);
+
+        println!("✅ Multi-chunk ARC4 round-trip successful");
+
+        // Test 3: Different encryption methods produce different results
+        let salsa20_encrypted = compress_data_encrypted_single(
+            original_data.clone(),
+            None,
+            None,
+            EncryptionMethod::Salsa20,
+            &test_key,
+            &test_iv,
+        )
+        .unwrap();
+
+        let arc4_encrypted = compress_data_encrypted_single(
+            original_data.clone(),
+            None,
+            None,
+            EncryptionMethod::ARC4,
+            &test_key,
+            &test_iv,
+        )
+        .unwrap();
+
+        // The encrypted data should be different
+        assert_ne!(&salsa20_encrypted[9..], &arc4_encrypted[9..]);
+
+        // But both should decrypt to the same original data
+        let salsa20_blte = crate::BLTEFile::parse(salsa20_encrypted).unwrap();
+        let arc4_blte = crate::BLTEFile::parse(arc4_encrypted).unwrap();
+
+        let salsa20_chunk = salsa20_blte.get_chunk_data(0).unwrap();
+        let arc4_chunk = arc4_blte.get_chunk_data(0).unwrap();
+
+        let salsa20_decrypted =
+            ngdp_crypto::decrypt_salsa20(&salsa20_chunk.data[1..], &test_key, &test_iv, 0).unwrap();
+        let arc4_decrypted =
+            ngdp_crypto::decrypt_arc4(&arc4_chunk.data[1..], &test_key, &test_iv, 0).unwrap();
+
+        assert_eq!(salsa20_decrypted, original_data);
+        assert_eq!(arc4_decrypted, original_data);
+
+        println!("✅ Encryption method differentiation test successful");
+        println!("✅ Full round-trip encryption test completed successfully!");
     }
 }

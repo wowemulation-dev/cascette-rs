@@ -2,7 +2,7 @@
 
 use byteorder::{BigEndian, ReadBytesExt};
 use std::fs;
-use std::io::{Cursor, Read};
+use std::io::Cursor;
 
 fn find_blte_files(data: &[u8]) -> Vec<(usize, u32, u32)> {
     let mut files = Vec::new();
@@ -70,12 +70,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let path = "test_blte/real_full.blte";
 
     if !std::path::Path::new(path).exists() {
-        println!("File not found: {}", path);
+        println!("File not found: {path}");
         println!("Please run: cargo run --example test_large_blte");
         return Ok(());
     }
 
-    println!("Analyzing concatenated BLTE file: {}", path);
+    println!("Analyzing concatenated BLTE file: {path}");
     let data = fs::read(path)?;
     println!(
         "Total file size: {} bytes ({:.2} MB)",
@@ -111,12 +111,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             println!("    ✓ Decompressed: {} bytes", decompressed.len());
                         }
                         Err(e) => {
-                            println!("    ✗ Decompression failed: {}", e);
+                            println!("    ✗ Decompression failed: {e}");
                         }
                     }
                 }
                 Err(e) => {
-                    println!("    ✗ Invalid BLTE: {}", e);
+                    println!("    ✗ Invalid BLTE: {e}");
                 }
             }
         }

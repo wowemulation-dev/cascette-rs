@@ -147,16 +147,21 @@ jobs:
       - name: Publish to crates.io (Dry Run)
         if: needs.determine-release-type.outputs.dry-run == 'true'
         run: |
-          echo "::warning::DRY RUN MODE - Would publish these packages in order:"
-          echo "1. ngdp-bpsv"
-          echo "2. ribbit-client"
-          echo "3. tact-client"
-          echo "4. tact-parser"
-          echo "5. ngdp-crypto"
-          echo "6. blte"
-          echo "7. ngdp-cdn"
-          echo "8. ngdp-cache"
-          echo "9. ngdp-client"
+          echo "::warning::DRY RUN MODE - Would publish these packages in dependency order:"
+          echo "Level 0 (no internal deps):"
+          echo "  1. ngdp-bpsv"
+          echo "  2. ngdp-crypto"
+          echo "Level 1 (depends on Level 0):"
+          echo "  3. ribbit-client (→ ngdp-bpsv)"
+          echo "  4. tact-client (→ ngdp-bpsv)"
+          echo "  5. blte (→ ngdp-crypto)"
+          echo "Level 2 (depends on Level 1):"
+          echo "  6. tact-parser (→ blte, ngdp-crypto)"
+          echo "  7. ngdp-cdn (→ tact-client)"
+          echo "Level 3 (depends on Level 2):"
+          echo "  8. ngdp-cache (→ ngdp-cdn, ribbit-client, tact-client)"
+          echo "Level 4 (depends on all):"
+          echo "  9. ngdp-client (→ all crates)"
           echo "::notice::No actual publishing performed"
           
       - name: Publish to crates.io (Production)
@@ -165,25 +170,41 @@ jobs:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
         run: |
           echo "::notice::Publishing packages to crates.io in dependency order..."
-          # Publish in dependency order
+          
+          # Level 0: No internal dependencies
+          echo "::group::Level 0 - Base crates (no internal deps)"
           cargo publish -p ngdp-bpsv
-          sleep 30  # Wait for crates.io to index
-          
-          cargo publish -p ribbit-client
-          cargo publish -p tact-client
-          cargo publish -p tact-parser
-          sleep 30
-          
           cargo publish -p ngdp-crypto
-          cargo publish -p blte
-          sleep 30
+          echo "::endgroup::"
+          sleep 45  # Longer wait for base crates to be indexed
           
-          cargo publish -p ngdp-cdn
-          cargo publish -p ngdp-cache
-          sleep 30
+          # Level 1: Depend on Level 0 only
+          echo "::group::Level 1 - First level dependencies"
+          cargo publish -p ribbit-client    # → ngdp-bpsv
+          cargo publish -p tact-client      # → ngdp-bpsv  
+          cargo publish -p blte             # → ngdp-crypto
+          echo "::endgroup::"
+          sleep 45  # Wait for Level 1 to be indexed
           
-          cargo publish -p ngdp-client
-          echo "::notice::All packages published successfully!"
+          # Level 2: Depend on Level 1
+          echo "::group::Level 2 - Second level dependencies"
+          cargo publish -p tact-parser      # → blte, ngdp-crypto
+          cargo publish -p ngdp-cdn         # → tact-client
+          echo "::endgroup::"
+          sleep 45  # Wait for Level 2 to be indexed
+          
+          # Level 3: Depend on Level 2
+          echo "::group::Level 3 - Third level dependencies"
+          cargo publish -p ngdp-cache       # → ngdp-cdn, ribbit-client, tact-client
+          echo "::endgroup::"
+          sleep 45  # Wait for Level 3 to be indexed
+          
+          # Level 4: CLI depends on everything
+          echo "::group::Level 4 - Final CLI crate"
+          cargo publish -p ngdp-client      # → all crates
+          echo "::endgroup::"
+          
+          echo "::notice::All packages published successfully in correct dependency order!"
 
       - name: Create library release
         uses: softprops/action-gh-release@v2

@@ -7,7 +7,7 @@ use std::time::Instant;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let path = "test_blte/first.blte";
 
-    println!("Testing extracted BLTE file: {}", path);
+    println!("Testing extracted BLTE file: {path}");
     let data = fs::read(path)?;
     println!("File size: {} bytes", data.len());
 
@@ -27,7 +27,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let actual_checksum = md5::compute(&chunk.data);
         println!("  Checksum (actual): {:02x?}", actual_checksum.0);
 
-        if chunk.data.len() > 0 {
+        if !chunk.data.is_empty() {
             println!("  First byte: 0x{:02x}", chunk.data[0]);
 
             // The issue is the chunk data starts with 0x5A which is 'Z'
@@ -79,12 +79,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         }
                                     }
                                     Err(e) => {
-                                        println!("✗ Re-decompression failed: {}", e);
+                                        println!("✗ Re-decompression failed: {e}");
                                     }
                                 }
                             }
                             Err(e) => {
-                                println!("✗ Decompression failed: {}", e);
+                                println!("✗ Decompression failed: {e}");
 
                                 // Debug: Let's check what's happening
                                 println!("\nDebug info:");
@@ -99,7 +99,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
                     Err(e) => {
-                        println!("  ✗ Chunk decompression failed: {}", e);
+                        println!("  ✗ Chunk decompression failed: {e}");
                     }
                 }
             }

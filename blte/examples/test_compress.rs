@@ -11,8 +11,8 @@ fn main() {
     let data = b"Test data".to_vec();
     let compressed = compress_chunk(&data, CompressionMode::None, None).unwrap();
     println!("Single chunk compressed:");
-    println!("  Data: {:?}", data);
-    println!("  Compressed (with mode): {:?}", compressed);
+    println!("  Data: {data:?}");
+    println!("  Compressed (with mode): {compressed:?}");
     println!("  Checksum of compressed: {:x}", md5::compute(&compressed));
     println!();
 
@@ -37,9 +37,9 @@ fn main() {
     let compressed2 = compress_chunk(&chunk2, CompressionMode::None, None).unwrap();
 
     println!("Multi-chunk compressed:");
-    println!("  Chunk 1: {:?} -> {:?}", chunk1, compressed1);
+    println!("  Chunk 1: {chunk1:?} -> {compressed1:?}");
     println!("  Checksum 1: {:x}", md5::compute(&compressed1));
-    println!("  Chunk 2: {:?} -> {:?}", chunk2, compressed2);
+    println!("  Chunk 2: {chunk2:?} -> {compressed2:?}");
     println!("  Checksum 2: {:x}", md5::compute(&compressed2));
     println!();
 
@@ -61,11 +61,11 @@ fn main() {
     // Try to decompress
     match decompress_blte(multi_blte.clone(), None) {
         Ok(decompressed) => {
-            println!("  Decompressed: {:?}", decompressed);
+            println!("  Decompressed: {decompressed:?}");
             println!("  Success!");
         }
         Err(e) => {
-            println!("  Decompression failed: {}", e);
+            println!("  Decompression failed: {e}");
 
             // Debug: show the actual BLTE structure
             println!("\nDebug - BLTE structure:");
@@ -114,7 +114,7 @@ fn main() {
 
                 // Show actual chunk data
                 let data_offset = 8 + header_size;
-                println!("  Data starts at offset: {}", data_offset);
+                println!("  Data starts at offset: {data_offset}");
                 println!(
                     "  First 20 bytes of data: {:?}",
                     &multi_blte[data_offset..data_offset + 20.min(multi_blte.len() - data_offset)]

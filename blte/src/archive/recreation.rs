@@ -220,9 +220,7 @@ pub fn recreate_perfect_blte_file(file: &ExtractedFile) -> Result<Vec<u8>> {
             // Single chunk recreation
             crate::compress_data_single(file.data.clone(), meta.compression_mode, None)?
         }
-        ChunkStructure::MultiChunk {
-            ..
-        } => {
+        ChunkStructure::MultiChunk { .. } => {
             // Multi-chunk recreation with original chunk boundaries
             recreate_multichunk_blte(file)?
         }

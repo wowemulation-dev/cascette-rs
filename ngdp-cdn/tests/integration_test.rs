@@ -3,6 +3,7 @@
 use ngdp_cdn::{CdnClient, Error};
 
 #[tokio::test]
+#[ignore = "requires internet connectivity"]
 async fn test_content_not_found_errors() {
     let client = CdnClient::new().unwrap();
 
@@ -51,6 +52,7 @@ async fn test_retry_on_server_error() {
 }
 
 #[tokio::test]
+#[ignore = "requires internet connectivity"]
 async fn test_custom_configuration() {
     let client = CdnClient::builder()
         .max_retries(1)
@@ -70,6 +72,7 @@ async fn test_custom_configuration() {
 }
 
 #[tokio::test]
+#[ignore = "requires internet connectivity"]
 async fn test_concurrent_requests() {
     let client = CdnClient::new().unwrap();
 

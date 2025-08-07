@@ -18,7 +18,7 @@ fn download_blte_file() -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     ];
 
     for url in &urls {
-        println!("Trying {}", url);
+        println!("Trying {url}");
         let response = ureq::get(url)
             .timeout(std::time::Duration::from_secs(10))
             .call();
@@ -32,16 +32,16 @@ fn download_blte_file() -> Result<Vec<u8>, Box<dyn std::error::Error>> {
 
                 if len > 0 && len < 10_000_000 {
                     // Less than 10MB
-                    println!("  Found file: {} bytes", len);
+                    println!("  Found file: {len} bytes");
                     let mut data = Vec::with_capacity(len);
                     resp.into_reader().read_to_end(&mut data)?;
                     return Ok(data);
                 } else {
-                    println!("  File too large: {} bytes, skipping", len);
+                    println!("  File too large: {len} bytes, skipping");
                 }
             }
             Err(e) => {
-                println!("  Failed: {}", e);
+                println!("  Failed: {e}");
             }
         }
     }
@@ -90,7 +90,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let decompress_time = start.elapsed();
 
     println!("Decompressed size: {} bytes", decompressed.len());
-    println!("Decompression time: {:?}", decompress_time);
+    println!("Decompression time: {decompress_time:?}");
 
     // Calculate compression ratio
     let ratio = data.len() as f64 / decompressed.len() as f64;
@@ -105,7 +105,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Determine compression mode from first chunk
     let mode = if let Ok(chunk) = blte.get_chunk_data(0) {
-        match chunk.data.get(0) {
+        match chunk.data.first() {
             Some(b'Z') => CompressionMode::ZLib,
             Some(b'4') => CompressionMode::LZ4,
             Some(b'N') => CompressionMode::None,
@@ -115,29 +115,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         CompressionMode::ZLib
     };
 
-    println!("Using compression mode: {:?}", mode);
+    println!("Using compression mode: {mode:?}");
 
     // For single chunk, use single compression
     let recompressed = if blte.is_single_chunk() {
         let start = Instant::now();
         let result = compress_data_single(decompressed.clone(), mode, None)?;
         let compress_time = start.elapsed();
-        println!("Compression time: {:?}", compress_time);
+        println!("Compression time: {compress_time:?}");
         result
     } else {
         // For multi-chunk, try to use similar chunk size
-        let avg_chunk_size = if blte.header.chunks.len() > 0 {
+        let avg_chunk_size = if !blte.header.chunks.is_empty() {
             let total: u32 = blte.header.chunks.iter().map(|c| c.decompressed_size).sum();
             (total / blte.header.chunks.len() as u32) as usize
         } else {
             256 * 1024 // Default 256KB chunks
         };
 
-        println!("Using chunk size: {} bytes", avg_chunk_size);
+        println!("Using chunk size: {avg_chunk_size} bytes");
         let start = Instant::now();
         let result = compress_data_multi(decompressed.clone(), avg_chunk_size, mode, None)?;
         let compress_time = start.elapsed();
-        println!("Compression time: {:?}", compress_time);
+        println!("Compression time: {compress_time:?}");
         result
     };
 
@@ -147,8 +147,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let size_diff = recompressed.len() as i64 - data.len() as i64;
     let size_diff_pct = (size_diff as f64 / data.len() as f64) * 100.0;
     println!(
-        "\nSize difference: {} bytes ({:+.2}%)",
-        size_diff, size_diff_pct
+        "\nSize difference: {size_diff} bytes ({size_diff_pct:+.2}%)"
     );
 
     // Verify round-trip
@@ -185,7 +184,7 @@ fn create_test_blte() -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     // Add some repetitive data (simulating game data patterns)
     for i in 0..1000 {
         test_data.extend_from_slice(b"SPELL_CAST_SUCCESS,");
-        test_data.extend_from_slice(format!("Player-{},", i).as_bytes());
+        test_data.extend_from_slice(format!("Player-{i},").as_bytes());
         test_data.extend_from_slice(b"0x0000000000000000,");
         test_data.extend_from_slice(b"\"Unknown\",0x0,");
         test_data.extend_from_slice(format!("{},", i * 100).as_bytes());
