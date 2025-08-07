@@ -147,6 +147,7 @@ jobs:
           cargo install rage
       
       - name: Build binary
+        shell: bash
         run: |
           if [ "${{ matrix.use_cross }}" = "true" ]; then
             cross build --release --package ngdp-client --bin ngdp --target ${{ matrix.target }}
