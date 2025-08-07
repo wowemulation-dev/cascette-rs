@@ -14,8 +14,8 @@ byteorder.workspace = true
 modular-bitfield.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
-blte = { path = "../blte", version = "0.3.0" }
-ngdp-crypto = { path = "../ngdp-crypto", version = "0.3.0" }
+blte = { path = "../blte", version = "0.3.1" }
+ngdp-crypto = { path = "../ngdp-crypto", version = "0.3.1" }
 md5 = "0.8"
 
 [dev-dependencies]
@@ -25,8 +25,8 @@ hex.workspace = true
 tracing-subscriber.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 reqwest = { version = "0.12.22", default-features = false, features = ["rustls-tls"] }
-ribbit-client = { path = "../ribbit-client", version = "0.3.0" }
-ngdp-bpsv = { path = "../ngdp-bpsv", version = "0.3.0" }
+ribbit-client = { path = "../ribbit-client", version = "0.3.1" }
+ngdp-bpsv = { path = "../ngdp-bpsv", version = "0.3.1" }
 
 [[bench]]
 name = "jenkins3"
