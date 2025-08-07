@@ -32,6 +32,11 @@ env:
   RUSTFLAGS: -D warnings
   CARGO_INCREMENTAL: 0
 
+# Prevent concurrent CLI releases
+concurrency:
+  group: release-cli-${{ github.repository }}
+  cancel-in-progress: false
+
 permissions:
   contents: write
   packages: write

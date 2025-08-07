@@ -21,12 +21,28 @@ on:
           - all
           - libraries
           - cli
+        default: cli
+      dry-run:
+        description: 'Dry run (no actual publishing)'
+        required: false
+        type: boolean
+        default: false
+      skip-tests:
+        description: 'Skip tests (use with caution)'
+        required: false
+        type: boolean
+        default: false
 
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
   RUSTFLAGS: -D warnings
   CARGO_INCREMENTAL: 0
+
+# Prevent concurrent releases
+concurrency:
+  group: release-${{ github.repository }}
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -40,6 +56,8 @@ jobs:
       release-libraries: ${{ steps.determine.outputs.release-libraries }}
       release-cli: ${{ steps.determine.outputs.release-cli }}
       version: ${{ steps.determine.outputs.version }}
+      dry-run: ${{ steps.determine.outputs.dry-run }}
+      skip-tests: ${{ steps.determine.outputs.skip-tests }}
     steps:
       - name: Determine what to release
         id: determine
@@ -47,34 +65,51 @@ jobs:
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             VERSION="${{ inputs.version }}"
             RELEASE_TYPE="${{ inputs.release-type }}"
+            DRY_RUN="${{ inputs.dry-run }}"
+            SKIP_TESTS="${{ inputs.skip-tests }}"
           else
             # Parse tag to determine release type
             TAG="${GITHUB_REF#refs/tags/}"
             if [[ "$TAG" == ngdp-client-v* ]]; then
               VERSION="${TAG#ngdp-client-v}"
               RELEASE_TYPE="cli"
+            elif [[ "$TAG" == libs-v* ]]; then
+              VERSION="${TAG#libs-v}"
+              RELEASE_TYPE="libraries"
             else
               VERSION="${TAG#v}"
               RELEASE_TYPE="all"
             fi
+            DRY_RUN="false"
+            SKIP_TESTS="false"
           fi
 
           echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "dry-run=$DRY_RUN" >> $GITHUB_OUTPUT
+          echo "skip-tests=$SKIP_TESTS" >> $GITHUB_OUTPUT
 
+          # Determine what to release
           case "$RELEASE_TYPE" in
             all)
               echo "release-libraries=true" >> $GITHUB_OUTPUT
               echo "release-cli=true" >> $GITHUB_OUTPUT
+              echo "::notice::Releasing both libraries and CLI for v$VERSION"
               ;;
             libraries)
               echo "release-libraries=true" >> $GITHUB_OUTPUT
               echo "release-cli=false" >> $GITHUB_OUTPUT
+              echo "::notice::Releasing libraries only for v$VERSION"
               ;;
             cli)
               echo "release-libraries=false" >> $GITHUB_OUTPUT
               echo "release-cli=true" >> $GITHUB_OUTPUT
+              echo "::notice::Releasing CLI only for v$VERSION"
               ;;
           esac
+          
+          if [[ "$DRY_RUN" == "true" ]]; then
+            echo "::warning::DRY RUN MODE - No actual publishing will occur"
+          fi
 
   # Release libraries to crates.io
   release-libraries:
@@ -106,12 +141,27 @@ jobs:
           done
 
       - name: Run tests
+        if: needs.determine-release-type.outputs.skip-tests != 'true'
         run: cargo test --all-features --workspace
 
-      - name: Publish to crates.io
+      - name: Publish to crates.io (Dry Run)
+        if: needs.determine-release-type.outputs.dry-run == 'true'
+        run: |
+          echo "::warning::DRY RUN MODE - Would publish these packages in order:"
+          echo "1. ngdp-bpsv"
+          echo "2. ribbit-client"
+          echo "3. tact-client" 
+          echo "4. ngdp-cdn"
+          echo "5. ngdp-cache"
+          echo "6. ngdp-client"
+          echo "::notice::No actual publishing performed"
+          
+      - name: Publish to crates.io (Production)
+        if: needs.determine-release-type.outputs.dry-run != 'true'
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
         run: |
+          echo "::notice::Publishing packages to crates.io in dependency order..."
           # Publish in dependency order
           cargo publish -p ngdp-bpsv
           sleep 30  # Wait for crates.io to index
@@ -125,6 +175,7 @@ jobs:
           sleep 30
           
           cargo publish -p ngdp-client
+          echo "::notice::All packages published successfully!"
 
       - name: Create library release
         uses: softprops/action-gh-release@v2
@@ -162,7 +213,7 @@ jobs:
     uses: ./.github/workflows/release-cli.yml
     with:
       version: ${{ needs.determine-release-type.outputs.version }}
-      dry-run: false
+      dry-run: ${{ needs.determine-release-type.outputs.dry-run == 'true' }}
     secrets: inherit
 
   # Final success check
