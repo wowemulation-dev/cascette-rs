@@ -9,6 +9,9 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 
+[features]
+async = ["dep:tokio"]
+
 [dependencies]
 flate2 = "1.1"
 lz4_flex = "0.11.5"
@@ -18,6 +21,7 @@ tracing.workspace = true
 thiserror.workspace = true
 byteorder.workspace = true
 hex.workspace = true
+tokio = { workspace = true, optional = true, features = ["macros", "fs"] }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt"] }
