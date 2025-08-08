@@ -13,9 +13,6 @@ use crate::{BLTE_MAGIC, Error, MD5_LENGTH, Md5, Result};
 /// [0]: https://wowdev.wiki/BLTE
 #[derive(Debug, Clone)]
 pub struct BLTEHeader {
-    /// Length of the BLTE headers, in bytes.
-    length: u32,
-
     /// Total size of all blocks in the file when decompressed.
     ///
     /// Set to 0 if unknown.
@@ -28,29 +25,46 @@ pub struct BLTEHeader {
 }
 
 impl BLTEHeader {
-    /// Parse a BLTE header at the file's current position.
-    pub fn parse<R: Read>(f: &mut R) -> Result<Self> {
+    /// Parse a BLTE header at the file's current position, with a BLTE stream
+    /// of up to `length` bytes.
+    pub fn parse<R: Read>(f: &mut R, length: u64) -> Result<Self> {
+        if length < 8 {
+            return Err(Error::TruncatedData {
+                expected: 8,
+                actual: length,
+            });
+        }
+
         let mut magic = [0; BLTE_MAGIC.len()];
         f.read_exact(&mut magic)?;
         if magic != BLTE_MAGIC {
             return Err(Error::InvalidMagic(magic));
         }
 
-        let length = f.read_u32::<BigEndian>()?;
-        if length <= 8 + 4 + 24 {
-            // We couldn't fit a BlockInfo entry, so this must be a single
-            // stream.
-            return Ok(BLTEHeader {
-                length: length.max(8),
-                total_decompressed_size: 0,
-                chunks: Vec::with_capacity(0),
+        let header_length = f.read_u32::<BigEndian>()?;
+        if length < header_length.into() {
+            // Header won't fit in the buffer we have
+            return Err(Error::TruncatedData {
+                expected: header_length.into(),
+                actual: length,
             });
         }
 
-        if length > 65535 {
+        if header_length <= 8 + 4 + 24 {
+            // We couldn't fit a single ChunkInfo, so this must be a single
+            // stream.
+            let header_length = header_length.max(8);
+
+            return Ok(BLTEHeader {
+                total_decompressed_size: 0,
+                chunks: vec![ChunkInfo::single_chunk(header_length, length)],
+            });
+        }
+
+        if header_length > 65535 {
             // Probably invalid, number is arbitrary.
             // This allows up to 1638 or 2730 chunks, depending on format.
-            return Err(Error::InvalidHeaderSize(length));
+            return Err(Error::InvalidHeaderSize(header_length));
         }
 
         // We have a ChunkInfo struct with 1 or more BlockInfos
@@ -63,7 +77,7 @@ impl BLTEHeader {
         let chunk_count = f.read_u24::<BigEndian>()?;
 
         // How much header have we got length for chunks?
-        let chunks_len = length - 8 - 4;
+        let chunks_len = header_length - 8 - 4;
         // Length of a single chunk
         let chunk_len = if has_uncompressed_hash { 40 } else { 24 };
 
@@ -75,11 +89,11 @@ impl BLTEHeader {
         }
 
         let mut chunks = Vec::with_capacity(chunk_count as usize);
-        let mut compressed_offset = u64::from(length);
+        let mut compressed_offset = u64::from(header_length);
         let mut decompressed_offset = 0;
         for _ in 0..chunk_count {
-            let compressed_size = f.read_u32::<BigEndian>()?;
-            let decompressed_size = f.read_u32::<BigEndian>()?;
+            let compressed_size = f.read_u32::<BigEndian>()?.into();
+            let decompressed_size = f.read_u32::<BigEndian>()?.into();
 
             let mut compressed_hash = [0; MD5_LENGTH];
             f.read_exact(&mut compressed_hash)?;
@@ -95,19 +109,26 @@ impl BLTEHeader {
             chunks.push(ChunkInfo {
                 compressed_size,
                 decompressed_size,
-                compressed_hash,
+                compressed_hash: Some(compressed_hash),
                 decompressed_hash,
                 compressed_offset,
                 decompressed_offset,
             });
 
-            decompressed_offset += u64::from(decompressed_size);
             compressed_offset += u64::from(compressed_size);
+            if compressed_offset > length {
+                // The streams we got would overrun!
+                return Err(Error::TruncatedData {
+                    expected: compressed_offset,
+                    actual: length,
+                });
+            }
+
+            decompressed_offset += u64::from(decompressed_size);
         }
 
         Ok(Self {
             chunks,
-            length,
             total_decompressed_size: decompressed_offset,
         })
     }
@@ -119,26 +140,14 @@ impl BLTEHeader {
         self.total_decompressed_size
     }
 
-    /// Find the offset of `chunk`, relative to the start of the header block.
-    ///
-    /// Returns `None` if `chunk` is out of range.
-    pub fn chunk_data_offset(&self, chunk: usize) -> Option<u64> {
-        if chunk == 0 {
-            return Some(self.length.into());
-        }
-
-        Some(self.chunks.get(chunk)?.compressed_offset)
-    }
-
-    /// Get total number of chunks
+    /// Get total number of chunks.
     pub fn chunk_count(&self) -> usize {
-        self.chunks.len().max(1)
+        self.chunks.len()
     }
 
     /// Get information about a chunk.
     ///
-    /// Returns `None` if the stream consists of a single chunk, or `chunk` is
-    /// out of range.
+    /// Returns `None` if `chunk` is out of range.
     pub fn get_chunk_info(&self, chunk: usize) -> Option<&ChunkInfo> {
         self.chunks.get(chunk)
     }
@@ -147,19 +156,30 @@ impl BLTEHeader {
 /// Information about a single chunk
 #[derive(Debug, Clone)]
 pub struct ChunkInfo {
-    /// The compressed size of the block, including block header byte(s).
-    pub compressed_size: u32,
+    /// The compressed size of the block, including chunk header byte(s).
+    ///
+    /// This value is expressed as a `u32` in the file, but we express it as
+    /// `u64` for easier use with `std::io` traits.
+    pub compressed_size: u64,
 
-    /// The decompressed size of the block.
+    /// The decompressed size of the block, if known.
+    ///
+    /// If this is set to `0`, then this is a single-stream file where the
+    /// decompressed size is unknown.
     ///
     /// For non-compressed blocks, this is `compressed_size - 1` (for the block
     /// header byte).
-    pub decompressed_size: u32,
+    ///
+    /// This value is expressed as a `u32` in the file, but we express it as
+    /// `u64` for easier use with `std::io` traits.
+    pub decompressed_size: u64,
 
     /// The MD5 checksum of the compressed block, including header byte(s).
     ///
+    /// Not present for single-chunk streams.
+    ///
     /// Can be verified with [`BlteExtractor::verify_compressed_checksum`][].
-    pub compressed_hash: Md5,
+    pub compressed_hash: Option<Md5>,
 
     /// The MD5 checksum of the block when decompressed.
     ///
@@ -175,33 +195,58 @@ pub struct ChunkInfo {
 }
 
 impl ChunkInfo {
-    // /// Create chunk info for single chunk mode
-    // pub fn single_chunk(compressed_size: u32, decompressed_size: u32) -> Self {
-    //     Self {
-    //         compressed_size,
-    //         decompressed_size,
-    //         checksum: [0u8; 16], // No checksum for single chunk
-    //     }
-    // }
+    /// Create synthetic chunk info for single chunk mode.
+    fn single_chunk(header_length: u32, length: u64) -> Self {
+        let header_length = u64::from(header_length);
+        Self {
+            compressed_size: length - header_length,
+            decompressed_size: 0,
+            compressed_hash: None,
+            decompressed_hash: None,
+            compressed_offset: header_length.into(),
+            decompressed_offset: 0,
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::io::{Cursor, ErrorKind};
     use super::*;
+    use std::{io::Cursor, iter::repeat_n};
 
     #[test]
     fn test_single_chunk_header() {
         let data = [
             b'B', b'L', b'T', b'E', // Magic
             0x00, 0x00, 0x00, 0x00, // Header size = 0 (single chunk)
+            b'N', 0x00, // Dummy payload
         ];
 
-        let header = BLTEHeader::parse(&mut Cursor::new(&data)).unwrap();
+        let header = BLTEHeader::parse(&mut Cursor::new(&data), data.len() as u64).unwrap();
         assert_eq!(header.chunk_count(), 1);
-        assert_eq!(header.chunk_data_offset(0), Some(8));
-        assert_eq!(header.chunk_data_offset(1), None);
-        assert!(header.chunks.is_empty());
+
+        // Check synthetic chunk info
+        let chunk_0 = header.get_chunk_info(0).unwrap();
+        assert_eq!(chunk_0.compressed_offset, 8);
+        assert_eq!(chunk_0.compressed_size, 2);
+
+        assert_eq!(chunk_0.decompressed_offset, 0);
+        assert_eq!(chunk_0.decompressed_size, 0);
+
+        assert!(header.get_chunk_info(1).is_none());
+
+        // Check when we truncate to just the header
+        let header = BLTEHeader::parse(&mut Cursor::new(&data), 8).unwrap();
+        assert_eq!(header.chunk_count(), 1);
+
+        let chunk_0 = header.get_chunk_info(0).unwrap();
+        assert_eq!(chunk_0.compressed_offset, 8);
+        assert_eq!(chunk_0.compressed_size, 0);
+
+        assert_eq!(chunk_0.decompressed_offset, 0);
+        assert_eq!(chunk_0.decompressed_size, 0);
+
+        assert!(header.get_chunk_info(1).is_none());
     }
 
     #[test]
@@ -216,43 +261,85 @@ mod tests {
         data.push(0x0F); // Flags
         data.extend_from_slice(&[0x00, 0x00, 0x02]); // 2 chunks (3-byte big-endian)
 
-        // Chunk 1
+        // Chunk info 1
         data.extend_from_slice(&1000u32.to_be_bytes()); // Compressed size
         data.extend_from_slice(&2000u32.to_be_bytes()); // Decompressed size
         data.extend_from_slice(&[0xAA; 16]); // Checksum
 
-        // Chunk 2
+        // Chunk info 2
         data.extend_from_slice(&1500u32.to_be_bytes()); // Compressed size
         data.extend_from_slice(&3000u32.to_be_bytes()); // Decompressed size
         data.extend_from_slice(&[0xBB; 16]); // Checksum
 
-        let header = BLTEHeader::parse(&mut Cursor::new(&data)).unwrap();
+        // Chunk data
+        data.extend(repeat_n(0xA0, 1000));
+        data.extend(repeat_n(0xB0, 1500));
+        assert_eq!(60 + 1000 + 1500, data.len());
+
+        let header = BLTEHeader::parse(&mut Cursor::new(&data), data.len() as u64).unwrap();
         assert_eq!(header.chunk_count(), 2);
-        assert_eq!(header.chunk_data_offset(0), Some(60));
-        assert_eq!(header.chunk_data_offset(1), Some(60 + 1000));
-        assert_eq!(header.chunk_data_offset(2), None);
 
         // Check chunks
-        assert_eq!(header.chunks.len(), 2);
-        assert_eq!(header.chunks[0].compressed_size, 1000);
-        assert_eq!(header.chunks[0].decompressed_size, 2000);
-        assert_eq!(header.chunks[0].compressed_hash, [0xAA; 16]);
-        assert_eq!(header.chunks[1].compressed_size, 1500);
-        assert_eq!(header.chunks[1].decompressed_size, 3000);
-        assert_eq!(header.chunks[1].compressed_hash, [0xBB; 16]);
+        let chunk_0 = header.get_chunk_info(0).unwrap();
+        assert_eq!(chunk_0.compressed_size, 1000);
+        assert_eq!(chunk_0.decompressed_size, 2000);
+        assert_eq!(chunk_0.compressed_hash.unwrap(), [0xAA; 16]);
+
+        let chunk_1 = header.get_chunk_info(1).unwrap();
+        assert_eq!(chunk_1.compressed_size, 1500);
+        assert_eq!(chunk_1.decompressed_size, 3000);
+        assert_eq!(chunk_1.compressed_hash.unwrap(), [0xBB; 16]);
+
+        assert!(header.get_chunk_info(2).is_none());
+
+        // Check that the length limit is enforced, even if the buffer is longer
+        // ...when reading the header
+        let err = BLTEHeader::parse(&mut Cursor::new(&data), 32).unwrap_err();
+        assert!(
+            matches!(
+                err,
+                Error::TruncatedData {
+                    expected: 60,
+                    actual: 32,
+                }
+            ),
+            "actual error: {err:?}",
+        );
+
+        // ...when reading the chunk infos
+        let err = BLTEHeader::parse(&mut Cursor::new(&data), 1500).unwrap_err();
+        assert!(
+            matches!(
+                err,
+                Error::TruncatedData {
+                    expected: 2560,
+                    actual: 1500,
+                },
+            ),
+            "actual error: {err:?}",
+        );
     }
 
     #[test]
     fn test_invalid_magic() {
         let data = b"BAD!\0\0\0\0"; // Wrong magic
-        let err = BLTEHeader::parse(&mut Cursor::new(data)).unwrap_err();
+        let err = BLTEHeader::parse(&mut Cursor::new(data), data.len() as u64).unwrap_err();
         assert!(matches!(err, Error::InvalidMagic(_)));
     }
 
     #[test]
     fn test_truncated_header() {
         let data = b"BLT"; // Too short
-        let err = BLTEHeader::parse(&mut Cursor::new(data)).unwrap_err();
-        assert!(matches!(err, Error::Io(e) if e.kind() == ErrorKind::UnexpectedEof));
+        let err = BLTEHeader::parse(&mut Cursor::new(data), data.len() as u64).unwrap_err();
+        assert!(
+            matches!(
+                err,
+                Error::TruncatedData {
+                    expected: 8,
+                    actual: 3
+                }
+            ),
+            "actual error: {err:?}",
+        );
     }
 }
