@@ -61,12 +61,6 @@ impl BLTEHeader {
             });
         }
 
-        if header_length > 65535 {
-            // Probably invalid, number is arbitrary.
-            // This allows up to 1638 or 2730 chunks, depending on format.
-            return Err(Error::InvalidHeaderSize(header_length));
-        }
-
         // We have a ChunkInfo struct with 1 or more BlockInfos
         let table_format = f.read_u8()?;
         debug!("Chunk table format: {table_format:#x}");
@@ -84,7 +78,7 @@ impl BLTEHeader {
         debug!("Chunk count: {chunk_count}");
 
         // Is the header the correct size for the expected number of blocks?
-        if chunks_len != chunk_count * chunk_len {
+        if chunk_count > 65535 || chunks_len != chunk_count * chunk_len {
             return Err(Error::InvalidChunkCount(chunk_count));
         }
 
