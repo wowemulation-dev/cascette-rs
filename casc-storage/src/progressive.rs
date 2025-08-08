@@ -162,6 +162,7 @@ pub struct ProgressiveChunk {
 #[derive(Debug)]
 pub struct ProgressiveFile {
     /// Unique identifier for this file (EKey)
+    #[allow(dead_code)]
     ekey: EKey,
     /// Size hint for the file
     size_hint: SizeHint,
@@ -217,6 +218,7 @@ enum ChunkPriority {
     /// Background prefetch
     Prefetch = 1,
     /// Normal read request
+    #[allow(dead_code)]
     Normal = 2,
     /// Urgent read request (blocking current operation)
     Urgent = 3,
@@ -411,7 +413,7 @@ impl ProgressiveFile {
         if let SizeHint::Exact(size) = self.size_hint {
             let chunks = self.chunks.read().await;
             let chunk_size = self.config.chunk_size as u64;
-            let expected_chunks = ((size + chunk_size - 1) / chunk_size) as usize;
+            let expected_chunks = size.div_ceil(chunk_size) as usize;
 
             chunks.len() == expected_chunks && chunks.values().any(|chunk| chunk.is_final)
         } else {

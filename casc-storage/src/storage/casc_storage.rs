@@ -78,13 +78,52 @@ impl CascStorage {
 
     /// Load indices from disk
     pub fn load_indices(&self) -> Result<()> {
-        // Use async runtime for parallel loading if available
-        if let Ok(handle) = tokio::runtime::Handle::try_current() {
-            handle.block_on(self.load_indices_parallel())
-        } else {
-            // Fallback to sequential loading if no async runtime
-            self.load_indices_sequential()
+        // Check if we're already in an async context
+        match tokio::runtime::Handle::try_current() {
+            Ok(_handle) => {
+                // We're in an async context, but we can't use block_on
+                // Fall back to sequential loading to avoid runtime conflict
+                debug!("In async context, using sequential loading to avoid runtime conflict");
+                self.load_indices_sequential()
+            }
+            Err(_) => {
+                // No async runtime, use sequential loading
+                debug!("No async runtime, using sequential loading");
+                self.load_indices_sequential()
+            }
         }
+    }
+
+    /// Create new CASC storage asynchronously (recommended for async contexts)
+    pub async fn new_async(config: CascConfig) -> Result<Self> {
+        // Create data directories if they don't exist
+        let data_path = &config.data_path;
+        let indices_path = data_path.join("indices");
+        let data_subpath = data_path.join("data");
+
+        std::fs::create_dir_all(&indices_path)?;
+        std::fs::create_dir_all(&data_subpath)?;
+
+        let cache_size_bytes = (config.cache_size_mb as usize) * 1024 * 1024;
+
+        let storage = Self {
+            config,
+            indices: Arc::new(DashMap::new()),
+            combined_index: Arc::new(CombinedIndex::new()),
+            async_index_manager: None,
+            archives: Arc::new(RwLock::new(HashMap::new())),
+            cache: Arc::new(LockFreeCache::new(cache_size_bytes)),
+            current_archive: Arc::new(RwLock::new(None)),
+            tact_manifests: None,
+            progressive_manager: None,
+            stats: Arc::new(RwLock::new(StorageStats::default())),
+        };
+
+        // Load indices asynchronously for better performance
+        storage.load_indices_parallel().await?;
+        storage.load_archives()?;
+
+        Ok(storage)
     }
 
     /// Load indices from disk with parallel processing (3-5x faster)
