@@ -17,21 +17,22 @@ pub use header::{BLTEHeader, ChunkInfo};
 pub use stream::{BLTEStream, create_streaming_reader};
 
 /// BLTE magic bytes
-pub const BLTE_MAGIC: [u8; 4] = [b'B', b'L', b'T', b'E'];
+pub const BLTE_MAGIC: [u8; 4] = *b"BLTE";
 
 /// BLTE compression modes
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[repr(u8)]
 pub enum CompressionMode {
     /// No compression (mode 'N')
-    None = b'N' as isize,
+    None = b'N',
     /// ZLib compression (mode 'Z')
-    ZLib = b'Z' as isize,
+    ZLib = b'Z',
     /// LZ4 compression (mode '4')
-    LZ4 = b'4' as isize,
+    LZ4 = b'4',
     /// Frame/Recursive BLTE (mode 'F')
-    Frame = b'F' as isize,
+    Frame = b'F',
     /// Encrypted (mode 'E')
-    Encrypted = b'E' as isize,
+    Encrypted = b'E',
 }
 
 impl CompressionMode {
