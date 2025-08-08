@@ -1,6 +1,7 @@
 //! Tests for lazy loading manifest functionality
 
 #![allow(clippy::uninlined_format_args)]
+#![allow(clippy::manual_repeat_n)]
 
 use casc_storage::manifest::{ManifestConfig, TactManifests};
 
@@ -8,9 +9,11 @@ use casc_storage::manifest::{ManifestConfig, TactManifests};
 #[tokio::test]
 async fn test_lazy_loading_initialization() {
     // Create config with lazy loading enabled
-    let mut config = ManifestConfig::default();
-    config.lazy_loading = true;
-    config.lazy_cache_limit = 1000;
+    let config = ManifestConfig {
+        lazy_loading: true,
+        lazy_cache_limit: 1000,
+        ..Default::default()
+    };
 
     let manifests = TactManifests::new(config);
 
@@ -37,8 +40,10 @@ async fn test_lazy_loading_initialization() {
 #[tokio::test]
 async fn test_lazy_loading_fallback() {
     // Create config with lazy loading enabled
-    let mut config = ManifestConfig::default();
-    config.lazy_loading = true;
+    let config = ManifestConfig {
+        lazy_loading: true,
+        ..Default::default()
+    };
 
     let manifests = TactManifests::new(config);
 
@@ -70,8 +75,10 @@ async fn test_lazy_loading_fallback() {
 async fn test_lazy_vs_full_memory_usage() {
     // Test with both lazy loading on and off
     for lazy_enabled in [false, true] {
-        let mut config = ManifestConfig::default();
-        config.lazy_loading = lazy_enabled;
+        let config = ManifestConfig {
+            lazy_loading: lazy_enabled,
+            ..Default::default()
+        };
 
         let manifests = TactManifests::new(config);
 
@@ -80,11 +87,12 @@ async fn test_lazy_vs_full_memory_usage() {
 
         let before_memory = get_approximate_memory_usage();
 
-        // Load the data
+        // Load the data - use different mock data for root and encoding
         manifests
             .load_root_from_data(large_mock_data.clone())
             .unwrap();
-        manifests.load_encoding_from_data(large_mock_data).unwrap();
+        let encoding_data = create_large_mock_encoding_data();
+        manifests.load_encoding_from_data(encoding_data).unwrap();
 
         let after_memory = get_approximate_memory_usage();
 
@@ -131,9 +139,7 @@ fn create_mock_root_data() -> Vec<u8> {
 
     // Add some mock block data to make it parseable
     // This won't be valid TACT data but should be enough for infrastructure testing
-    for _ in 0..100 {
-        data.push(0); // Padding to make it look like there's content
-    }
+    data.extend(std::iter::repeat(0).take(100)); // Padding to make it look like there's content
 
     data
 }
@@ -168,9 +174,7 @@ fn create_mock_encoding_data() -> Vec<u8> {
     data.extend_from_slice(&0u32.to_be_bytes());
 
     // Add padding to make it look substantial
-    for _ in 0..100 {
-        data.push(0);
-    }
+    data.extend(std::iter::repeat(0).take(100));
 
     data
 }
@@ -182,6 +186,18 @@ fn create_large_mock_data() -> Vec<u8> {
     // Extend with dummy data to simulate larger manifest
     for i in 0..10000 {
         base_data.extend_from_slice(&(i as u32).to_le_bytes());
+    }
+
+    base_data
+}
+
+/// Create larger mock encoding data for memory testing
+fn create_large_mock_encoding_data() -> Vec<u8> {
+    let mut base_data = create_mock_encoding_data();
+
+    // Extend with dummy data to simulate larger manifest
+    for i in 0..10000 {
+        base_data.extend_from_slice(&(i as u32).to_be_bytes()); // Big endian for encoding
     }
 
     base_data
@@ -209,9 +225,11 @@ fn test_lazy_loading_configuration() {
     );
 
     // Test custom configuration
-    let mut custom_config = ManifestConfig::default();
-    custom_config.lazy_loading = false;
-    custom_config.lazy_cache_limit = 5000;
+    let custom_config = ManifestConfig {
+        lazy_loading: false,
+        lazy_cache_limit: 5000,
+        ..Default::default()
+    };
 
     assert!(
         !custom_config.lazy_loading,
@@ -228,8 +246,10 @@ fn test_lazy_loading_configuration() {
 /// Test cache clearing functionality with lazy loading
 #[tokio::test]
 async fn test_lazy_cache_clearing() {
-    let mut config = ManifestConfig::default();
-    config.lazy_loading = true;
+    let config = ManifestConfig {
+        lazy_loading: true,
+        ..Default::default()
+    };
 
     let manifests = TactManifests::new(config);
 
