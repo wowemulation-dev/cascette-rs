@@ -134,6 +134,7 @@ pub fn create_pooled_client(config: PoolConfig) -> Client {
         .timeout(config.request_timeout)
         .connect_timeout(config.connect_timeout)
         .use_rustls_tls() // Use rustls for TLS (more predictable than native-tls)
+        // HTTP/2 is automatically negotiated when available
         .tcp_keepalive(Duration::from_secs(60)); // Keep TCP connections alive
 
     if let Some(max_idle) = config.max_idle_connections {
