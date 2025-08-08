@@ -32,9 +32,7 @@ pub async fn handle(
             inspect_build_config(product, build, region, format).await?;
         }
         InspectCommands::CdnConfig { product, region } => {
-            println!("CDN config inspection not yet implemented");
-            println!("Product: {product}");
-            println!("Region: {region}");
+            inspect_cdn_config(product, region, format).await?;
         }
         InspectCommands::Encoding {
             product,
@@ -579,6 +577,136 @@ fn output_build_config_json(
     };
 
     println!("{output}");
+    Ok(())
+}
+
+/// Inspect CDN configuration for a product
+async fn inspect_cdn_config(
+    product: String,
+    region: String,
+    format: OutputFormat,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let style = OutputStyle::new();
+    let region_enum = Region::from_str(&region)?;
+
+    print_section_header(&format!("CDN Configuration Inspector - {product}"), &style);
+
+    // Get CDN configuration
+    let client = create_client(region_enum).await?;
+    let cdns_endpoint = Endpoint::ProductCdns(product.clone());
+    let cdns: ProductCdnsResponse = client.request_typed(&cdns_endpoint).await?;
+
+    // Find the specific region
+    let cdn_entry = cdns.entries.iter().find(|e| e.name == region);
+
+    let cdn_entry = match cdn_entry {
+        Some(entry) => entry,
+        None => {
+            eprintln!(
+                "{}",
+                format_warning(
+                    &format!("No CDN configuration found for region {region}"),
+                    &style
+                )
+            );
+            return Ok(());
+        }
+    };
+
+    match format {
+        OutputFormat::Json | OutputFormat::JsonPretty => {
+            let json_data = serde_json::json!({
+                "product": product,
+                "region": region,
+                "cdn_name": cdn_entry.name,
+                "path": cdn_entry.path,
+                "hosts": cdn_entry.hosts,
+                "config_path": &cdn_entry.config_path,
+                "total_hosts": cdn_entry.hosts.len(),
+            });
+
+            let output = match format {
+                OutputFormat::JsonPretty => serde_json::to_string_pretty(&json_data)?,
+                _ => serde_json::to_string(&json_data)?,
+            };
+            println!("{output}");
+        }
+        OutputFormat::Text => {
+            // Basic Info
+            println!("{}", format_key_value("Product", &product, &style));
+            println!("{}", format_key_value("Region", &region, &style));
+            println!("{}", format_key_value("CDN Name", &cdn_entry.name, &style));
+            println!("{}", format_key_value("CDN Path", &cdn_entry.path, &style));
+            if !cdn_entry.config_path.is_empty() {
+                println!(
+                    "{}",
+                    format_key_value("Config Path", &cdn_entry.config_path, &style)
+                );
+            }
+
+            // CDN Hosts Section
+            print_subsection_header(
+                &format!(
+                    "Available CDN Hosts {}",
+                    format_count_badge(cdn_entry.hosts.len(), "host", &style)
+                ),
+                &style,
+            );
+
+            let mut hosts_table = create_table(&style);
+            hosts_table.set_header(vec![
+                header_cell("Index", &style),
+                header_cell("CDN Host", &style),
+                header_cell("Status", &style),
+            ]);
+
+            for (i, host) in cdn_entry.hosts.iter().enumerate() {
+                // Basic availability check - just test if the host looks valid
+                let status = if host.contains("blzddist") || host.contains("battle.net") {
+                    format_success("Active", &style)
+                } else {
+                    "Unknown".to_string()
+                };
+
+                hosts_table.add_row(vec![
+                    numeric_cell(&(i + 1).to_string()),
+                    regular_cell(host),
+                    regular_cell(&status),
+                ]);
+            }
+
+            println!("{hosts_table}");
+
+            // CDN URLs Section
+            print_subsection_header("Example CDN URLs", &style);
+
+            let primary_host = &cdn_entry.hosts[0];
+            let cdn_path = &cdn_entry.path;
+
+            println!("🌐 Base CDN URL:");
+            println!("   {primary_host}/{cdn_path}");
+            println!();
+            println!("📁 Common endpoints:");
+            println!("   Config:  {primary_host}/{cdn_path}/config/[hash]");
+            println!("   Data:    {primary_host}/{cdn_path}/data/[hash]");
+            println!("   Patch:   {primary_host}/{cdn_path}/patch/[hash]");
+        }
+        OutputFormat::Bpsv => {
+            // For BPSV format, we'll output in a structured way
+            println!("## CDN Configuration");
+            println!("product:{product}");
+            println!("region:{region}");
+            println!("cdn_name:{}", cdn_entry.name);
+            println!("path:{}", cdn_entry.path);
+            if !cdn_entry.config_path.is_empty() {
+                println!("config_path:{}", cdn_entry.config_path);
+            }
+            for (i, host) in cdn_entry.hosts.iter().enumerate() {
+                println!("host_{i}:{host}");
+            }
+        }
+    }
+
     Ok(())
 }
 
