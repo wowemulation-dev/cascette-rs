@@ -1,5 +1,5 @@
 //! Error types for ngdp-crypto operations.
-
+use cipher::StreamCipherError;
 use thiserror::Error;
 
 /// Errors that can occur during crypto operations.
@@ -44,4 +44,7 @@ pub enum CryptoError {
     /// Initialization failed.
     #[error("initialization failed: {0}")]
     InitializationFailed(String),
+
+    #[error("stream cipher error: {0}")]
+    StreamCipherError(#[from] StreamCipherError),
 }

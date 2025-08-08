@@ -3,13 +3,13 @@
 //! This module implements ARC4 (RC4) stream cipher decryption specifically
 //! for BLTE encrypted blocks, following Blizzard's key construction pattern.
 
+use crate::Result;
+use cipher::StreamCipher;
 use generic_array::typenum::U32;
-use rc4::{KeyInit, Rc4, StreamCipher};
-use tracing::{debug, trace};
+use rc4::{KeyInit, Rc4};
+use tracing::debug;
 
-use crate::{CryptoError, Result};
-
-/// Decrypt data using ARC4 cipher with BLTE-specific key construction
+/// Create BLTE ARC4 stream cipher.
 ///
 /// BLTE ARC4 uses a specific key construction pattern:
 /// 1. Start with 16-byte base key
@@ -20,44 +20,21 @@ use crate::{CryptoError, Result};
 ///
 /// # Arguments
 ///
-/// * `data` - Encrypted data to decrypt
 /// * `key` - 16-byte base encryption key
 /// * `iv` - 4-byte initialization vector  
 /// * `block_index` - Block index for multi-chunk files
-///
-/// # Returns
-///
-/// Decrypted data
-pub fn decrypt_arc4(data: &[u8], key: &[u8; 16], iv: &[u8], block_index: usize) -> Result<Vec<u8>> {
-    if iv.len() != 4 {
-        return Err(CryptoError::InvalidParameter(format!(
-            "IV must be 4 bytes, got {}",
-            iv.len()
-        )));
-    }
-
-    trace!(
-        "ARC4 decrypt: {} bytes, block_index={}",
-        data.len(),
-        block_index
-    );
-
-    // CRITICAL: Create combined key following BLTE pattern
-    let mut arc4_key = Vec::with_capacity(32);
+pub fn init_arc4(key: &[u8; 16], iv: &[u8; 4], block_index: u32) -> Rc4<U32> {
+    // Create combined key following BLTE pattern
+    let mut arc4_key = [0; 32];
 
     // Add base key (16 bytes)
-    arc4_key.extend_from_slice(key);
+    arc4_key[..16].copy_from_slice(key);
 
     // Add IV (4 bytes)
-    arc4_key.extend_from_slice(iv);
+    arc4_key[16..20].copy_from_slice(iv);
 
     // Add block index as little-endian bytes (4 bytes)
-    arc4_key.extend_from_slice(&(block_index as u32).to_le_bytes());
-
-    // CRITICAL: Pad to exactly 32 bytes with zeros
-    while arc4_key.len() < 32 {
-        arc4_key.push(0);
-    }
+    arc4_key[20..24].copy_from_slice(&block_index.to_le_bytes());
 
     debug!(
         "ARC4 key construction: base_key(16) + iv(4) + block_index(4) + padding({}) = {} bytes",
@@ -66,27 +43,28 @@ pub fn decrypt_arc4(data: &[u8], key: &[u8; 16], iv: &[u8], block_index: usize) 
     );
 
     // Create cipher and decrypt
-    let mut cipher: Rc4<U32> = Rc4::new_from_slice(&arc4_key).map_err(|_| {
-        CryptoError::InitializationFailed("Failed to create RC4 cipher".to_string())
-    })?;
+    Rc4::new(&arc4_key.into())
+}
 
-    let mut decrypted = data.to_vec();
-    cipher.apply_keystream(&mut decrypted);
+/// Decrypt data in-place using ARC4 cipher with BLTE-specific key construction.
+///
+/// This is a convenience method for small buffers, which requires the entire
+/// stream loaded in memory. Use [`init_arc4()`] instead.
+pub fn decrypt_arc4(data: &mut [u8], key: &[u8; 16], iv: &[u8; 4], block_index: u32) -> Result<()> {
+    let mut cipher = init_arc4(key, iv, block_index);
+    cipher.try_apply_keystream(data)?;
 
-    debug!(
-        "ARC4 decrypted {} bytes -> {} bytes",
-        data.len(),
-        decrypted.len()
-    );
-
-    Ok(decrypted)
+    Ok(())
 }
 
 /// Encrypt data using ARC4 cipher (for testing)
 ///
-/// Uses the same key construction as decrypt_arc4 but for encryption.
-/// This is primarily useful for testing round-trip encryption/decryption.
-pub fn encrypt_arc4(data: &[u8], key: &[u8; 16], iv: &[u8], block_index: usize) -> Result<Vec<u8>> {
+/// Uses the same algorithm as [decrypt][decrypt_arc4] (stream ciphers are
+/// symmetric).
+///
+/// This is a convenience method for small buffers, which requires the entire
+/// stream loaded in memory. Use [`init_arc4()`] instead.
+pub fn encrypt_arc4(data: &mut [u8], key: &[u8; 16], iv: &[u8; 4], block_index: u32) -> Result<()> {
     // ARC4 is symmetric, so encryption and decryption are identical
     decrypt_arc4(data, key, iv, block_index)
 }
@@ -101,18 +79,19 @@ mod tests {
         let iv = [0x02, 0x03, 0x04, 0x05];
         let block_index = 0;
         let plaintext = b"Hello, BLTE ARC4 world!";
+        let mut encrypted = plaintext.clone();
 
         // Encrypt
-        let encrypted = encrypt_arc4(plaintext, &key, &iv, block_index).unwrap();
+        encrypt_arc4(&mut encrypted, &key, &iv, block_index).unwrap();
 
         // Should be different from original
-        assert_ne!(encrypted, plaintext);
+        assert_ne!(&encrypted, plaintext);
 
         // Decrypt
-        let decrypted = decrypt_arc4(&encrypted, &key, &iv, block_index).unwrap();
+        decrypt_arc4(&mut encrypted, &key, &iv, block_index).unwrap();
 
         // Should match original
-        assert_eq!(decrypted, plaintext);
+        assert_eq!(&encrypted, plaintext);
     }
 
     #[test]
@@ -122,18 +101,20 @@ mod tests {
         let plaintext = b"Test data for block index variation";
 
         // Encrypt with different block indices
-        let encrypted_0 = encrypt_arc4(plaintext, &key, &iv, 0).unwrap();
-        let encrypted_1 = encrypt_arc4(plaintext, &key, &iv, 1).unwrap();
+        let mut encrypted_0 = plaintext.clone();
+        encrypt_arc4(&mut encrypted_0, &key, &iv, 0).unwrap();
+        let mut encrypted_1 = plaintext.clone();
+        encrypt_arc4(&mut encrypted_1, &key, &iv, 1).unwrap();
 
         // Should produce different ciphertext due to different keys
         assert_ne!(encrypted_0, encrypted_1);
 
         // But decrypt correctly with matching indices
-        let decrypted_0 = decrypt_arc4(&encrypted_0, &key, &iv, 0).unwrap();
-        let decrypted_1 = decrypt_arc4(&encrypted_1, &key, &iv, 1).unwrap();
+        decrypt_arc4(&mut encrypted_0, &key, &iv, 0).unwrap();
+        decrypt_arc4(&mut encrypted_1, &key, &iv, 1).unwrap();
 
-        assert_eq!(decrypted_0, plaintext);
-        assert_eq!(decrypted_1, plaintext);
+        assert_eq!(&encrypted_0, plaintext);
+        assert_eq!(&encrypted_1, plaintext);
     }
 
     #[test]
@@ -144,22 +125,13 @@ mod tests {
         let block_index = 0;
         let plaintext = b"Sensitive data";
 
-        let encrypted1 = encrypt_arc4(plaintext, &key1, &iv, block_index).unwrap();
-        let encrypted2 = encrypt_arc4(plaintext, &key2, &iv, block_index).unwrap();
+        let mut encrypted_1 = plaintext.clone();
+        encrypt_arc4(&mut encrypted_1, &key1, &iv, block_index).unwrap();
+        let mut encrypted_2 = plaintext.clone();
+        encrypt_arc4(&mut encrypted_2, &key2, &iv, block_index).unwrap();
 
         // Different keys should produce different ciphertext
-        assert_ne!(encrypted1, encrypted2);
-    }
-
-    #[test]
-    fn test_arc4_invalid_iv_size() {
-        let key = [0x01u8; 16];
-        let invalid_iv = [0x02, 0x03]; // Only 2 bytes instead of 4
-        let block_index = 0;
-        let data = b"test";
-
-        let result = decrypt_arc4(data, &key, &invalid_iv, block_index);
-        assert!(result.is_err());
+        assert_ne!(encrypted_1, encrypted_2);
     }
 
     #[test]
@@ -171,15 +143,17 @@ mod tests {
 
         // This test verifies the key construction is working by ensuring
         // consistent results with the same inputs
-        let encrypted1 = encrypt_arc4(plaintext, &key, &iv, block_index).unwrap();
-        let encrypted2 = encrypt_arc4(plaintext, &key, &iv, block_index).unwrap();
+        let mut encrypted_1 = plaintext.clone();
+        encrypt_arc4(&mut encrypted_1, &key, &iv, block_index).unwrap();
+        let mut encrypted_2 = plaintext.clone();
+        encrypt_arc4(&mut encrypted_2, &key, &iv, block_index).unwrap();
 
         // Same inputs should produce identical output
-        assert_eq!(encrypted1, encrypted2);
+        assert_eq!(&encrypted_1, &encrypted_2);
 
         // Verify decryption works
-        let decrypted = decrypt_arc4(&encrypted1, &key, &iv, block_index).unwrap();
-        assert_eq!(decrypted, plaintext);
+        decrypt_arc4(&mut encrypted_1, &key, &iv, block_index).unwrap();
+        assert_eq!(&encrypted_1, plaintext);
     }
 
     #[test]
@@ -187,12 +161,9 @@ mod tests {
         let key = [0x01u8; 16];
         let iv = [0x02, 0x03, 0x04, 0x05];
         let block_index = 0;
-        let empty_data = b"";
+        let mut empty_data = [];
 
-        let encrypted = encrypt_arc4(empty_data, &key, &iv, block_index).unwrap();
-        assert_eq!(encrypted.len(), 0);
-
-        let decrypted = decrypt_arc4(&encrypted, &key, &iv, block_index).unwrap();
-        assert_eq!(decrypted, empty_data);
+        encrypt_arc4(&mut empty_data, &key, &iv, block_index).unwrap();
+        decrypt_arc4(&mut empty_data, &key, &iv, block_index).unwrap();
     }
 }

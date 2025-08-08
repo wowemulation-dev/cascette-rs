@@ -1,293 +1,290 @@
 //! BLTE chunk handling and file structure
 
-use crate::{BLTEHeader, Error, Result};
+#[cfg(feature = "async")]
+use tokio::io::AsyncReadExt;
 
-/// A complete BLTE file with header and data
-#[derive(Debug, Clone)]
-pub struct BLTEFile {
-    /// BLTE header
-    pub header: BLTEHeader,
-    /// Raw data (everything after header)
-    pub data: Vec<u8>,
+use crate::{Error, Result};
+use byteorder::{BigEndian, ReadBytesExt};
+use std::io::Read;
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+#[repr(u8)]
+pub enum Cipher {
+    Arc4,
+    Salsa20,
 }
 
-impl BLTEFile {
-    /// Parse a BLTE file from bytes
-    pub fn parse(data: Vec<u8>) -> Result<Self> {
-        let header = BLTEHeader::parse(&data)?;
-        let data_offset = header.data_offset();
+impl TryFrom<u8> for Cipher {
+    type Error = Error;
 
-        if data.len() < data_offset {
-            return Err(Error::TruncatedData {
-                expected: data_offset,
-                actual: data.len(),
-            });
+    fn try_from(value: u8) -> Result<Self> {
+        match value {
+            b'A' => Ok(Self::Arc4),
+            b'S' => Ok(Self::Salsa20),
+            other => Err(Error::UnsupportedEncryptionType(other)),
         }
+    }
+}
 
-        let chunk_data = data[data_offset..].to_vec();
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct EncryptedChunkHeader {
+    key_name: Vec<u8>,
+    iv: Vec<u8>,
+    cipher: Cipher,
+}
 
-        Ok(BLTEFile {
-            header,
-            data: chunk_data,
+impl EncryptedChunkHeader {
+    /// Parses an encrypted chunk header.
+    pub fn parse<R: Read>(f: &mut R) -> Result<Self> {
+        let key_name_length = f.read_u8()?;
+        let mut key_name = vec![0; key_name_length as usize];
+        f.read_exact(&mut key_name)?;
+
+        let iv_length = f.read_u8()?;
+        let mut iv = vec![0; iv_length as usize];
+        f.read_exact(&mut iv)?;
+
+        let cipher = f.read_u8()?.try_into()?;
+
+        Ok(Self {
+            key_name,
+            iv,
+            cipher,
         })
     }
 
-    /// Get chunk data by index
-    pub fn get_chunk_data(&self, chunk_index: usize) -> Result<ChunkData> {
-        if self.header.is_single_chunk() {
-            if chunk_index != 0 {
-                return Err(Error::InvalidChunkCount(chunk_index as u32));
-            }
+    #[cfg(feature = "async")]
+    /// Parses an encrypted block header asynchronously.
+    pub async fn aparse<R: AsyncReadExt + Unpin>(f: &mut R) -> Result<Self> {
+        let key_name_length = f.read_u8().await?;
+        let mut key_name = vec![0; key_name_length as usize];
+        f.read_exact(&mut key_name).await?;
 
-            // For single chunk, we don't know the decompressed size ahead of time
-            return Ok(ChunkData {
-                data: self.data.clone(),
-                compressed_size: self.data.len() as u32,
-                decompressed_size: 0, // Unknown until decompressed
-                checksum: [0u8; 16],  // No checksum for single chunk
-            });
-        }
+        let iv_length = f.read_u8().await?;
+        let mut iv = vec![0; iv_length as usize];
+        f.read_exact(&mut iv).await?;
 
-        if chunk_index >= self.header.chunks.len() {
-            return Err(Error::InvalidChunkCount(chunk_index as u32));
-        }
+        let cipher = f.read_u8().await?.try_into()?;
 
-        let chunk_info = &self.header.chunks[chunk_index];
-
-        // Calculate offset for this chunk
-        let mut offset = 0;
-        for i in 0..chunk_index {
-            offset += self.header.chunks[i].compressed_size as usize;
-        }
-
-        let end_offset = offset + chunk_info.compressed_size as usize;
-
-        if end_offset > self.data.len() {
-            return Err(Error::TruncatedData {
-                expected: end_offset,
-                actual: self.data.len(),
-            });
-        }
-
-        let chunk_data = self.data[offset..end_offset].to_vec();
-
-        Ok(ChunkData {
-            data: chunk_data,
-            compressed_size: chunk_info.compressed_size,
-            decompressed_size: chunk_info.decompressed_size,
-            checksum: chunk_info.checksum,
+        Ok(Self {
+            key_name,
+            iv,
+            cipher,
         })
     }
 
-    /// Get all chunk data
-    pub fn get_all_chunks(&self) -> Result<Vec<ChunkData>> {
-        let mut chunks = Vec::new();
-        let chunk_count = self.header.chunk_count();
-
-        for i in 0..chunk_count {
-            chunks.push(self.get_chunk_data(i)?);
-        }
-
-        Ok(chunks)
+    /// Length of the [`EncryptedChunkHeader`] on disk, including length
+    /// prefixes and cipher type.
+    pub fn len(&self) -> usize {
+        self.key_name.len() + self.iv.len() + 3
     }
 
-    /// Check if the file is single-chunk
-    pub fn is_single_chunk(&self) -> bool {
-        self.header.is_single_chunk()
-    }
-
-    /// Get total number of chunks
-    pub fn chunk_count(&self) -> usize {
-        self.header.chunk_count()
+    /// `true` if the [`EncryptedChunkHeader`] would take up 0 bytes.
+    ///
+    /// This is always `false`.
+    #[inline]
+    pub const fn is_empty(&self) -> bool {
+        false
     }
 }
 
-/// Data for a single chunk
-#[derive(Debug, Clone)]
-pub struct ChunkData {
-    /// Raw chunk data (compressed)
-    pub data: Vec<u8>,
-    /// Compressed size
-    pub compressed_size: u32,
-    /// Expected decompressed size (0 if unknown)
-    pub decompressed_size: u32,
-    /// MD5 checksum of compressed data
-    pub checksum: [u8; 16],
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum Lz4hcChunkHeader {
+    V1 { size: u64, block_shift: u8 },
 }
 
-impl ChunkData {
-    /// Verify the checksum of this chunk
-    pub fn verify_checksum(&self) -> bool {
-        if self.checksum == [0u8; 16] {
-            return true; // No checksum to verify
+impl Lz4hcChunkHeader {
+    /// Parses an encrypted chunk header.
+    pub fn parse<R: Read>(f: &mut R) -> Result<Self> {
+        let version = f.read_u8()?;
+        if version != 1 {
+            return Err(Error::UnsupportedLz4hcVersion(version));
         }
 
-        let calculated = md5::compute(&self.data);
-        calculated.0 == self.checksum
+        let size = f.read_u64::<BigEndian>()?;
+        let block_shift = f.read_u8()?;
+
+        Ok(Self::V1 { size, block_shift })
     }
 
-    /// Get the compression mode of this chunk
-    pub fn compression_mode(&self) -> Result<crate::CompressionMode> {
-        if self.data.is_empty() {
-            return Err(Error::TruncatedData {
-                expected: 1,
-                actual: 0,
-            });
+    #[cfg(feature = "async")]
+    /// Parses an encrypted block header asynchronously.
+    pub async fn aparse<R: AsyncReadExt + Unpin>(f: &mut R) -> Result<Self> {
+        let version = f.read_u8().await?;
+        if version != 1 {
+            return Err(Error::UnsupportedLz4hcVersion(version));
         }
 
-        crate::CompressionMode::from_byte(self.data[0])
-            .ok_or(Error::UnknownCompressionMode(self.data[0]))
+        let size = f.read_u64().await?;
+        let block_shift = f.read_u8().await?;
+
+        Ok(Self::V1 { size, block_shift })
+    }
+
+    /// Length of the [`Lz4hcChunkHeader`] on disk.
+    pub fn len(&self) -> usize {
+        match self {
+            Self::V1 { .. } => 10,
+        }
+    }
+
+    /// `true` if the [`Lz4hcChunkHeader`] would take up 0 bytes.
+    ///
+    /// This is always `false`.
+    #[inline]
+    pub const fn is_empty(&self) -> bool {
+        false
+    }
+}
+
+/// BLTE compression / encoding modes
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ChunkEncodingHeader {
+    /// No compression (mode 'N')
+    None,
+    /// ZLib compression (mode 'Z')
+    ZLib,
+    /// LZ4HC compression (mode '4')
+    Lz4hc(Lz4hcChunkHeader),
+    /// Frame/Recursive BLTE (mode 'F')
+    Frame,
+    /// Encrypted (mode 'E')
+    Encrypted(EncryptedChunkHeader),
+}
+
+impl ChunkEncodingHeader {
+    /// Parses an chunk encoding header.
+    pub fn parse<R: Read>(f: &mut R) -> Result<Self> {
+        let mode = f.read_u8()?;
+
+        Ok(match mode {
+            b'N' => Self::None,
+            b'Z' => Self::ZLib,
+            b'4' => Self::Lz4hc(Lz4hcChunkHeader::parse(f)?),
+            b'F' => Self::Frame,
+            b'E' => Self::Encrypted(EncryptedChunkHeader::parse(f)?),
+            other => return Err(Error::UnknownCompressionMode(other)),
+        })
+    }
+
+    #[cfg(feature = "async")]
+    /// Parses an block encoding header asynchronously.
+    pub async fn aparse<R: AsyncReadExt + Unpin>(f: &mut R) -> Result<Self> {
+        let mode = f.read_u8().await?;
+
+        Ok(match mode {
+            b'N' => Self::None,
+            b'Z' => Self::ZLib,
+            b'4' => Self::Lz4hc(Lz4hcChunkHeader::aparse(f).await?),
+            b'F' => Self::Frame,
+            b'E' => Self::Encrypted(EncryptedChunkHeader::aparse(f).await?),
+            other => return Err(Error::UnknownCompressionMode(other)),
+        })
+    }
+
+    /// Length of the encoding header on disk.
+    pub fn len(&self) -> usize {
+        1 + if let Self::Encrypted(h) = self {
+            h.len()
+        } else {
+            0
+        }
+    }
+
+    /// `true` if the [`BlockEncoding`] would take up 0 bytes.
+    ///
+    /// This is always `false`.
+    #[inline]
+    pub const fn is_empty(&self) -> bool {
+        false
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::io::Cursor;
+
     use super::*;
 
-    fn create_single_chunk_blte() -> Vec<u8> {
-        let mut data = Vec::new();
-        data.extend_from_slice(b"BLTE");
-        data.extend_from_slice(&0u32.to_be_bytes()); // Single chunk
-        data.extend_from_slice(b"N"); // No compression
-        data.extend_from_slice(b"Hello, BLTE!"); // Payload
-        data
-    }
-
-    fn create_multi_chunk_blte() -> Vec<u8> {
-        let chunk1_data = b"NHello";
-        let chunk2_data = b"N, BLTE!";
-
-        let mut data = Vec::new();
-
-        // Calculate header size: 4 (magic) + 4 (header_size) + 1 (flags) + 3 (chunk_count) + 2 * 24 (chunk_info)
-        let header_size = 8 + 1 + 3 + 2 * 24; // = 60
-
-        // Header
-        data.extend_from_slice(b"BLTE");
-        data.extend_from_slice(&(header_size as u32).to_be_bytes());
-
-        // Chunk table
-        data.push(0x0F); // Standard flags
-        data.extend_from_slice(&[0x00, 0x00, 0x02]); // 2 chunks
-
-        // Chunk 1 info
-        data.extend_from_slice(&(chunk1_data.len() as u32).to_be_bytes()); // Compressed size
-        data.extend_from_slice(&5u32.to_be_bytes()); // Decompressed: "Hello"
-        data.extend_from_slice(&[0; 16]); // Zero checksum to skip verification
-
-        // Chunk 2 info
-        data.extend_from_slice(&(chunk2_data.len() as u32).to_be_bytes()); // Compressed size
-        data.extend_from_slice(&7u32.to_be_bytes()); // Decompressed: ", BLTE!"
-        data.extend_from_slice(&[0; 16]); // Zero checksum to skip verification
-
-        // Chunk data
-        data.extend_from_slice(chunk1_data); // Chunk 1
-        data.extend_from_slice(chunk2_data); // Chunk 2
-
-        data
-    }
-
     #[test]
-    fn test_single_chunk_file() {
-        let data = create_single_chunk_blte();
-        let blte_file = BLTEFile::parse(data).unwrap();
-
-        assert!(blte_file.is_single_chunk());
-        assert_eq!(blte_file.chunk_count(), 1);
-
-        let chunk = blte_file.get_chunk_data(0).unwrap();
-        assert_eq!(chunk.data, b"NHello, BLTE!");
-        assert_eq!(chunk.compressed_size, 13);
-        assert_eq!(chunk.decompressed_size, 0); // Unknown for single chunk
-        assert_eq!(
-            chunk.compression_mode().unwrap(),
-            crate::CompressionMode::None
-        );
-    }
-
-    #[test]
-    fn test_multi_chunk_file() {
-        let data = create_multi_chunk_blte();
-        let blte_file = BLTEFile::parse(data).unwrap();
-
-        assert!(!blte_file.is_single_chunk());
-        assert_eq!(blte_file.chunk_count(), 2);
-
-        // Test chunk 1
-        let chunk1 = blte_file.get_chunk_data(0).unwrap();
-        assert_eq!(chunk1.data, b"NHello");
-        assert_eq!(chunk1.compressed_size, 6);
-        assert_eq!(chunk1.decompressed_size, 5);
-        assert_eq!(
-            chunk1.compression_mode().unwrap(),
-            crate::CompressionMode::None
-        );
-
-        // Test chunk 2
-        let chunk2 = blte_file.get_chunk_data(1).unwrap();
-        assert_eq!(chunk2.data, b"N, BLTE!");
-        assert_eq!(chunk2.compressed_size, 8);
-        assert_eq!(chunk2.decompressed_size, 7);
-        assert_eq!(
-            chunk2.compression_mode().unwrap(),
-            crate::CompressionMode::None
-        );
-    }
-
-    #[test]
-    fn test_get_all_chunks() {
-        let data = create_multi_chunk_blte();
-        let blte_file = BLTEFile::parse(data).unwrap();
-
-        let chunks = blte_file.get_all_chunks().unwrap();
-        assert_eq!(chunks.len(), 2);
-        assert_eq!(chunks[0].data, b"NHello");
-        assert_eq!(chunks[1].data, b"N, BLTE!");
-    }
-
-    #[test]
-    fn test_invalid_chunk_index() {
-        let data = create_single_chunk_blte();
-        let blte_file = BLTEFile::parse(data).unwrap();
-
-        let result = blte_file.get_chunk_data(1);
-        assert!(result.is_err());
-        matches!(result.unwrap_err(), Error::InvalidChunkCount(_));
-    }
-
-    #[test]
-    fn test_compression_mode_detection() {
+    fn test_compression_mode_detection() -> Result<()> {
         let test_cases = [
-            (b'N', crate::CompressionMode::None),
-            (b'Z', crate::CompressionMode::ZLib),
-            (b'4', crate::CompressionMode::LZ4),
-            (b'F', crate::CompressionMode::Frame),
-            (b'E', crate::CompressionMode::Encrypted),
+            // TODO: add more to other modes
+            (b"N".as_slice(), ChunkEncodingHeader::None),
+            (b"Z", ChunkEncodingHeader::ZLib),
+            (
+                b"4\x01\0\0\0\0\0\0\0\xFF\x05",
+                ChunkEncodingHeader::Lz4hc(Lz4hcChunkHeader::V1 {
+                    size: 0xff,
+                    block_shift: 5,
+                }),
+            ),
+            (b"F", ChunkEncodingHeader::Frame),
+            (
+                b"E\x05Hello\x0DPlanet Earth!A",
+                ChunkEncodingHeader::Encrypted(EncryptedChunkHeader {
+                    key_name: b"Hello".to_vec(),
+                    iv: b"Planet Earth!".to_vec(),
+                    cipher: Cipher::Arc4,
+                }),
+            ),
         ];
 
-        for (byte, expected_mode) in test_cases {
-            let chunk = ChunkData {
-                data: vec![byte],
-                compressed_size: 1,
-                decompressed_size: 1,
-                checksum: [0u8; 16],
-            };
-
-            assert_eq!(chunk.compression_mode().unwrap(), expected_mode);
+        for (payload, expected) in test_cases {
+            let actual = ChunkEncodingHeader::parse(&mut Cursor::new(payload))?;
+            assert_eq!(expected, actual, "payload: {:?}", hex::encode(payload));
         }
+
+        Ok(())
+    }
+
+    #[cfg(feature = "async")]
+    #[tokio::test]
+    async fn test_async_compression_mode_detection() -> Result<()> {
+        let test_cases = [
+            // TODO: add more to other modes
+            (b"N".as_slice(), ChunkEncodingHeader::None),
+            (b"Z", ChunkEncodingHeader::ZLib),
+            (
+                b"4\x01\0\0\0\0\0\0\0\xFF\x05",
+                ChunkEncodingHeader::Lz4hc(Lz4hcChunkHeader::V1 {
+                    size: 0xff,
+                    block_shift: 5,
+                }),
+            ),
+            (b"F", ChunkEncodingHeader::Frame),
+            (
+                b"E\x05Hello\x0DPlanet Earth!A",
+                ChunkEncodingHeader::Encrypted(EncryptedChunkHeader {
+                    key_name: b"Hello".to_vec(),
+                    iv: b"Planet Earth!".to_vec(),
+                    cipher: Cipher::Arc4,
+                }),
+            ),
+        ];
+
+        for (payload, expected) in test_cases {
+            let actual = ChunkEncodingHeader::aparse(&mut Cursor::new(payload)).await?;
+            assert_eq!(expected, actual, "payload: {:?}", hex::encode(payload));
+        }
+
+        Ok(())
     }
 
     #[test]
     fn test_unknown_compression_mode() {
-        let chunk = ChunkData {
-            data: vec![b'X'], // Unknown mode
-            compressed_size: 1,
-            decompressed_size: 1,
-            checksum: [0u8; 16],
-        };
+        let payload = b"XUnknown Mode!";
+        let err = ChunkEncodingHeader::parse(&mut Cursor::new(payload)).unwrap_err();
+        assert!(matches!(err, Error::UnknownCompressionMode(b'X')));
+    }
 
-        let result = chunk.compression_mode();
-        assert!(result.is_err());
-        matches!(result.unwrap_err(), Error::UnknownCompressionMode(b'X'));
+    #[cfg(feature = "async")]
+    #[tokio::test]
+    async fn test_async_unknown_compression_mode() {
+        let payload = b"XUnknown Mode!";
+        let err = ChunkEncodingHeader::aparse(&mut Cursor::new(payload))
+            .await
+            .unwrap_err();
+        assert!(matches!(err, Error::UnknownCompressionMode(b'X')));
     }
 }

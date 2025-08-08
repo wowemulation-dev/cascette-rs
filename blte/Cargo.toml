@@ -9,15 +9,22 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 
+[features]
+async = ["dep:tokio"]
+
 [dependencies]
 flate2 = "1.1"
-lz4_flex = "0.11.5"
+lz4_flex = { version = "0.11.5", features = ["frame"] }
 ngdp-crypto = { path = "../ngdp-crypto", version = "0.3.0" }
-md5 = "0.8"
+# RustCrypto version
+md-5 = "0.10.6"
 tracing.workspace = true
 thiserror.workspace = true
 byteorder.workspace = true
 hex.workspace = true
+tokio = { workspace = true, optional = true, features = ["macros", "io-util"] }
 
 [dev-dependencies]
+clap = { workspace = true, features = ["derive", "cargo", "env"] }
 tokio = { workspace = true, features = ["macros", "rt"] }
+tracing-subscriber.workspace = true
