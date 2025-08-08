@@ -33,5 +33,6 @@ rand = "0.9"
 serde = "1.0"
 thiserror = "2.0"
 tokio = "1.47"
+toml = "0.8"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }

@@ -38,6 +38,8 @@ tracing-subscriber.workspace = true
 thiserror.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json = "1.0.142"
+tempfile = "3.20"
+toml.workspace = true
 dirs.workspace = true
 reqwest = { version = "0.12.22", default-features = false, features = ["rustls-tls", "json"] }
 base64 = "0.22.1"
