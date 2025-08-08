@@ -151,9 +151,7 @@ async fn handle_info(
         ..Default::default()
     };
 
-    let storage = CascStorage::new(config)?;
-    storage.load_indices()?;
-    storage.load_archives()?;
+    let storage = CascStorage::new_async(config).await?;
 
     // Test EKey lookup to debug the issue
     if std::env::var("TEST_EKEY_LOOKUP").is_ok() {
@@ -343,9 +341,7 @@ async fn handle_stats(
         ..Default::default()
     };
 
-    let storage = CascStorage::new(config)?;
-    storage.load_indices()?;
-    storage.load_archives()?;
+    let storage = CascStorage::new_async(config).await?;
 
     let stats = storage.stats();
 
@@ -421,9 +417,7 @@ async fn handle_verify(
         ..Default::default()
     };
 
-    let storage = CascStorage::new(config)?;
-    storage.load_indices()?;
-    storage.load_archives()?;
+    let storage = CascStorage::new_async(config).await?;
 
     let errors = storage.verify()?;
 
@@ -489,9 +483,7 @@ async fn handle_read(
         ..Default::default()
     };
 
-    let storage = CascStorage::new(config)?;
-    storage.load_indices()?;
-    storage.load_archives()?;
+    let storage = CascStorage::new_async(config).await?;
 
     // Convert to EKey type
     let ekey = if ekey_bytes.len() == 9 {
@@ -538,9 +530,7 @@ async fn handle_write(
         ..Default::default()
     };
 
-    let storage = CascStorage::new(config)?;
-    storage.load_indices()?;
-    storage.load_archives()?;
+    let storage = CascStorage::new_async(config).await?;
 
     // Convert to EKey type
     let ekey = if ekey_bytes.len() == 9 {
@@ -585,9 +575,7 @@ async fn handle_list(
         ..Default::default()
     };
 
-    let storage = CascStorage::new(config)?;
-    storage.load_indices()?;
-    storage.load_archives()?;
+    let storage = CascStorage::new_async(config).await?;
 
     println!("📋 Listing files in CASC storage");
 
@@ -729,9 +717,7 @@ async fn handle_optimize(path: PathBuf) -> Result<(), Box<dyn std::error::Error>
         ..Default::default()
     };
 
-    let storage = CascStorage::new(config)?;
-    storage.load_indices()?;
-    storage.load_archives()?;
+    let storage = CascStorage::new_async(config).await?;
 
     // Clear cache to free memory
     storage.clear_cache();
@@ -761,9 +747,7 @@ async fn handle_repair(path: PathBuf, dry_run: bool) -> Result<(), Box<dyn std::
         ..Default::default()
     };
 
-    let storage = CascStorage::new(config)?;
-    storage.load_indices()?;
-    storage.load_archives()?;
+    let storage = CascStorage::new_async(config).await?;
 
     let errors = storage.verify()?;
 
@@ -809,9 +793,7 @@ async fn handle_clean(path: PathBuf, dry_run: bool) -> Result<(), Box<dyn std::e
         ..Default::default()
     };
 
-    let storage = CascStorage::new(config)?;
-    storage.load_indices()?;
-    storage.load_archives()?;
+    let storage = CascStorage::new_async(config).await?;
 
     // Clear the cache
     storage.clear_cache();
@@ -853,9 +835,7 @@ async fn handle_extract(
         ..Default::default()
     };
 
-    let storage = CascStorage::new(config)?;
-    storage.load_indices()?;
-    storage.load_archives()?;
+    let storage = CascStorage::new_async(config).await?;
 
     // Convert to EKey type
     let ekey_obj = if ekey_bytes.len() == 9 {
