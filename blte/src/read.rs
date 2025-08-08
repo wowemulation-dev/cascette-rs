@@ -49,7 +49,7 @@ impl<T> BLTEFile<T> {
 
     /// Get the number of chunks in the stream.
     #[inline]
-    pub const fn chunk_count(&self) -> usize {
+    pub fn chunk_count(&self) -> usize {
         self.header.chunks().len()
     }
 }
