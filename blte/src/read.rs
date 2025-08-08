@@ -148,7 +148,23 @@ impl<T: BufRead + Seek> BLTEFile<T> {
 
                     file = decompressor.finish()?;
                 }
-                ChunkEncodingHeader::Lz4hc(_) => todo!(),
+                ChunkEncodingHeader::Lz4hc(_) => {
+                    // TODO: lz4_flex API wants to own the read file handle
+                    // while decompressing, which won't work when we only have a
+                    // mutable reference to it.
+                    //
+                    // By comparison, flate2 can own
+                    // the write file handle, and we can just push in more
+                    // compressed buffer.
+                    //
+                    // We could set an extra Default trait bound, but that
+                    // doesn't work with actual file handles. The work-around
+                    // will likely involve some hacks.
+                    //
+                    // However, I can't locate an LZ4HC compressed file to test
+                    // this stuff against, so this is pretty moot.
+                    todo!();
+                }
                 ChunkEncodingHeader::Encrypted(_) => todo!(),
                 ChunkEncodingHeader::Frame => todo!(),
             }
