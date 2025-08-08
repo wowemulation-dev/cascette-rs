@@ -2,6 +2,7 @@
 
 use crate::error::{CascError, Result};
 use memmap2::{Mmap, MmapOptions};
+use std::borrow::Cow;
 use std::fs::File;
 use std::io::{BufReader, Cursor, Read, Seek, SeekFrom};
 use std::path::Path;
@@ -18,25 +19,39 @@ pub struct ArchiveReader {
 }
 
 /// A section of an archive that can be streamed
-pub struct ArchiveSection {
-    data: Cursor<Vec<u8>>,
+pub struct ArchiveSection<'a> {
+    data: Cursor<Cow<'a, [u8]>>,
 }
 
-impl ArchiveSection {
-    pub fn new(data: Vec<u8>) -> Self {
+impl<'a> ArchiveSection<'a> {
+    pub fn new(data: Cow<'a, [u8]>) -> Self {
         Self {
             data: Cursor::new(data),
         }
     }
+
+    /// Create from owned data
+    pub fn from_vec(data: Vec<u8>) -> Self {
+        Self {
+            data: Cursor::new(Cow::Owned(data)),
+        }
+    }
+
+    /// Create from borrowed data
+    pub fn from_slice(data: &'a [u8]) -> Self {
+        Self {
+            data: Cursor::new(Cow::Borrowed(data)),
+        }
+    }
 }
 
-impl Read for ArchiveSection {
+impl<'a> Read for ArchiveSection<'a> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         self.data.read(buf)
     }
 }
 
-impl Seek for ArchiveSection {
+impl<'a> Seek for ArchiveSection<'a> {
     fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
         self.data.seek(pos)
     }
@@ -78,7 +93,7 @@ impl ArchiveReader {
         Ok(Self { mmap, file, size })
     }
 
-    /// Create a reader at a specific offset for streaming access
+    /// Create a reader at a specific offset for streaming access (zero-copy when possible)
     pub fn reader_at(&self, offset: u64, length: usize) -> Result<ArchiveSection> {
         if offset + length as u64 > self.size {
             return Err(CascError::InvalidArchiveFormat(format!(
@@ -88,9 +103,9 @@ impl ArchiveReader {
         }
 
         if let Some(ref mmap) = self.mmap {
-            // Memory-mapped access
+            // Memory-mapped access - zero copy
             let data = &mmap[offset as usize..(offset as usize + length)];
-            Ok(ArchiveSection::new(data.to_vec()))
+            Ok(ArchiveSection::from_slice(data))
         } else {
             // For regular file access, we still need to read the data
             // This could be improved later to use a file handle with seeking
@@ -100,7 +115,27 @@ impl ArchiveReader {
         }
     }
 
-    /// Read data at a specific offset
+    /// Read data at a specific offset (returns Cow for zero-copy when possible)
+    pub fn read_at_cow(&self, offset: u64, length: usize) -> Result<Cow<[u8]>> {
+        if offset + length as u64 > self.size {
+            return Err(CascError::InvalidArchiveFormat(format!(
+                "Read beyond archive bounds: offset={}, length={}, size={}",
+                offset, length, self.size
+            )));
+        }
+
+        if let Some(ref mmap) = self.mmap {
+            // Fast path: memory-mapped access - zero copy
+            let data = &mmap[offset as usize..(offset as usize + length)];
+            Ok(Cow::Borrowed(data))
+        } else {
+            Err(CascError::InvalidArchiveFormat(
+                "Non-memory-mapped archives require mutable access".into(),
+            ))
+        }
+    }
+
+    /// Read data at a specific offset (allocates for compatibility)
     pub fn read_at(&mut self, offset: u64, length: usize) -> Result<Vec<u8>> {
         if offset + length as u64 > self.size {
             return Err(CascError::InvalidArchiveFormat(format!(

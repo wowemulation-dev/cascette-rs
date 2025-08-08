@@ -8,6 +8,7 @@ pub use archive_writer::ArchiveWriter;
 
 use crate::error::Result;
 use crate::types::ArchiveLocation;
+use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 
 /// Represents a CASC archive file (data.XXX)
@@ -47,7 +48,19 @@ impl Archive {
         Ok(self.reader.as_mut().unwrap())
     }
 
-    /// Read data from a specific location in the archive
+    /// Read data from a specific location in the archive (zero-copy when possible)
+    pub fn read_at_cow(&self, location: &ArchiveLocation) -> Result<Cow<[u8]>> {
+        if let Some(ref reader) = self.reader {
+            reader.read_at_cow(location.offset, location.size as usize)
+        } else {
+            // Need to open the reader first - this will require ownership
+            let mut reader = ArchiveReader::open(&self.path)?;
+            let data = reader.read_at(location.offset, location.size as usize)?;
+            Ok(Cow::Owned(data))
+        }
+    }
+
+    /// Read data from a specific location in the archive (allocates)
     pub fn read_at(&mut self, location: &ArchiveLocation) -> Result<Vec<u8>> {
         let reader = self.open()?;
         reader.read_at(location.offset, location.size as usize)
