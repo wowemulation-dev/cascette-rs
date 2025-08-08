@@ -249,6 +249,7 @@ name = "blte"
 version = "0.3.0"
 dependencies = [
  "byteorder",
+ "clap",
  "flate2",
  "hex",
  "lz4_flex",
@@ -257,6 +258,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
