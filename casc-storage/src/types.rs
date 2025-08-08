@@ -3,7 +3,7 @@
 use std::fmt;
 
 /// Encoding key - 16 bytes that identify content
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct EKey([u8; 16]);
 
 impl EKey {

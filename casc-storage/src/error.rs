@@ -46,6 +46,12 @@ pub enum CascError {
 
     #[error("BLTE error: {0}")]
     Blte(#[from] blte::error::Error),
+
+    #[error("Manifest not loaded: {0}")]
+    ManifestNotLoaded(String),
+
+    #[error("Invalid format: {0}")]
+    InvalidFormat(String),
 }
 
 pub type Result<T> = std::result::Result<T, CascError>;

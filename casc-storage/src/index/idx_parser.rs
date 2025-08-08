@@ -3,11 +3,11 @@
 use crate::error::{CascError, Result};
 use crate::types::{ArchiveLocation, EKey, IndexEntry};
 use byteorder::{BigEndian, LittleEndian, ReadBytesExt};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::{BufReader, Read, Seek, SeekFrom};
 use std::path::Path;
-use tracing::{debug, trace};
+use tracing::debug;
 
 /// Header for .idx files
 #[derive(Debug)]
@@ -25,7 +25,7 @@ struct IdxHeader {
 
 /// Parser for .idx index files
 pub struct IdxParser {
-    entries: HashMap<EKey, ArchiveLocation>,
+    entries: BTreeMap<EKey, ArchiveLocation>,
     bucket: u8,
     version: u16,
 }
@@ -55,12 +55,13 @@ impl IdxParser {
         // Read header fields
         let version = reader.read_u16::<LittleEndian>()?;
         let bucket = reader.read_u8()?;
+        let _unused = reader.read_u8()?; // Skip unused byte
         let length_field_size = reader.read_u8()?;
         let location_field_size = reader.read_u8()?;
         let key_field_size = reader.read_u8()?;
         let segment_bits = reader.read_u8()?;
 
-        trace!(
+        debug!(
             "IDX header: version={}, bucket={:02x}, key_size={}, location_size={}, length_size={}, segment_bits={}",
             version, bucket, key_field_size, location_field_size, length_field_size, segment_bits
         );
@@ -80,8 +81,8 @@ impl IdxParser {
         }
 
         // Align to 16-byte boundary
-        let current_pos = 16 + data_size as u64;
-        let padding = (16 - (current_pos % 16)) % 16;
+        let actual_pos = reader.stream_position()?;
+        let padding = (16 - (actual_pos % 16)) % 16;
         if padding > 0 {
             reader.seek(SeekFrom::Current(padding as i64))?;
         }
@@ -104,10 +105,10 @@ impl IdxParser {
             entry_count, entry_size
         );
 
-        // Parse entries
-        let mut entries = HashMap::new();
+        // Parse entries directly into BTreeMap (more stable iteration)
+        let mut entries = BTreeMap::new();
 
-        for i in 0..entry_count {
+        for _i in 0..entry_count {
             let entry = Self::parse_entry(
                 reader,
                 key_field_size,
@@ -115,17 +116,6 @@ impl IdxParser {
                 length_field_size,
                 segment_bits,
             )?;
-
-            if i < 5 {
-                trace!(
-                    "Entry {}: ekey={}, archive={}, offset={:x}, size={}",
-                    i,
-                    entry.ekey,
-                    entry.location.archive_id,
-                    entry.location.offset,
-                    entry.location.size
-                );
-            }
 
             entries.insert(entry.ekey, entry.location);
         }
@@ -146,6 +136,10 @@ impl IdxParser {
         length_size: u8,
         segment_bits: u8,
     ) -> Result<IndexEntry> {
+        // For WoW Era .idx files, the format is fixed:
+        // 9 bytes key, 5 bytes location (1 high + 4 low), 4 bytes size = 18 bytes total
+        // Based on CascLib reference implementation
+
         // Read key bytes
         let mut key_bytes = vec![0u8; key_size as usize];
         reader.read_exact(&mut key_bytes)?;
@@ -160,58 +154,86 @@ impl IdxParser {
                 .ok_or_else(|| CascError::InvalidIndexFormat("Invalid key size".into()))?
         };
 
-        // Calculate field sizes
-        let offset_size = segment_bits.div_ceil(8);
-        let file_size = location_size - offset_size;
+        // For standard WoW Era format (key=9, location=5, length=4)
+        if key_size == 9 && location_size == 5 && length_size == 4 {
+            // Read archive index high byte
+            let index_high = reader.read_u8()?;
 
-        // Read file number (little-endian)
-        let mut file_bytes = vec![0u8; file_size as usize];
-        reader.read_exact(&mut file_bytes)?;
-        let mut archive_id = 0u64;
-        for (i, &byte) in file_bytes.iter().enumerate() {
-            archive_id |= (byte as u64) << (i * 8);
-        }
+            // Read archive index low bits + offset (big-endian)
+            let index_low = reader.read_u32::<BigEndian>()?;
 
-        // Read offset (big-endian)
-        let mut offset_bytes = vec![0u8; offset_size as usize];
-        reader.read_exact(&mut offset_bytes)?;
-        let mut offset = 0u64;
-        for &byte in &offset_bytes {
-            offset = (offset << 8) | (byte as u64);
-        }
+            // Extract archive ID: high byte shifted left by 2, plus top 2 bits of low word
+            let archive_id = ((index_high as u16) << 2) | ((index_low >> 30) as u16);
 
-        // Combine file number and offset bits
-        let extra_bits = (offset_size * 8) - segment_bits;
-        archive_id <<= extra_bits;
-        let high_bits = offset >> segment_bits;
-        archive_id |= high_bits;
-        offset &= (1u64 << segment_bits) - 1;
+            // Extract offset: bottom 30 bits of low word
+            let offset = (index_low & 0x3FFFFFFF) as u64;
 
-        // Read size (little-endian)
-        let size = match length_size {
-            4 => reader.read_u32::<LittleEndian>()?,
-            3 => {
-                let mut bytes = [0u8; 4];
-                reader.read_exact(&mut bytes[0..3])?;
-                u32::from_le_bytes(bytes)
+            // Read size (little-endian)
+            let size = reader.read_u32::<LittleEndian>()?;
+
+            Ok(IndexEntry {
+                ekey,
+                location: ArchiveLocation {
+                    archive_id,
+                    offset,
+                    size,
+                },
+            })
+        } else {
+            // Fallback to generic parsing for other formats
+            // Calculate field sizes
+            let offset_size = segment_bits.div_ceil(8);
+            let file_size = location_size - offset_size;
+
+            // Read file number (little-endian)
+            let mut file_bytes = vec![0u8; file_size as usize];
+            reader.read_exact(&mut file_bytes)?;
+            let mut archive_id = 0u64;
+            for (i, &byte) in file_bytes.iter().enumerate() {
+                archive_id |= (byte as u64) << (i * 8);
             }
-            2 => reader.read_u16::<LittleEndian>()? as u32,
-            1 => reader.read_u8()? as u32,
-            _ => {
-                return Err(CascError::InvalidIndexFormat(format!(
-                    "Invalid length field size: {length_size}"
-                )));
-            }
-        };
 
-        Ok(IndexEntry {
-            ekey,
-            location: ArchiveLocation {
-                archive_id: archive_id as u16,
-                offset,
-                size,
-            },
-        })
+            // Read offset (big-endian)
+            let mut offset_bytes = vec![0u8; offset_size as usize];
+            reader.read_exact(&mut offset_bytes)?;
+            let mut offset = 0u64;
+            for &byte in &offset_bytes {
+                offset = (offset << 8) | (byte as u64);
+            }
+
+            // Combine file number and offset bits
+            let extra_bits = (offset_size * 8) - segment_bits;
+            archive_id <<= extra_bits;
+            let high_bits = offset >> segment_bits;
+            archive_id |= high_bits;
+            offset &= (1u64 << segment_bits) - 1;
+
+            // Read size (little-endian)
+            let size = match length_size {
+                4 => reader.read_u32::<LittleEndian>()?,
+                3 => {
+                    let mut bytes = [0u8; 4];
+                    reader.read_exact(&mut bytes[0..3])?;
+                    u32::from_le_bytes(bytes)
+                }
+                2 => reader.read_u16::<LittleEndian>()? as u32,
+                1 => reader.read_u8()? as u32,
+                _ => {
+                    return Err(CascError::InvalidIndexFormat(format!(
+                        "Invalid length field size: {length_size}"
+                    )));
+                }
+            };
+
+            Ok(IndexEntry {
+                ekey,
+                location: ArchiveLocation {
+                    archive_id: archive_id as u16,
+                    offset,
+                    size,
+                },
+            })
+        }
     }
 
     /// Get the bucket index for this parser
@@ -242,5 +264,10 @@ impl IdxParser {
     /// Iterate over all entries
     pub fn entries(&self) -> impl Iterator<Item = (&EKey, &ArchiveLocation)> {
         self.entries.iter()
+    }
+
+    /// Consume the parser and return all entries
+    pub fn into_entries(self) -> BTreeMap<EKey, ArchiveLocation> {
+        self.entries
     }
 }

@@ -96,6 +96,10 @@ enum Commands {
     /// Certificate operations
     #[command(subcommand)]
     Certs(CertsCommands),
+
+    /// Manage community listfiles for filename resolution
+    #[command(subcommand)]
+    Listfile(ngdp_client::ListfileCommands),
 }
 
 #[tokio::main]
@@ -143,6 +147,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Commands::Config(cmd) => commands::config::handle(cmd, cli.format).await,
         Commands::Certs(cmd) => commands::certs::handle(cmd, cli.format).await,
         Commands::Keys(cmd) => commands::keys::handle_keys_command(cmd).await,
+        Commands::Listfile(cmd) => commands::listfile::handle(cmd, cli.format).await,
     };
 
     // Handle errors with more user-friendly messages

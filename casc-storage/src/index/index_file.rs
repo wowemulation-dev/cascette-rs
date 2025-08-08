@@ -14,7 +14,7 @@ pub enum IndexVersion {
 /// Generic index file interface
 pub struct IndexFile {
     version: IndexVersion,
-    entries: std::collections::HashMap<EKey, ArchiveLocation>,
+    entries: std::collections::BTreeMap<EKey, ArchiveLocation>,
 }
 
 impl IndexFile {
@@ -22,7 +22,7 @@ impl IndexFile {
     pub fn new(version: IndexVersion) -> Self {
         Self {
             version,
-            entries: std::collections::HashMap::new(),
+            entries: std::collections::BTreeMap::new(),
         }
     }
 
@@ -31,7 +31,7 @@ impl IndexFile {
         // Determine type based on extension
         if path.extension().and_then(|s| s.to_str()) == Some("idx") {
             let parser = super::IdxParser::parse_file(path)?;
-            let mut entries = std::collections::HashMap::new();
+            let mut entries = std::collections::BTreeMap::new();
             for (ekey, location) in parser.entries() {
                 entries.insert(*ekey, *location);
             }
@@ -41,7 +41,7 @@ impl IndexFile {
             })
         } else if path.extension().and_then(|s| s.to_str()) == Some("index") {
             let parser = super::GroupIndex::parse_file(path)?;
-            let mut entries = std::collections::HashMap::new();
+            let mut entries = std::collections::BTreeMap::new();
             for (ekey, location) in parser.entries() {
                 entries.insert(*ekey, *location);
             }

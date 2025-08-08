@@ -20,7 +20,8 @@ pub mod test_constants {
 pub use crate::commands::{
     certs::handle as handle_certs, config::handle as handle_config,
     download::handle as handle_download, inspect::handle as handle_inspect,
-    products::handle as handle_products, storage::handle as handle_storage,
+    listfile::handle as handle_listfile, products::handle as handle_products,
+    storage::handle as handle_storage,
 };
 
 use clap::Subcommand;
@@ -120,6 +121,20 @@ pub enum StorageCommands {
         path: PathBuf,
     },
 
+    /// Show NGDP configuration information from WoW installation
+    Config {
+        /// Path to WoW installation directory
+        #[arg(default_value = ".")]
+        path: PathBuf,
+    },
+
+    /// Show detailed storage statistics
+    Stats {
+        /// Path to storage directory
+        #[arg(default_value = ".")]
+        path: PathBuf,
+    },
+
     /// Verify storage integrity
     Verify {
         /// Path to storage directory
@@ -131,6 +146,76 @@ pub enum StorageCommands {
         fix: bool,
     },
 
+    /// Read a file by EKey
+    Read {
+        /// Path to storage directory
+        path: PathBuf,
+
+        /// Encoding key (hex)
+        ekey: String,
+
+        /// Output file (defaults to stdout)
+        #[arg(short = 'O', long)]
+        output: Option<PathBuf>,
+    },
+
+    /// Write a file to storage
+    Write {
+        /// Path to storage directory
+        path: PathBuf,
+
+        /// Encoding key (hex)
+        ekey: String,
+
+        /// Input file (defaults to stdin)
+        #[arg(short = 'I', long)]
+        input: Option<PathBuf>,
+    },
+
+    /// List all files in storage
+    List {
+        /// Path to storage directory
+        #[arg(default_value = ".")]
+        path: PathBuf,
+
+        /// Show detailed information
+        #[arg(short, long)]
+        detailed: bool,
+
+        /// Limit number of results
+        #[arg(short = 'n', long)]
+        limit: Option<usize>,
+    },
+
+    /// Rebuild storage indices
+    Rebuild {
+        /// Path to storage directory
+        #[arg(default_value = ".")]
+        path: PathBuf,
+
+        /// Force rebuild even if indices seem valid
+        #[arg(short, long)]
+        force: bool,
+    },
+
+    /// Optimize storage for performance
+    Optimize {
+        /// Path to storage directory
+        #[arg(default_value = ".")]
+        path: PathBuf,
+    },
+
+    /// Repair corrupted storage
+    Repair {
+        /// Path to storage directory
+        #[arg(default_value = ".")]
+        path: PathBuf,
+
+        /// Dry run (don't actually repair)
+        #[arg(short = 'n', long)]
+        dry_run: bool,
+    },
+
     /// Clean up unused data
     Clean {
         /// Path to storage directory
@@ -140,6 +225,142 @@ pub enum StorageCommands {
         /// Dry run (don't actually delete)
         #[arg(short = 'n', long)]
         dry_run: bool,
+    },
+
+    /// Extract a file by EKey with optional filename resolution
+    Extract {
+        /// Encoding key (hex)
+        ekey: String,
+
+        /// Path to storage directory
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+
+        /// Output file path (optional)
+        #[arg(short = 'O', long)]
+        output: Option<PathBuf>,
+
+        /// Path to community listfile for filename resolution
+        #[arg(long)]
+        listfile: Option<PathBuf>,
+
+        /// Resolve filename using listfile and TACT manifests
+        #[arg(long)]
+        resolve_filename: bool,
+    },
+
+    /// Extract a file by FileDataID (requires TACT manifests)
+    ExtractById {
+        /// FileDataID to extract
+        fdid: u32,
+
+        /// Path to storage directory
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+
+        /// Output file path (optional)
+        #[arg(short = 'O', long)]
+        output: Option<PathBuf>,
+
+        /// Path to root manifest file
+        #[arg(long)]
+        root_manifest: Option<PathBuf>,
+
+        /// Path to encoding manifest file
+        #[arg(long)]
+        encoding_manifest: Option<PathBuf>,
+    },
+
+    /// Extract a file by filename (requires TACT manifests and listfile)
+    ExtractByName {
+        /// Filename to extract
+        filename: String,
+
+        /// Path to storage directory
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+
+        /// Output file path (optional)
+        #[arg(short = 'O', long)]
+        output: Option<PathBuf>,
+
+        /// Path to root manifest file
+        #[arg(long)]
+        root_manifest: Option<PathBuf>,
+
+        /// Path to encoding manifest file
+        #[arg(long)]
+        encoding_manifest: Option<PathBuf>,
+
+        /// Path to community listfile for filename resolution
+        #[arg(long)]
+        listfile: Option<PathBuf>,
+    },
+
+    /// Load TACT manifests for enhanced operations
+    LoadManifests {
+        /// Path to storage directory
+        #[arg(default_value = ".")]
+        path: PathBuf,
+
+        /// Path to root manifest file
+        #[arg(long)]
+        root_manifest: Option<PathBuf>,
+
+        /// Path to encoding manifest file
+        #[arg(long)]
+        encoding_manifest: Option<PathBuf>,
+
+        /// Path to community listfile for filename resolution
+        #[arg(long)]
+        listfile: Option<PathBuf>,
+
+        /// Locale to use for filtering (default: all)
+        #[arg(long, default_value = "all")]
+        locale: String,
+
+        /// Only show info, don't persist
+        #[arg(long)]
+        info_only: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum ListfileCommands {
+    /// Download the latest community listfile
+    Download {
+        /// Output directory for listfile
+        #[arg(long, default_value = ".")]
+        output: PathBuf,
+
+        /// Force download even if file exists
+        #[arg(short, long)]
+        force: bool,
+    },
+
+    /// Show listfile information
+    Info {
+        /// Path to listfile
+        #[arg(default_value = "community-listfile.csv")]
+        path: PathBuf,
+    },
+
+    /// Search for files in listfile
+    Search {
+        /// Search pattern (regex)
+        pattern: String,
+
+        /// Path to listfile
+        #[arg(default_value = "community-listfile.csv")]
+        path: PathBuf,
+
+        /// Case-insensitive search
+        #[arg(short, long)]
+        ignore_case: bool,
+
+        /// Limit results
+        #[arg(short, long, default_value = "50")]
+        limit: usize,
     },
 }
 

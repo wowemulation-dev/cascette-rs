@@ -3,6 +3,7 @@
 use crate::archive::{Archive, ArchiveWriter};
 use crate::error::{CascError, Result};
 use crate::index::{GroupIndex, IdxParser, IndexFile};
+use crate::manifest::{FileMapping, ManifestConfig, TactManifests};
 use crate::types::{ArchiveLocation, CascConfig, EKey, StorageStats};
 use dashmap::DashMap;
 use lru::LruCache;
@@ -10,7 +11,7 @@ use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::num::NonZeroUsize;
 use std::sync::Arc;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 
 /// Main CASC storage implementation
 pub struct CascStorage {
@@ -29,7 +30,11 @@ pub struct CascStorage {
     /// Current archive for writing
     current_archive: Arc<RwLock<Option<ArchiveWriter>>>,
 
+    /// TACT manifest integration for FileDataID lookups
+    tact_manifests: Option<TactManifests>,
+
     /// Storage statistics
+    #[allow(dead_code)]
     stats: Arc<RwLock<StorageStats>>,
 }
 
@@ -53,6 +58,7 @@ impl CascStorage {
             archives: Arc::new(RwLock::new(HashMap::new())),
             cache: Arc::new(RwLock::new(LruCache::new(cache_size))),
             current_archive: Arc::new(RwLock::new(None)),
+            tact_manifests: None,
             stats: Arc::new(RwLock::new(StorageStats::default())),
         })
     }
@@ -61,70 +67,116 @@ impl CascStorage {
     pub fn load_indices(&self) -> Result<()> {
         info!("Loading CASC indices from {:?}", self.config.data_path);
 
+        // Try multiple locations for indices
         let indices_path = self.config.data_path.join("indices");
+        let data_path = self.config.data_path.join("data");
 
-        // Load .idx files (bucket-based indices)
-        for entry in std::fs::read_dir(&indices_path)? {
-            let entry = entry?;
-            let path = entry.path();
+        // Load .idx files from data directory (WoW Era format)
+        if data_path.exists() {
+            if let Ok(entries) = std::fs::read_dir(&data_path) {
+                for entry in entries {
+                    let entry = entry?;
+                    let path = entry.path();
 
-            if path.extension().and_then(|s| s.to_str()) == Some("idx") {
-                match IdxParser::parse_file(&path) {
-                    Ok(parser) => {
-                        let bucket = parser.bucket();
-                        debug!(
-                            "Loaded .idx file for bucket {:02x}: {} entries",
-                            bucket,
-                            parser.len()
-                        );
+                    if path.extension().and_then(|s| s.to_str()) == Some("idx") {
+                        match IdxParser::parse_file(&path) {
+                            Ok(parser) => {
+                                let bucket = parser.bucket();
+                                debug!(
+                                    "Loaded .idx file for bucket {:02x}: {} entries",
+                                    bucket,
+                                    parser.len()
+                                );
 
-                        let mut index = IndexFile::new(crate::index::IndexVersion::V7);
-                        for (ekey, location) in parser.entries() {
-                            index.add_entry(*ekey, *location);
+                                // Consume parser and get all entries at once
+                                let entries_map = parser.into_entries();
+
+                                let mut index = IndexFile::new(crate::index::IndexVersion::V7);
+
+                                // Add all entries to the index
+                                for (ekey, location) in entries_map {
+                                    index.add_entry(ekey, location);
+                                }
+
+                                self.indices.insert(bucket, index);
+                            }
+                            Err(e) => {
+                                warn!("Failed to load index {:?}: {}", path, e);
+                            }
                         }
-
-                        self.indices.insert(bucket, index);
-                    }
-                    Err(e) => {
-                        warn!("Failed to load index {:?}: {}", path, e);
                     }
                 }
             }
         }
 
-        // Load .index files (group indices)
-        for entry in std::fs::read_dir(&indices_path)? {
-            let entry = entry?;
-            let path = entry.path();
+        // Load .idx files from indices directory (if exists)
+        if indices_path.exists() {
+            for entry in std::fs::read_dir(&indices_path)? {
+                let entry = entry?;
+                let path = entry.path();
 
-            if path.extension().and_then(|s| s.to_str()) == Some("index") {
-                match GroupIndex::parse_file(&path) {
-                    Ok(group) => {
-                        let bucket = group.bucket_index();
-                        debug!(
-                            "Loaded .index file for bucket {:02x}: {} entries",
-                            bucket,
-                            group.len()
-                        );
+                if path.extension().and_then(|s| s.to_str()) == Some("idx") {
+                    match IdxParser::parse_file(&path) {
+                        Ok(parser) => {
+                            let bucket = parser.bucket();
+                            debug!(
+                                "Loaded .idx file for bucket {:02x}: {} entries",
+                                bucket,
+                                parser.len()
+                            );
 
-                        // Merge with existing index or create new
-                        self.indices
-                            .entry(bucket)
-                            .and_modify(|index| {
-                                for (ekey, location) in group.entries() {
-                                    index.add_entry(*ekey, *location);
-                                }
-                            })
-                            .or_insert_with(|| {
-                                let mut index = IndexFile::new(crate::index::IndexVersion::V7);
-                                for (ekey, location) in group.entries() {
-                                    index.add_entry(*ekey, *location);
-                                }
-                                index
-                            });
+                            let mut index = IndexFile::new(crate::index::IndexVersion::V7);
+                            // Transfer ownership of entries to avoid lifetime issues
+                            for (ekey, location) in parser.into_entries() {
+                                index.add_entry(ekey, location);
+                            }
+
+                            self.indices.insert(bucket, index);
+                        }
+                        Err(e) => {
+                            warn!("Failed to load index {:?}: {}", path, e);
+                        }
                     }
-                    Err(e) => {
-                        warn!("Failed to load group index {:?}: {}", path, e);
+                }
+            }
+        }
+
+        // Load .index files (group indices) - disabled until format is understood
+        #[allow(unreachable_code)]
+        if false {
+            for entry in std::fs::read_dir(&indices_path)? {
+                let entry = entry?;
+                let path = entry.path();
+
+                if path.extension().and_then(|s| s.to_str()) == Some("index") {
+                    match GroupIndex::parse_file(&path) {
+                        Ok(group) => {
+                            let bucket = group.bucket_index();
+                            debug!(
+                                "Loaded .index file for bucket {:02x}: {} entries",
+                                bucket,
+                                group.len()
+                            );
+
+                            // Merge with existing index or create new
+                            self.indices
+                                .entry(bucket)
+                                .and_modify(|index| {
+                                    for (ekey, location) in group.entries() {
+                                        index.add_entry(*ekey, *location);
+                                    }
+                                })
+                                .or_insert_with(|| {
+                                    let mut index = IndexFile::new(crate::index::IndexVersion::V7);
+                                    for (ekey, location) in group.entries() {
+                                        index.add_entry(*ekey, *location);
+                                    }
+                                    index
+                                });
+                        }
+                        Err(e) => {
+                            warn!("Failed to load group index {:?}: {}", path, e);
+                        }
                     }
                 }
             }
@@ -179,13 +231,25 @@ impl CascStorage {
             }
         }
 
-        // Find the file in indices
-        let bucket = ekey.bucket_index();
-        let location = self
-            .indices
-            .get(&bucket)
-            .and_then(|index| index.lookup(ekey).copied())
-            .ok_or_else(|| CascError::EntryNotFound(ekey.to_string()))?;
+        // Search all buckets for the key (don't rely on XOR hash)
+        debug!("Looking up EKey {} in all buckets", ekey);
+
+        let mut location = None;
+        for index_ref in self.indices.iter() {
+            let bucket = *index_ref.key();
+            let index = index_ref.value();
+
+            if let Some(loc) = index.lookup(ekey) {
+                debug!("Found EKey {} in bucket {:02x}", ekey, bucket);
+                location = Some(*loc);
+                break;
+            }
+        }
+
+        let location = location.ok_or_else(|| {
+            debug!("EKey {} not found in any bucket", ekey);
+            CascError::EntryNotFound(ekey.to_string())
+        })?;
 
         debug!(
             "Found {} in archive {} at offset {:x}",
@@ -193,7 +257,7 @@ impl CascStorage {
         );
 
         // Read from archive
-        let compressed_data = {
+        let raw_data = {
             let mut archives = self.archives.write();
             let archive = archives
                 .get_mut(&location.archive_id)
@@ -201,6 +265,24 @@ impl CascStorage {
 
             archive.read_at(&location)?
         };
+
+        // CASC archives have a 30-byte header before the BLTE data:
+        // 16 bytes: BlteHash (encoding key)
+        // 4 bytes: Size of header + data
+        // 2 bytes: Flags
+        // 4 bytes: ChecksumA
+        // 4 bytes: ChecksumB
+        const CASC_ENTRY_HEADER_SIZE: usize = 30;
+
+        if raw_data.len() < CASC_ENTRY_HEADER_SIZE {
+            return Err(CascError::InvalidArchiveFormat(format!(
+                "Archive data too small: {} bytes",
+                raw_data.len()
+            )));
+        }
+
+        // Skip the header and get the BLTE data
+        let compressed_data = raw_data[CASC_ENTRY_HEADER_SIZE..].to_vec();
 
         // Decompress using BLTE (no key service needed for now)
         let decompressed = blte::decompress_blte(compressed_data, None)?;
@@ -352,15 +434,129 @@ impl CascStorage {
 
     /// Get storage statistics
     pub fn stats(&self) -> StorageStats {
-        let stats = self.stats.read();
-        StorageStats {
-            total_archives: stats.total_archives,
-            total_indices: stats.total_indices,
-            total_size: stats.total_size,
-            file_count: stats.file_count,
-            duplicate_count: stats.duplicate_count,
-            compression_ratio: stats.compression_ratio,
+        // Calculate stats from current state
+        let mut file_count = 0usize;
+        for index_ref in self.indices.iter() {
+            file_count += index_ref.value().entries().count();
         }
+
+        let archives = self.archives.read();
+        let total_archives = archives.len();
+
+        let mut total_size = 0u64;
+        for archive in archives.values() {
+            total_size += archive.size;
+        }
+
+        StorageStats {
+            total_archives: total_archives as u32,
+            total_indices: self.indices.len() as u32,
+            total_size,
+            file_count: file_count as u64,
+            duplicate_count: 0,
+            compression_ratio: 0.0,
+        }
+    }
+
+    /// Enumerate all files in the storage
+    /// Returns a vector of (EKey, ArchiveLocation) pairs
+    pub fn enumerate_files_vec(&self) -> Vec<(EKey, ArchiveLocation)> {
+        let mut all_entries = Vec::new();
+
+        for index_ref in self.indices.iter() {
+            let _bucket = *index_ref.key();
+            let index = index_ref.value();
+
+            let bucket_entries: Vec<(EKey, ArchiveLocation)> = index
+                .entries()
+                .map(|(ekey, location)| (*ekey, *location))
+                .collect();
+            all_entries.extend(bucket_entries);
+        }
+
+        all_entries
+    }
+
+    /// Enumerate all files in the storage
+    /// Returns an iterator over (EKey, ArchiveLocation) pairs  
+    pub fn enumerate_files(&self) -> impl Iterator<Item = (EKey, ArchiveLocation)> + '_ {
+        self.indices.iter().flat_map(|index_ref| {
+            index_ref
+                .value()
+                .entries()
+                .map(|(ekey, location)| (*ekey, *location))
+                .collect::<Vec<_>>()
+        })
+    }
+
+    /// Get all EKeys in the storage
+    pub fn get_all_ekeys(&self) -> Vec<EKey> {
+        self.enumerate_files().map(|(ekey, _)| ekey).collect()
+    }
+
+    /// Test function to verify EKey lookup is working
+    pub fn test_ekey_lookup(&self) -> Result<()> {
+        // Get the first EKey from enumeration (use vec to avoid iterator issues)
+        let all_files = self.enumerate_files_vec();
+        if let Some((test_ekey, expected_location)) = all_files.first().copied() {
+            info!("Testing lookup with first enumerated EKey: {}", test_ekey);
+            info!(
+                "Expected location: archive={}, offset={:x}, size={}",
+                expected_location.archive_id, expected_location.offset, expected_location.size
+            );
+
+            // Try to read it using the normal read path
+            match self.read(&test_ekey) {
+                Ok(data) => {
+                    info!("SUCCESS: Read {} bytes from EKey {}", data.len(), test_ekey);
+                    Ok(())
+                }
+                Err(e) => {
+                    error!("FAILED to read EKey {}: {}", test_ekey, e);
+
+                    // Debug why it failed
+                    let bucket = test_ekey.bucket_index();
+                    info!("EKey {} maps to bucket {:02x}", test_ekey, bucket);
+
+                    if let Some(index) = self.indices.get(&bucket) {
+                        info!("Bucket {:02x} exists with {} entries", bucket, index.len());
+
+                        // Check if the key exists in the bucket
+                        let found = index.entries().any(|(k, _)| *k == test_ekey);
+
+                        if found {
+                            info!("EKey IS in the bucket but lookup failed!");
+                        } else {
+                            info!("EKey is NOT in the bucket!");
+
+                            // Show first few entries
+                            let entries: Vec<String> = index
+                                .entries()
+                                .take(3)
+                                .map(|(k, _)| k.to_string())
+                                .collect();
+                            info!("First 3 entries in bucket: {:?}", entries);
+                        }
+                    } else {
+                        error!("Bucket {:02x} doesn't exist!", bucket);
+                    }
+
+                    Err(e)
+                }
+            }
+        } else {
+            error!("No files found in storage!");
+            Err(CascError::EntryNotFound("No files in storage".to_string()))
+        }
+    }
+
+    /// Count files per archive
+    pub fn files_per_archive(&self) -> std::collections::HashMap<u16, usize> {
+        let mut counts = std::collections::HashMap::new();
+        for (_ekey, location) in self.enumerate_files() {
+            *counts.entry(location.archive_id).or_insert(0) += 1;
+        }
+        counts
     }
 
     /// Clear the cache
@@ -376,5 +572,118 @@ impl CascStorage {
             writer.flush()?;
         }
         Ok(())
+    }
+
+    // === TACT Manifest Integration ===
+
+    /// Initialize TACT manifest support with configuration
+    pub fn init_tact_manifests(&mut self, config: ManifestConfig) {
+        self.tact_manifests = Some(TactManifests::new(config));
+        info!("Initialized TACT manifest support");
+    }
+
+    /// Load root manifest from raw data
+    pub fn load_root_manifest(&self, data: Vec<u8>) -> Result<()> {
+        let manifests = self.tact_manifests.as_ref().ok_or_else(|| {
+            CascError::ManifestNotLoaded("TACT manifests not initialized".to_string())
+        })?;
+        manifests.load_root_from_data(data)
+    }
+
+    /// Load encoding manifest from raw data  
+    pub fn load_encoding_manifest(&self, data: Vec<u8>) -> Result<()> {
+        let manifests = self.tact_manifests.as_ref().ok_or_else(|| {
+            CascError::ManifestNotLoaded("TACT manifests not initialized".to_string())
+        })?;
+        manifests.load_encoding_from_data(data)
+    }
+
+    /// Load root manifest from file
+    pub fn load_root_manifest_from_file(&self, path: &std::path::Path) -> Result<()> {
+        let manifests = self.tact_manifests.as_ref().ok_or_else(|| {
+            CascError::ManifestNotLoaded("TACT manifests not initialized".to_string())
+        })?;
+        manifests.load_root_from_file(path)
+    }
+
+    /// Load encoding manifest from file
+    pub fn load_encoding_manifest_from_file(&self, path: &std::path::Path) -> Result<()> {
+        let manifests = self.tact_manifests.as_ref().ok_or_else(|| {
+            CascError::ManifestNotLoaded("TACT manifests not initialized".to_string())
+        })?;
+        manifests.load_encoding_from_file(path)
+    }
+
+    /// Load a community listfile for filename resolution
+    pub fn load_listfile(&self, path: &std::path::Path) -> Result<usize> {
+        let manifests = self.tact_manifests.as_ref().ok_or_else(|| {
+            CascError::ManifestNotLoaded("TACT manifests not initialized".to_string())
+        })?;
+        manifests.load_listfile(path)
+    }
+
+    /// Read a file by FileDataID
+    pub fn read_by_fdid(&self, fdid: u32) -> Result<Vec<u8>> {
+        let manifests = self.tact_manifests.as_ref().ok_or_else(|| {
+            CascError::ManifestNotLoaded("TACT manifests not initialized".to_string())
+        })?;
+
+        let mapping = manifests.lookup_by_fdid(fdid)?;
+        let ekey = mapping
+            .encoding_key
+            .ok_or_else(|| CascError::EntryNotFound(format!("EKey for FDID {fdid}")))?;
+
+        self.read(&ekey)
+    }
+
+    /// Read a file by filename (requires loaded listfile or root manifest)
+    pub fn read_by_filename(&self, filename: &str) -> Result<Vec<u8>> {
+        let manifests = self.tact_manifests.as_ref().ok_or_else(|| {
+            CascError::ManifestNotLoaded("TACT manifests not initialized".to_string())
+        })?;
+
+        let mapping = manifests.lookup_by_filename(filename)?;
+        let ekey = mapping
+            .encoding_key
+            .ok_or_else(|| CascError::EntryNotFound(format!("EKey for filename {filename}")))?;
+
+        self.read(&ekey)
+    }
+
+    /// Get FileDataID for a filename (if known)
+    pub fn get_fdid_for_filename(&self, filename: &str) -> Option<u32> {
+        self.tact_manifests
+            .as_ref()?
+            .get_fdid_for_filename(filename)
+    }
+
+    /// Get all known FileDataIDs
+    pub fn get_all_fdids(&self) -> Result<Vec<u32>> {
+        let manifests = self.tact_manifests.as_ref().ok_or_else(|| {
+            CascError::ManifestNotLoaded("TACT manifests not initialized".to_string())
+        })?;
+        manifests.get_all_fdids()
+    }
+
+    /// Check if TACT manifests are loaded and ready
+    pub fn tact_manifests_loaded(&self) -> bool {
+        self.tact_manifests
+            .as_ref()
+            .is_some_and(|m| m.is_loaded())
+    }
+
+    /// Get file mapping information for a FileDataID
+    pub fn get_file_mapping(&self, fdid: u32) -> Result<FileMapping> {
+        let manifests = self.tact_manifests.as_ref().ok_or_else(|| {
+            CascError::ManifestNotLoaded("TACT manifests not initialized".to_string())
+        })?;
+        manifests.lookup_by_fdid(fdid)
+    }
+
+    /// Clear TACT manifest caches
+    pub fn clear_manifest_cache(&self) {
+        if let Some(manifests) = &self.tact_manifests {
+            manifests.clear_cache();
+        }
     }
 }

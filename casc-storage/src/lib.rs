@@ -5,8 +5,10 @@
 //! and fast access to game files.
 
 pub mod archive;
+pub mod config;
 pub mod error;
 pub mod index;
+pub mod manifest;
 pub mod storage;
 pub mod types;
 pub mod utils;
@@ -17,4 +19,6 @@ pub use types::{ArchiveLocation, EKey, IndexEntry};
 
 // Re-export commonly used types
 pub use archive::{Archive, ArchiveReader};
+pub use config::{ConfigDiscovery, WowConfigSet};
 pub use index::{GroupIndex, IndexFile, IndexVersion};
+pub use manifest::{FileMapping, ManifestConfig, TactManifests};

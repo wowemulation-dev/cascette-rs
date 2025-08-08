@@ -48,17 +48,17 @@ impl GroupIndex {
         );
 
         // Calculate entry size
-        let entry_size = header.ekey_bytes
-            + header.archive_bytes
-            + header.span_offset_bytes
-            + header.span_size_bytes;
+        let entry_size = (header.ekey_bytes as usize)
+            + (header.archive_bytes as usize)
+            + (header.span_offset_bytes as usize)
+            + (header.span_size_bytes as usize);
 
         // Read all remaining data
         let mut data = Vec::new();
         reader.read_to_end(&mut data)?;
 
         // Parse entries
-        let entry_count = data.len() / entry_size as usize;
+        let entry_count = data.len() / entry_size;
         debug!(
             "Parsing {} entries of {} bytes each",
             entry_count, entry_size
@@ -69,7 +69,7 @@ impl GroupIndex {
 
         for i in 0..entry_count {
             let entry = Self::parse_entry(&data[offset..], &header)?;
-            offset += entry_size as usize;
+            offset += entry_size;
 
             if i < 5 {
                 trace!(
