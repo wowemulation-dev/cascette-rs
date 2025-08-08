@@ -11,8 +11,6 @@ use crate::{BLTE_MAGIC, Error, Result};
 /// BLTE header
 #[derive(Debug, Clone)]
 pub struct BLTEHeader {
-    /// Magic bytes (always "BLTE")
-    pub magic: [u8; 4],
     /// Header size (0 = single chunk, >0 = multi-chunk)
     pub header_size: u32,
     /// Chunk information (empty for single chunk)
@@ -53,7 +51,6 @@ impl BLTEHeader {
         };
 
         Ok(BLTEHeader {
-            magic,
             header_size,
             chunks,
         })
@@ -203,7 +200,6 @@ mod tests {
         ];
 
         let header = BLTEHeader::parse(&data).unwrap();
-        assert_eq!(header.magic, BLTE_MAGIC);
         assert_eq!(header.header_size, 0);
         assert!(header.is_single_chunk());
         assert_eq!(header.chunk_count(), 1);
@@ -234,7 +230,6 @@ mod tests {
         data.extend_from_slice(&[0xBB; 16]); // Checksum
 
         let header = BLTEHeader::parse(&data).unwrap();
-        assert_eq!(header.magic, BLTE_MAGIC);
         assert_eq!(header.header_size, 32);
         assert!(!header.is_single_chunk());
         assert_eq!(header.chunk_count(), 2);
