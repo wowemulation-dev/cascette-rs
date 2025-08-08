@@ -11,8 +11,17 @@ pub struct BLTEFile {
     pub data: Vec<u8>,
 }
 
+/// A BLTE file that borrows its data (zero-copy)
+#[derive(Debug)]
+pub struct BLTEFileRef<'a> {
+    /// BLTE header
+    pub header: BLTEHeader,
+    /// Raw data (everything after header)
+    pub data: &'a [u8],
+}
+
 impl BLTEFile {
-    /// Parse a BLTE file from bytes
+    /// Parse a BLTE file from bytes (allocates)
     pub fn parse(data: Vec<u8>) -> Result<Self> {
         let header = BLTEHeader::parse(&data)?;
         let data_offset = header.data_offset();
@@ -29,6 +38,24 @@ impl BLTEFile {
         Ok(BLTEFile {
             header,
             data: chunk_data,
+        })
+    }
+
+    /// Parse a BLTE file from bytes (zero-copy)
+    pub fn parse_ref(data: &[u8]) -> Result<BLTEFileRef> {
+        let header = BLTEHeader::parse(data)?;
+        let data_offset = header.data_offset();
+
+        if data.len() < data_offset {
+            return Err(Error::TruncatedData {
+                expected: data_offset,
+                actual: data.len(),
+            });
+        }
+
+        Ok(BLTEFileRef {
+            header,
+            data: &data[data_offset..],
         })
     }
 
@@ -146,11 +173,80 @@ impl BLTEFile {
     }
 }
 
+impl<'a> BLTEFileRef<'a> {
+    /// Get chunk data by index (zero-copy)
+    pub fn get_chunk_data(&self, chunk_index: usize) -> Result<ChunkDataRef<'a>> {
+        if self.header.is_single_chunk() {
+            if chunk_index != 0 {
+                return Err(Error::InvalidChunkCount(chunk_index as u32));
+            }
+
+            return Ok(ChunkDataRef {
+                data: self.data,
+                compressed_size: self.data.len() as u32,
+                decompressed_size: 0, // Unknown until decompressed
+                checksum: [0u8; 16],  // No checksum for single chunk
+            });
+        }
+
+        if chunk_index >= self.header.chunks.len() {
+            return Err(Error::InvalidChunkCount(chunk_index as u32));
+        }
+
+        let chunk_info = &self.header.chunks[chunk_index];
+
+        // Calculate offset for this chunk
+        let mut offset = 0;
+        for i in 0..chunk_index {
+            offset += self.header.chunks[i].compressed_size as usize;
+        }
+
+        let end_offset = offset + chunk_info.compressed_size as usize;
+
+        if end_offset > self.data.len() {
+            return Err(Error::TruncatedData {
+                expected: end_offset,
+                actual: self.data.len(),
+            });
+        }
+
+        Ok(ChunkDataRef {
+            data: &self.data[offset..end_offset],
+            compressed_size: chunk_info.compressed_size,
+            decompressed_size: chunk_info.decompressed_size,
+            checksum: chunk_info.checksum,
+        })
+    }
+
+    /// Get the total number of chunks
+    pub fn chunk_count(&self) -> usize {
+        self.header.chunk_count()
+    }
+
+    /// Check if the file is single-chunk
+    pub fn is_single_chunk(&self) -> bool {
+        self.header.is_single_chunk()
+    }
+}
+
 /// Data for a single chunk
 #[derive(Debug, Clone)]
 pub struct ChunkData {
     /// Raw chunk data (compressed)
     pub data: Vec<u8>,
+    /// Compressed size
+    pub compressed_size: u32,
+    /// Expected decompressed size (0 if unknown)
+    pub decompressed_size: u32,
+    /// MD5 checksum of compressed data
+    pub checksum: [u8; 16],
+}
+
+/// Chunk data reference (zero-copy)
+#[derive(Debug)]
+pub struct ChunkDataRef<'a> {
+    /// Raw chunk data reference (compressed)
+    pub data: &'a [u8],
     /// Compressed size
     pub compressed_size: u32,
     /// Expected decompressed size (0 if unknown)

@@ -31,7 +31,7 @@ pub use archive::{
 pub use builder::{
     BLTEBuilder, ChunkSpec, CompressionStrategy, EncryptionAlgorithm, EncryptionSpec,
 };
-pub use chunk::{BLTEFile, ChunkData};
+pub use chunk::{BLTEFile, BLTEFileRef, ChunkData, ChunkDataRef};
 pub use compress::{
     EncryptionMethod,
     auto_select_compression_mode,
