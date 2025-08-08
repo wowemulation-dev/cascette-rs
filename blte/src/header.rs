@@ -19,7 +19,7 @@ pub struct BLTEHeader {
     total_decompressed_size: u64,
 
     /// Chunk information.
-    /// 
+    ///
     /// Contains a single synthetic entry when there is only one chunk.
     chunks: Vec<ChunkInfo>,
 }

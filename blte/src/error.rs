@@ -46,7 +46,7 @@ pub enum Error {
     #[error(
         "Checksum mismatch: expected {}, got {}",
         hex::encode(expected),
-        hex::encode(actual),
+        hex::encode(actual)
     )]
     ChecksumMismatch { expected: Vec<u8>, actual: Md5 },
 

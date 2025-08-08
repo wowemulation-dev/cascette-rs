@@ -23,4 +23,3 @@ pub const BLTE_MAGIC: [u8; 4] = *b"BLTE";
 
 const MD5_LENGTH: usize = 16;
 pub type Md5 = [u8; MD5_LENGTH];
-

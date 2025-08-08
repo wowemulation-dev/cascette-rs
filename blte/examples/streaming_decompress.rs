@@ -84,78 +84,78 @@
 // }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-//     println!("BLTE Streaming Decompression Example");
-//     println!("====================================");
+    //     println!("BLTE Streaming Decompression Example");
+    //     println!("====================================");
 
-//     // Example 1: Simple single chunk streaming
-//     println!("\n1. Single Chunk Streaming:");
-//     let simple_data = create_sample_blte_data();
-//     println!("   Original BLTE data size: {} bytes", simple_data.len());
+    //     // Example 1: Simple single chunk streaming
+    //     println!("\n1. Single Chunk Streaming:");
+    //     let simple_data = create_sample_blte_data();
+    //     println!("   Original BLTE data size: {} bytes", simple_data.len());
 
-//     let mut stream = BLTEStream::new(simple_data, None)?;
-//     println!("   Stream created with {} chunks", stream.chunk_count());
+    //     let mut stream = BLTEStream::new(simple_data, None)?;
+    //     println!("   Stream created with {} chunks", stream.chunk_count());
 
-//     let mut decompressed = String::new();
-//     stream.read_to_string(&mut decompressed)?;
-//     println!("   Decompressed content: \"{decompressed}\"");
-//     println!("   Decompressed size: {} bytes", decompressed.len());
+    //     let mut decompressed = String::new();
+    //     stream.read_to_string(&mut decompressed)?;
+    //     println!("   Decompressed content: \"{decompressed}\"");
+    //     println!("   Decompressed size: {} bytes", decompressed.len());
 
-//     // Example 2: Multi-chunk streaming
-//     println!("\n2. Multi-Chunk Streaming:");
-//     let multi_data = create_multi_chunk_blte_data();
-//     println!("   Original BLTE data size: {} bytes", multi_data.len());
+    //     // Example 2: Multi-chunk streaming
+    //     println!("\n2. Multi-Chunk Streaming:");
+    //     let multi_data = create_multi_chunk_blte_data();
+    //     println!("   Original BLTE data size: {} bytes", multi_data.len());
 
-//     let mut multi_stream = BLTEStream::new(multi_data, None)?;
-//     println!(
-//         "   Stream created with {} chunks",
-//         multi_stream.chunk_count()
-//     );
+    //     let mut multi_stream = BLTEStream::new(multi_data, None)?;
+    //     println!(
+    //         "   Stream created with {} chunks",
+    //         multi_stream.chunk_count()
+    //     );
 
-//     let mut multi_decompressed = String::new();
-//     multi_stream.read_to_string(&mut multi_decompressed)?;
-//     println!("   Decompressed content: \"{multi_decompressed}\"");
-//     println!("   Decompressed size: {} bytes", multi_decompressed.len());
+    //     let mut multi_decompressed = String::new();
+    //     multi_stream.read_to_string(&mut multi_decompressed)?;
+    //     println!("   Decompressed content: \"{multi_decompressed}\"");
+    //     println!("   Decompressed size: {} bytes", multi_decompressed.len());
 
-//     // Example 3: Streaming with small buffer reads (simulates processing large files)
-//     println!("\n3. Small Buffer Streaming (simulating large file processing):");
-//     let buffer_data = create_multi_chunk_blte_data();
-//     let mut buffer_stream = BLTEStream::new(buffer_data, None)?;
+    //     // Example 3: Streaming with small buffer reads (simulates processing large files)
+    //     println!("\n3. Small Buffer Streaming (simulating large file processing):");
+    //     let buffer_data = create_multi_chunk_blte_data();
+    //     let mut buffer_stream = BLTEStream::new(buffer_data, None)?;
 
-//     let mut buffer = [0u8; 8]; // Very small buffer to demonstrate streaming
-//     let mut total_bytes = 0;
-//     let mut chunks_read = 0;
+    //     let mut buffer = [0u8; 8]; // Very small buffer to demonstrate streaming
+    //     let mut total_bytes = 0;
+    //     let mut chunks_read = 0;
 
-//     println!("   Reading in 8-byte chunks:");
-//     loop {
-//         let bytes_read = buffer_stream.read(&mut buffer)?;
-//         if bytes_read == 0 {
-//             break; // End of stream
-//         }
+    //     println!("   Reading in 8-byte chunks:");
+    //     loop {
+    //         let bytes_read = buffer_stream.read(&mut buffer)?;
+    //         if bytes_read == 0 {
+    //             break; // End of stream
+    //         }
 
-//         chunks_read += 1;
-//         total_bytes += bytes_read;
-//         let chunk_str = String::from_utf8_lossy(&buffer[..bytes_read]);
-//         println!("     Chunk {chunks_read}: {bytes_read} bytes -> \"{chunk_str}\"");
-//     }
+    //         chunks_read += 1;
+    //         total_bytes += bytes_read;
+    //         let chunk_str = String::from_utf8_lossy(&buffer[..bytes_read]);
+    //         println!("     Chunk {chunks_read}: {bytes_read} bytes -> \"{chunk_str}\"");
+    //     }
 
-//     println!("   Total bytes read: {total_bytes}");
-//     println!("   Total read operations: {chunks_read}");
+    //     println!("   Total bytes read: {total_bytes}");
+    //     println!("   Total read operations: {chunks_read}");
 
-//     // Example 4: Using the convenience function
-//     println!("\n4. Using convenience function:");
-//     let convenience_data = create_sample_blte_data();
-//     let mut convenience_stream = create_streaming_reader(convenience_data, None)?;
+    //     // Example 4: Using the convenience function
+    //     println!("\n4. Using convenience function:");
+    //     let convenience_data = create_sample_blte_data();
+    //     let mut convenience_stream = create_streaming_reader(convenience_data, None)?;
 
-//     let mut convenience_result = String::new();
-//     convenience_stream.read_to_string(&mut convenience_result)?;
-//     println!("   Result: \"{convenience_result}\"");
+    //     let mut convenience_result = String::new();
+    //     convenience_stream.read_to_string(&mut convenience_result)?;
+    //     println!("   Result: \"{convenience_result}\"");
 
-//     println!("\n✅ All streaming examples completed successfully!");
-//     println!("\nStreaming benefits:");
-//     println!("• Memory efficient for large BLTE files");
-//     println!("• Can process data as it becomes available");
-//     println!("• Supports all BLTE compression modes");
-//     println!("• Compatible with standard Read trait");
+    //     println!("\n✅ All streaming examples completed successfully!");
+    //     println!("\nStreaming benefits:");
+    //     println!("• Memory efficient for large BLTE files");
+    //     println!("• Can process data as it becomes available");
+    //     println!("• Supports all BLTE compression modes");
+    //     println!("• Compatible with standard Read trait");
 
     Ok(())
 }
