@@ -19,6 +19,9 @@ pub use stream::{BLTEStream, create_streaming_reader};
 /// BLTE magic bytes
 pub const BLTE_MAGIC: [u8; 4] = *b"BLTE";
 
+const MD5_LENGTH: usize = 16;
+pub type Md5 = [u8; MD5_LENGTH];
+
 /// BLTE compression modes
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(u8)]

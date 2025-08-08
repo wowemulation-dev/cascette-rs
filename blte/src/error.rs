@@ -13,7 +13,7 @@ pub enum Error {
     Io(#[from] std::io::Error),
 
     /// Invalid BLTE magic bytes
-    #[error("Invalid BLTE magic: expected [66, 76, 84, 69], got {0:?}")]
+    #[error("Invalid BLTE magic: expected 'BLTE', got {0:?}")]
     InvalidMagic([u8; 4]),
 
     /// Invalid header size
@@ -55,4 +55,7 @@ pub enum Error {
     /// Unsupported encryption type
     #[error("Unsupported encryption type: {0:#04x}")]
     UnsupportedEncryptionType(u8),
+
+    #[error("Unsupported table format: {0:#x}")]
+    UnsupportedTableFormat(u8),
 }
