@@ -9,6 +9,8 @@
 //! named by their MD5.
 //!
 //! This is intended for reading such files.
+//!
+//! **TODO:** Support encrypted streams.
 use blte::{BLTEFile, ChunkEncodingHeader};
 use clap::Parser;
 use std::{
