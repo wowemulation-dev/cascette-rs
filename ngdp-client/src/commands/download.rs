@@ -18,6 +18,8 @@ pub async fn handle(
             build,
             output,
             region,
+            dry_run,
+            tags,
         } => {
             info!(
                 "Build download requested: product={}, build={}, region={}",
@@ -28,7 +30,7 @@ pub async fn handle(
             // Parse region or use US as default
             let region = region.parse::<Region>().unwrap_or(Region::US);
 
-            match download_build(&product, &build, &output, region).await {
+            match download_build(&product, &build, &output, region, dry_run, tags).await {
                 Ok(_) => info!("✅ Build download completed successfully!"),
                 Err(e) => {
                     error!("❌ Build download failed: {}", e);
@@ -41,6 +43,9 @@ pub async fn handle(
             patterns,
             output,
             build,
+            dry_run,
+            tags,
+            limit,
         } => {
             info!(
                 "File download requested: product={}, patterns={:?}",
@@ -48,7 +53,7 @@ pub async fn handle(
             );
             info!("Output directory: {:?}", output);
 
-            match download_files(&product, &patterns, &output, build).await {
+            match download_files(&product, &patterns, &output, build, dry_run, tags, limit).await {
                 Ok(_) => info!("✅ File download completed successfully!"),
                 Err(e) => {
                     error!("❌ File download failed: {}", e);
@@ -96,11 +101,21 @@ async fn download_build(
     build: &str,
     output: &Path,
     region: Region,
+    dry_run: bool,
+    tags: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     info!(
         "📋 Initializing build download for {} build {}",
         product, build
     );
+    
+    if dry_run {
+        info!("🔍 DRY RUN mode - no files will be downloaded");
+    }
+    
+    if let Some(tags) = &tags {
+        info!("🏷️ Filtering by tags: {}", tags);
+    }
 
     // Create output directory
     tokio::fs::create_dir_all(output).await?;
@@ -143,52 +158,72 @@ async fn download_build(
 
     // Download build configuration
     info!("⬇️ Downloading BuildConfig...");
-    let build_config_response = cdn_client
-        .download_build_config(cdn_host, &cdn_entry.path, &version_entry.build_config)
-        .await?;
+    if dry_run {
+        info!("🔍 Would download BuildConfig: {}", version_entry.build_config);
+    } else {
+        let build_config_response = cdn_client
+            .download_build_config(cdn_host, &cdn_entry.path, &version_entry.build_config)
+            .await?;
 
-    let build_config_path = output.join("build_config");
-    tokio::fs::write(&build_config_path, build_config_response.bytes().await?).await?;
-    info!("💾 Saved BuildConfig to: {:?}", build_config_path);
+        let build_config_path = output.join("build_config");
+        tokio::fs::write(&build_config_path, build_config_response.bytes().await?).await?;
+        info!("💾 Saved BuildConfig to: {:?}", build_config_path);
+    }
 
     // Download CDN configuration
     info!("⬇️ Downloading CDNConfig...");
-    let cdn_config_response = cdn_client
-        .download_cdn_config(cdn_host, &cdn_entry.path, &version_entry.cdn_config)
-        .await?;
+    if dry_run {
+        info!("🔍 Would download CDNConfig: {}", version_entry.cdn_config);
+    } else {
+        let cdn_config_response = cdn_client
+            .download_cdn_config(cdn_host, &cdn_entry.path, &version_entry.cdn_config)
+            .await?;
 
-    let cdn_config_path = output.join("cdn_config");
-    tokio::fs::write(&cdn_config_path, cdn_config_response.bytes().await?).await?;
-    info!("💾 Saved CDNConfig to: {:?}", cdn_config_path);
+        let cdn_config_path = output.join("cdn_config");
+        tokio::fs::write(&cdn_config_path, cdn_config_response.bytes().await?).await?;
+        info!("💾 Saved CDNConfig to: {:?}", cdn_config_path);
+    }
 
     // Download product configuration
     info!("⬇️ Downloading ProductConfig...");
-    let product_config_response = cdn_client
-        .download_product_config(
-            cdn_host,
-            &cdn_entry.config_path,
-            &version_entry.product_config,
-        )
-        .await?;
+    if dry_run {
+        info!("🔍 Would download ProductConfig: {}", version_entry.product_config);
+    } else {
+        let product_config_response = cdn_client
+            .download_product_config(
+                cdn_host,
+                &cdn_entry.config_path,
+                &version_entry.product_config,
+            )
+            .await?;
 
-    let product_config_path = output.join("product_config");
-    tokio::fs::write(&product_config_path, product_config_response.bytes().await?).await?;
-    info!("💾 Saved ProductConfig to: {:?}", product_config_path);
+        let product_config_path = output.join("product_config");
+        tokio::fs::write(&product_config_path, product_config_response.bytes().await?).await?;
+        info!("💾 Saved ProductConfig to: {:?}", product_config_path);
+    }
 
     // Download keyring if available
     if let Some(keyring_hash) = &version_entry.key_ring {
         info!("⬇️ Downloading KeyRing...");
-        let keyring_response = cdn_client
-            .download_key_ring(cdn_host, &cdn_entry.path, keyring_hash)
-            .await?;
+        if dry_run {
+            info!("🔍 Would download KeyRing: {}", keyring_hash);
+        } else {
+            let keyring_response = cdn_client
+                .download_key_ring(cdn_host, &cdn_entry.path, keyring_hash)
+                .await?;
 
-        let keyring_path = output.join("keyring");
-        tokio::fs::write(&keyring_path, keyring_response.bytes().await?).await?;
-        info!("💾 Saved KeyRing to: {:?}", keyring_path);
+            let keyring_path = output.join("keyring");
+            tokio::fs::write(&keyring_path, keyring_response.bytes().await?).await?;
+            info!("💾 Saved KeyRing to: {:?}", keyring_path);
+        }
     }
 
-    info!("✅ Build download completed successfully!");
-    info!("📂 Files saved to: {:?}", output);
+    if dry_run {
+        info!("✅ Dry run completed - showed what would be downloaded");
+    } else {
+        info!("✅ Build download completed successfully!");
+        info!("📂 Files saved to: {:?}", output);
+    }
 
     Ok(())
 }
@@ -199,12 +234,27 @@ async fn download_files(
     patterns: &[String],
     output: &Path,
     build: Option<String>,
+    dry_run: bool,
+    tags: Option<String>,
+    limit: Option<usize>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     info!(
         "📋 Initializing file download for {} with {} patterns",
         product,
         patterns.len()
     );
+    
+    if dry_run {
+        info!("🔍 DRY RUN mode - no files will be downloaded");
+    }
+    
+    if let Some(tags) = &tags {
+        info!("🏷️ Filtering by tags: {}", tags);
+    }
+    
+    if let Some(limit) = limit {
+        info!("📊 Limiting to {} files", limit);
+    }
 
     // Create output directory
     tokio::fs::create_dir_all(output).await?;

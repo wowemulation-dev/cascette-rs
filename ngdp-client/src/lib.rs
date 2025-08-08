@@ -5,6 +5,7 @@
 pub mod cached_client;
 pub mod cdn_config;
 pub mod commands;
+pub mod config_manager;
 pub mod fallback_client;
 pub mod output;
 pub mod wago_api;
@@ -381,6 +382,14 @@ pub enum DownloadCommands {
         /// Region
         #[arg(short, long, default_value = "us")]
         region: String,
+
+        /// Dry run - show what would be downloaded without actually downloading
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Filter by tags (comma-separated)
+        #[arg(long)]
+        tags: Option<String>,
     },
 
     /// Download specific files
@@ -398,6 +407,18 @@ pub enum DownloadCommands {
         /// Build ID or version
         #[arg(short, long)]
         build: Option<String>,
+
+        /// Dry run - show what would be downloaded without actually downloading
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Filter by tags (comma-separated)
+        #[arg(long)]
+        tags: Option<String>,
+
+        /// Limit number of files to download
+        #[arg(long)]
+        limit: Option<usize>,
     },
 
     /// Resume an interrupted download
