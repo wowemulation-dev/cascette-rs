@@ -299,11 +299,13 @@ checksum = "d71b6127be86fdcfddb610f7182ac57211d4b18a3e9c82eb2d17662f2227ad6a"
 name = "casc-storage"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "blte",
  "byteorder",
  "bytes",
  "criterion 0.5.1",
  "dashmap",
+ "futures-util",
  "hex",
  "lru",
  "md5 0.7.0",
@@ -2644,6 +2646,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "url",
 ]
 
 [[package]]

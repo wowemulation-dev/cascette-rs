@@ -5,7 +5,8 @@ use memmap2::{Mmap, MmapOptions};
 use std::borrow::Cow;
 use std::fs::File;
 use std::io::{BufReader, Cursor, Read, Seek, SeekFrom};
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use tracing::debug;
 
 /// Reader for CASC archive files with memory mapping support
@@ -14,6 +15,8 @@ pub struct ArchiveReader {
     mmap: Option<Mmap>,
     /// Regular file reader (fallback)
     file: Option<BufReader<File>>,
+    /// Path to the archive file (for large file fallback)
+    path: Arc<PathBuf>,
     /// Size of the archive
     size: u64,
 }
@@ -58,20 +61,39 @@ impl<'a> Seek for ArchiveSection<'a> {
 }
 
 impl ArchiveReader {
+    /// Determine if we can memory map a file of this size
+    pub fn can_memory_map(size: u64) -> bool {
+        // Platform-specific memory mapping limits
+        #[cfg(target_pointer_width = "64")]
+        {
+            // On 64-bit systems, we can handle much larger files
+            // Practical limit is around 128GB to avoid excessive virtual memory usage
+            const MAX_MMAP_SIZE: u64 = 128 * 1024 * 1024 * 1024; // 128GB
+            size <= MAX_MMAP_SIZE
+        }
+        
+        #[cfg(target_pointer_width = "32")]
+        {
+            // On 32-bit systems, stick to 2GB limit due to address space constraints
+            const MAX_MMAP_SIZE_32BIT: u64 = 2 * 1024 * 1024 * 1024; // 2GB
+            size <= MAX_MMAP_SIZE_32BIT
+        }
+    }
+
     /// Open an archive file for reading
     pub fn open(path: &Path) -> Result<Self> {
         let file = File::open(path)?;
         let metadata = file.metadata()?;
         let size = metadata.len();
+        let path = Arc::new(path.to_path_buf());
 
         debug!("Opening archive: {:?} (size: {} bytes)", path, size);
 
-        // Try to memory-map the file if it's not too large
-        let mmap = if size > 0 && size < 2_147_483_648 {
-            // Limit mmap to 2GB files
+        // Try to memory-map the file (support for large archives >2GB)
+        let mmap = if size > 0 && Self::can_memory_map(size) {
             match unsafe { MmapOptions::new().map(&file) } {
                 Ok(mmap) => {
-                    debug!("Successfully memory-mapped archive");
+                    debug!("Successfully memory-mapped archive ({} bytes)", size);
                     Some(mmap)
                 }
                 Err(e) => {
@@ -79,6 +101,9 @@ impl ArchiveReader {
                     None
                 }
             }
+        } else if size > 0 {
+            debug!("Archive too large for memory mapping ({} bytes), using file reader", size);
+            None
         } else {
             None
         };
@@ -90,7 +115,7 @@ impl ArchiveReader {
             None
         };
 
-        Ok(Self { mmap, file, size })
+        Ok(Self { mmap, file, path, size })
     }
 
     /// Create a reader at a specific offset for streaming access (zero-copy when possible)
@@ -107,11 +132,10 @@ impl ArchiveReader {
             let data = &mmap[offset as usize..(offset as usize + length)];
             Ok(ArchiveSection::from_slice(data))
         } else {
-            // For regular file access, we still need to read the data
-            // This could be improved later to use a file handle with seeking
-            Err(CascError::InvalidArchiveFormat(
-                "Streaming from non-memory-mapped archives not yet supported".into(),
-            ))
+            // For large archives without mmap, read the data into a buffer
+            let mut data = vec![0u8; length];
+            self.read_at_fallback(offset, &mut data)?;
+            Ok(ArchiveSection::from_vec(data))
         }
     }
 
@@ -129,9 +153,52 @@ impl ArchiveReader {
             let data = &mmap[offset as usize..(offset as usize + length)];
             Ok(Cow::Borrowed(data))
         } else {
-            Err(CascError::InvalidArchiveFormat(
-                "Non-memory-mapped archives require mutable access".into(),
-            ))
+            // For large archives without mmap, read into owned data
+            let mut data = vec![0u8; length];
+            self.read_at_fallback(offset, &mut data)?;
+            Ok(Cow::Owned(data))
+        }
+    }
+
+    /// Fallback method for reading from non-memory-mapped files
+    fn read_at_fallback(&self, offset: u64, buffer: &mut [u8]) -> Result<()> {
+        // For large archives that can't be memory-mapped, use platform-specific optimizations
+        
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::FileExt;
+            
+            // Use pread for thread-safe positioned reads without seeking
+            let file = File::open(&*self.path)?;
+            file.read_exact_at(buffer, offset)?;
+            Ok(())
+        }
+        
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::FileExt;
+            
+            // Windows positioned read
+            let file = File::open(&*self.path)?;
+            let bytes_read = file.seek_read(buffer, offset)?;
+            if bytes_read != buffer.len() {
+                return Err(CascError::InvalidArchiveFormat(
+                    "Incomplete read from archive".into()
+                ));
+            }
+            Ok(())
+        }
+        
+        #[cfg(not(any(unix, windows)))]
+        {
+            // Fallback for other platforms - not thread-safe but functional
+            use std::io::{BufReader, BufRead};
+            
+            let file = File::open(&*self.path)?;
+            let mut reader = BufReader::new(file);
+            reader.seek(SeekFrom::Start(offset))?;
+            reader.read_exact(buffer)?;
+            Ok(())
         }
     }
 
@@ -149,15 +216,16 @@ impl ArchiveReader {
             let data = &mmap[offset as usize..(offset as usize + length)];
             Ok(data.to_vec())
         } else if let Some(ref mut file) = self.file {
-            // Slow path: file read
+            // Traditional file read (for smaller files or when mmap failed)
             file.seek(SeekFrom::Start(offset))?;
             let mut buffer = vec![0u8; length];
             file.read_exact(&mut buffer)?;
             Ok(buffer)
         } else {
-            Err(CascError::InvalidArchiveFormat(
-                "Archive reader not initialized".into(),
-            ))
+            // Large archive fallback - use positioned reads
+            let mut buffer = vec![0u8; length];
+            self.read_at_fallback(offset, &mut buffer)?;
+            Ok(buffer)
         }
     }
 
