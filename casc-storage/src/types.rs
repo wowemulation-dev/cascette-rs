@@ -47,7 +47,7 @@ impl fmt::Display for EKey {
 }
 
 /// Location of a file within an archive
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ArchiveLocation {
     /// Archive file number (data.XXX)
     pub archive_id: u16,
