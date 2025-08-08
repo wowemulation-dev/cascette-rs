@@ -1452,11 +1452,123 @@ fn test_bucket_distribution() {
 
 ---
 
-## Priority 4: Advanced Features
+## Priority 4: Server-Side Research & Reverse Engineering 🔍❓
 
-### 4.1 `ngdp-patch` - Patch System 🟡
+**Note**: These are completely unknown server-side components that we theorized in the NGDP Summary.md documentation. These represent research goals for understanding how Blizzard's infrastructure works internally.
 
-#### 4.1.1 Create Crate Structure 🟡
+### 4.1 `ngdp-build-system` - Content Creation Pipeline Research ❓
+
+#### 4.1.1 Asset Processing Pipeline Research ❓
+
+**Research Goal**: Understand how game assets are processed into CASC format
+
+**Unknown Components:**
+- [ ] **Asset Format Conversion**: How raw game assets (models, textures, sounds) are converted to game-ready formats
+- [ ] **FileDataID Assignment**: Algorithm used to assign FileDataID values to game files
+- [ ] **Content Dependency Resolution**: How dependencies between game files are tracked and resolved
+- [ ] **Version Management**: How file versions are managed and incremented across builds
+
+**Research Approach:**
+- [ ] Analyze multiple WoW builds to identify patterns in FileDataID assignment
+- [ ] Compare asset files across versions to understand versioning strategy
+- [ ] Study manifest file generation patterns
+- [ ] Research relationship between install manifest tags and actual game content
+
+**Location**: `research/build-system/` (future research directory)
+
+#### 4.1.2 BLTE Compression Strategy Research ❓
+
+**Research Goal**: Understand how Blizzard chooses compression strategies for different file types
+
+**Unknown Components:**
+- [ ] **ESpec Generation**: Algorithm used to generate ESpec compression directives
+- [ ] **Content-Type Detection**: How Blizzard automatically categorizes files for optimal compression
+- [ ] **Chunk Size Selection**: Strategy for determining optimal chunk sizes for multi-chunk BLTE files
+- [ ] **Encryption Key Management**: Server-side key generation, distribution, and rotation policies
+
+**Research Approach:**
+- [ ] Statistical analysis of compression mode distribution across file types
+- [ ] Pattern analysis in ESpec strings across different builds
+- [ ] Performance analysis of compression choices
+- [ ] Encryption key usage pattern analysis
+
+#### 4.1.3 Manifest Generation System Research ❓
+
+**Research Goal**: Understand how encoding, install, and download manifests are generated
+
+**Unknown Components:**
+- [ ] **Encoding File Generation**: Algorithm for creating CKey → EKey mappings and organizing pages
+- [ ] **Install Manifest Creation**: Strategy for organizing files into tag-based categories
+- [ ] **Download Manifest Prioritization**: Algorithm for determining download priority and file ordering
+- [ ] **Size File Calculation**: Method for calculating and organizing size requirements
+
+**Research Approach:**
+- [ ] Compare manifests across multiple builds to identify generation patterns
+- [ ] Analyze tag assignment strategies in install manifests
+- [ ] Study priority assignment in download manifests
+- [ ] Research correlation between file popularity and download priority
+
+### 4.2 `ngdp-cdn-infrastructure` - Distribution System Research ❓
+
+#### 4.2.1 CDN Upload & Organization Research ❓
+
+**Research Goal**: Understand how content is uploaded and organized on Blizzard's CDN
+
+**Unknown Components:**
+- [ ] **File Upload Process**: How BLTE files are uploaded and distributed across CDN nodes
+- [ ] **Path Generation Strategy**: Algorithm for generating CDN paths from content hashes
+- [ ] **Cache Invalidation**: How CDN caches are invalidated when new content is published
+- [ ] **Geographic Distribution**: Strategy for replicating content across global CDN nodes
+
+**Research Approach:**
+- [ ] Monitor CDN endpoints for pattern analysis
+- [ ] Study CDN path structures across different products
+- [ ] Analyze CDN response headers for cache management insights
+- [ ] Research CDN node geographic distribution patterns
+
+#### 4.2.2 Ribbit API Backend Research ❓
+
+**Research Goal**: Understand the server implementation behind Ribbit API responses
+
+**Unknown Components:**
+- [ ] **Product Configuration Management**: How product configurations are stored and versioned
+- [ ] **Build Metadata Storage**: Database schema and storage strategy for build information
+- [ ] **Version Release Process**: Workflow for releasing new builds and updating metadata
+- [ ] **Region-Specific Configuration**: How different regions receive different configuration data
+
+**Research Approach:**
+- [ ] Monitor Ribbit API responses over time to identify update patterns
+- [ ] Analyze regional differences in API responses
+- [ ] Study correlation between Battle.net client updates and Ribbit data changes
+- [ ] Research version numbering and release cadence patterns
+
+### 4.3 `ngdp-protocol-analysis` - Protocol Reverse Engineering ❓
+
+#### 4.3.1 Battle.net Client Communication Research ❓
+
+**Research Goal**: Understand proprietary protocols between Battle.net client and Blizzard services
+
+**Unknown Components:**
+- [ ] **Authentication Protocol**: Full authentication flow beyond basic API access
+- [ ] **Update Detection**: How Battle.net client detects and initiates game updates
+- [ ] **Progress Reporting**: Protocol for reporting download progress and statistics to Blizzard
+- [ ] **Error Handling**: How network errors and failures are handled and reported
+
+**Research Approach:**
+- [ ] Network traffic analysis of Battle.net client communications
+- [ ] Protocol buffer analysis if proprietary protocols are used
+- [ ] Study error conditions and client behavior during network issues
+- [ ] Research client-side caching and update strategies
+
+**Ethical Note**: This research should focus only on understanding publicly observable behavior and published interfaces, not on bypassing security measures or violating terms of service.
+
+---
+
+## Priority 5: Advanced Features
+
+### 5.1 `ngdp-patch` - Patch System 🟡
+
+#### 5.1.1 Create Crate Structure 🟡
 
 **Location:** `ngdp-patch/` (new crate)
 
@@ -1476,7 +1588,7 @@ bsdiff = "0.1"  # For patch application
   - [ ] `src/zbsdiff.rs` - ZBSDIFF format
   - [ ] `src/apply.rs` - Patch application
 
-#### 4.1.2 Patch File Parser 🟡
+#### 5.1.2 Patch File Parser 🟡
 
 **Location:** `ngdp-patch/src/patch.rs`
 
@@ -1502,7 +1614,7 @@ pub struct PatchEntry {
 **Testing:** Parse patch files
 **Acceptance:** Can identify needed patches
 
-#### 4.1.3 ZBSDIFF Implementation 🟡
+#### 5.1.3 ZBSDIFF Implementation 🟡
 
 **Location:** `ngdp-patch/src/zbsdiff.rs`
 
@@ -1520,9 +1632,9 @@ pub fn apply_patch(old_data: &[u8], patch_data: &[u8]) -> Result<Vec<u8>>
 
 ---
 
-### 4.2 `ngdp-client` - CLI Enhancements 🟡
+### 5.2 `ngdp-client` - CLI Enhancements 🟡
 
-#### 4.2.0 TACT Parser Integration ✅
+#### 5.2.0 TACT Parser Integration ✅
 
 **Location:** `ngdp-client/src/commands/` ✅
 **Implementation:**
@@ -1545,7 +1657,7 @@ pub fn apply_patch(old_data: &[u8], patch_data: &[u8]) -> Result<Vec<u8>>
 
 ---
 
-#### 4.2.1 Keys Update Command ✅
+#### 5.2.1 Keys Update Command ✅
 
 **Location:** `ngdp-client/src/commands/keys.rs` ✅
 
@@ -1564,7 +1676,7 @@ pub async fn handle_keys_command(command: KeysCommands) -> Result<()>
 **Testing:** Successfully downloads and parses TACTKeys ✅
 **Acceptance:** Updates local key database ✅
 
-#### 4.2.2 File Download Command ✅
+#### 5.2.2 File Download Command ✅
 
 **Location:** `ngdp-client/src/commands/download.rs` ✅
 
@@ -1585,7 +1697,7 @@ pub async fn handle(cmd: DownloadCommands, format: OutputFormat) -> Result<()>
 **Testing:** Tested with wow_classic_era build downloads ✅
 **Acceptance:** Successfully downloads build files from CDN ✅
 
-#### 4.2.3 Installation Command 🟡
+#### 5.2.3 Installation Command 🟡
 
 **Location:** `ngdp-client/src/commands/install.rs` (new file)
 
@@ -1604,7 +1716,7 @@ pub fn install_game(product: &str, path: &Path) -> Result<()>
 **Testing:** Install minimal file set
 **Acceptance:** Creates valid CASC storage
 
-#### 4.2.4 Verification Command 🟡
+#### 5.2.4 Verification Command 🟡
 
 **Location:** `ngdp-client/src/commands/verify.rs` (new file)
 
@@ -1772,7 +1884,16 @@ Each component MUST have:
 - [x] **Comprehensive performance testing** - Verified with real ngdp commands ✅
 - [x] **Progressive file loading with size hints** - Reduced latency for large files ✅
 
-### Milestone 5: Production Ready 🟡
+### Milestone 5: Server-Side Research 🔍❓
+
+- [ ] Asset Processing Pipeline Research
+- [ ] BLTE Compression Strategy Research  
+- [ ] Manifest Generation System Research
+- [ ] CDN Infrastructure Research
+- [ ] Ribbit API Backend Research
+- [ ] Protocol Reverse Engineering Research
+
+### Milestone 6: Production Ready 🟡
 
 - [ ] ngdp-patch crate
 - [x] Complete CLI ✅
@@ -1784,7 +1905,7 @@ Each component MUST have:
 - [x] **Dynamic compression algorithm selection based on data** ✅
 - [x] **Implement async-first index operations throughout** ✅
 
-### Milestone 6: Release 🔴
+### Milestone 7: Release 🔴
 
 - [ ] Documentation complete
 - [ ] Cross-platform testing
@@ -1902,5 +2023,5 @@ Each task is independent within its priority level and can be worked on in paral
 
 ---
 
-*Last Updated: 2025-08-08*
-*Version: 1.11.0 - Progressive File Loading and Zero-Copy Parsing Efforts*
+*Last Updated: 2025-01-28*
+*Version: 1.12.0 - TODO Implementation & CLI Enhancement Milestone*
