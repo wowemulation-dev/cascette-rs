@@ -1637,6 +1637,7 @@ dependencies = [
  "rand 0.9.2",
  "reqwest",
  "tact-client",
+ "tempfile",
  "thiserror",
  "tokio",
  "tokio-test",

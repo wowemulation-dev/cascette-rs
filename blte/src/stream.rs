@@ -55,9 +55,9 @@ impl<R: Read + Seek> BLTEStream<R> {
             )));
         }
 
-        let header_size = reader.read_u32::<BigEndian>().map_err(|e| {
-            Error::DecompressionFailed(format!("Failed to read header size: {e}"))
-        })?;
+        let header_size = reader
+            .read_u32::<BigEndian>()
+            .map_err(|e| Error::DecompressionFailed(format!("Failed to read header size: {e}")))?;
 
         // Calculate data offset (magic + header_size field + actual header)
         let data_offset = 8u64 + header_size as u64;

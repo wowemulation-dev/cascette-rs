@@ -402,6 +402,27 @@ impl GenericCache {
         Ok(data)
     }
 
+    /// Stream data from cache to a writer (memory-efficient for large cached files)
+    pub async fn read_to_writer<W>(&self, key: &str, mut writer: W) -> Result<u64>
+    where
+        W: tokio::io::AsyncWrite + Unpin,
+    {
+        let path = self.get_path(key);
+
+        trace!("Streaming from cache key: {}", key);
+        let mut file = tokio::fs::File::open(&path).await?;
+
+        let bytes_copied = tokio::io::copy(&mut file, &mut writer).await?;
+
+        // Update access order for cache hit
+        self.update_access_order(key);
+
+        // Record cache hit statistics
+        self.stats.record_hit(bytes_copied);
+
+        Ok(bytes_copied)
+    }
+
     /// Delete a cache entry
     pub async fn delete(&self, key: &str) -> Result<()> {
         let path = self.get_path(key);

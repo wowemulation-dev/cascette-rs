@@ -198,8 +198,20 @@ async fn test_cache_directory_structure() {
         .await
         .unwrap();
 
+    // Ensure directory creation is completed by trying multiple times
+    for _attempt in 0..10 {
+        tokio::task::yield_now().await;
+        if test_dir.exists() {
+            break;
+        }
+        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+    }
+
     // Verify the test directory was created
-    assert!(test_dir.exists());
+    assert!(
+        test_dir.exists(),
+        "Test directory {test_dir:?} should exist"
+    );
 
     cleanup_test_dir(&test_dir).await;
 }

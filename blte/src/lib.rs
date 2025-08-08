@@ -16,6 +16,7 @@ pub mod compress;
 pub mod decompress;
 pub mod error;
 pub mod header;
+pub mod memory_pool;
 pub mod stream;
 
 pub use archive::{
@@ -43,9 +44,15 @@ pub use compress::{
     compress_encrypted,
     create_single_chunk_blte,
 };
-pub use decompress::{decompress_blte, decompress_chunk};
+pub use decompress::{
+    decompress_blte, decompress_blte_pooled, decompress_chunk, decompress_chunk_pooled,
+};
 pub use error::{Error, Result};
 pub use header::{BLTEHeader, ChunkInfo};
+pub use memory_pool::{
+    BLTEMemoryPool, PoolConfig, PoolStats, PooledBuffer, PooledBufferGuard, global_pool,
+    init_global_pool,
+};
 pub use stream::{BLTEStream, create_streaming_reader};
 
 /// BLTE magic bytes

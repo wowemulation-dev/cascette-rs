@@ -3,6 +3,7 @@
 use crate::error::{CascError, Result};
 use crate::types::EKey;
 use std::collections::HashMap;
+use std::io::{Read, Seek};
 use std::path::PathBuf;
 use tracing::{debug, info};
 
@@ -75,13 +76,24 @@ impl LooseFileStorage {
             .ok_or_else(|| CascError::EntryNotFound(ekey.to_string()))?;
 
         debug!("Reading loose file {} from {:?}", ekey, path);
-        let data = std::fs::read(path)?;
 
-        // Decompress if needed using streaming
-        if data.len() >= 4 && data[0..4] == blte::BLTE_MAGIC {
-            use std::io::{Cursor, Read};
-            let cursor = Cursor::new(data);
-            let mut stream = blte::create_streaming_reader(cursor, None)
+        // Use streaming approach to avoid loading file twice
+        let mut file = std::fs::File::open(path)?;
+
+        // Check if file is BLTE compressed by reading magic
+        let mut magic = [0u8; 4];
+        file.read_exact(&mut magic)?;
+
+        if magic == blte::BLTE_MAGIC {
+            debug!(
+                "Loose file {} is BLTE compressed, using streaming decompression",
+                ekey
+            );
+            // Seek back to beginning for BLTE parser
+            file.seek(std::io::SeekFrom::Start(0))?;
+
+            // Create streaming BLTE reader
+            let mut stream = blte::create_streaming_reader(file, None)
                 .map_err(|e| CascError::DecompressionError(e.to_string()))?;
 
             let mut result = Vec::new();
@@ -90,6 +102,11 @@ impl LooseFileStorage {
                 .map_err(|e| CascError::DecompressionError(e.to_string()))?;
             Ok(result)
         } else {
+            debug!("Loose file {} is uncompressed", ekey);
+            // Seek back to beginning and read entire file
+            file.seek(std::io::SeekFrom::Start(0))?;
+            let mut data = Vec::new();
+            file.read_to_end(&mut data)?;
             Ok(data)
         }
     }

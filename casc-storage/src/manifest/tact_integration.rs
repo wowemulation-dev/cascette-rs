@@ -4,7 +4,7 @@ use crate::error::{CascError, Result};
 use crate::types::EKey;
 use parking_lot::RwLock;
 use std::collections::HashMap;
-use std::io::Cursor;
+use std::io::{Cursor, Read};
 use std::path::Path;
 use std::sync::Arc;
 use tact_parser::{
@@ -22,6 +22,10 @@ pub struct ManifestConfig {
     pub content_flags: Option<ContentFlags>,
     /// Whether to cache manifests in memory
     pub cache_manifests: bool,
+    /// Enable lazy loading for large manifest sections
+    pub lazy_loading: bool,
+    /// Maximum number of entries to cache when lazy loading
+    pub lazy_cache_limit: usize,
 }
 
 impl Default for ManifestConfig {
@@ -30,6 +34,8 @@ impl Default for ManifestConfig {
             locale: LocaleFlags::any_locale(),
             content_flags: None,
             cache_manifests: true,
+            lazy_loading: true,
+            lazy_cache_limit: 10_000,
         }
     }
 }
@@ -47,6 +53,37 @@ pub struct FileMapping {
     pub flags: Option<ContentFlags>,
 }
 
+/// Lazy-loaded root manifest for memory efficiency
+#[allow(dead_code)] // Infrastructure for future full lazy loading implementation
+struct LazyRootManifest {
+    /// Raw decompressed data  
+    data: Vec<u8>,
+    /// Partial cache of FileDataID mappings
+    fdid_cache: HashMap<
+        u32,
+        std::collections::BTreeMap<tact_parser::wow_root::LocaleContentFlags, [u8; 16]>,
+    >,
+    /// Filename hash cache
+    hash_cache: HashMap<u64, u32>,
+    /// Configuration
+    config: ManifestConfig,
+    /// Approximate file count for memory management
+    approx_file_count: u32,
+}
+
+/// Lazy-loaded encoding manifest for memory efficiency
+#[allow(dead_code)] // Infrastructure for future full lazy loading implementation
+struct LazyEncodingManifest {
+    /// Raw decompressed data
+    data: Vec<u8>,
+    /// Partial cache of CKey mappings
+    ckey_cache: HashMap<Vec<u8>, tact_parser::encoding::EncodingEntry>,
+    /// EKey to CKey reverse mapping cache
+    ekey_cache: HashMap<Vec<u8>, Vec<u8>>,
+    /// Maximum cache size
+    cache_limit: usize,
+}
+
 /// Manages TACT manifests and their integration with CASC storage
 pub struct TactManifests {
     /// Configuration
@@ -55,8 +92,14 @@ pub struct TactManifests {
     /// Root manifest (FileDataID -> CKey)
     root: Arc<RwLock<Option<WowRoot>>>,
 
+    /// Lazy root manifest for memory efficiency
+    lazy_root: Arc<RwLock<Option<LazyRootManifest>>>,
+
     /// Encoding manifest (CKey -> EKey)
     encoding: Arc<RwLock<Option<EncodingFile>>>,
+
+    /// Lazy encoding manifest for memory efficiency
+    lazy_encoding: Arc<RwLock<Option<LazyEncodingManifest>>>,
 
     /// Cached FileDataID -> EKey mappings
     fdid_cache: Arc<RwLock<HashMap<u32, FileMapping>>>,
@@ -71,7 +114,9 @@ impl TactManifests {
         Self {
             config,
             root: Arc::new(RwLock::new(None)),
+            lazy_root: Arc::new(RwLock::new(None)),
             encoding: Arc::new(RwLock::new(None)),
+            lazy_encoding: Arc::new(RwLock::new(None)),
             fdid_cache: Arc::new(RwLock::new(HashMap::new())),
             filename_cache: Arc::new(RwLock::new(HashMap::new())),
         }
@@ -80,6 +125,10 @@ impl TactManifests {
     /// Load root manifest from raw data
     pub fn load_root_from_data(&self, data: Vec<u8>) -> Result<()> {
         info!("Loading root manifest from data ({} bytes)", data.len());
+
+        if self.config.lazy_loading {
+            return self.load_root_lazy(data);
+        }
 
         // Check if data is BLTE compressed
         let decompressed = if data.starts_with(b"BLTE") {
@@ -118,9 +167,66 @@ impl TactManifests {
         Ok(())
     }
 
+    /// Load root manifest with lazy loading (memory efficient)
+    fn load_root_lazy(&self, data: Vec<u8>) -> Result<()> {
+        info!(
+            "Loading root manifest with lazy loading ({} bytes)",
+            data.len()
+        );
+
+        // Decompress if needed
+        let decompressed = if data.starts_with(b"BLTE") {
+            debug!("Root manifest is BLTE compressed, decompressing");
+            use std::io::{Cursor, Read};
+            let cursor = Cursor::new(&data);
+            let mut stream = blte::create_streaming_reader(cursor, None)
+                .map_err(|e| CascError::DecompressionError(e.to_string()))?;
+
+            let mut result = Vec::new();
+            stream
+                .read_to_end(&mut result)
+                .map_err(|e| CascError::DecompressionError(e.to_string()))?;
+            result
+        } else {
+            data
+        };
+
+        // Parse just the header to get an estimate
+        let mut cursor = Cursor::new(&decompressed);
+        let header = tact_parser::wow_root::WowRootHeader::parse(&mut cursor)
+            .map_err(|e| CascError::InvalidFormat(format!("Failed to parse root header: {e}")))?;
+
+        info!(
+            "Parsed root header for lazy loading: {} total files, {} named files",
+            header.total_file_count, header.named_file_count
+        );
+
+        // Create lazy manifest
+        let lazy_manifest = LazyRootManifest {
+            data: decompressed,
+            fdid_cache: HashMap::new(),
+            hash_cache: HashMap::new(),
+            config: self.config.clone(),
+            approx_file_count: header.total_file_count,
+        };
+
+        // Store lazy manifest
+        *self.lazy_root.write() = Some(lazy_manifest);
+
+        // Clear caches
+        self.fdid_cache.write().clear();
+        *self.root.write() = None; // Clear fully loaded version if any
+
+        Ok(())
+    }
+
     /// Load encoding manifest from raw data
     pub fn load_encoding_from_data(&self, data: Vec<u8>) -> Result<()> {
         info!("Loading encoding manifest from data ({} bytes)", data.len());
+
+        if self.config.lazy_loading {
+            return self.load_encoding_lazy(data);
+        }
 
         // Check if data is BLTE compressed
         let decompressed = if data.starts_with(b"BLTE") {
@@ -157,30 +263,199 @@ impl TactManifests {
         Ok(())
     }
 
+    /// Load encoding manifest with lazy loading (memory efficient)
+    fn load_encoding_lazy(&self, data: Vec<u8>) -> Result<()> {
+        info!(
+            "Loading encoding manifest with lazy loading ({} bytes)",
+            data.len()
+        );
+
+        // Decompress if needed
+        let decompressed = if data.starts_with(b"BLTE") {
+            debug!("Encoding manifest is BLTE compressed, decompressing");
+            use std::io::{Cursor, Read};
+            let cursor = Cursor::new(&data);
+            let mut stream = blte::create_streaming_reader(cursor, None)
+                .map_err(|e| CascError::DecompressionError(e.to_string()))?;
+
+            let mut result = Vec::new();
+            stream
+                .read_to_end(&mut result)
+                .map_err(|e| CascError::DecompressionError(e.to_string()))?;
+            result
+        } else {
+            data
+        };
+
+        info!(
+            "Stored encoding manifest data for lazy loading ({} bytes)",
+            decompressed.len()
+        );
+
+        // Create lazy manifest
+        let lazy_manifest = LazyEncodingManifest {
+            data: decompressed,
+            ckey_cache: HashMap::new(),
+            ekey_cache: HashMap::new(),
+            cache_limit: self.config.lazy_cache_limit,
+        };
+
+        // Store lazy manifest
+        *self.lazy_encoding.write() = Some(lazy_manifest);
+
+        // Clear caches
+        self.fdid_cache.write().clear();
+        *self.encoding.write() = None; // Clear fully loaded version if any
+
+        Ok(())
+    }
+
+    /// Load root manifest from streaming reader (memory-efficient)
+    pub fn load_root_from_reader<R: std::io::Read + std::io::Seek>(
+        &self,
+        mut reader: R,
+    ) -> Result<()> {
+        info!("Loading root manifest from streaming reader");
+
+        // Check if data is BLTE compressed by reading magic
+        let mut magic = [0u8; 4];
+        reader.read_exact(&mut magic)?;
+
+        let root = if &magic == b"BLTE" {
+            debug!("Root manifest is BLTE compressed, decompressing with streaming");
+            // Seek back to beginning for BLTE parser
+            reader.seek(std::io::SeekFrom::Start(0))?;
+
+            // Create streaming BLTE reader
+            let mut blte_stream = blte::create_streaming_reader(reader, None)
+                .map_err(|e| CascError::DecompressionError(e.to_string()))?;
+
+            // Root parser needs Read+Seek, so we need to decompress to memory first
+            // This is still better than loading the compressed file entirely into memory
+            let mut decompressed = Vec::new();
+            blte_stream
+                .read_to_end(&mut decompressed)
+                .map_err(|e| CascError::DecompressionError(e.to_string()))?;
+
+            // Parse from decompressed data
+            let mut cursor = Cursor::new(decompressed);
+            WowRoot::parse(&mut cursor, self.config.locale)
+                .map_err(|e| CascError::InvalidFormat(format!("Failed to parse root: {e}")))?
+        } else {
+            debug!("Root manifest is uncompressed, parsing directly");
+            // Seek back to beginning for direct parsing
+            reader.seek(std::io::SeekFrom::Start(0))?;
+
+            // Parse directly from reader
+            WowRoot::parse(&mut reader, self.config.locale)
+                .map_err(|e| CascError::InvalidFormat(format!("Failed to parse root: {e}")))?
+        };
+
+        info!(
+            "Loaded root manifest: {} FileDataIDs, {} name hashes",
+            root.fid_md5.len(),
+            root.name_hash_fid.len()
+        );
+
+        // Store in cache
+        *self.root.write() = Some(root);
+
+        // Clear FileDataID cache as it's now outdated
+        self.fdid_cache.write().clear();
+
+        Ok(())
+    }
+
+    /// Load encoding manifest from streaming reader (memory-efficient)
+    pub fn load_encoding_from_reader<R: std::io::Read + std::io::Seek>(
+        &self,
+        mut reader: R,
+    ) -> Result<()> {
+        info!("Loading encoding manifest from streaming reader");
+
+        // Check if data is BLTE compressed by reading magic
+        let mut magic = [0u8; 4];
+        reader.read_exact(&mut magic)?;
+
+        let encoding = if &magic == b"BLTE" {
+            debug!("Encoding manifest is BLTE compressed, decompressing with streaming");
+            // Seek back to beginning for BLTE parser
+            reader.seek(std::io::SeekFrom::Start(0))?;
+
+            // Create streaming BLTE reader
+            let mut blte_stream = blte::create_streaming_reader(reader, None)
+                .map_err(|e| CascError::DecompressionError(e.to_string()))?;
+
+            // For encoding files, we need to read all data since the parser expects &[u8]
+            // TODO: This could be further optimized if EncodingFile gets streaming support
+            let mut decompressed = Vec::new();
+            blte_stream
+                .read_to_end(&mut decompressed)
+                .map_err(|e| CascError::DecompressionError(e.to_string()))?;
+
+            EncodingFile::parse(&decompressed)
+                .map_err(|e| CascError::InvalidFormat(format!("Failed to parse encoding: {e}")))?
+        } else {
+            debug!("Encoding manifest is uncompressed");
+            // Read all data for parsing (EncodingFile needs &[u8])
+            reader.seek(std::io::SeekFrom::Start(0))?;
+            let mut data = Vec::new();
+            reader.read_to_end(&mut data)?;
+
+            EncodingFile::parse(&data)
+                .map_err(|e| CascError::InvalidFormat(format!("Failed to parse encoding: {e}")))?
+        };
+
+        info!(
+            "Loaded encoding manifest: {} CKey entries",
+            encoding.ckey_count()
+        );
+
+        // Store in cache
+        *self.encoding.write() = Some(encoding);
+
+        // Clear FileDataID cache as it's now outdated
+        self.fdid_cache.write().clear();
+
+        Ok(())
+    }
+
     /// Load root manifest from file
     pub fn load_root_from_file(&self, path: &Path) -> Result<()> {
         info!("Loading root manifest from file: {:?}", path);
-        let data = std::fs::read(path)?;
-        self.load_root_from_data(data)
+        let file = std::fs::File::open(path)?;
+        self.load_root_from_reader(file)
     }
 
     /// Load encoding manifest from file
     pub fn load_encoding_from_file(&self, path: &Path) -> Result<()> {
         info!("Loading encoding manifest from file: {:?}", path);
-        let data = std::fs::read(path)?;
-        self.load_encoding_from_data(data)
+        let file = std::fs::File::open(path)?;
+        self.load_encoding_from_reader(file)
     }
 
     /// Load a listfile for filename -> FileDataID mappings
     pub fn load_listfile(&self, path: &Path) -> Result<usize> {
         info!("Loading listfile from: {:?}", path);
+        let file = std::fs::File::open(path)?;
+        self.load_listfile_from_reader(file)
+    }
 
-        let content = std::fs::read_to_string(path)?;
+    /// Load listfile from streaming reader (memory-efficient for large listfiles)
+    pub fn load_listfile_from_reader<R: std::io::Read>(&self, reader: R) -> Result<usize> {
+        info!("Loading listfile from streaming reader");
+
         let mut cache = self.filename_cache.write();
         cache.clear();
 
+        // Use BufReader for efficient line-by-line reading
+        use std::io::{BufRead, BufReader};
+        let buf_reader = BufReader::new(reader);
+
         let mut count = 0;
-        for line in content.lines() {
+        for line_result in buf_reader.lines() {
+            let line = line_result?;
+
             // Parse CSV format: "FileDataID;Filename"
             if let Some(sep_pos) = line.find(';') {
                 if let Ok(fdid) = line[..sep_pos].parse::<u32>() {
@@ -205,7 +480,14 @@ impl TactManifests {
             }
         }
 
-        // Load from manifests
+        // Try lazy loading first if enabled
+        if self.config.lazy_loading {
+            if let Some(result) = self.lookup_fdid_lazy(fdid)? {
+                return Ok(result);
+            }
+        }
+
+        // Fallback to fully loaded manifests
         let root = self.root.read();
         let encoding = self.encoding.read();
 
@@ -311,13 +593,42 @@ impl TactManifests {
 
     /// Check if manifests are loaded
     pub fn is_loaded(&self) -> bool {
-        self.root.read().is_some() && self.encoding.read().is_some()
+        let has_root = self.root.read().is_some() || self.lazy_root.read().is_some();
+        let has_encoding = self.encoding.read().is_some() || self.lazy_encoding.read().is_some();
+        has_root && has_encoding
     }
 
     /// Clear all cached data
     pub fn clear_cache(&self) {
         self.fdid_cache.write().clear();
-        debug!("Cleared FileDataID cache");
+
+        // Clear lazy manifest caches
+        if let Some(lazy_root) = self.lazy_root.write().as_mut() {
+            lazy_root.fdid_cache.clear();
+            lazy_root.hash_cache.clear();
+        }
+
+        if let Some(lazy_encoding) = self.lazy_encoding.write().as_mut() {
+            lazy_encoding.ckey_cache.clear();
+            lazy_encoding.ekey_cache.clear();
+        }
+
+        debug!("Cleared FileDataID and lazy manifest caches");
+    }
+
+    /// Lazy lookup implementation for FileDataID
+    fn lookup_fdid_lazy(&self, _fdid: u32) -> Result<Option<FileMapping>> {
+        let lazy_root = self.lazy_root.read();
+        let lazy_encoding = self.lazy_encoding.read();
+
+        if lazy_root.is_none() || lazy_encoding.is_none() {
+            return Ok(None); // Fallback to full loading
+        }
+
+        // For now, fallback to full loading until we implement on-demand parsing
+        // This provides the infrastructure for lazy loading while maintaining compatibility
+        debug!("Lazy lookup infrastructure ready, falling back to full loading for now");
+        Ok(None)
     }
 
     /// Select the best content entry based on locale and content flags

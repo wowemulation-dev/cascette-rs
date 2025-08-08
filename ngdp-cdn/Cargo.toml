@@ -26,6 +26,7 @@ criterion.workspace = true
 tracing-subscriber.workspace = true
 tokio-test = "0.4.4"
 wiremock = "0.6.4"
+tempfile = "3.20"
 
 [[bench]]
 name = "cdn_benchmark"

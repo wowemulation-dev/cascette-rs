@@ -32,6 +32,8 @@ const DEFAULT_REQUEST_TIMEOUT_SECS: u64 = 300;
 pub struct CdnClient {
     /// HTTP client with connection pooling
     client: Client,
+    /// Shared TACT client for resumable downloads (reuses connection pool)
+    tact_client: Option<tact_client::HttpClient>,
     /// Maximum number of retries
     max_retries: u32,
     /// Initial backoff duration in milliseconds
@@ -59,6 +61,7 @@ impl CdnClient {
 
         Ok(Self {
             client,
+            tact_client: None, // Will be initialized on first use
             max_retries: DEFAULT_MAX_RETRIES,
             initial_backoff_ms: DEFAULT_INITIAL_BACKOFF_MS,
             max_backoff_ms: DEFAULT_MAX_BACKOFF_MS,
@@ -72,6 +75,7 @@ impl CdnClient {
     pub fn with_client(client: Client) -> Self {
         Self {
             client,
+            tact_client: None, // Will be initialized on first use
             max_retries: DEFAULT_MAX_RETRIES,
             initial_backoff_ms: DEFAULT_INITIAL_BACKOFF_MS,
             max_backoff_ms: DEFAULT_MAX_BACKOFF_MS,
@@ -120,6 +124,29 @@ impl CdnClient {
     pub fn with_user_agent(mut self, user_agent: impl Into<String>) -> Self {
         self.user_agent = Some(user_agent.into());
         self
+    }
+
+    /// Get or create a shared TACT client for resumable downloads
+    ///
+    /// This reuses the same HttpClient instance across multiple resumable downloads,
+    /// providing better connection pooling performance.
+    fn get_or_create_tact_client(&mut self) -> Result<&tact_client::HttpClient> {
+        if self.tact_client.is_none() {
+            use tact_client::{HttpClient, ProtocolVersion, Region};
+
+            // Create TACT client with shared connection pool
+            let mut tact_client = HttpClient::with_shared_pool(Region::US, ProtocolVersion::V2)
+                .with_max_retries(self.max_retries)
+                .with_initial_backoff_ms(self.initial_backoff_ms);
+
+            if let Some(user_agent) = &self.user_agent {
+                tact_client = tact_client.with_user_agent(user_agent);
+            }
+
+            self.tact_client = Some(tact_client);
+        }
+
+        Ok(self.tact_client.as_ref().unwrap())
     }
 
     /// Calculate backoff duration with exponential backoff and jitter
@@ -497,6 +524,112 @@ impl CdnClient {
             .await
     }
 
+    /// Download multiple files in parallel with streaming to writers (memory-efficient)
+    ///
+    /// This method downloads multiple files concurrently while streaming each file
+    /// directly to its corresponding writer. This prevents loading all downloads
+    /// into memory simultaneously, making it suitable for large file batches.
+    ///
+    /// # Arguments
+    /// * `cdn_host` - CDN host to download from
+    /// * `path` - Base path for downloads
+    /// * `hashes` - Vector of file hashes to download
+    /// * `writers` - Vector of writers (must match hashes length)
+    /// * `max_concurrent` - Maximum number of concurrent downloads
+    ///
+    /// # Returns
+    /// Vector of results with bytes written for each file
+    pub async fn download_parallel_to_writers<W>(
+        &self,
+        cdn_host: &str,
+        path: &str,
+        hashes: &[String],
+        writers: Vec<W>,
+        max_concurrent: Option<usize>,
+    ) -> Vec<Result<u64>>
+    where
+        W: tokio::io::AsyncWrite + Unpin + Send + 'static,
+    {
+        use futures_util::stream::{self, StreamExt};
+        use tokio::io::AsyncWriteExt;
+
+        if hashes.len() != writers.len() {
+            return (0..hashes.len())
+                .map(|_| {
+                    Err(Error::invalid_response(
+                        "Hashes and writers length mismatch",
+                    ))
+                })
+                .collect();
+        }
+
+        let max_concurrent = max_concurrent.unwrap_or(10);
+
+        let futures =
+            hashes
+                .iter()
+                .zip(writers.into_iter())
+                .enumerate()
+                .map(|(idx, (hash, mut writer))| {
+                    let cdn_host = cdn_host.to_string();
+                    let path = path.to_string();
+                    let hash = hash.clone();
+
+                    async move {
+                        match self.download(&cdn_host, &path, &hash).await {
+                            Ok(response) => {
+                                let mut stream = response.bytes_stream();
+                                let mut total_bytes = 0u64;
+
+                                use futures_util::StreamExt;
+                                while let Some(chunk) = stream.next().await {
+                                    match chunk {
+                                        Ok(bytes) => {
+                                            if let Err(e) = writer.write_all(&bytes).await {
+                                                return (
+                                                    idx,
+                                                    Err(Error::invalid_response(format!(
+                                                        "Write error: {e}"
+                                                    ))),
+                                                );
+                                            }
+                                            total_bytes += bytes.len() as u64;
+                                        }
+                                        Err(e) => {
+                                            return (idx, Err(Error::from(e)));
+                                        }
+                                    }
+                                }
+
+                                if let Err(e) = writer.flush().await {
+                                    return (
+                                        idx,
+                                        Err(Error::invalid_response(format!("Flush error: {e}"))),
+                                    );
+                                }
+
+                                (idx, Ok(total_bytes))
+                            }
+                            Err(e) => (idx, Err(e)),
+                        }
+                    }
+                });
+
+        // Collect results in original order
+        let mut results: Vec<Result<u64>> = Vec::with_capacity(hashes.len());
+        for _ in 0..hashes.len() {
+            results.push(Err(Error::invalid_response("Not downloaded")));
+        }
+
+        let mut download_stream = stream::iter(futures).buffer_unordered(max_concurrent);
+
+        while let Some((idx, result)) = download_stream.next().await {
+            results[idx] = result;
+        }
+
+        results
+    }
+
     /// Download content and stream it to a writer
     ///
     /// This is useful for large files to avoid loading them entirely into memory.
@@ -585,13 +718,13 @@ impl CdnClient {
     /// use std::path::PathBuf;
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let client = CdnClient::new()?;
+    /// let mut client = CdnClient::new()?;
     /// let mut resumable = client.create_resumable_download(
     ///     "blzddist1-a.akamaihd.net",
     ///     "tpr/wow",
     ///     "2e9c1e3b5f5a0c9d9e8f1234567890ab",
     ///     &PathBuf::from("game_file.bin")
-    /// ).await?;
+    /// )?;
     ///
     /// // Start or resume the download
     /// resumable.start_or_resume().await?;
@@ -601,25 +734,17 @@ impl CdnClient {
     /// # Ok(())
     /// # }
     /// ```
-    pub async fn create_resumable_download(
-        &self,
+    pub fn create_resumable_download(
+        &mut self,
         cdn_host: &str,
         path: &str,
         hash: &str,
         output_file: &std::path::Path,
     ) -> Result<tact_client::resumable::ResumableDownload> {
         use tact_client::resumable::{DownloadProgress, ResumableDownload};
-        use tact_client::{HttpClient, ProtocolVersion, Region};
 
-        // Create a TACT HTTP client configured with CDN client settings
-        let mut tact_client = HttpClient::new(Region::US, ProtocolVersion::V2)
-            .map_err(|e| Error::invalid_response(format!("Failed to create TACT client: {e}")))?
-            .with_max_retries(self.max_retries)
-            .with_initial_backoff_ms(self.initial_backoff_ms);
-
-        if let Some(user_agent) = &self.user_agent {
-            tact_client = tact_client.with_user_agent(user_agent);
-        }
+        // Get the shared TACT client (creates one if needed)
+        let tact_client = self.get_or_create_tact_client()?.clone();
 
         let progress = DownloadProgress::new(
             hash.to_string(),
@@ -651,7 +776,7 @@ impl CdnClient {
     /// use std::path::PathBuf;
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let client = CdnClient::new()?;
+    /// let mut client = CdnClient::new()?;
     ///
     /// // Resume from existing progress file
     /// let mut resumable = client.resume_download(&PathBuf::from("file.bin.download")).await?;
@@ -661,25 +786,17 @@ impl CdnClient {
     /// # }
     /// ```
     pub async fn resume_download(
-        &self,
+        &mut self,
         progress_file: &std::path::Path,
     ) -> Result<tact_client::resumable::ResumableDownload> {
         use tact_client::resumable::{DownloadProgress, ResumableDownload};
-        use tact_client::{HttpClient, ProtocolVersion, Region};
 
         let progress = DownloadProgress::load_from_file(progress_file)
             .await
             .map_err(|e| Error::invalid_response(format!("Failed to load progress: {e}")))?;
 
-        // Create a TACT HTTP client configured with CDN client settings
-        let mut tact_client = HttpClient::new(Region::US, ProtocolVersion::V2)
-            .map_err(|e| Error::invalid_response(format!("Failed to create TACT client: {e}")))?
-            .with_max_retries(self.max_retries)
-            .with_initial_backoff_ms(self.initial_backoff_ms);
-
-        if let Some(user_agent) = &self.user_agent {
-            tact_client = tact_client.with_user_agent(user_agent);
-        }
+        // Get the shared TACT client (creates one if needed)
+        let tact_client = self.get_or_create_tact_client()?.clone();
 
         Ok(ResumableDownload::new(tact_client, progress))
     }
@@ -868,6 +985,7 @@ impl CdnClientBuilder {
 
         Ok(CdnClient {
             client,
+            tact_client: None, // Will be initialized on first use
             max_retries: self.max_retries,
             initial_backoff_ms: self.initial_backoff_ms,
             max_backoff_ms: self.max_backoff_ms,

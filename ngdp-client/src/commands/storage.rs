@@ -1005,6 +1005,8 @@ async fn handle_extract_by_id(
         locale: LocaleFlags::any_locale(),
         content_flags: None,
         cache_manifests: true,
+        lazy_loading: true,       // Enable lazy loading by default
+        lazy_cache_limit: 50_000, // Higher limit for CLI usage
     };
     storage.init_tact_manifests(manifest_config);
 
@@ -1106,6 +1108,8 @@ async fn handle_extract_by_name(
         locale: LocaleFlags::any_locale(),
         content_flags: None,
         cache_manifests: true,
+        lazy_loading: true,       // Enable lazy loading by default
+        lazy_cache_limit: 50_000, // Higher limit for CLI usage
     };
     storage.init_tact_manifests(manifest_config);
 
@@ -1234,6 +1238,8 @@ async fn handle_load_manifests(
         locale: locale_flags,
         content_flags: None,
         cache_manifests: true,
+        lazy_loading: true,       // Enable lazy loading by default
+        lazy_cache_limit: 50_000, // Higher limit for CLI usage
     };
     storage.init_tact_manifests(manifest_config);
 

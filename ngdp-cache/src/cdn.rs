@@ -262,6 +262,20 @@ impl CdnCache {
         Ok(tokio::fs::read(&path).await?)
     }
 
+    /// Stream data from cache to writer (memory-efficient)
+    pub async fn read_data_to_writer<W>(&self, hash: &str, mut writer: W) -> Result<u64>
+    where
+        W: tokio::io::AsyncWrite + Unpin,
+    {
+        let path = self.data_path(hash);
+        trace!("Streaming data from cache: {}", hash);
+
+        let mut file = tokio::fs::File::open(&path).await?;
+        let bytes_copied = tokio::io::copy(&mut file, &mut writer).await?;
+
+        Ok(bytes_copied)
+    }
+
     /// Read patch from cache
     pub async fn read_patch(&self, hash: &str) -> Result<Vec<u8>> {
         let path = self.patch_path(hash);
@@ -274,6 +288,20 @@ impl CdnCache {
         let path = self.index_path(hash);
         trace!("Reading index from cache: {}", hash);
         Ok(tokio::fs::read(&path).await?)
+    }
+
+    /// Stream index from cache to writer (memory-efficient)
+    pub async fn read_index_to_writer<W>(&self, hash: &str, mut writer: W) -> Result<u64>
+    where
+        W: tokio::io::AsyncWrite + Unpin,
+    {
+        let path = self.index_path(hash);
+        trace!("Streaming index from cache: {}", hash);
+
+        let mut file = tokio::fs::File::open(&path).await?;
+        let bytes_copied = tokio::io::copy(&mut file, &mut writer).await?;
+
+        Ok(bytes_copied)
     }
 
     /// Stream read data from cache

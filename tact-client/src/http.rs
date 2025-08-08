@@ -62,6 +62,26 @@ impl HttpClient {
         })
     }
 
+    /// Create a new HTTP client using the global connection pool
+    ///
+    /// This provides better performance than `new()` by reusing connections across
+    /// multiple HttpClient instances. Recommended for production use.
+    pub fn with_shared_pool(region: Region, version: ProtocolVersion) -> Self {
+        let client = crate::pool::get_global_pool().clone();
+
+        Self {
+            client,
+            region,
+            version,
+            max_retries: DEFAULT_MAX_RETRIES,
+            initial_backoff_ms: DEFAULT_INITIAL_BACKOFF_MS,
+            max_backoff_ms: DEFAULT_MAX_BACKOFF_MS,
+            backoff_multiplier: DEFAULT_BACKOFF_MULTIPLIER,
+            jitter_factor: DEFAULT_JITTER_FACTOR,
+            user_agent: None,
+        }
+    }
+
     /// Create a new HTTP client with custom reqwest client
     pub fn with_client(client: Client, region: Region, version: ProtocolVersion) -> Self {
         Self {

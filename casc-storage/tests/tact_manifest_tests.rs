@@ -19,6 +19,8 @@ fn test_manifest_config_custom() {
         locale: LocaleFlags::new().with_en_us(true),
         content_flags: Some(ContentFlags::new().with_windows(true).with_x86_64(true)),
         cache_manifests: false,
+        lazy_loading: false,
+        lazy_cache_limit: 5000,
     };
 
     assert!(config.locale.en_us());
@@ -99,6 +101,8 @@ fn test_casc_storage_tact_integration() {
         locale: LocaleFlags::new().with_en_us(true),
         content_flags: Some(ContentFlags::new().with_windows(true)),
         cache_manifests: true,
+        lazy_loading: false, // Keep false for this test
+        lazy_cache_limit: 10000,
     };
 
     storage.init_tact_manifests(manifest_config);
