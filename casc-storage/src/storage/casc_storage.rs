@@ -1,15 +1,14 @@
 //! Main CASC storage implementation
 
 use crate::archive::{Archive, ArchiveWriter};
+use crate::cache::LockFreeCache;
 use crate::error::{CascError, Result};
 use crate::index::{GroupIndex, IdxParser, IndexFile};
 use crate::manifest::{FileMapping, ManifestConfig, TactManifests};
 use crate::types::{ArchiveLocation, CascConfig, EKey, StorageStats};
 use dashmap::DashMap;
-use lru::LruCache;
 use parking_lot::RwLock;
 use std::collections::HashMap;
-use std::num::NonZeroUsize;
 use std::sync::Arc;
 use tracing::{debug, error, info, warn};
 
@@ -24,8 +23,8 @@ pub struct CascStorage {
     /// Archive files
     archives: Arc<RwLock<HashMap<u16, Archive>>>,
 
-    /// LRU cache for decompressed content
-    cache: Arc<RwLock<LruCache<EKey, Vec<u8>>>>,
+    /// Lock-free cache for decompressed content (using Arc to avoid cloning)
+    cache: Arc<LockFreeCache>,
 
     /// Current archive for writing
     current_archive: Arc<RwLock<Option<ArchiveWriter>>>,
@@ -49,14 +48,13 @@ impl CascStorage {
         std::fs::create_dir_all(&indices_path)?;
         std::fs::create_dir_all(&data_subpath)?;
 
-        let cache_size = NonZeroUsize::new((config.cache_size_mb as usize) * 1024 * 1024)
-            .unwrap_or(NonZeroUsize::new(256 * 1024 * 1024).unwrap());
+        let cache_size_bytes = (config.cache_size_mb as usize) * 1024 * 1024;
 
         Ok(Self {
             config,
             indices: Arc::new(DashMap::new()),
             archives: Arc::new(RwLock::new(HashMap::new())),
-            cache: Arc::new(RwLock::new(LruCache::new(cache_size))),
+            cache: Arc::new(LockFreeCache::new(cache_size_bytes)),
             current_archive: Arc::new(RwLock::new(None)),
             tact_manifests: None,
             stats: Arc::new(RwLock::new(StorageStats::default())),
@@ -337,17 +335,32 @@ impl CascStorage {
         Ok(())
     }
 
-    /// Read a file by its encoding key
-    pub fn read(&self, ekey: &EKey) -> Result<Vec<u8>> {
-        // Check cache first
-        {
-            let mut cache = self.cache.write();
-            if let Some(data) = cache.get(ekey) {
-                debug!("Cache hit for {}", ekey);
-                return Ok(data.clone());
-            }
+    /// Read a file by its encoding key (zero-copy when cached)
+    pub fn read_arc(&self, ekey: &EKey) -> Result<Arc<Vec<u8>>> {
+        // Check cache first - lock-free operation
+        if let Some(data) = self.cache.get(ekey) {
+            debug!("Cache hit for {} (zero-copy)", ekey);
+            return Ok(data); // Zero-copy return from cache
         }
 
+        // Not in cache, need to read and decompress
+        let data = self.read_and_decompress(ekey)?;
+        let data_arc = Arc::new(data);
+
+        // Update cache - lock-free operation
+        self.cache.put(*ekey, Arc::clone(&data_arc));
+
+        Ok(data_arc)
+    }
+
+    /// Read a file by its encoding key (compatibility method, always clones)
+    pub fn read(&self, ekey: &EKey) -> Result<Vec<u8>> {
+        let arc_data = self.read_arc(ekey)?;
+        Ok((*arc_data).clone())
+    }
+
+    /// Internal method to read and decompress without caching logic
+    fn read_and_decompress(&self, ekey: &EKey) -> Result<Vec<u8>> {
         // Search all buckets for the key (don't rely on XOR hash)
         debug!("Looking up EKey {} in all buckets", ekey);
 
@@ -412,12 +425,6 @@ impl CascStorage {
             .read_to_end(&mut decompressed)
             .map_err(|e| CascError::DecompressionError(e.to_string()))?;
 
-        // Update cache
-        {
-            let mut cache = self.cache.write();
-            cache.put(*ekey, decompressed.clone());
-        }
-
         Ok(decompressed)
     }
 
@@ -449,11 +456,8 @@ impl CascStorage {
             .or_insert_with(|| IndexFile::new(crate::index::IndexVersion::V7))
             .add_entry(*ekey, location);
 
-        // Update cache
-        {
-            let mut cache = self.cache.write();
-            cache.put(*ekey, data.to_vec());
-        }
+        // Update cache with Arc to avoid future clones - lock-free operation
+        self.cache.put(*ekey, Arc::new(data.to_vec()));
 
         debug!(
             "Wrote {} to archive {} at offset {:x}",
@@ -686,9 +690,7 @@ impl CascStorage {
 
     /// Clear the cache
     pub fn clear_cache(&self) {
-        let mut cache = self.cache.write();
-        cache.clear();
-        debug!("Cache cleared");
+        self.cache.clear();
     }
 
     /// Flush any pending writes

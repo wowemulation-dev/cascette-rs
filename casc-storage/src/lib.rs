@@ -5,6 +5,7 @@
 //! and fast access to game files.
 
 pub mod archive;
+pub mod cache;
 pub mod config;
 pub mod error;
 pub mod index;
