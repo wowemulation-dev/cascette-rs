@@ -3,7 +3,7 @@
 use crate::archive::{Archive, ArchiveWriter};
 use crate::cache::LockFreeCache;
 use crate::error::{CascError, Result};
-use crate::index::{GroupIndex, IdxParser, IndexFile};
+use crate::index::{CombinedIndex, GroupIndex, IdxParser, IndexFile};
 use crate::manifest::{FileMapping, ManifestConfig, TactManifests};
 use crate::types::{ArchiveLocation, CascConfig, EKey, StorageStats};
 use dashmap::DashMap;
@@ -17,8 +17,11 @@ pub struct CascStorage {
     /// Configuration
     config: CascConfig,
 
-    /// Bucket-based indices (0x00-0x0F)
+    /// Bucket-based indices (0x00-0x0F) - kept for compatibility
     indices: Arc<DashMap<u8, IndexFile>>,
+
+    /// Combined index for optimized lookups
+    combined_index: Arc<CombinedIndex>,
 
     /// Archive files
     archives: Arc<RwLock<HashMap<u16, Archive>>>,
@@ -53,6 +56,7 @@ impl CascStorage {
         Ok(Self {
             config,
             indices: Arc::new(DashMap::new()),
+            combined_index: Arc::new(CombinedIndex::new()),
             archives: Arc::new(RwLock::new(HashMap::new())),
             cache: Arc::new(LockFreeCache::new(cache_size_bytes)),
             current_archive: Arc::new(RwLock::new(None)),
@@ -158,6 +162,10 @@ impl CascStorage {
         while let Some(result) = join_set.join_next().await {
             match result {
                 Ok(Ok((bucket, index))) => {
+                    // Also populate combined index
+                    for (ekey, location) in index.entries() {
+                        self.combined_index.insert(*ekey, *location);
+                    }
                     self.indices.insert(bucket, index);
                     loaded_count += 1;
                 }
@@ -208,9 +216,10 @@ impl CascStorage {
 
                                 let mut index = IndexFile::new(crate::index::IndexVersion::V7);
 
-                                // Add all entries to the index
+                                // Add all entries to the index and combined index
                                 for (ekey, location) in entries_map {
                                     index.add_entry(ekey, location);
+                                    self.combined_index.insert(ekey, location);
                                 }
 
                                 self.indices.insert(bucket, index);
@@ -244,6 +253,7 @@ impl CascStorage {
                             // Transfer ownership of entries to avoid lifetime issues
                             for (ekey, location) in parser.into_entries() {
                                 index.add_entry(ekey, location);
+                                self.combined_index.insert(ekey, location);
                             }
 
                             self.indices.insert(bucket, index);
@@ -361,23 +371,11 @@ impl CascStorage {
 
     /// Internal method to read and decompress without caching logic
     fn read_and_decompress(&self, ekey: &EKey) -> Result<Vec<u8>> {
-        // Search all buckets for the key (don't rely on XOR hash)
-        debug!("Looking up EKey {} in all buckets", ekey);
+        // Use optimized combined index for O(log n) lookup
+        debug!("Looking up EKey {} using combined index", ekey);
 
-        let mut location = None;
-        for index_ref in self.indices.iter() {
-            let bucket = *index_ref.key();
-            let index = index_ref.value();
-
-            if let Some(loc) = index.lookup(ekey) {
-                debug!("Found EKey {} in bucket {:02x}", ekey, bucket);
-                location = Some(*loc);
-                break;
-            }
-        }
-
-        let location = location.ok_or_else(|| {
-            debug!("EKey {} not found in any bucket", ekey);
+        let location = self.combined_index.lookup(ekey).ok_or_else(|| {
+            debug!("EKey {} not found in combined index", ekey);
             CascError::EntryNotFound(ekey.to_string())
         })?;
 
