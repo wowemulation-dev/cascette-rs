@@ -1,8 +1,6 @@
 use crate::{BLTEHeader, ChunkEncodingHeader, ChunkInfo, Error, Result};
 use md5::{Digest, Md5 as Md5Hasher};
 use std::io::{BufRead, Seek, SeekFrom, Write};
-#[cfg(feature = "async")]
-use tokio::io::{AsyncBufReadExt, AsyncSeekExt, AsyncWrite};
 use tracing::{error, warn};
 
 /// Information about a compressed block's encoding
@@ -204,158 +202,6 @@ impl<T: BufRead + Seek> BLTEFile<T> {
     }
 }
 
-// #[cfg(feature = "async")]
-// impl<T: AsyncBufReadExt + AsyncSeekExt + Unpin + Send> BLTEFile<T> {
-//     /// Parse a BLTE chunk at `offset`.
-//     ///
-//     /// This is designed to work directly with complete `/tpr/{product}/data/`
-//     /// blobs (where there are multiple BLTE streams in a single file), but can
-//     /// also work on a file with a single BLTE stream.
-//     ///
-//     /// # Arguments
-//     ///
-//     /// * `offset`: byte offset of the start of the BLTE stream within `f`.
-//     ///
-//     ///   If `f` contains a single BLTE stream at the start of the file, set
-//     ///   this to `0`.
-//     ///
-//     /// * `size`: length of the BLTE stream within `f`.
-//     pub async fn anew(mut f: T, offset: u64, length: u64) -> Result<Self> {
-//         f.seek(SeekFrom::Start(offset)).await?;
-//         let header = BLTEHeader::aparse(&mut f).await?;
-
-//         Ok(Self {
-//             f,
-//             header,
-//             offset,
-//             length,
-//         })
-//     }
-
-//     /// Reads the chunk encoding header, and leaves the file's position at the
-//     /// first byte of the chunk.
-//     pub async fn aread_chunk_header(&mut self, chunk: usize) -> Result<ChunkEncodingInfo> {
-//         let Some(info) = self.header.get_chunk(chunk).cloned() else {
-//             return Err(Error::ChunkIndexOutOfRange(chunk, 1));
-//         };
-
-//         if info.compressed_offset + info.compressed_size > self.length {
-//             // This is also checked by `BLTEHeader`
-//             error!(
-//                 "Block {chunk} is out of range: {} + {} > {}",
-//                 info.compressed_offset, info.compressed_size, self.length,
-//             );
-//             return Err(Error::TruncatedData {
-//                 expected: info.compressed_offset + info.compressed_size,
-//                 actual: self.length,
-//             });
-//         }
-
-//         self.f
-//             .seek(SeekFrom::Start(self.offset + info.compressed_offset))?;
-//         let encoding: ChunkEncodingHeader = ChunkEncodingHeader::parse(&mut self.f)?;
-//         Ok(ChunkEncodingInfo { encoding, info })
-//     }
-
-//     /// Extracts blocks to a file (partially) asynchronously.
-//     ///
-//     /// Block data may be encrypted or compressed. An uncompressed size _may_
-//     /// be available in [`BlteHeader::total_decompressed_size()`].
-//     ///
-//     /// Compressed data will be automatically decompressed.
-//     ///
-//     /// This does not verify checksums during extraction. Those can be verified
-//     /// with [`BlteExtractor::verify_compressed_checksum`].
-//     ///
-//     /// To extract data to RAM, pass a [`std::io::Cursor`][] to this function.
-//     pub async fn awrite_to_file<W: AsyncWrite + Unpin>(&mut self, mut file: W) -> Result<W> {
-//         let mut buf = [0; EXTRACTOR_BUFFER_SIZE];
-
-//         for block in 0..self.header.block_count() {
-//             let header = self.aread_chunk_header(block).await?;
-
-//             // Position in the block, skip the headers
-//             let mut p = header.encoding.len() as u64;
-
-//             match header.encoding {
-//                 BlockEncoding::None => {
-//                     // Directly copy the contents
-//                     while p < header.compressed_size {
-//                         let read_size = (header.compressed_size - p).min(BUF_SIZE_U64);
-
-//                         self.f.read_exact(&mut buf[0..read_size as usize]).await?;
-//                         file.write_all(&buf[0..read_size as usize]).await?;
-
-//                         p += read_size;
-//                     }
-//                 }
-
-//                 BlockEncoding::Zlib => {
-//                     let mut decompressor = async_compression::tokio::write::ZlibDecoder::new(file);
-//                     while p < header.compressed_size {
-//                         let read_size = (header.compressed_size - p).min(BUF_SIZE_U64);
-//                         self.f.read_exact(&mut buf[0..read_size as usize]).await?;
-//                         decompressor.write_all(&buf[0..read_size as usize]).await?;
-//                         p += read_size;
-//                     }
-
-//                     decompressor.shutdown().await?;
-//                     file = decompressor.into_inner();
-//                 }
-
-//                 // TODO: implement lz4hc
-//                 BlockEncoding::Lz4hc => return Err(Error::NotImplemented),
-
-//                 // TODO: implement encrypted blobs
-//                 BlockEncoding::Encrypted(_) => return Err(Error::NotImplemented),
-//             }
-//         }
-
-//         Ok(file)
-//     }
-
-//     /// Verify the checksum of compressed data.
-//     ///
-//     /// Returns [`Error::ChecksumMismatch`][] on checksum failures.
-//     ///
-//     /// Returns `Ok(())` if block-level checksums are valid **OR** there are no
-//     /// block-level checksums. [`BlteExtractor::has_block_level_checksums`] will
-//     /// return `false` for streams without block-level checksums.
-//     pub async fn averify_compressed_checksum(&mut self) -> Result<()> {
-//         let Some(block_infos) = self.header.block_info.as_ref() else {
-//             return Ok(());
-//         };
-
-//         let mut buf = [0; EXTRACTOR_BUFFER_SIZE];
-//         for header in block_infos {
-//             let mut hasher = Md5Hasher::new();
-//             self.f
-//                 .seek(SeekFrom::Start(self.offset + header.compressed_offset))
-//                 .await?;
-//             let mut p = 0u32;
-
-//             while p < header.compressed_size {
-//                 let read_size = (header.compressed_size - p).min(BUF_SIZE_U32);
-//                 self.f.read_exact(&mut buf[0..read_size as usize]).await?;
-//                 hasher.update(&buf[0..read_size as usize]);
-//                 p += read_size;
-//             }
-
-//             let result = hasher.finalize();
-//             if !result.starts_with(&header.compressed_hash) {
-//                 warn!(
-//                     "MD5 mismatch: {} != {}",
-//                     hex::encode(result),
-//                     hex::encode(header.compressed_hash),
-//                 );
-//                 return Err(Error::ChecksumMismatch);
-//             }
-//         }
-
-//         Ok(())
-//     }
-// }
-
 #[cfg(test)]
 mod tests {
     use std::io::{Cursor, Read};
@@ -454,17 +300,6 @@ mod tests {
         assert_eq!(&data, b", BLTE!");
     }
 
-    // #[test]
-    // fn test_get_all_chunks() {
-    //     let data = create_multi_chunk_blte();
-    //     let blte_file = BLTEFile::new(&mut Cursor::new(data), 0, data.len() as u64).unwrap();
-
-    //     let chunks = blte_file.get_all_chunks().unwrap();
-    //     assert_eq!(chunks.len(), 2);
-    //     assert_eq!(chunks[0].data, b"NHello");
-    //     assert_eq!(chunks[1].data, b"N, BLTE!");
-    // }
-
     #[test]
     fn test_invalid_chunk_index() {
         let data = create_single_chunk_blte();
@@ -472,6 +307,9 @@ mod tests {
         let mut blte_file = BLTEFile::new(&mut buf, 0, data.len() as u64).unwrap();
 
         let err = blte_file.read_chunk_header(1).unwrap_err();
-        assert!(matches!(err, Error::ChunkIndexOutOfRange(1, 1)), "actual: {err:?}");
+        assert!(
+            matches!(err, Error::ChunkIndexOutOfRange(1, 1)),
+            "actual: {err:?}",
+        );
     }
 }
