@@ -57,7 +57,7 @@ impl EncryptedChunkHeader {
 }
 
 /// BLTE compression / encoding modes
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ChunkEncodingHeader {
     /// No compression (mode 'N')
     None,

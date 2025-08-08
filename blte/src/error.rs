@@ -46,7 +46,7 @@ pub enum Error {
 
     /// Truncated data
     #[error("Truncated data: expected {expected} bytes, got {actual}")]
-    TruncatedData { expected: usize, actual: usize },
+    TruncatedData { expected: u64, actual: u64 },
 
     /// Invalid encrypted block structure
     #[error("Invalid encrypted block: {0}")]
@@ -58,4 +58,7 @@ pub enum Error {
 
     #[error("Unsupported table format: {0:#x}")]
     UnsupportedTableFormat(u8),
+
+    #[error("Chunk index {0} is out of range, must be less than {1}")]
+    ChunkIndexOutOfRange(usize, usize),
 }
