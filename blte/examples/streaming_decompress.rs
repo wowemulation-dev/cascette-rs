@@ -4,7 +4,7 @@
 //! without loading everything into memory at once.
 
 use blte::{BLTEStream, CompressionMode, create_streaming_reader};
-use std::io::{Read, Write};
+use std::io::{Cursor, Read, Write};
 
 fn create_sample_blte_data() -> Vec<u8> {
     // Create a simple BLTE file with one uncompressed chunk
@@ -92,7 +92,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let simple_data = create_sample_blte_data();
     println!("   Original BLTE data size: {} bytes", simple_data.len());
 
-    let mut stream = BLTEStream::new(simple_data, None)?;
+    let cursor = Cursor::new(simple_data);
+    let mut stream = BLTEStream::new(cursor, None)?;
     println!("   Stream created with {} chunks", stream.chunk_count());
 
     let mut decompressed = String::new();
@@ -105,7 +106,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let multi_data = create_multi_chunk_blte_data();
     println!("   Original BLTE data size: {} bytes", multi_data.len());
 
-    let mut multi_stream = BLTEStream::new(multi_data, None)?;
+    let cursor = Cursor::new(multi_data);
+    let mut multi_stream = BLTEStream::new(cursor, None)?;
     println!(
         "   Stream created with {} chunks",
         multi_stream.chunk_count()
@@ -119,7 +121,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Example 3: Streaming with small buffer reads (simulates processing large files)
     println!("\n3. Small Buffer Streaming (simulating large file processing):");
     let buffer_data = create_multi_chunk_blte_data();
-    let mut buffer_stream = BLTEStream::new(buffer_data, None)?;
+    let cursor = Cursor::new(buffer_data);
+    let mut buffer_stream = BLTEStream::new(cursor, None)?;
 
     let mut buffer = [0u8; 8]; // Very small buffer to demonstrate streaming
     let mut total_bytes = 0;
@@ -144,7 +147,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Example 4: Using the convenience function
     println!("\n4. Using convenience function:");
     let convenience_data = create_sample_blte_data();
-    let mut convenience_stream = create_streaming_reader(convenience_data, None)?;
+    let cursor = Cursor::new(convenience_data);
+    let mut convenience_stream = create_streaming_reader(cursor, None)?;
 
     let mut convenience_result = String::new();
     convenience_stream.read_to_string(&mut convenience_result)?;

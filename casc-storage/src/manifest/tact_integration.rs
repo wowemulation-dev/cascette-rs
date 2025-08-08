@@ -83,9 +83,17 @@ impl TactManifests {
 
         // Check if data is BLTE compressed
         let decompressed = if data.starts_with(b"BLTE") {
-            debug!("Root manifest is BLTE compressed, decompressing");
-            blte::decompress_blte(data, None)
-                .map_err(|e| CascError::DecompressionError(e.to_string()))?
+            debug!("Root manifest is BLTE compressed, decompressing with streaming");
+            use std::io::{Cursor, Read};
+            let cursor = Cursor::new(data);
+            let mut stream = blte::create_streaming_reader(cursor, None)
+                .map_err(|e| CascError::DecompressionError(e.to_string()))?;
+
+            let mut result = Vec::new();
+            stream
+                .read_to_end(&mut result)
+                .map_err(|e| CascError::DecompressionError(e.to_string()))?;
+            result
         } else {
             data
         };
@@ -116,9 +124,17 @@ impl TactManifests {
 
         // Check if data is BLTE compressed
         let decompressed = if data.starts_with(b"BLTE") {
-            debug!("Encoding manifest is BLTE compressed, decompressing");
-            blte::decompress_blte(data, None)
-                .map_err(|e| CascError::DecompressionError(e.to_string()))?
+            debug!("Encoding manifest is BLTE compressed, decompressing with streaming");
+            use std::io::{Cursor, Read};
+            let cursor = Cursor::new(data);
+            let mut stream = blte::create_streaming_reader(cursor, None)
+                .map_err(|e| CascError::DecompressionError(e.to_string()))?;
+
+            let mut result = Vec::new();
+            stream
+                .read_to_end(&mut result)
+                .map_err(|e| CascError::DecompressionError(e.to_string()))?;
+            result
         } else {
             data
         };

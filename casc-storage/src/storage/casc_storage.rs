@@ -284,8 +284,16 @@ impl CascStorage {
         // Skip the header and get the BLTE data
         let compressed_data = raw_data[CASC_ENTRY_HEADER_SIZE..].to_vec();
 
-        // Decompress using BLTE (no key service needed for now)
-        let decompressed = blte::decompress_blte(compressed_data, None)?;
+        // Decompress using streaming BLTE for better memory efficiency
+        use std::io::{Cursor, Read};
+        let cursor = Cursor::new(compressed_data);
+        let mut stream = blte::create_streaming_reader(cursor, None)
+            .map_err(|e| CascError::DecompressionError(e.to_string()))?;
+
+        let mut decompressed = Vec::new();
+        stream
+            .read_to_end(&mut decompressed)
+            .map_err(|e| CascError::DecompressionError(e.to_string()))?;
 
         // Update cache
         {
@@ -667,9 +675,7 @@ impl CascStorage {
 
     /// Check if TACT manifests are loaded and ready
     pub fn tact_manifests_loaded(&self) -> bool {
-        self.tact_manifests
-            .as_ref()
-            .is_some_and(|m| m.is_loaded())
+        self.tact_manifests.as_ref().is_some_and(|m| m.is_loaded())
     }
 
     /// Get file mapping information for a FileDataID

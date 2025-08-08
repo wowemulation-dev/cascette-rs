@@ -3,7 +3,7 @@
 use crate::error::{CascError, Result};
 use memmap2::{Mmap, MmapOptions};
 use std::fs::File;
-use std::io::{BufReader, Read, Seek, SeekFrom};
+use std::io::{BufReader, Cursor, Read, Seek, SeekFrom};
 use std::path::Path;
 use tracing::debug;
 
@@ -15,6 +15,31 @@ pub struct ArchiveReader {
     file: Option<BufReader<File>>,
     /// Size of the archive
     size: u64,
+}
+
+/// A section of an archive that can be streamed
+pub struct ArchiveSection {
+    data: Cursor<Vec<u8>>,
+}
+
+impl ArchiveSection {
+    pub fn new(data: Vec<u8>) -> Self {
+        Self {
+            data: Cursor::new(data),
+        }
+    }
+}
+
+impl Read for ArchiveSection {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        self.data.read(buf)
+    }
+}
+
+impl Seek for ArchiveSection {
+    fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
+        self.data.seek(pos)
+    }
 }
 
 impl ArchiveReader {
@@ -51,6 +76,28 @@ impl ArchiveReader {
         };
 
         Ok(Self { mmap, file, size })
+    }
+
+    /// Create a reader at a specific offset for streaming access
+    pub fn reader_at(&self, offset: u64, length: usize) -> Result<ArchiveSection> {
+        if offset + length as u64 > self.size {
+            return Err(CascError::InvalidArchiveFormat(format!(
+                "Read beyond archive bounds: offset={}, length={}, size={}",
+                offset, length, self.size
+            )));
+        }
+
+        if let Some(ref mmap) = self.mmap {
+            // Memory-mapped access
+            let data = &mmap[offset as usize..(offset as usize + length)];
+            Ok(ArchiveSection::new(data.to_vec()))
+        } else {
+            // For regular file access, we still need to read the data
+            // This could be improved later to use a file handle with seeking
+            Err(CascError::InvalidArchiveFormat(
+                "Streaming from non-memory-mapped archives not yet supported".into(),
+            ))
+        }
     }
 
     /// Read data at a specific offset

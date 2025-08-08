@@ -16,6 +16,10 @@ pub enum Error {
     #[error("Invalid BLTE magic: expected [66, 76, 84, 69], got {0:?}")]
     InvalidMagic([u8; 4]),
 
+    /// Invalid header format
+    #[error("Invalid header format: {0}")]
+    InvalidHeader(String),
+
     /// Invalid header size
     #[error("Invalid header size: {0}")]
     InvalidHeaderSize(u32),

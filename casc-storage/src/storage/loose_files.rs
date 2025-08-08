@@ -77,9 +77,18 @@ impl LooseFileStorage {
         debug!("Reading loose file {} from {:?}", ekey, path);
         let data = std::fs::read(path)?;
 
-        // Decompress if needed
+        // Decompress if needed using streaming
         if data.len() >= 4 && data[0..4] == blte::BLTE_MAGIC {
-            Ok(blte::decompress_blte(data, None)?)
+            use std::io::{Cursor, Read};
+            let cursor = Cursor::new(data);
+            let mut stream = blte::create_streaming_reader(cursor, None)
+                .map_err(|e| CascError::DecompressionError(e.to_string()))?;
+
+            let mut result = Vec::new();
+            stream
+                .read_to_end(&mut result)
+                .map_err(|e| CascError::DecompressionError(e.to_string()))?;
+            Ok(result)
         } else {
             Ok(data)
         }
