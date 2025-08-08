@@ -5,6 +5,7 @@ use crate::cache::LockFreeCache;
 use crate::error::{CascError, Result};
 use crate::index::{CombinedIndex, GroupIndex, IdxParser, IndexFile};
 use crate::manifest::{FileMapping, ManifestConfig, TactManifests};
+use crate::progressive::{ChunkLoader, ProgressiveConfig, ProgressiveFileManager, SizeHint};
 use crate::types::{ArchiveLocation, CascConfig, EKey, StorageStats};
 use dashmap::DashMap;
 use parking_lot::RwLock;
@@ -35,6 +36,9 @@ pub struct CascStorage {
     /// TACT manifest integration for FileDataID lookups
     tact_manifests: Option<TactManifests>,
 
+    /// Progressive file loading manager
+    progressive_manager: Option<ProgressiveFileManager>,
+
     /// Storage statistics
     #[allow(dead_code)]
     stats: Arc<RwLock<StorageStats>>,
@@ -61,6 +65,7 @@ impl CascStorage {
             cache: Arc::new(LockFreeCache::new(cache_size_bytes)),
             current_archive: Arc::new(RwLock::new(None)),
             tact_manifests: None,
+            progressive_manager: None,
             stats: Arc::new(RwLock::new(StorageStats::default())),
         })
     }
@@ -808,5 +813,171 @@ impl CascStorage {
         if let Some(manifests) = &self.tact_manifests {
             manifests.clear_cache();
         }
+    }
+
+    // === Progressive Loading Support ===
+
+    /// Initialize progressive file loading with configuration
+    pub fn init_progressive_loading(&mut self, config: ProgressiveConfig) {
+        let chunk_loader = Arc::new(CascStorageChunkLoader {
+            storage: self as *const CascStorage,
+        });
+        
+        self.progressive_manager = Some(ProgressiveFileManager::new(config, chunk_loader));
+        info!("Initialized progressive file loading");
+    }
+
+    /// Read a file progressively with size hints
+    pub async fn read_progressive(&self, ekey: &EKey, size_hint: SizeHint) -> Result<Arc<crate::progressive::ProgressiveFile>> {
+        let manager = self.progressive_manager.as_ref().ok_or_else(|| {
+            CascError::InvalidArchiveFormat("Progressive loading not initialized".to_string())
+        })?;
+        
+        Ok(manager.get_or_create_progressive_file(*ekey, size_hint).await)
+    }
+
+    /// Read a file by FileDataID progressively with size hints from manifest
+    pub async fn read_by_fdid_progressive(&self, fdid: u32) -> Result<Arc<crate::progressive::ProgressiveFile>> {
+        let manifests = self.tact_manifests.as_ref().ok_or_else(|| {
+            CascError::ManifestNotLoaded("TACT manifests not initialized".to_string())
+        })?;
+
+        let mapping = manifests.lookup_by_fdid(fdid)?;
+        let ekey = mapping.encoding_key
+            .ok_or_else(|| CascError::EntryNotFound(format!("EKey for FDID {fdid}")))?;
+
+        // Create size hint from archive location data
+        let size_hint = if let Some(location) = self.combined_index.lookup(&ekey) {
+            // Archive location gives us compressed size, actual size is usually larger
+            SizeHint::Minimum(location.size as u64)
+        } else {
+            SizeHint::Unknown
+        };
+
+        self.read_progressive(&ekey, size_hint).await
+    }
+
+    /// Get size hint for an EKey from archive location
+    pub fn get_size_hint_for_ekey(&self, ekey: &EKey) -> SizeHint {
+        if let Some(location) = self.combined_index.lookup(ekey) {
+            // Archive location gives us a minimum size (compressed size)
+            // Actual decompressed size is usually larger
+            SizeHint::Minimum(location.size as u64)
+        } else {
+            SizeHint::Unknown
+        }
+    }
+
+    /// Check if progressive loading is available
+    pub fn has_progressive_loading(&self) -> bool {
+        self.progressive_manager.is_some()
+    }
+
+    /// Cleanup inactive progressive files
+    pub async fn cleanup_progressive_files(&self) {
+        if let Some(manager) = &self.progressive_manager {
+            use std::time::Duration;
+            manager.cleanup_inactive_files(Duration::from_secs(300)).await; // 5 minutes
+        }
+    }
+
+    /// Get progressive loading statistics
+    pub async fn get_progressive_stats(&self) -> Vec<(EKey, crate::progressive::LoadingStats)> {
+        if let Some(manager) = &self.progressive_manager {
+            manager.get_global_stats().await
+        } else {
+            Vec::new()
+        }
+    }
+}
+
+/// ChunkLoader implementation for CascStorage
+struct CascStorageChunkLoader {
+    storage: *const CascStorage,
+}
+
+// Safety: CascStorageChunkLoader is only used with a valid CascStorage pointer
+// and the storage lifetime is guaranteed by the ProgressiveFileManager
+unsafe impl Send for CascStorageChunkLoader {}
+unsafe impl Sync for CascStorageChunkLoader {}
+
+#[async_trait::async_trait]
+impl ChunkLoader for CascStorageChunkLoader {
+    async fn load_chunk(&self, ekey: EKey, offset: u64, size: usize) -> Result<Vec<u8>> {
+        // Safety: The storage pointer is valid for the lifetime of the progressive manager
+        let storage = unsafe { &*self.storage };
+        
+        // Get the location of the file
+        let location = storage.combined_index.lookup(&ekey).ok_or_else(|| {
+            debug!("EKey {} not found in combined index", ekey);
+            CascError::EntryNotFound(ekey.to_string())
+        })?;
+
+        debug!(
+            "Loading chunk for {} from archive {} at offset {:x} (chunk offset={}, size={})",
+            ekey, location.archive_id, location.offset, offset, size
+        );
+
+        // Read the compressed data from archive
+        let raw_data = {
+            let mut archives = storage.archives.write();
+            let archive = archives
+                .get_mut(&location.archive_id)
+                .ok_or(CascError::ArchiveNotFound(location.archive_id))?;
+
+            archive.read_at(&location)?
+        };
+
+        // CASC archives have a 30-byte header before the BLTE data
+        const CASC_ENTRY_HEADER_SIZE: usize = 30;
+
+        if raw_data.len() < CASC_ENTRY_HEADER_SIZE {
+            return Err(CascError::InvalidArchiveFormat(format!(
+                "Archive data too small: {} bytes",
+                raw_data.len()
+            )));
+        }
+
+        // Skip the header and get the BLTE data
+        let compressed_data = raw_data[CASC_ENTRY_HEADER_SIZE..].to_vec();
+
+        // Decompress using streaming BLTE
+        use std::io::{Cursor, Read};
+        let cursor = Cursor::new(compressed_data);
+        let mut stream = blte::create_streaming_reader(cursor, None)
+            .map_err(|e| CascError::DecompressionError(e.to_string()))?;
+
+        // Seek to the requested offset in the decompressed stream
+        if offset > 0 {
+            let mut discard_buf = vec![0u8; 8192]; // 8KB discard buffer
+            let mut remaining = offset;
+            
+            while remaining > 0 {
+                let to_read = (remaining as usize).min(discard_buf.len());
+                let read = stream.read(&mut discard_buf[..to_read])
+                    .map_err(|e| CascError::DecompressionError(e.to_string()))?;
+                
+                if read == 0 {
+                    break; // End of stream
+                }
+                
+                remaining -= read as u64;
+            }
+        }
+
+        // Read the requested chunk
+        let mut chunk_data = vec![0u8; size];
+        let actual_read = stream.read(&mut chunk_data)
+            .map_err(|e| CascError::DecompressionError(e.to_string()))?;
+
+        // Resize to actual read size
+        chunk_data.truncate(actual_read);
+
+        debug!(
+            "Loaded chunk for {} (offset={}, requested_size={}, actual_size={})",
+            ekey, offset, size, actual_read
+        );
+
+        Ok(chunk_data)
     }
 }
