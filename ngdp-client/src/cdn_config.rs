@@ -37,19 +37,55 @@ pub async fn create_cdn_client_with_config(
 
 /// Get a boolean configuration value
 fn get_config_bool(key: &str) -> Option<bool> {
-    // TODO: Replace with actual config loading
-    match key {
-        "use_community_cdn_fallbacks" => Some(true),
-        _ => None,
+    use crate::config_manager::ConfigManager;
+    
+    match ConfigManager::new() {
+        Ok(config_manager) => {
+            match config_manager.get(key) {
+                Ok(value) => value.to_lowercase().parse().ok(),
+                Err(_) => {
+                    // Return sensible defaults
+                    match key {
+                        "use_community_cdn_fallbacks" => Some(true),
+                        _ => None,
+                    }
+                }
+            }
+        },
+        Err(_) => {
+            // Fallback to defaults if config manager fails
+            match key {
+                "use_community_cdn_fallbacks" => Some(true),
+                _ => None,
+            }
+        }
     }
 }
 
 /// Get a string configuration value
 fn get_config_string(key: &str) -> Option<String> {
-    // TODO: Replace with actual config loading
-    match key {
-        "custom_cdn_fallbacks" => Some(String::new()),
-        _ => None,
+    use crate::config_manager::ConfigManager;
+    
+    match ConfigManager::new() {
+        Ok(config_manager) => {
+            match config_manager.get(key) {
+                Ok(value) if !value.is_empty() => Some(value),
+                _ => {
+                    // Return sensible defaults
+                    match key {
+                        "custom_cdn_fallbacks" => Some(String::new()),
+                        _ => None,
+                    }
+                }
+            }
+        },
+        Err(_) => {
+            // Fallback to defaults if config manager fails
+            match key {
+                "custom_cdn_fallbacks" => Some(String::new()),
+                _ => None,
+            }
+        }
     }
 }
 
