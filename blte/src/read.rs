@@ -148,7 +148,7 @@ impl<T: BufRead + Seek> BLTEFile<T> {
 
                     file = decompressor.finish()?;
                 }
-                ChunkEncodingHeader::Lz4hc => todo!(),
+                ChunkEncodingHeader::Lz4hc(_) => todo!(),
                 ChunkEncodingHeader::Encrypted(_) => todo!(),
                 ChunkEncodingHeader::Frame => todo!(),
             }

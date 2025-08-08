@@ -67,4 +67,7 @@ pub enum Error {
 
     #[error("Chunk index {0} is out of range, must be less than {1}")]
     ChunkIndexOutOfRange(usize, usize),
+
+    #[error("Unsupported LZ4HC header version: {0:#x}")]
+    UnsupportedLz4hcVersion(u8),
 }
