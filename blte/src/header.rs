@@ -188,7 +188,6 @@ impl ChunkInfo {
 #[cfg(test)]
 mod tests {
     use std::io::{Cursor, ErrorKind};
-
     use super::*;
 
     #[test]
@@ -245,22 +244,15 @@ mod tests {
 
     #[test]
     fn test_invalid_magic() {
-        let data = [
-            b'B', b'A', b'D', b'!', // Wrong magic
-            0x00, 0x00, 0x00, 0x00,
-        ];
-
-        let result = BLTEHeader::parse(&mut Cursor::new(data));
-        assert!(result.is_err());
-        matches!(result.unwrap_err(), Error::InvalidMagic(_));
+        let data = b"BAD!\0\0\0\0"; // Wrong magic
+        let err = BLTEHeader::parse(&mut Cursor::new(data)).unwrap_err();
+        assert!(matches!(err, Error::InvalidMagic(_)));
     }
 
     #[test]
     fn test_truncated_header() {
-        let data = [b'B', b'L', b'T']; // Too short
-
-        let result = BLTEHeader::parse(&mut Cursor::new(data));
-        assert!(result.is_err());
-        matches!(result.unwrap_err(), Error::Io(e) if e.kind() == ErrorKind::UnexpectedEof);
+        let data = b"BLT"; // Too short
+        let err = BLTEHeader::parse(&mut Cursor::new(data)).unwrap_err();
+        assert!(matches!(err, Error::Io(e) if e.kind() == ErrorKind::UnexpectedEof));
     }
 }
