@@ -249,13 +249,21 @@ impl BLTEArchive {
             0.0
         };
 
+        // Calculate compression mode statistics from actual files
+        let compression_modes = CompressionModeStats::default();
+        
+        // For now, compression mode stats are not calculated from files
+        // since ArchiveEntry doesn't store chunk information directly
+        // This would require parsing each BLTE file, which is expensive
+        // TODO: Add optional compression mode analysis
+
         ArchiveStats {
             file_count,
             total_size,
             compressed_size,
             decompressed_size,
             compression_ratio,
-            compression_modes: CompressionModeStats::default(), // TODO: Calculate from actual files
+            compression_modes,
             size_distribution: SizeDistribution {
                 min_size,
                 max_size,
