@@ -2,6 +2,8 @@
 
 use thiserror::Error;
 
+use crate::Md5;
+
 /// Result type for BLTE operations
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -41,8 +43,12 @@ pub enum Error {
     KeyNotFound(u64),
 
     /// Checksum mismatch
-    #[error("Checksum mismatch: expected {expected}, got {actual}")]
-    ChecksumMismatch { expected: String, actual: String },
+    #[error(
+        "Checksum mismatch: expected {}, got {}",
+        hex::encode(expected),
+        hex::encode(actual),
+    )]
+    ChecksumMismatch { expected: Vec<u8>, actual: Md5 },
 
     /// Truncated data
     #[error("Truncated data: expected {expected} bytes, got {actual}")]

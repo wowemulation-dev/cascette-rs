@@ -18,9 +18,9 @@ pub struct BLTEHeader {
     /// Set to 0 if unknown.
     total_decompressed_size: u64,
 
-    /// Chunk information
-    ///
-    /// When empty, the remainder of the BLTE stream contains a single chunk.
+    /// Chunk information.
+    /// 
+    /// Contains a single synthetic entry when there is only one chunk.
     chunks: Vec<ChunkInfo>,
 }
 
@@ -140,21 +140,22 @@ impl BLTEHeader {
         self.total_decompressed_size
     }
 
-    /// Get total number of chunks.
-    pub fn chunk_count(&self) -> usize {
-        self.chunks.len()
-    }
-
     /// Get information about a chunk.
     ///
     /// Returns `None` if `chunk` is out of range.
-    pub fn get_chunk_info(&self, chunk: usize) -> Option<&ChunkInfo> {
+    #[inline]
+    pub fn get_chunk(&self, chunk: usize) -> Option<&ChunkInfo> {
         self.chunks.get(chunk)
+    }
+
+    /// Get information about all chunks in the stream.
+    pub const fn chunks(&self) -> &Vec<ChunkInfo> {
+        &self.chunks
     }
 }
 
 /// Information about a single chunk
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ChunkInfo {
     /// The compressed size of the block, including chunk header byte(s).
     ///
@@ -223,30 +224,30 @@ mod tests {
         ];
 
         let header = BLTEHeader::parse(&mut Cursor::new(&data), data.len() as u64).unwrap();
-        assert_eq!(header.chunk_count(), 1);
+        assert_eq!(header.chunks().len(), 1);
 
         // Check synthetic chunk info
-        let chunk_0 = header.get_chunk_info(0).unwrap();
+        let chunk_0 = header.get_chunk(0).unwrap();
         assert_eq!(chunk_0.compressed_offset, 8);
         assert_eq!(chunk_0.compressed_size, 2);
 
         assert_eq!(chunk_0.decompressed_offset, 0);
         assert_eq!(chunk_0.decompressed_size, 0);
 
-        assert!(header.get_chunk_info(1).is_none());
+        assert!(header.get_chunk(1).is_none());
 
         // Check when we truncate to just the header
         let header = BLTEHeader::parse(&mut Cursor::new(&data), 8).unwrap();
-        assert_eq!(header.chunk_count(), 1);
+        assert_eq!(header.chunks().len(), 1);
 
-        let chunk_0 = header.get_chunk_info(0).unwrap();
+        let chunk_0 = header.get_chunk(0).unwrap();
         assert_eq!(chunk_0.compressed_offset, 8);
         assert_eq!(chunk_0.compressed_size, 0);
 
         assert_eq!(chunk_0.decompressed_offset, 0);
         assert_eq!(chunk_0.decompressed_size, 0);
 
-        assert!(header.get_chunk_info(1).is_none());
+        assert!(header.get_chunk(1).is_none());
     }
 
     #[test]
@@ -277,20 +278,20 @@ mod tests {
         assert_eq!(60 + 1000 + 1500, data.len());
 
         let header = BLTEHeader::parse(&mut Cursor::new(&data), data.len() as u64).unwrap();
-        assert_eq!(header.chunk_count(), 2);
+        assert_eq!(header.chunks().len(), 2);
 
         // Check chunks
-        let chunk_0 = header.get_chunk_info(0).unwrap();
+        let chunk_0 = header.get_chunk(0).unwrap();
         assert_eq!(chunk_0.compressed_size, 1000);
         assert_eq!(chunk_0.decompressed_size, 2000);
         assert_eq!(chunk_0.compressed_hash.unwrap(), [0xAA; 16]);
 
-        let chunk_1 = header.get_chunk_info(1).unwrap();
+        let chunk_1 = header.get_chunk(1).unwrap();
         assert_eq!(chunk_1.compressed_size, 1500);
         assert_eq!(chunk_1.decompressed_size, 3000);
         assert_eq!(chunk_1.compressed_hash.unwrap(), [0xBB; 16]);
 
-        assert!(header.get_chunk_info(2).is_none());
+        assert!(header.get_chunk(2).is_none());
 
         // Check that the length limit is enforced, even if the buffer is longer
         // ...when reading the header
