@@ -8,9 +8,29 @@ use byteorder::{BigEndian, ReadBytesExt};
 use std::io::Read;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
+#[repr(u8)]
+pub enum Cipher {
+    Arc4,
+    Salsa20,
+}
+
+impl TryFrom<u8> for Cipher {
+    type Error = Error;
+
+    fn try_from(value: u8) -> Result<Self> {
+        match value {
+            b'A' => Ok(Self::Arc4),
+            b'S' => Ok(Self::Salsa20),
+            other => Err(Error::UnsupportedEncryptionType(other)),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct EncryptedChunkHeader {
     key_name: Vec<u8>,
     iv: Vec<u8>,
+    cipher: Cipher,
 }
 
 impl EncryptedChunkHeader {
@@ -24,7 +44,13 @@ impl EncryptedChunkHeader {
         let mut iv = vec![0; iv_length as usize];
         f.read_exact(&mut iv)?;
 
-        Ok(Self { key_name, iv })
+        let cipher = f.read_u8()?.try_into()?;
+
+        Ok(Self {
+            key_name,
+            iv,
+            cipher,
+        })
     }
 
     #[cfg(feature = "async")]
@@ -38,13 +64,19 @@ impl EncryptedChunkHeader {
         let mut iv = vec![0; iv_length as usize];
         f.read_exact(&mut iv).await?;
 
-        Ok(Self { key_name, iv })
+        let cipher = f.read_u8().await?.try_into()?;
+
+        Ok(Self {
+            key_name,
+            iv,
+            cipher,
+        })
     }
 
     /// Length of the [`EncryptedChunkHeader`] on disk, including length
-    /// prefixes.
+    /// prefixes and cipher type.
     pub fn len(&self) -> usize {
-        self.key_name.len() + self.iv.len() + 2
+        self.key_name.len() + self.iv.len() + 3
     }
 
     /// `true` if the [`EncryptedChunkHeader`] would take up 0 bytes.
@@ -189,10 +221,11 @@ mod tests {
             ),
             (b"F", ChunkEncodingHeader::Frame),
             (
-                b"E\x05Hello\x0DPlanet Earth!",
+                b"E\x05Hello\x0DPlanet Earth!A",
                 ChunkEncodingHeader::Encrypted(EncryptedChunkHeader {
                     key_name: b"Hello".to_vec(),
                     iv: b"Planet Earth!".to_vec(),
+                    cipher: Cipher::Arc4,
                 }),
             ),
         ];
@@ -221,10 +254,11 @@ mod tests {
             ),
             (b"F", ChunkEncodingHeader::Frame),
             (
-                b"E\x05Hello\x0DPlanet Earth!",
+                b"E\x05Hello\x0DPlanet Earth!A",
                 ChunkEncodingHeader::Encrypted(EncryptedChunkHeader {
                     key_name: b"Hello".to_vec(),
                     iv: b"Planet Earth!".to_vec(),
+                    cipher: Cipher::Arc4,
                 }),
             ),
         ];
