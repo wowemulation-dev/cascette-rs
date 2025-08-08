@@ -2,7 +2,6 @@
 
 use ngdp_cdn::CdnClient;
 use std::time::Instant;
-use tokio;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -16,7 +15,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("HTTP/2 Request Batching Example");
     println!("================================");
 
-    let mut client = CdnClient::builder()
+    let client = CdnClient::builder()
         .max_retries(3)
         .pool_max_idle_per_host(50) // Higher connection pool for batching
         .build()?;

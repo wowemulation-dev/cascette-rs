@@ -35,14 +35,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("  Is text: {}", analysis.is_text);
         println!("  Is compressed: {}", analysis.is_compressed);
         if let Some(file_type) = analysis.file_type {
-            println!("  File type: {:?}", file_type);
+            println!("  File type: {file_type:?}");
         }
 
         // Get compression recommendation
         let recommendation = select_compression_mode(&analysis);
         println!("\n  Recommendation: {:?}", recommendation.mode);
         if let Some(level) = recommendation.level {
-            println!("  Level: {}", level);
+            println!("  Level: {level}");
         }
         println!(
             "  Expected ratio: {:.1}%",
@@ -63,7 +63,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // Test best ratio selection
         let (best_compressed, best_mode) = compress_with_best_ratio(&data)?;
-        println!("\n  Best mode: {:?}", best_mode);
+        println!("\n  Best mode: {best_mode:?}");
         println!("  Best size: {} bytes", best_compressed.len());
 
         println!();

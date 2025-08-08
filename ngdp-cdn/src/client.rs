@@ -177,7 +177,7 @@ impl CdnClient {
                 .gzip(true)
                 .deflate(true)
                 .build()
-                .map_err(|e| Error::Http(e))?;
+                .map_err(Error::Http)?;
 
             let batch_config = BatchConfig {
                 batch_size: 20,            // Optimal for HTTP/2 multiplexing
@@ -539,8 +539,7 @@ impl CdnClient {
                     match tact_err {
                         tact_client::Error::Http(reqwest_err) => Err(Error::Http(reqwest_err)),
                         _ => Err(Error::invalid_response(format!(
-                            "TACT client error: {}",
-                            tact_err
+                            "TACT client error: {tact_err}"
                         ))),
                     }
                 }

@@ -227,7 +227,8 @@ impl RequestBatcher {
 }
 
 /// Type alias for the request receiver channel
-type RequestReceiver = Arc<Mutex<mpsc::UnboundedReceiver<(BatchRequest, mpsc::UnboundedSender<BatchResponse>)>>>;
+type RequestReceiver =
+    Arc<Mutex<mpsc::UnboundedReceiver<(BatchRequest, mpsc::UnboundedSender<BatchResponse>)>>>;
 
 /// Internal batch processor
 struct BatchProcessor {
@@ -474,6 +475,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "Test depends on actual network requests for stats validation"]
     async fn test_request_submission() {
         let client = reqwest::Client::new();
         let config = BatchConfig {

@@ -42,8 +42,9 @@ async fn test_batch_statistics() {
 
     // Now stats should be available
     if let Some(stats) = client.get_batch_stats().await {
-        assert!(stats.batches_processed >= 0);
-        assert!(stats.requests_processed >= 0);
+        // These counters should be incremented after batch processing
+        assert!(stats.batches_processed > 0);
+        assert!(stats.requests_processed > 0);
         println!("Batch stats: {:?}", stats);
     }
 }
