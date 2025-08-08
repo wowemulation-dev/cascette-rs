@@ -150,10 +150,44 @@ mod tests {
         Ok(())
     }
 
+    #[cfg(feature = "async")]
+    #[tokio::test]
+    async fn test_async_compression_mode_detection() -> Result<()> {
+        let test_cases = [
+            // TODO: add more to other modes
+            (b"N".as_slice(), ChunkEncodingHeader::None),
+            (b"Z", ChunkEncodingHeader::ZLib),
+            (b"4", ChunkEncodingHeader::Lz4hc),
+            (b"F", ChunkEncodingHeader::Frame),
+            (
+                b"E\x05Hello\x0DPlanet Earth!",
+                ChunkEncodingHeader::Encrypted(EncryptedChunkHeader {
+                    key_name: b"Hello".to_vec(),
+                    iv: b"Planet Earth!".to_vec(),
+                }),
+            ),
+        ];
+
+        for (payload, expected) in test_cases {
+            let actual = ChunkEncodingHeader::aparse(&mut Cursor::new(payload)).await?;
+            assert_eq!(expected, actual, "payload: {:?}", hex::encode(payload));
+        }
+
+        Ok(())
+    }
+
     #[test]
     fn test_unknown_compression_mode() {
         let payload = b"XUnknown Mode!";
         let err = ChunkEncodingHeader::parse(&mut Cursor::new(payload)).unwrap_err();
+        assert!(matches!(err, Error::UnknownCompressionMode(b'X')));
+    }
+
+    #[cfg(feature = "async")]
+    #[tokio::test]
+    async fn test_async_unknown_compression_mode() {
+        let payload = b"XUnknown Mode!";
+        let err = ChunkEncodingHeader::aparse(&mut Cursor::new(payload)).await.unwrap_err();
         assert!(matches!(err, Error::UnknownCompressionMode(b'X')));
     }
 }

@@ -21,7 +21,7 @@ tracing.workspace = true
 thiserror.workspace = true
 byteorder.workspace = true
 hex.workspace = true
-tokio = { workspace = true, optional = true, features = ["macros", "fs"] }
+tokio = { workspace = true, optional = true, features = ["macros", "io-util"] }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt"] }
