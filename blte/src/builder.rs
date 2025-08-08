@@ -3,6 +3,7 @@
 //! This module provides a builder API for creating BLTE files with flexible
 //! compression and chunking strategies.
 
+use crate::adaptive::{analyze_data, select_compression_mode};
 use crate::compress::{compress_chunk, compress_data_multi, compress_data_single};
 use crate::{BLTE_MAGIC, CompressionMode, Error, Result};
 use std::collections::HashMap;
@@ -218,11 +219,15 @@ impl BLTEBuilder {
     pub fn with_compression_strategy(mut self, strategy: CompressionStrategy) -> Self {
         match strategy {
             CompressionStrategy::Auto => {
-                // Auto-select compression for each chunk
+                // Auto-select compression for each chunk based on data analysis
                 for chunk in &mut self.chunks {
                     if chunk.compression.is_none() {
-                        chunk.compression =
-                            Some(crate::compress::auto_select_compression_mode(&chunk.data));
+                        let analysis = analyze_data(&chunk.data);
+                        let recommendation = select_compression_mode(&analysis);
+                        chunk.compression = Some(recommendation.mode);
+                        if recommendation.mode == CompressionMode::ZLib {
+                            self.compression_level = recommendation.level;
+                        }
                     }
                 }
             }

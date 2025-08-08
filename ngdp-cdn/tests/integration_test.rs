@@ -74,7 +74,9 @@ async fn test_custom_configuration() {
 #[tokio::test]
 #[ignore = "requires internet connectivity"]
 async fn test_concurrent_requests() {
-    let client = CdnClient::new().unwrap();
+    use std::sync::Arc;
+
+    let client = Arc::new(CdnClient::new().unwrap());
 
     let handles: Vec<_> = (0..5)
         .map(|i| {

@@ -6,7 +6,7 @@ use reqwest::{Client, Response};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::{Mutex, mpsc};
 use tracing::{debug, info, warn};
 
 /// Default batch size for request batching
@@ -82,6 +82,7 @@ pub struct BatchResponse {
 }
 
 /// A batch of requests to be executed together
+#[allow(dead_code)]
 #[derive(Debug)]
 struct RequestBatch {
     /// Requests in this batch
@@ -96,8 +97,10 @@ struct RequestBatch {
 #[derive(Debug)]
 pub struct RequestBatcher {
     /// HTTP client with HTTP/2 support
+    #[allow(dead_code)]
     client: Client,
     /// Configuration
+    #[allow(dead_code)]
     config: BatchConfig,
     /// Channel for incoming requests
     request_tx: mpsc::UnboundedSender<(BatchRequest, mpsc::UnboundedSender<BatchResponse>)>,
@@ -132,7 +135,7 @@ impl RequestBatcher {
             request_rx: Arc::new(Mutex::new(request_rx)),
             stats,
         };
-        
+
         tokio::spawn(batch_processor.run());
 
         batcher
@@ -142,20 +145,26 @@ impl RequestBatcher {
     ///
     /// Returns a receiver for the response. The request will be batched with others
     /// and executed when the batch is full or the timeout expires.
-    pub async fn submit_request(&self, request: BatchRequest) -> Result<mpsc::UnboundedReceiver<BatchResponse>> {
+    pub async fn submit_request(
+        &self,
+        request: BatchRequest,
+    ) -> Result<mpsc::UnboundedReceiver<BatchResponse>> {
         let (response_tx, response_rx) = mpsc::unbounded_channel();
-        
+
         self.request_tx
             .send((request, response_tx))
             .map_err(|_| Error::InvalidResponse)?;
-            
+
         Ok(response_rx)
     }
 
     /// Submit multiple requests and wait for all responses
-    pub async fn submit_requests_and_wait(&self, requests: Vec<BatchRequest>) -> Vec<BatchResponse> {
+    pub async fn submit_requests_and_wait(
+        &self,
+        requests: Vec<BatchRequest>,
+    ) -> Vec<BatchResponse> {
         let mut receivers = Vec::new();
-        
+
         // Submit all requests
         for request in requests {
             match self.submit_request(request).await {
@@ -174,7 +183,7 @@ impl RequestBatcher {
                 }
             }
         }
-        
+
         // Collect all responses
         let mut responses = Vec::new();
         for mut rx in receivers {
@@ -188,7 +197,7 @@ impl RequestBatcher {
                 });
             }
         }
-        
+
         responses
     }
 
@@ -198,11 +207,7 @@ impl RequestBatcher {
     }
 
     /// Create batch requests for CDN file downloads
-    pub fn create_cdn_requests(
-        cdn_host: &str,
-        path: &str,
-        hashes: &[String],
-    ) -> Vec<BatchRequest> {
+    pub fn create_cdn_requests(cdn_host: &str, path: &str, hashes: &[String]) -> Vec<BatchRequest> {
         hashes
             .iter()
             .map(|hash| BatchRequest {
@@ -221,23 +226,30 @@ impl RequestBatcher {
     }
 }
 
+/// Type alias for the request receiver channel
+type RequestReceiver = Arc<Mutex<mpsc::UnboundedReceiver<(BatchRequest, mpsc::UnboundedSender<BatchResponse>)>>>;
+
 /// Internal batch processor
 struct BatchProcessor {
     client: Client,
     config: BatchConfig,
-    request_rx: Arc<Mutex<mpsc::UnboundedReceiver<(BatchRequest, mpsc::UnboundedSender<BatchResponse>)>>>,
+    request_rx: RequestReceiver,
     stats: Arc<Mutex<BatchStats>>,
 }
 
 impl BatchProcessor {
     async fn run(self) {
-        let mut current_batch: Vec<(BatchRequest, mpsc::UnboundedSender<BatchResponse>)> = Vec::new();
-        let mut batch_timer = tokio::time::interval(Duration::from_millis(self.config.batch_timeout_ms));
+        let mut current_batch: Vec<(BatchRequest, mpsc::UnboundedSender<BatchResponse>)> =
+            Vec::new();
+        let mut batch_timer =
+            tokio::time::interval(Duration::from_millis(self.config.batch_timeout_ms));
         let mut request_rx = self.request_rx.lock().await;
 
         debug!(
             "Starting batch processor with config: batch_size={}, timeout={}ms, max_concurrent={}",
-            self.config.batch_size, self.config.batch_timeout_ms, self.config.max_concurrent_batches
+            self.config.batch_size,
+            self.config.batch_timeout_ms,
+            self.config.max_concurrent_batches
         );
 
         loop {
@@ -247,7 +259,7 @@ impl BatchProcessor {
                     match maybe_request {
                         Some((request, response_tx)) => {
                             current_batch.push((request, response_tx));
-                            
+
                             // If batch is full, process it immediately
                             if current_batch.len() >= self.config.batch_size {
                                 let batch = std::mem::take(&mut current_batch);
@@ -264,7 +276,7 @@ impl BatchProcessor {
                         }
                     }
                 }
-                
+
                 // Batch timeout expired
                 _ = batch_timer.tick() => {
                     if !current_batch.is_empty() {
@@ -278,28 +290,36 @@ impl BatchProcessor {
         debug!("Batch processor shutting down");
     }
 
-    async fn process_batch(&self, batch: Vec<(BatchRequest, mpsc::UnboundedSender<BatchResponse>)>) {
+    async fn process_batch(
+        &self,
+        batch: Vec<(BatchRequest, mpsc::UnboundedSender<BatchResponse>)>,
+    ) {
         if batch.is_empty() {
             return;
         }
 
         let batch_start = Instant::now();
         let batch_size = batch.len();
-        
+
         debug!("Processing batch of {} requests", batch_size);
 
         // Group requests by host to maximize HTTP/2 connection reuse
         let mut requests_by_host: HashMap<String, Vec<_>> = HashMap::new();
-        
+
         for (request, response_tx) in batch {
-            let host = self.extract_host(&request.url).unwrap_or_else(|| "unknown".to_string());
-            requests_by_host.entry(host).or_default().push((request, response_tx));
+            let host = self
+                .extract_host(&request.url)
+                .unwrap_or_else(|| "unknown".to_string());
+            requests_by_host
+                .entry(host)
+                .or_default()
+                .push((request, response_tx));
         }
 
         // Process each host group concurrently (up to max_concurrent_batches)
         let host_groups: Vec<_> = requests_by_host.into_iter().collect();
         let concurrent_limit = self.config.max_concurrent_batches.min(host_groups.len());
-        
+
         stream::iter(host_groups)
             .map(|(host, requests)| async move {
                 self.process_host_batch(host, requests).await;
@@ -309,7 +329,7 @@ impl BatchProcessor {
             .await;
 
         let batch_duration = batch_start.elapsed();
-        
+
         // Update statistics
         let mut stats = self.stats.lock().await;
         stats.batches_processed += 1;
@@ -324,7 +344,11 @@ impl BatchProcessor {
         );
     }
 
-    async fn process_host_batch(&self, host: String, requests: Vec<(BatchRequest, mpsc::UnboundedSender<BatchResponse>)>) {
+    async fn process_host_batch(
+        &self,
+        host: String,
+        requests: Vec<(BatchRequest, mpsc::UnboundedSender<BatchResponse>)>,
+    ) {
         debug!("Processing {} requests for host: {}", requests.len(), host);
 
         // Check if server supports HTTP/2
@@ -338,23 +362,25 @@ impl BatchProcessor {
         // Execute all requests for this host concurrently
         // HTTP/2 multiplexing allows multiple requests on the same connection
         let num_requests = requests.len();
-        let futures = requests.into_iter().map(|(request, response_tx)| async move {
-            let start_time = Instant::now();
-            let request_id = request.id.clone();
-            
-            let result = self.execute_request(request).await;
-            let duration = start_time.elapsed();
-            
-            let response = BatchResponse {
-                request_id,
-                result,
-                duration,
-            };
-            
-            if response_tx.send(response).is_err() {
-                warn!("Failed to send batch response - receiver dropped");
-            }
-        });
+        let futures = requests
+            .into_iter()
+            .map(|(request, response_tx)| async move {
+                let start_time = Instant::now();
+                let request_id = request.id.clone();
+
+                let result = self.execute_request(request).await;
+                let duration = start_time.elapsed();
+
+                let response = BatchResponse {
+                    request_id,
+                    result,
+                    duration,
+                };
+
+                if response_tx.send(response).is_err() {
+                    warn!("Failed to send batch response - receiver dropped");
+                }
+            });
 
         // Execute all requests concurrently
         stream::iter(futures)
@@ -365,26 +391,22 @@ impl BatchProcessor {
 
     async fn execute_request(&self, request: BatchRequest) -> Result<Response> {
         let mut req_builder = self.client.get(&request.url);
-        
+
         // Add custom headers
         for (key, value) in &request.headers {
             req_builder = req_builder.header(key, value);
         }
 
         // Execute with timeout
-        let response = tokio::time::timeout(
-            self.config.batch_execution_timeout,
-            req_builder.send()
-        ).await;
+        let response =
+            tokio::time::timeout(self.config.batch_execution_timeout, req_builder.send()).await;
 
         match response {
             Ok(Ok(response)) => {
                 if response.status().is_success() {
                     Ok(response)
                 } else {
-                    Err(Error::Http(
-                        response.error_for_status().unwrap_err()
-                    ))
+                    Err(Error::Http(response.error_for_status().unwrap_err()))
                 }
             }
             Ok(Err(e)) => Err(Error::Http(e)),
@@ -413,25 +435,25 @@ impl BatchProcessor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::time::{sleep, Duration};
+    use tokio::time::{Duration, sleep};
 
     #[test]
     fn test_batch_config_default() {
         let config = BatchConfig::default();
         assert_eq!(config.batch_size, DEFAULT_BATCH_SIZE);
         assert_eq!(config.batch_timeout_ms, DEFAULT_BATCH_TIMEOUT_MS);
-        assert_eq!(config.max_concurrent_batches, DEFAULT_MAX_CONCURRENT_BATCHES);
+        assert_eq!(
+            config.max_concurrent_batches,
+            DEFAULT_MAX_CONCURRENT_BATCHES
+        );
     }
 
     #[test]
     fn test_create_cdn_requests() {
-        let hashes = vec![
-            "abcd1234".to_string(),
-            "efgh5678".to_string(),
-        ];
-        
+        let hashes = vec!["abcd1234".to_string(), "efgh5678".to_string()];
+
         let requests = RequestBatcher::create_cdn_requests("example.com", "data", &hashes);
-        
+
         assert_eq!(requests.len(), 2);
         assert_eq!(requests[0].id, "abcd1234");
         assert_eq!(requests[0].url, "http://example.com/data/ab/cd/abcd1234");
@@ -444,7 +466,7 @@ mod tests {
         let client = reqwest::Client::new();
         let config = BatchConfig::default();
         let batcher = RequestBatcher::new(client, config);
-        
+
         let stats = batcher.get_stats().await;
         assert_eq!(stats.batches_processed, 0);
         assert_eq!(stats.requests_processed, 0);
@@ -459,20 +481,20 @@ mod tests {
             ..BatchConfig::default()
         };
         let batcher = RequestBatcher::new(client, config);
-        
+
         let request = BatchRequest {
             id: "test123".to_string(),
             url: "http://httpbin.org/status/200".to_string(), // Test endpoint
             headers: HashMap::new(),
         };
-        
+
         // This will fail in tests without network, but tests the API
         let _receiver = batcher.submit_request(request).await;
         // Just test that submission doesn't panic
-        
+
         // Wait a bit for batch processing
         sleep(Duration::from_millis(100)).await;
-        
+
         // Stats should be updated (even if requests failed)
         let stats = batcher.get_stats().await;
         assert!(stats.batches_processed > 0 || stats.requests_processed > 0);

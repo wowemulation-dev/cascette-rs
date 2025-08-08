@@ -3,7 +3,9 @@
 use crate::archive::{Archive, ArchiveWriter};
 use crate::cache::LockFreeCache;
 use crate::error::{CascError, Result};
-use crate::index::{CombinedIndex, GroupIndex, IdxParser, IndexFile};
+use crate::index::{
+    AsyncIndexConfig, AsyncIndexManager, CombinedIndex, GroupIndex, IdxParser, IndexFile,
+};
 use crate::manifest::{FileMapping, ManifestConfig, TactManifests};
 use crate::progressive::{ChunkLoader, ProgressiveConfig, ProgressiveFileManager, SizeHint};
 use crate::types::{ArchiveLocation, CascConfig, EKey, StorageStats};
@@ -23,6 +25,9 @@ pub struct CascStorage {
 
     /// Combined index for optimized lookups
     combined_index: Arc<CombinedIndex>,
+
+    /// Async index manager for parallel operations
+    async_index_manager: Option<Arc<AsyncIndexManager>>,
 
     /// Archive files
     archives: Arc<RwLock<HashMap<u16, Archive>>>,
@@ -61,6 +66,7 @@ impl CascStorage {
             config,
             indices: Arc::new(DashMap::new()),
             combined_index: Arc::new(CombinedIndex::new()),
+            async_index_manager: None,
             archives: Arc::new(RwLock::new(HashMap::new())),
             cache: Arc::new(LockFreeCache::new(cache_size_bytes)),
             current_archive: Arc::new(RwLock::new(None)),
@@ -815,6 +821,87 @@ impl CascStorage {
         }
     }
 
+    // === Async Index Operations ===
+
+    /// Initialize async index manager for parallel operations
+    pub async fn init_async_indices(&mut self) -> Result<()> {
+        let config = AsyncIndexConfig {
+            max_concurrent_files: 16,
+            buffer_size: 128 * 1024, // 128KB buffers
+            enable_caching: true,
+            max_cache_entries: 100_000,
+            enable_background_updates: false, // Can be enabled later
+        };
+
+        let manager = Arc::new(AsyncIndexManager::new(config));
+
+        // Load existing indices
+        let loaded = manager.load_directory(&self.config.data_path).await?;
+
+        info!("Async index manager initialized with {} indices", loaded);
+        self.async_index_manager = Some(manager);
+
+        Ok(())
+    }
+
+    /// Perform async lookup using the async index manager
+    pub async fn lookup_async(&self, ekey: &EKey) -> Option<ArchiveLocation> {
+        if let Some(ref manager) = self.async_index_manager {
+            manager.lookup(ekey).await
+        } else {
+            // Fallback to sync lookup
+            self.combined_index.lookup(ekey)
+        }
+    }
+
+    /// Batch lookup for multiple keys using async operations
+    pub async fn lookup_batch_async(&self, ekeys: &[EKey]) -> Vec<Option<ArchiveLocation>> {
+        if let Some(ref manager) = self.async_index_manager {
+            manager.lookup_batch(ekeys).await
+        } else {
+            // Fallback to sync batch lookup
+            self.combined_index.lookup_batch(ekeys)
+        }
+    }
+
+    /// Start background index updates with specified interval
+    pub async fn start_index_background_updates(&self, interval: std::time::Duration) {
+        if let Some(ref manager) = self.async_index_manager {
+            manager
+                .start_background_updates(self.config.data_path.clone(), interval)
+                .await;
+            info!(
+                "Started background index updates with interval {:?}",
+                interval
+            );
+        }
+    }
+
+    /// Stop background index updates
+    pub async fn stop_index_background_updates(&self) {
+        if let Some(ref manager) = self.async_index_manager {
+            manager.stop_background_updates().await;
+            info!("Stopped background index updates");
+        }
+    }
+
+    /// Get async index statistics
+    pub async fn get_async_index_stats(&self) -> Option<crate::index::AsyncIndexStats> {
+        if let Some(ref manager) = self.async_index_manager {
+            Some(manager.get_stats().await)
+        } else {
+            None
+        }
+    }
+
+    /// Clear async index cache
+    pub async fn clear_async_index_cache(&self) {
+        if let Some(ref manager) = self.async_index_manager {
+            manager.clear_cache().await;
+            debug!("Cleared async index cache");
+        }
+    }
+
     // === Progressive Loading Support ===
 
     /// Initialize progressive file loading with configuration
@@ -822,28 +909,38 @@ impl CascStorage {
         let chunk_loader = Arc::new(CascStorageChunkLoader {
             storage: self as *const CascStorage,
         });
-        
+
         self.progressive_manager = Some(ProgressiveFileManager::new(config, chunk_loader));
         info!("Initialized progressive file loading");
     }
 
     /// Read a file progressively with size hints
-    pub async fn read_progressive(&self, ekey: &EKey, size_hint: SizeHint) -> Result<Arc<crate::progressive::ProgressiveFile>> {
+    pub async fn read_progressive(
+        &self,
+        ekey: &EKey,
+        size_hint: SizeHint,
+    ) -> Result<Arc<crate::progressive::ProgressiveFile>> {
         let manager = self.progressive_manager.as_ref().ok_or_else(|| {
             CascError::InvalidArchiveFormat("Progressive loading not initialized".to_string())
         })?;
-        
-        Ok(manager.get_or_create_progressive_file(*ekey, size_hint).await)
+
+        Ok(manager
+            .get_or_create_progressive_file(*ekey, size_hint)
+            .await)
     }
 
     /// Read a file by FileDataID progressively with size hints from manifest
-    pub async fn read_by_fdid_progressive(&self, fdid: u32) -> Result<Arc<crate::progressive::ProgressiveFile>> {
+    pub async fn read_by_fdid_progressive(
+        &self,
+        fdid: u32,
+    ) -> Result<Arc<crate::progressive::ProgressiveFile>> {
         let manifests = self.tact_manifests.as_ref().ok_or_else(|| {
             CascError::ManifestNotLoaded("TACT manifests not initialized".to_string())
         })?;
 
         let mapping = manifests.lookup_by_fdid(fdid)?;
-        let ekey = mapping.encoding_key
+        let ekey = mapping
+            .encoding_key
             .ok_or_else(|| CascError::EntryNotFound(format!("EKey for FDID {fdid}")))?;
 
         // Create size hint from archive location data
@@ -877,7 +974,9 @@ impl CascStorage {
     pub async fn cleanup_progressive_files(&self) {
         if let Some(manager) = &self.progressive_manager {
             use std::time::Duration;
-            manager.cleanup_inactive_files(Duration::from_secs(300)).await; // 5 minutes
+            manager
+                .cleanup_inactive_files(Duration::from_secs(300))
+                .await; // 5 minutes
         }
     }
 
@@ -906,7 +1005,7 @@ impl ChunkLoader for CascStorageChunkLoader {
     async fn load_chunk(&self, ekey: EKey, offset: u64, size: usize) -> Result<Vec<u8>> {
         // Safety: The storage pointer is valid for the lifetime of the progressive manager
         let storage = unsafe { &*self.storage };
-        
+
         // Get the location of the file
         let location = storage.combined_index.lookup(&ekey).ok_or_else(|| {
             debug!("EKey {} not found in combined index", ekey);
@@ -951,23 +1050,25 @@ impl ChunkLoader for CascStorageChunkLoader {
         if offset > 0 {
             let mut discard_buf = vec![0u8; 8192]; // 8KB discard buffer
             let mut remaining = offset;
-            
+
             while remaining > 0 {
                 let to_read = (remaining as usize).min(discard_buf.len());
-                let read = stream.read(&mut discard_buf[..to_read])
+                let read = stream
+                    .read(&mut discard_buf[..to_read])
                     .map_err(|e| CascError::DecompressionError(e.to_string()))?;
-                
+
                 if read == 0 {
                     break; // End of stream
                 }
-                
+
                 remaining -= read as u64;
             }
         }
 
         // Read the requested chunk
         let mut chunk_data = vec![0u8; size];
-        let actual_read = stream.read(&mut chunk_data)
+        let actual_read = stream
+            .read(&mut chunk_data)
             .map_err(|e| CascError::DecompressionError(e.to_string()))?;
 
         // Resize to actual read size

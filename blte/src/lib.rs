@@ -9,6 +9,7 @@
 //! Blizzard's CDN serves content as 256MB archive files containing multiple
 //! concatenated BLTE files. Use the `archive` module for handling these files.
 
+pub mod adaptive;
 pub mod archive;
 pub mod builder;
 pub mod chunk;
@@ -19,6 +20,10 @@ pub mod header;
 pub mod memory_pool;
 pub mod stream;
 
+pub use adaptive::{
+    CompressionRecommendation, DataAnalysis, FileType, analyze_data, auto_compress,
+    compress_with_best_ratio, select_compression_mode,
+};
 pub use archive::{
     ArchiveEntry, ArchiveMetadata, ArchiveStats, BLTEArchive,
     builder::{ArchiveBuilder, MultiArchiveBuilder},

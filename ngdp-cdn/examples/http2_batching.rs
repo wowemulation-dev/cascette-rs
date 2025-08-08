@@ -7,8 +7,10 @@ use tokio;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize tracing for debugging
-    tracing_subscriber::fmt()
-        .with_env_filter("ngdp_cdn=debug,tact_client=debug")
+    use tracing_subscriber::{EnvFilter, fmt};
+
+    fmt()
+        .with_env_filter(EnvFilter::new("ngdp_cdn=debug,tact_client=debug"))
         .init();
 
     println!("HTTP/2 Request Batching Example");
@@ -22,7 +24,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Example: Download multiple game assets
     let asset_hashes = vec![
         "abcd1234567890ef".to_string(),
-        "1234567890abcdef".to_string(), 
+        "1234567890abcdef".to_string(),
         "567890abcdef1234".to_string(),
         "90abcdef12345678".to_string(),
         "cdef123456789012".to_string(),
@@ -33,7 +35,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "89012abcdef12345".to_string(),
     ];
 
-    println!("\nDownloading {} files using different methods...", asset_hashes.len());
+    println!(
+        "\nDownloading {} files using different methods...",
+        asset_hashes.len()
+    );
 
     // Method 1: Traditional parallel downloads
     println!("\n1. Traditional Parallel Downloads:");
@@ -44,7 +49,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let parallel_duration = start.elapsed();
 
     println!("   - Duration: {:?}", parallel_duration);
-    println!("   - Success: {}/{}",
+    println!(
+        "   - Success: {}/{}",
         parallel_results.iter().filter(|r| r.is_ok()).count(),
         parallel_results.len()
     );
@@ -58,7 +64,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let batch_duration = start.elapsed();
 
     println!("   - Duration: {:?}", batch_duration);
-    println!("   - Success: {}/{}",
+    println!(
+        "   - Success: {}/{}",
         batch_results.iter().filter(|r| r.is_ok()).count(),
         batch_results.len()
     );
@@ -69,7 +76,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("   - HTTP/2 batching is {:.2}x faster!", improvement);
     } else if batch_duration > parallel_duration {
         let overhead = batch_duration.as_millis() as f64 / parallel_duration.as_millis() as f64;
-        println!("   - HTTP/2 batching has {:.2}x overhead (possibly due to network conditions)", overhead);
+        println!(
+            "   - HTTP/2 batching has {:.2}x overhead (possibly due to network conditions)",
+            overhead
+        );
     } else {
         println!("   - Performance is equivalent");
     }
@@ -107,7 +117,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .download_config_batched("example-cdn.com", "wow", &config_hashes)
         .await;
     println!("Config download time: {:?}", start.elapsed());
-    println!("Config results: {}/{} successful",
+    println!(
+        "Config results: {}/{} successful",
         config_results.iter().filter(|r| r.is_ok()).count(),
         config_results.len()
     );
@@ -119,7 +130,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .download_patch_batched("example-cdn.com", "wow", &patch_hashes)
         .await;
     println!("Patch download time: {:?}", start.elapsed());
-    println!("Patch results: {}/{} successful",
+    println!(
+        "Patch results: {}/{} successful",
         patch_results.iter().filter(|r| r.is_ok()).count(),
         patch_results.len()
     );
@@ -129,9 +141,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("\nFinal Statistics After All Operations:");
         println!("   - Total batches: {}", final_stats.batches_processed);
         println!("   - Total requests: {}", final_stats.requests_processed);
-        println!("   - Overall avg batch size: {:.1}", final_stats.avg_batch_size);
-        println!("   - Overall avg batch time: {:?}", final_stats.avg_batch_time);
-        println!("   - Total HTTP/2 connections used: {}", final_stats.http2_connections);
+        println!(
+            "   - Overall avg batch size: {:.1}",
+            final_stats.avg_batch_size
+        );
+        println!(
+            "   - Overall avg batch time: {:?}",
+            final_stats.avg_batch_time
+        );
+        println!(
+            "   - Total HTTP/2 connections used: {}",
+            final_stats.http2_connections
+        );
 
         if final_stats.http2_connections > 0 {
             println!("   ✓ HTTP/2 multiplexing was successfully used");
@@ -156,11 +177,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     let concurrent_duration = start.elapsed();
 
-    println!("Concurrent batching completed in: {:?}", concurrent_duration);
-    println!("Results: {}/{}, {}/{}, {}/{}",
-        results1.iter().filter(|r| r.is_ok()).count(), results1.len(),
-        results2.iter().filter(|r| r.is_ok()).count(), results2.len(),
-        results3.iter().filter(|r| r.is_ok()).count(), results3.len(),
+    println!(
+        "Concurrent batching completed in: {:?}",
+        concurrent_duration
+    );
+    println!(
+        "Results: {}/{}, {}/{}, {}/{}",
+        results1.iter().filter(|r| r.is_ok()).count(),
+        results1.len(),
+        results2.iter().filter(|r| r.is_ok()).count(),
+        results2.len(),
+        results3.iter().filter(|r| r.is_ok()).count(),
+        results3.len(),
     );
 
     println!("\nExample completed!");

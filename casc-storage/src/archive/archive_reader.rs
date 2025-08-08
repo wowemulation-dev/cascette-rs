@@ -71,7 +71,7 @@ impl ArchiveReader {
             const MAX_MMAP_SIZE: u64 = 128 * 1024 * 1024 * 1024; // 128GB
             size <= MAX_MMAP_SIZE
         }
-        
+
         #[cfg(target_pointer_width = "32")]
         {
             // On 32-bit systems, stick to 2GB limit due to address space constraints
@@ -102,7 +102,10 @@ impl ArchiveReader {
                 }
             }
         } else if size > 0 {
-            debug!("Archive too large for memory mapping ({} bytes), using file reader", size);
+            debug!(
+                "Archive too large for memory mapping ({} bytes), using file reader",
+                size
+            );
             None
         } else {
             None
@@ -115,7 +118,12 @@ impl ArchiveReader {
             None
         };
 
-        Ok(Self { mmap, file, path, size })
+        Ok(Self {
+            mmap,
+            file,
+            path,
+            size,
+        })
     }
 
     /// Create a reader at a specific offset for streaming access (zero-copy when possible)
@@ -163,37 +171,37 @@ impl ArchiveReader {
     /// Fallback method for reading from non-memory-mapped files
     fn read_at_fallback(&self, offset: u64, buffer: &mut [u8]) -> Result<()> {
         // For large archives that can't be memory-mapped, use platform-specific optimizations
-        
+
         #[cfg(unix)]
         {
             use std::os::unix::fs::FileExt;
-            
+
             // Use pread for thread-safe positioned reads without seeking
             let file = File::open(&*self.path)?;
             file.read_exact_at(buffer, offset)?;
             Ok(())
         }
-        
+
         #[cfg(windows)]
         {
             use std::os::windows::fs::FileExt;
-            
+
             // Windows positioned read
             let file = File::open(&*self.path)?;
             let bytes_read = file.seek_read(buffer, offset)?;
             if bytes_read != buffer.len() {
                 return Err(CascError::InvalidArchiveFormat(
-                    "Incomplete read from archive".into()
+                    "Incomplete read from archive".into(),
                 ));
             }
             Ok(())
         }
-        
+
         #[cfg(not(any(unix, windows)))]
         {
             // Fallback for other platforms - not thread-safe but functional
-            use std::io::{BufReader, BufRead};
-            
+            use std::io::{BufRead, BufReader};
+
             let file = File::open(&*self.path)?;
             let mut reader = BufReader::new(file);
             reader.seek(SeekFrom::Start(offset))?;

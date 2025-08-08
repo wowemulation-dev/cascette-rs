@@ -34,7 +34,7 @@ pub fn compress_chunk(data: &[u8], mode: CompressionMode, level: Option<u8>) -> 
 }
 
 /// Mode 'N' - No compression
-fn compress_none(data: &[u8]) -> Result<Vec<u8>> {
+pub fn compress_none(data: &[u8]) -> Result<Vec<u8>> {
     let mut result = Vec::with_capacity(data.len() + 1);
     result.push(b'N');
     result.extend_from_slice(data);

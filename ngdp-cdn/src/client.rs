@@ -157,9 +157,11 @@ impl CdnClient {
     ///
     /// This enables efficient batching of multiple CDN requests over HTTP/2 connections,
     /// significantly improving performance for batch operations.
-    async fn get_or_create_request_batcher(&self) -> Result<std::sync::Arc<tokio::sync::Mutex<Option<tact_client::RequestBatcher>>>> {
+    async fn get_or_create_request_batcher(
+        &self,
+    ) -> Result<std::sync::Arc<tokio::sync::Mutex<Option<tact_client::RequestBatcher>>>> {
         let mut batcher_guard = self.request_batcher.lock().await;
-        
+
         if batcher_guard.is_none() {
             use tact_client::{BatchConfig, RequestBatcher};
 
@@ -178,8 +180,8 @@ impl CdnClient {
                 .map_err(|e| Error::Http(e))?;
 
             let batch_config = BatchConfig {
-                batch_size: 20, // Optimal for HTTP/2 multiplexing
-                batch_timeout_ms: 50, // Quick batching for low latency
+                batch_size: 20,            // Optimal for HTTP/2 multiplexing
+                batch_timeout_ms: 50,      // Quick batching for low latency
                 max_concurrent_batches: 8, // Higher concurrency for CDN
                 batch_execution_timeout: std::time::Duration::from_secs(300),
             };
@@ -477,7 +479,7 @@ impl CdnClient {
     /// - Connection overhead
     /// - Network latency
     /// - Server connection pressure
-    /// 
+    ///
     /// Expected improvement: 2-5x faster than traditional parallel downloads for batches >10 files.
     pub async fn download_batched(
         &self,
@@ -487,17 +489,22 @@ impl CdnClient {
     ) -> Vec<Result<Vec<u8>>> {
         // Create batch requests for all hashes
         let requests = tact_client::RequestBatcher::create_cdn_requests(cdn_host, path, hashes);
-        
+
         // Get the request batcher
         let batcher_arc = match self.get_or_create_request_batcher().await {
             Ok(batcher_arc) => batcher_arc,
             Err(e) => {
                 // Fallback to regular parallel downloads if batching fails
-                warn!("Failed to create request batcher, falling back to parallel downloads: {}", e);
-                return self.download_parallel(cdn_host, path, hashes, Some(20)).await;
+                warn!(
+                    "Failed to create request batcher, falling back to parallel downloads: {}",
+                    e
+                );
+                return self
+                    .download_parallel(cdn_host, path, hashes, Some(20))
+                    .await;
             }
         };
-        
+
         // Submit batch and wait for responses
         let batch_responses = {
             let batcher_guard = batcher_arc.lock().await;
@@ -506,15 +513,17 @@ impl CdnClient {
             } else {
                 // Fallback if batcher wasn't initialized
                 warn!("Request batcher not initialized, falling back to parallel downloads");
-                return self.download_parallel(cdn_host, path, hashes, Some(20)).await;
+                return self
+                    .download_parallel(cdn_host, path, hashes, Some(20))
+                    .await;
             }
         };
-        
+
         // Convert batch responses to the expected format
         let mut results = Vec::with_capacity(hashes.len());
-        let mut response_map: std::collections::HashMap<String, Result<Vec<u8>>> = 
+        let mut response_map: std::collections::HashMap<String, Result<Vec<u8>>> =
             std::collections::HashMap::new();
-        
+
         // Process batch responses
         for response in batch_responses {
             let result = match response.result {
@@ -529,23 +538,28 @@ impl CdnClient {
                     // Convert tact_client::Error to ngdp_cdn::Error
                     match tact_err {
                         tact_client::Error::Http(reqwest_err) => Err(Error::Http(reqwest_err)),
-                        _ => Err(Error::invalid_response(format!("TACT client error: {}", tact_err))),
+                        _ => Err(Error::invalid_response(format!(
+                            "TACT client error: {}",
+                            tact_err
+                        ))),
                     }
-                },
+                }
             };
-            
+
             response_map.insert(response.request_id, result);
         }
-        
+
         // Ensure results are in the same order as input hashes
         for hash in hashes {
             if let Some(result) = response_map.remove(hash) {
                 results.push(result);
             } else {
-                results.push(Err(Error::invalid_response("No response received for hash")));
+                results.push(Err(Error::invalid_response(
+                    "No response received for hash",
+                )));
             }
         }
-        
+
         results
     }
 
