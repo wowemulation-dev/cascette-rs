@@ -72,7 +72,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Performance comparison
     match parallel_duration.cmp(&batch_duration) {
         std::cmp::Ordering::Greater => {
-            let improvement = parallel_duration.as_millis() as f64 / batch_duration.as_millis() as f64;
+            let improvement =
+                parallel_duration.as_millis() as f64 / batch_duration.as_millis() as f64;
             println!("   - HTTP/2 batching is {improvement:.2}x faster!");
         }
         std::cmp::Ordering::Less => {
