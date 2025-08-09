@@ -12,7 +12,7 @@ homepage.workspace = true
 [dependencies]
 flate2 = "1.1"
 lz4_flex = "0.11.5"
-ngdp-crypto = { path = "../ngdp-crypto", version = "0.3.0" }
+ngdp-crypto = { path = "../ngdp-crypto", version = "0.4.0" }
 md5 = "0.8"
 tracing.workspace = true
 thiserror.workspace = true
@@ -21,3 +21,25 @@ hex.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt"] }
+ureq = "2.10"
+
+[[example]]
+name = "test_compress"
+
+[[example]]
+name = "real_blte_roundtrip"
+
+[[example]]
+name = "test_large_blte"
+
+[[example]]
+name = "analyze_large_blte"
+
+[[example]]
+name = "test_first_blte"
+
+[[example]]
+name = "investigate_blte_formats"
+
+[[example]]
+name = "test_wow_archives"

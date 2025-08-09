@@ -1,6 +1,6 @@
 [package]
 name = "ngdp-client"
-version = "0.3.0"
+version = "0.4.0"
 authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -23,20 +23,23 @@ path = "src/main.rs"
 clap = { workspace = true, features = ["derive", "cargo", "env"] }
 comfy-table = "7.1.4"
 owo-colors = { version = "4.2.2", features = ["supports-colors"] }
-ribbit-client = { path = "../ribbit-client", version = "0.3.0" }
-tact-client = { path = "../tact-client", version = "0.3.0" }
-ngdp-bpsv = { path = "../ngdp-bpsv", version = "0.3.0" }
-ngdp-cache = { path = "../ngdp-cache", version = "0.3.0" }
-ngdp-cdn = { path = "../ngdp-cdn", version = "0.3.0" }
-tact-parser = { path = "../tact-parser", version = "0.3.0" }
-blte = { path = "../blte", version = "0.3.0" }
-ngdp-crypto = { path = "../ngdp-crypto", version = "0.3.0" }
+ribbit-client = { path = "../ribbit-client", version = "0.4.0" }
+tact-client = { path = "../tact-client", version = "0.4.0" }
+ngdp-bpsv = { path = "../ngdp-bpsv", version = "0.4.0" }
+ngdp-cache = { path = "../ngdp-cache", version = "0.4.0" }
+ngdp-cdn = { path = "../ngdp-cdn", version = "0.4.0" }
+tact-parser = { path = "../tact-parser", version = "0.4.0" }
+blte = { path = "../blte", version = "0.4.0" }
+ngdp-crypto = { path = "../ngdp-crypto", version = "0.4.0" }
+casc-storage = { path = "../casc-storage", version = "0.1.0" }
 tokio = { workspace = true, features = ["full"] }
 tracing.workspace = true
 tracing-subscriber.workspace = true
 thiserror.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json = "1.0.142"
+tempfile = "3.20"
+toml.workspace = true
 dirs.workspace = true
 reqwest = { version = "0.12.22", default-features = false, features = ["rustls-tls", "json"] }
 base64 = "0.22.1"
@@ -44,6 +47,9 @@ x509-cert = "0.2"
 der = "0.7"
 chrono = { version = "0.4.41", features = ["serde"] }
 hex.workspace = true
+regex = "1.10.2"
+indicatif = "0.17"
+futures = "0.3"
 
 [dev-dependencies]
 assert_cmd = "2.0.17"

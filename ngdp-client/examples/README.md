@@ -5,7 +5,9 @@ This directory contains examples demonstrating how to use the `ngdp-client` crat
 ## Available Examples
 
 ### `certificate_operations.rs`
+
 Demonstrates certificate-related functionality:
+
 - Downloading certificates by SKI (Subject Key Identifier)
 - Certificate details extraction (subject, issuer, validity)
 - PEM and DER format handling
@@ -13,7 +15,9 @@ Demonstrates certificate-related functionality:
 - Integration with Ribbit client for certificate fetching
 
 ### `fallback_demo.rs`
+
 Shows automatic Ribbit to TACT fallback functionality:
+
 - FallbackClient configuration and usage
 - Automatic protocol switching (Ribbit → TACT)
 - Regional compatibility handling (SG → US mapping)
@@ -21,7 +25,9 @@ Shows automatic Ribbit to TACT fallback functionality:
 - Performance comparison between protocols
 
 ### `products_operations.rs`
+
 Comprehensive product query operations:
+
 - Product listing with filtering
 - Version information retrieval
 - CDN configuration analysis
@@ -29,7 +35,9 @@ Comprehensive product query operations:
 - Cross-region product comparison
 
 ### `wago_builds.rs`
+
 Integration with Wago Tools API for historical build data:
+
 - Historical build retrieval for products
 - Version pattern filtering
 - Time-based build filtering
@@ -51,15 +59,15 @@ use ribbit_client::Region;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create a cached client
     let client = create_client(Region::US).await?;
-    
+
     // Query product versions
     let versions = client.get_product_versions("wow").await?;
-    
+
     // Process results
     for entry in &versions.entries {
         println!("Build: {} - {}", entry.build_id, entry.versions_name);
     }
-    
+
     Ok(())
 }
 ```
@@ -67,6 +75,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ## CLI Integration
 
 Examples also demonstrate advanced CLI patterns:
+
 - Custom output formatting
 - Progress reporting
 - Error handling strategies
@@ -76,11 +85,13 @@ Examples also demonstrate advanced CLI patterns:
 ## Running Examples
 
 To run any example:
+
 ```bash
 cargo run --example <example_name> -p ngdp-client
 ```
 
 For example:
+
 ```bash
 cargo run --example products_operations -p ngdp-client
 cargo run --example certificate_operations -p ngdp-client
@@ -93,17 +104,20 @@ cargo run --example wago_builds -p ngdp-client
 The examples demonstrate integration with other crates:
 
 ### Caching Integration
+
 - Transparent caching with `ngdp-cache`
 - Performance improvements through cached responses
 - Cache management and statistics
 
-### Protocol Integration  
+### Protocol Integration
+
 - Ribbit client integration for version queries
 - TACT client for CDN configuration
 - CDN client for content downloads
 - BPSV parsing for data processing
 
 ### Output Formatting
+
 - Beautiful terminal output with Unicode tables
 - Color support with automatic detection
 - Multiple output formats (text, JSON, BPSV)
@@ -112,6 +126,7 @@ The examples demonstrate integration with other crates:
 ## Error Handling
 
 Examples show comprehensive error handling:
+
 - Network connectivity issues
 - Protocol-specific errors
 - Data parsing failures
@@ -121,6 +136,7 @@ Examples show comprehensive error handling:
 ## Performance Optimization
 
 Examples demonstrate performance features:
+
 - Connection pooling and reuse
 - Parallel operations where appropriate
 - Caching for reduced API calls
@@ -130,6 +146,7 @@ Examples demonstrate performance features:
 ## Configuration
 
 Examples show various configuration options:
+
 - Region selection and switching
 - Protocol version preferences
 - Timeout and retry settings
@@ -137,6 +154,7 @@ Examples show various configuration options:
 - Output format selection
 
 Run examples with different configurations:
+
 ```bash
 # With specific region
 REGION=eu cargo run --example products_operations -p ngdp-client

@@ -1,6 +1,6 @@
 [package]
 name = "ngdp-cache"
-version = "0.3.0"
+version = "0.4.0"
 edition.workspace = true
 rust-version.workspace = true
 authors.workspace = true
@@ -15,16 +15,17 @@ categories = ["caching", "filesystem", "games"]
 bytes = "1.10.1"
 dirs = { workspace = true }
 futures = "0.3.31"
-ngdp-cdn = { path = "../ngdp-cdn", version = "0.3.0" }
+ngdp-cdn = { path = "../ngdp-cdn", version = "0.4.0" }
 reqwest = { version = "0.12.22", default-features = false, features = ["rustls-tls"] }
-ribbit-client = { path = "../ribbit-client", version = "0.3.0" }
+ribbit-client = { path = "../ribbit-client", version = "0.4.0" }
 serde = { workspace = true, features = ["derive"] }
 serde_json = "1.0.142"
-tact-client = { path = "../tact-client", version = "0.3.0" }
+tact-client = { path = "../tact-client", version = "0.4.0" }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["fs", "io-util"] }
 tracing = { workspace = true }
 walkdir = "2.5.0"
+parking_lot = "0.12"
 
 [dev-dependencies]
 criterion = { workspace = true }

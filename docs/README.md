@@ -6,6 +6,20 @@ Distribution Pipeline) protocols and formats.
 
 ## 📚 Documentation Overview
 
+### System Architecture
+
+#### [Complete NGDP Ecosystem](ngdp-ecosystem-complete.md) 🆕
+
+Comprehensive overview of the entire NGDP ecosystem from content creation to distribution:
+
+- Creative tools integration (Blender, Maya, level editors)
+- Content management system architecture
+- Build pipeline from raw assets to NGDP packages
+- Ribbit server as central orchestrator
+- CDN distribution network
+- Complete replacement system requirements
+- Implementation roadmap and success metrics
+
 ### Core Protocol Documentation
 
 #### [BPSV Format Specification](bpsv-format.md)
@@ -65,6 +79,16 @@ Comprehensive API documentation for key features:
 - File download command implementation
 - Cache management and statistics
 
+#### [Command Testing Guide](command-testing-guide.md)
+
+Step-by-step testing instructions for all ngdp commands:
+
+- Logical testing order from basic to advanced commands
+- Real-world examples using wow_classic_era product
+- Local storage testing with WoW client version 1.14.2
+- Validation tests for different products and regions
+- Troubleshooting guide and success criteria
+
 #### Temporary Research Notes (temp/)
 
 The `temp/` directory contains research notes and analysis from studying reference
@@ -96,11 +120,14 @@ decisions.
 
 If you're new to NGDP, we recommend reading the documentation in this order:
 
-1. **[BPSV Format](bpsv-format.md)** - Understanding the data format used throughout
+1. **[Complete NGDP Ecosystem](ngdp-ecosystem-complete.md)** - Understand the full system
+   architecture from content creation to distribution
+2. **[BPSV Format](bpsv-format.md)** - Understanding the data format used throughout
    NGDP
-2. **[Ribbit Protocol](ribbit-protocol.md)** - How to retrieve version and configuration
+3. **[Ribbit Protocol](ribbit-protocol.md)** - How to retrieve version and configuration
    information
-3. **[TACT Protocol](tact-protocol.md)** - How content is distributed and downloaded
+4. **[TACT Protocol](tact-protocol.md)** - How content is distributed and downloaded
+5. **[Command Testing Guide](command-testing-guide.md)** - Hands-on testing of all functionality
 
 ## 🎯 Use Cases
 
@@ -108,6 +135,7 @@ If you're new to NGDP, we recommend reading the documentation in this order:
 
 - Start with the BPSV format to understand data structures
 - Review the protocol documentation for the specific client you're using
+- Follow the command testing guide to verify functionality
 - Check the performance optimization report for efficiency tips
 
 ### For Contributors

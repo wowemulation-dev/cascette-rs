@@ -40,7 +40,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Request WoW version information using typed API
     let versions = client.get_product_versions("wow").await?;
-    
+
     // Access typed fields directly
     for entry in &versions.entries {
         println!(

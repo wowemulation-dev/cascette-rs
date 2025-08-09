@@ -51,4 +51,8 @@ pub enum Error {
     /// UTF-8 conversion error
     #[error("UTF-8 conversion error: {0}")]
     Utf8(#[from] std::string::FromUtf8Error),
+
+    /// Network error
+    #[error("Network error: {0}")]
+    Network(String),
 }

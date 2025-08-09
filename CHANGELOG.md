@@ -5,7 +5,162 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.4.0] - 2025-08-09
+
+### Added
+
+#### Major Features
+
+- **Complete NGDP Ecosystem Documentation**: Comprehensive architecture documentation from content creation to distribution
+  - Added `docs/ngdp-ecosystem-complete.md` with full system architecture
+  - Documented creative tools integration (Blender, Maya, level editors)
+  - Detailed content management system requirements
+  - Complete build and distribution pipeline documentation
+  - Server implementation architecture (Ribbit as orchestrator, CDN distribution)
+
+- **Project Roadmap and Organization**: Created comprehensive project structure documentation
+  - Added `ROADMAP.md` with completed milestones and future plans
+  - Created condensed `TODO-CONDENSED.md` focusing only on pending work
+  - Organized completed features into roadmap for better visibility
+  - Clear success metrics and version planning through v1.0.0
+
+- **HTTP-first version discovery**: New `HybridVersionClient` that prioritizes modern HTTPS endpoints over legacy Ribbit protocol
+  - Primary: `https://us.version.battle.net/wow/versions` and similar endpoints
+  - Fallback: Legacy Ribbit TCP protocol (:1119) for backward compatibility
+  - Transparent retry and error handling across both protocols
+
+- **Client installation functionality**: Complete `install` command for downloading and setting up game clients
+  - Support for minimal, full, custom, and metadata-only installation types
+  - Automatic `.build.info` file generation using BPSV format for client restoration
+  - Proper directory structure creation (`Data/`, `Data/config/`, etc.)
+  - Install manifest filtering for region-specific and platform-specific builds
+  - Resume capability for interrupted downloads
+  - Repair command for verifying and fixing existing installations
+  - Cross-command compatibility through shared .build.info format
+
+- **Enhanced install manifest handling**: Proper filtering and validation of install manifest entries
+  - Silent filtering of missing keys (normal for region-specific builds) following CascLib patterns
+  - Size validation to detect and skip corrupted entries (e.g., >10GB files)
+  - Comprehensive logging for debugging installation issues
+
+- **Write Support Planning**: Identified and documented all components needing write support
+  - TACT format writers (7 components: Encoding, Install, Download, Size, Config, TVFS, Root)
+  - BPSV writer for Ribbit protocol compatibility
+  - CASC index writers (.idx, .index files)
+  - Key generation and management services
+  - FileDataID assignment system
+  - Content management system architecture
+  - Complete NGDP build system specification
+
+- **Code Quality Improvements**: Better adherence to Rust best practices
+  - Added SAFETY documentation to all unsafe blocks
+  - Refactored functions with too many arguments using config structs
+  - Fixed clippy warnings across the codebase
+  - Improved error handling with proper context
+  - Added comprehensive README files for examples and tests
+  - Fixed all deprecated warnings with proper annotations
+
+### Fixed
+
+- **Install manifest architecture**: Resolved key mismatch issues between install manifests and encoding files
+  - Install manifests are comprehensive catalogs containing all possible files for all configurations
+  - Missing keys from encoding files are expected behavior for filtered/regional builds
+  - Only files present in encoding file are meant to be downloaded
+
+- **Build configuration handling**: Verified proper uncompressed handling of BuildConfig and CDNConfig files
+  - No BLTE decompression applied to configuration files (as intended)
+  - Correct download order: encoding file downloaded before manifests that need key lookups
+
+- **Test suite improvements**: Fixed all failing tests and warnings
+  - Fixed BPSV API changes (entries() to rows())
+  - Fixed mutable borrow errors in install command
+  - Fixed deprecated function warnings with #[allow(deprecated)]
+  - Fixed unnecessary type casts
+  - All 436+ tests now passing
+
+### Changed
+
+- **Version discovery prioritization**: `ngdp-cache` now uses HTTP-first approach by default
+  - HTTPS endpoints are primary method for version and CDN discovery
+  - Ribbit protocol serves as fallback for backward compatibility
+  - Better error messages indicating which discovery method was used
+
+- **Documentation structure**: Reorganized documentation for better clarity
+  - Main architecture documentation in `docs/ngdp-ecosystem-complete.md`
+  - Completed work tracked in `ROADMAP.md`
+  - Pending work in condensed `TODO-CONDENSED.md`
+  - Updated all crate README files for accuracy
+
+### Deprecated
+
+- **ARC4 encryption support**: ARC4/RC4 cipher marked as deprecated (will be removed in v0.5.0)
+  - `ngdp_crypto::encrypt_arc4` and `ngdp_crypto::decrypt_arc4` functions
+  - `EncryptionMethod::ARC4` enum variant in BLTE compression
+  - Modern implementations should use Salsa20 encryption instead
+
+- **Recursive BLTE (Frame mode)**: Frame compression mode marked as deprecated (will be removed in v0.5.0)
+  - `CompressionMode::Frame` enum variant
+  - All Frame-related compression and decompression functions
+  - Modern NGDP implementations use standard BLTE compression modes
+
+## [0.3.1] - 2025-08-07
+
+### Fixed
+
+- **Clippy warnings**: Resolved all uninlined format arguments warnings across multiple files
+  - Updated format strings to use inline variable syntax (e.g., `{var}` instead of `"{}", var`)
+  - Affected files: blte/examples, tact-client/examples, tact-client/src, ngdp-client/src
+  - Ensures code quality and consistency with modern Rust idioms
+
+- **Release workflow**: Fixed missing crates in GitHub Actions release workflow
+  - Added ngdp-crypto, tact-parser, and blte to version verification
+  - Corrected publishing order to respect dependency requirements
+  - Ensures all crates are properly published to crates.io
+
+- **Documentation improvements**:
+  - Corrected TACT acronym to "Trusted Application Content Transfer" across all documentation
+  - Added missing crate descriptions for crates.io publishing
+  - Updated all README files with proper installation instructions and version badges
+  - Improved crate descriptions to be more informative and searchable
+
+### Changed
+
+- **Version bump**: Updated all crates from 0.3.0 to 0.3.1
+- **Workflow stability**: Implemented long-term stability fixes for CI/CD pipelines
+
+### Added
+
+- **QA command documentation**: Created comprehensive rust-qa.md command file
+  - Covers all GitHub Actions CI checks
+  - Includes format, compilation, clippy, test, and documentation checks
+  - Provides environment variables for CI-like behavior
+
+## [0.3.0] - 2025-08-06
+
+### Added
+
+- **Ephemeral signing support**: Implemented ephemeral key signing following cargo-binstall approach
+  - Per-release minisign key generation for enhanced security
+  - Automatic signature verification in install scripts
+  - Compatible with cargo-binstall's ephemeral signing model
+  - Includes ephemeral-gen.sh script for key management
+
+- **Installation script improvements**:
+  - Added minisign signature verification
+  - Support for both persistent and ephemeral signing keys
+  - Automatic architecture detection
+  - Platform-specific package format selection (tar.gz for Unix, zip for Windows)
+
+### Fixed
+
+- **Windows PowerShell compatibility**: Fixed install script execution on Windows
+  - Removed unused sig_file variable that caused PowerShell errors
+  - Improved cross-platform compatibility
+
+### Changed
+
+- **Version bump**: Updated all crates to version 0.3.0
+- **Build workflow**: Added shell specification for build binary step
 
 ## [0.2.0] - 2025-08-07
 
@@ -14,6 +169,7 @@ This release introduces streaming capabilities, HTTP range request support, and 
 ### Added
 
 #### Core Features
+
 - **Streaming BLTE Decompression**: Memory-efficient streaming decompression for large files
   - `BLTEStream` struct implementing Read trait
   - Support for all compression modes (N, Z, 4, F, E)
@@ -35,6 +191,7 @@ This release introduces streaming capabilities, HTTP range request support, and 
   - Variable-length integer utilities
 
 #### CLI Enhancements
+
 - **Download Command**: Full implementation with CDN integration
   - Download by build, content key, encoding key, or file path
   - Automatic BLTE decompression
@@ -56,6 +213,7 @@ This release introduces streaming capabilities, HTTP range request support, and 
   - Support for 19,419 WoW encryption keys
 
 #### Infrastructure
+
 - **ngdp-crypto Crate**: Complete encryption/decryption support
   - Salsa20 cipher with proper key extension
   - ARC4 cipher implementation
@@ -97,9 +255,7 @@ This release introduces streaming capabilities, HTTP range request support, and 
 - **Parallel Downloads**: Support for concurrent chunk retrieval
 - **Cache Hit Ratio**: Improved with better key management
 
-## [0.4.0] - 2025-08-06
-
-### Added
+### Also Added in 0.2.0
 
 #### `ngdp-crypto` crate (new)
 
@@ -158,9 +314,7 @@ This release introduces streaming capabilities, HTTP range request support, and 
   - Fixed MD5 checksum validation with proper implementation
   - Corrected page verification logic
 
-## [0.3.0] - 2025-08-05
-
-### Added
+### Previous Release Content
 
 #### `tact-parser` crate
 
@@ -214,7 +368,7 @@ This release introduces streaming capabilities, HTTP range request support, and 
 
 - **Historical builds command**:
   - Added `ngdp products builds` command to retrieve all historical builds for a product
-  - Integrates with Wago Tools API (https://wago.tools/api/builds) for comprehensive build history
+  - Integrates with Wago Tools API (<https://wago.tools/api/builds>) for comprehensive build history
   - Support for filtering by version pattern with `--filter`
   - Time-based filtering with `--days` option
   - Result limiting with `--limit` option
@@ -282,7 +436,6 @@ This release introduces streaming capabilities, HTTP range request support, and 
   - Replaced `vec!` with arrays for small fixed-size collections
   - Optimized string building in `ngdp-client` using iterator chains instead of manual loops
   - Fixed clippy warnings about format string inlining
-
 
 ## [0.1.0] - 2025-06-28
 
@@ -1144,8 +1297,8 @@ This release introduces streaming capabilities, HTTP range request support, and 
 - `regex` (1.11) - Regular expression support for tests
 - `serde_json` (1.0) - JSON support for tests
 
-[Unreleased]: https://github.com/wowemulation-dev/cascette-rs/compare/v0.2.0...HEAD
-[0.2.0]: https://github.com/wowemulation-dev/cascette-rs/compare/v0.4.0...v0.2.0
-[0.4.0]: https://github.com/wowemulation-dev/cascette-rs/compare/v0.3.0...v0.4.0
-[0.3.0]: https://github.com/wowemulation-dev/cascette-rs/compare/v0.1.0...v0.3.0
+[0.4.0]: https://github.com/wowemulation-dev/cascette-rs/compare/v0.3.1...v0.4.0
+[0.3.1]: https://github.com/wowemulation-dev/cascette-rs/compare/v0.3.0...v0.3.1
+[0.3.0]: https://github.com/wowemulation-dev/cascette-rs/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/wowemulation-dev/cascette-rs/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/wowemulation-dev/cascette-rs/releases/tag/v0.1.0

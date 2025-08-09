@@ -10,7 +10,7 @@ use crate::error::CryptoError;
 ///
 /// This implements the specific Salsa20 variant used by BLTE:
 /// - 16-byte key is extended to 32 bytes by duplication
-/// - 4-byte IV is extended to 8 bytes by duplication  
+/// - 4-byte IV is extended to 8 bytes by duplication
 /// - Block index is XORed with first 4 bytes of IV
 pub fn decrypt_salsa20(
     data: &[u8],

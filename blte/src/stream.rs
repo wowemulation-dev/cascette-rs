@@ -1,62 +1,112 @@
 //! BLTE streaming decompression implementation
 //!
-//! Provides streaming decompression for BLTE files, allowing processing
-//! of large files without loading everything into memory.
+//! Provides TRUE streaming decompression for BLTE files, reading chunks
+//! on-demand without loading the entire file into memory.
 
-use byteorder::{LittleEndian, ReadBytesExt};
+use byteorder::{BigEndian, LittleEndian, ReadBytesExt};
 use flate2::read::ZlibDecoder;
-use std::io::{Cursor, Read, Result as IoResult};
+use std::io::{Cursor, Read, Result as IoResult, Seek, SeekFrom};
 use tracing::{debug, trace, warn};
 
-use crate::{BLTEFile, CompressionMode, Error, Result};
+use crate::{BLTEHeader, CompressionMode, Error, Result};
+#[allow(deprecated)]
 use ngdp_crypto::{KeyService, arc4::decrypt_arc4, salsa20::decrypt_salsa20};
 
-/// A streaming BLTE decompressor
+/// A true streaming BLTE decompressor
 ///
-/// This allows decompressing BLTE files chunk by chunk without loading
-/// the entire file into memory. Useful for large game assets.
-pub struct BLTEStream {
-    /// The underlying BLTEFile structure
-    blte_file: BLTEFile,
+/// This decompresses BLTE files chunk by chunk without loading
+/// the entire file into memory. Truly memory-efficient for large files.
+pub struct BLTEStream<R: Read + Seek> {
+    /// The source reader
+    reader: R,
+    /// BLTE header information
+    header: BLTEHeader,
     /// Current chunk being processed
     current_chunk: usize,
     /// Key service for encrypted chunks
     key_service: Option<KeyService>,
-    /// Internal buffer for chunk data
+    /// Internal buffer for current chunk decompressed data
     chunk_buffer: Vec<u8>,
-    /// Position within current chunk data
+    /// Position within current chunk buffer
     chunk_position: usize,
+    /// Offset where chunk data starts in the source
+    data_offset: u64,
 }
 
-impl BLTEStream {
+impl<R: Read + Seek> BLTEStream<R> {
     /// Create a new streaming BLTE decompressor
     ///
     /// # Arguments
-    /// * `data` - The raw BLTE data to decompress
+    /// * `reader` - The source to read from (must support seeking)
     /// * `key_service` - Optional key service for encrypted chunks
     ///
     /// # Errors
-    /// Returns an error if the BLTE file cannot be parsed.
-    pub fn new(data: Vec<u8>, key_service: Option<KeyService>) -> Result<Self> {
-        let blte_file = BLTEFile::parse(data)?;
+    /// Returns an error if the BLTE header cannot be parsed.
+    pub fn new(mut reader: R, key_service: Option<KeyService>) -> Result<Self> {
+        // Read and parse just the header
+        let mut magic = [0u8; 4];
+        reader
+            .read_exact(&mut magic)
+            .map_err(|e| Error::DecompressionFailed(format!("Failed to read magic: {e}")))?;
+
+        if &magic != b"BLTE" {
+            return Err(Error::InvalidHeader(format!(
+                "Invalid BLTE magic: {}",
+                hex::encode(magic)
+            )));
+        }
+
+        let header_size = reader
+            .read_u32::<BigEndian>()
+            .map_err(|e| Error::DecompressionFailed(format!("Failed to read header size: {e}")))?;
+
+        // Calculate data offset (magic + header_size field + actual header)
+        let data_offset = 8u64 + header_size as u64;
+
+        // Read the header data if multi-chunk
+        let header = if header_size == 0 {
+            // Single chunk - no additional header
+            BLTEHeader {
+                magic,
+                header_size,
+                chunks: Vec::new(),
+            }
+        } else {
+            // Multi-chunk - read chunk table
+            let mut header_data = vec![0u8; header_size as usize];
+            reader
+                .read_exact(&mut header_data)
+                .map_err(|e| Error::DecompressionFailed(format!("Failed to read header: {e}")))?;
+
+            // Parse chunk table from header data
+            let mut header_bytes = Vec::with_capacity(8 + header_size as usize);
+            header_bytes.extend_from_slice(b"BLTE");
+            header_bytes.extend_from_slice(&header_size.to_be_bytes());
+            header_bytes.extend_from_slice(&header_data);
+
+            BLTEHeader::parse(&header_bytes)?
+        };
 
         debug!(
-            "Created BLTE stream with {} chunks",
-            blte_file.chunk_count()
+            "Created streaming BLTE with {} chunks, data offset: {}",
+            header.chunk_count(),
+            data_offset
         );
 
         Ok(Self {
-            blte_file,
+            reader,
+            header,
             current_chunk: 0,
             key_service,
             chunk_buffer: Vec::new(),
             chunk_position: 0,
+            data_offset,
         })
     }
 
     /// Get the total number of chunks
     pub fn chunk_count(&self) -> usize {
-        self.blte_file.chunk_count()
+        self.header.chunk_count()
     }
 
     /// Get the current chunk index being processed
@@ -66,7 +116,7 @@ impl BLTEStream {
 
     /// Check if we have more chunks to process
     pub fn has_more_chunks(&self) -> bool {
-        self.current_chunk < self.blte_file.chunk_count()
+        self.current_chunk < self.header.chunk_count()
     }
 
     /// Prepare the next chunk for reading
@@ -75,26 +125,71 @@ impl BLTEStream {
             return Ok(()); // No more chunks
         }
 
-        let chunk = self.blte_file.get_chunk_data(self.current_chunk)?;
+        trace!("Preparing chunk {} for streaming", self.current_chunk);
 
-        // Verify checksum if present (skip for zero checksum)
-        if !chunk.verify_checksum() {
-            return Err(Error::ChecksumMismatch {
-                expected: hex::encode(chunk.checksum),
-                actual: hex::encode(md5::compute(&chunk.data).0),
-            });
+        // Calculate the offset and size for this chunk
+        let (chunk_offset, chunk_size) = if self.header.is_single_chunk() {
+            // Single chunk - read from data_offset to end
+            (self.data_offset, None)
+        } else {
+            // Multi-chunk - calculate offset based on previous chunks
+            let chunk_info = &self.header.chunks[self.current_chunk];
+            let mut offset = self.data_offset;
+
+            // Add sizes of all previous chunks
+            for i in 0..self.current_chunk {
+                offset += self.header.chunks[i].compressed_size as u64;
+            }
+
+            (offset, Some(chunk_info.compressed_size as usize))
+        };
+
+        // Seek to chunk position
+        self.reader
+            .seek(SeekFrom::Start(chunk_offset))
+            .map_err(|e| Error::DecompressionFailed(format!("Failed to seek to chunk: {e}")))?;
+
+        // Read the chunk data
+        let chunk_data = if let Some(size) = chunk_size {
+            // Known size - read exactly that amount
+            let mut buffer = vec![0u8; size];
+            self.reader
+                .read_exact(&mut buffer)
+                .map_err(|e| Error::DecompressionFailed(format!("Failed to read chunk: {e}")))?;
+            buffer
+        } else {
+            // Unknown size (single chunk) - read to end
+            let mut buffer = Vec::new();
+            self.reader.read_to_end(&mut buffer).map_err(|e| {
+                Error::DecompressionFailed(format!("Failed to read single chunk: {e}"))
+            })?;
+            buffer
+        };
+
+        // Verify checksum if we have chunk info
+        if !self.header.is_single_chunk() {
+            let chunk_info = &self.header.chunks[self.current_chunk];
+            if chunk_info.checksum != [0u8; 16] {
+                let calculated = md5::compute(&chunk_data);
+                if calculated.0 != chunk_info.checksum {
+                    return Err(Error::ChecksumMismatch {
+                        expected: hex::encode(chunk_info.checksum),
+                        actual: hex::encode(calculated.0),
+                    });
+                }
+            }
         }
 
-        // Decompress the chunk data
+        // Decompress the chunk
         let decompressed =
-            decompress_chunk_streaming(&chunk.data, self.current_chunk, self.key_service.as_ref())?;
+            decompress_chunk_streaming(&chunk_data, self.current_chunk, self.key_service.as_ref())?;
 
         self.chunk_buffer = decompressed;
         self.chunk_position = 0;
         self.current_chunk += 1;
 
         trace!(
-            "Prepared chunk {} with {} bytes",
+            "Prepared chunk {} with {} bytes decompressed",
             self.current_chunk - 1,
             self.chunk_buffer.len()
         );
@@ -103,7 +198,7 @@ impl BLTEStream {
     }
 }
 
-impl Read for BLTEStream {
+impl<R: Read + Seek> Read for BLTEStream<R> {
     fn read(&mut self, buf: &mut [u8]) -> IoResult<usize> {
         let mut bytes_read = 0;
 
@@ -144,14 +239,14 @@ impl Read for BLTEStream {
     }
 }
 
-/// Create a streaming reader from BLTE data
+/// Create a streaming reader from any Read + Seek source
 ///
 /// This is a convenience function that creates a BLTEStream for immediate use.
-pub fn create_streaming_reader(
-    data: Vec<u8>,
+pub fn create_streaming_reader<R: Read + Seek>(
+    reader: R,
     key_service: Option<KeyService>,
-) -> Result<BLTEStream> {
-    BLTEStream::new(data, key_service)
+) -> Result<BLTEStream<R>> {
+    BLTEStream::new(reader, key_service)
 }
 
 /// Decompress a single chunk for streaming (internal function)
@@ -174,6 +269,7 @@ fn decompress_chunk_streaming(
         mode, block_index
     );
 
+    #[allow(deprecated)]
     match mode {
         CompressionMode::None => decompress_none_streaming(&data[1..]),
         CompressionMode::ZLib => decompress_zlib_streaming(&data[1..]),
@@ -252,6 +348,7 @@ fn decompress_lz4_streaming(data: &[u8]) -> Result<Vec<u8>> {
 }
 
 /// Mode 'F' - Frame/Recursive BLTE (streaming)
+#[allow(deprecated)]
 fn decompress_frame_streaming(data: &[u8], key_service: Option<&KeyService>) -> Result<Vec<u8>> {
     trace!(
         "Frame/recursive decompression (streaming) of {} bytes",
@@ -324,6 +421,7 @@ fn decompress_encrypted_streaming(
     );
 
     // Decrypt based on encryption type
+    #[allow(deprecated)]
     let decrypted = match enc_type {
         0x53 => {
             // Salsa20
@@ -368,7 +466,8 @@ mod tests {
         blte_data.push(b'N'); // No compression
         blte_data.extend_from_slice(b"Hello, BLTE Streaming!");
 
-        let mut stream = BLTEStream::new(blte_data, None).unwrap();
+        let cursor = Cursor::new(blte_data);
+        let mut stream = BLTEStream::new(cursor, None).unwrap();
         let mut result = String::new();
         stream.read_to_string(&mut result).unwrap();
 
@@ -402,8 +501,8 @@ mod tests {
         chunk2_full.push(b'Z'); // ZLib compression mode
         chunk2_full.extend_from_slice(&compressed2);
 
-        // Calculate header size
-        let header_size = 8 + 1 + 3 + 2 * 24; // magic + header_size + flags + chunk_count + 2 * chunk_info
+        // Calculate header size (does NOT include magic + header_size field itself)
+        let header_size = 1 + 3 + 2 * 24; // flags + chunk_count + 2 * chunk_info = 52
 
         // Build BLTE file
         let mut blte_data = Vec::new();
@@ -430,7 +529,8 @@ mod tests {
         blte_data.extend_from_slice(&chunk1_full);
         blte_data.extend_from_slice(&chunk2_full);
 
-        let mut stream = BLTEStream::new(blte_data, None).unwrap();
+        let cursor = Cursor::new(blte_data);
+        let mut stream = BLTEStream::new(cursor, None).unwrap();
         let mut result = String::new();
         stream.read_to_string(&mut result).unwrap();
 
@@ -445,7 +545,8 @@ mod tests {
         blte_data.push(b'N'); // No compression
         blte_data.extend_from_slice(b"Hello, BLTE!");
 
-        let mut stream = BLTEStream::new(blte_data, None).unwrap();
+        let cursor = Cursor::new(blte_data);
+        let mut stream = BLTEStream::new(cursor, None).unwrap();
 
         // Read in small chunks
         let mut result = Vec::new();
@@ -470,7 +571,8 @@ mod tests {
         blte_data.push(b'N'); // No compression
         blte_data.extend_from_slice(b"Hello, Reader!");
 
-        let mut reader = create_streaming_reader(blte_data, None).unwrap();
+        let cursor = Cursor::new(blte_data);
+        let mut reader = create_streaming_reader(cursor, None).unwrap();
         let mut result = String::new();
         reader.read_to_string(&mut result).unwrap();
 

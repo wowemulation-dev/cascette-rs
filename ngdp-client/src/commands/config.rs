@@ -1,11 +1,11 @@
 use crate::{
     ConfigCommands, OutputFormat,
+    config_manager::{ConfigError, ConfigManager},
     output::{
         OutputStyle, create_table, format_error, format_success, header_cell, print_section_header,
         regular_cell,
     },
 };
-use std::collections::HashMap;
 
 pub async fn handle(
     cmd: ConfigCommands,
@@ -20,27 +20,8 @@ pub async fn handle(
 }
 
 async fn show_config(format: OutputFormat) -> Result<(), Box<dyn std::error::Error>> {
-    // TODO: Implement actual config loading
-    // Show all configuration options with their default values
-    let config = HashMap::from([
-        ("default_region", "us"),
-        ("cache_dir", "~/.cache/ngdp"),
-        ("timeout", "30"),
-        ("cache_enabled", "true"),
-        ("cache_ttl", "1800"), // 30 minutes in seconds
-        ("max_concurrent_downloads", "4"),
-        ("user_agent", "ngdp-client/0.1.2"),
-        ("verify_certificates", "true"),
-        ("proxy_url", ""),
-        ("ribbit_timeout", "30"),
-        ("tact_timeout", "30"),
-        ("retry_attempts", "3"),
-        ("log_file", ""),
-        ("color_output", "true"),
-        ("fallback_to_tact", "true"),
-        ("use_community_cdn_fallbacks", "true"),
-        ("custom_cdn_fallbacks", ""), // Comma-separated list
-    ]);
+    let config_manager = ConfigManager::new()?;
+    let config = config_manager.get_all();
 
     match format {
         OutputFormat::Json | OutputFormat::JsonPretty => {
@@ -81,7 +62,9 @@ async fn set_config(
     value: String,
     format: OutputFormat,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    // TODO: Implement actual config saving
+    let mut config_manager = ConfigManager::new()?;
+    config_manager.set(key.clone(), value.clone())?;
+
     match format {
         OutputFormat::Json | OutputFormat::JsonPretty => {
             let result = serde_json::json!({
@@ -103,47 +86,43 @@ async fn set_config(
 }
 
 async fn get_config(key: String, format: OutputFormat) -> Result<(), Box<dyn std::error::Error>> {
-    // TODO: Implement actual config loading
-    let value = match key.as_str() {
-        "default_region" => Some("us"),
-        "cache_dir" => Some("~/.cache/ngdp"),
-        "timeout" => Some("30"),
-        "cache_enabled" => Some("true"),
-        "cache_ttl" => Some("1800"),
-        "max_concurrent_downloads" => Some("4"),
-        "user_agent" => Some("ngdp-client/0.1.2"),
-        "verify_certificates" => Some("true"),
-        "proxy_url" => Some(""),
-        "ribbit_timeout" => Some("30"),
-        "tact_timeout" => Some("30"),
-        "retry_attempts" => Some("3"),
-        "log_file" => Some(""),
-        "color_output" => Some("true"),
-        "fallback_to_tact" => Some("true"),
-        "use_community_cdn_fallbacks" => Some("true"),
-        "custom_cdn_fallbacks" => Some(""),
-        _ => None,
-    };
+    let config_manager = ConfigManager::new()?;
+    let value = config_manager.get(&key);
 
     match format {
         OutputFormat::Json | OutputFormat::JsonPretty => {
-            let result = serde_json::json!({
-                "key": key,
-                "value": value,
-                "found": value.is_some(),
-            });
+            let result = match &value {
+                Ok(val) => serde_json::json!({
+                    "key": key,
+                    "value": val,
+                    "found": true,
+                }),
+                Err(_) => serde_json::json!({
+                    "key": key,
+                    "value": null,
+                    "found": false,
+                }),
+            };
             println!("{}", serde_json::to_string(&result)?);
         }
         _ => {
             let style = OutputStyle::new();
-            if let Some(value) = value {
-                println!("{value}");
-            } else {
-                eprintln!(
-                    "{}",
-                    format_error(&format!("Configuration key '{key}' not found"), &style)
-                );
-                std::process::exit(1);
+            match value {
+                Ok(val) => println!("{val}"),
+                Err(ConfigError::KeyNotFound { key }) => {
+                    eprintln!(
+                        "{}",
+                        format_error(&format!("Configuration key '{key}' not found"), &style)
+                    );
+                    std::process::exit(1);
+                }
+                Err(e) => {
+                    eprintln!(
+                        "{}",
+                        format_error(&format!("Configuration error: {e}"), &style)
+                    );
+                    std::process::exit(1);
+                }
             }
         }
     }
@@ -162,7 +141,9 @@ async fn reset_config(yes: bool, format: OutputFormat) -> Result<(), Box<dyn std
         std::process::exit(1);
     }
 
-    // TODO: Implement actual config reset
+    let mut config_manager = ConfigManager::new()?;
+    config_manager.reset()?;
+
     match format {
         OutputFormat::Json | OutputFormat::JsonPretty => {
             let result = serde_json::json!({

@@ -104,7 +104,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let response = client.get_versions("wow").await?;
     let versions_data = response.text().await?;
     let versions = parse_versions(&versions_data)?;
-    
+
     // Access typed fields
     for version in &versions {
         println!("Region: {}", version.region);
@@ -116,7 +116,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let response = client.get_cdns("wow").await?;
     let cdn_data = response.text().await?;
     let cdns = parse_cdns(&cdn_data)?;
-    
+
     for cdn in &cdns {
         println!("Region: {}", cdn.name);
         println!("CDN Hosts: {:?}", cdn.hosts);

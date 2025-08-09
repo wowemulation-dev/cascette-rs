@@ -9,6 +9,7 @@ Currently, the `blte` crate doesn't have standalone examples as it's primarily u
 ## Usage in Other Crates
 
 The `blte` crate is used extensively by:
+
 - `tact-parser` - For decompressing manifest files
 - `ngdp-client` - For CLI operations involving BLTE files
 

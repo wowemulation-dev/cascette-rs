@@ -5,6 +5,7 @@ This directory contains comprehensive tests for the `ngdp-cache` crate covering 
 ## Test Files
 
 ### Integration Tests
+
 - `cache_validity_test.rs` - Cache validation and expiration testing
 - `cached_cdn_client_integration.rs` - CDN client caching integration
 - `cached_cdn_helper_tests.rs` - CDN helper method functionality
@@ -18,17 +19,20 @@ This directory contains comprehensive tests for the `ngdp-cache` crate covering 
 ## Test Coverage
 
 ### Core Cache Types
+
 - **GenericCache**: Key-value operations, TTL handling, concurrent access
 - **RibbitCache**: Protocol-specific caching, sequence numbers, TTL strategies
 - **CdnCache**: Hash-based paths, content types, product separation
 - **TactCache**: Metadata caching, endpoint isolation, region separation
 
 ### Client Integration
+
 - **CachedRibbitClient**: Drop-in replacement functionality, API compatibility
 - **CachedCdnClient**: Content caching, streaming operations, statistics
 - **CachedTactClient**: Metadata caching, sequence tracking, TTL management
 
 ### Advanced Features
+
 - **Streaming I/O**: Memory-efficient large file operations
 - **Batch operations**: Parallel read/write/delete operations
 - **TTL management**: Expiration, cleanup, validation
@@ -36,6 +40,7 @@ This directory contains comprehensive tests for the `ngdp-cache` crate covering 
 - **Error handling**: Network failures, corruption detection, recovery
 
 ### Performance Testing
+
 - **Large file handling**: >10MB file operations
 - **Concurrent operations**: Multi-threaded access patterns
 - **Cache statistics**: Hit/miss ratios, performance metrics
@@ -44,6 +49,7 @@ This directory contains comprehensive tests for the `ngdp-cache` crate covering 
 ## Cache Structure Testing
 
 Tests verify correct cache organization:
+
 ```
 ~/.cache/ngdp/
 ├── ribbit/{region}/{protocol}/{endpoint}-{sequence}.bpsv
@@ -53,6 +59,7 @@ Tests verify correct cache organization:
 ```
 
 ### Directory Validation
+
 - Platform-specific cache root directories
 - Hash-based path construction
 - Region and protocol isolation
@@ -60,6 +67,7 @@ Tests verify correct cache organization:
 - Content type separation
 
 ### Cache Isolation Testing
+
 - Cross-cache type isolation
 - Region-based separation
 - Protocol version isolation
@@ -92,6 +100,7 @@ cargo test -p ngdp-cache --release
 ## Test Environment
 
 Tests create temporary cache directories to avoid interfering with user data:
+
 - Uses system temp directories for test isolation
 - Cleans up test data automatically
 - Supports parallel test execution
@@ -100,14 +109,16 @@ Tests create temporary cache directories to avoid interfering with user data:
 ### Performance Benchmarks
 
 Some tests include performance measurements:
+
 - **Streaming operations**: Memory usage validation
-- **Batch operations**: Throughput measurement  
+- **Batch operations**: Throughput measurement
 - **Large files**: Processing time analysis
 - **Concurrent access**: Contention measurement
 
 ## Network Requirements
 
 Integration tests may require network access for:
+
 - Real Ribbit server responses (cached for subsequent runs)
 - CDN content downloads (minimal, uses small test files)
 - TACT endpoint testing (metadata only)

@@ -63,7 +63,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added `--parse-config` flag to `products versions` command
   - Downloads and parses build configurations to show meaningful information
   - Displays build names instead of just cryptic hashes (e.g., "WOW-62417patch11.2.0_Retail")
-  - Shows patch availability and file size information  
+  - Shows patch availability and file size information
   - Counts VFS entries to indicate build complexity
   - Maintains full backward compatibility when flag is not used
   - Works across all WoW products (wow, wow_classic_era, wowt, etc.)
@@ -94,7 +94,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Historical builds command**:
   - Added `ngdp products builds` command to retrieve all historical builds for a product
-  - Integrates with Wago Tools API (https://wago.tools/api/builds) for comprehensive build history
+  - Integrates with Wago Tools API (<https://wago.tools/api/builds>) for comprehensive build history
   - Support for filtering by version pattern with `--filter`
   - Time-based filtering with `--days` option
   - Result limiting with `--limit` option

@@ -61,19 +61,25 @@ loop {
 ## Compression Modes
 
 ### Mode 'N' (None)
+
 Raw uncompressed data. The first byte is the mode indicator, followed by the raw data.
 
 ### Mode 'Z' (ZLib)
+
 Standard deflate compression using the flate2 crate.
 
 ### Mode '4' (LZ4)
+
 LZ4 compression for fast decompression of large files.
 
 ### Mode 'F' (Frame)
+
 Recursive BLTE frame - the payload is another complete BLTE file.
 
 ### Mode 'E' (Encrypted)
+
 Encrypted blocks that must be decrypted before decompression. Supports:
+
 - Salsa20 stream cipher (type 'S')
 - ARC4/RC4 cipher (type 'A')
 

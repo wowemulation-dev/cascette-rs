@@ -157,12 +157,14 @@ Range: bytes=0-1023
 ```
 
 Response codes:
+
 - **206 Partial Content**: Server supports range requests and returns requested bytes
 - **200 OK**: Server doesn't support range requests, returns full file
 
 Use cases:
+
 - Download file headers for format detection
-- Implement pause/resume functionality  
+- Implement pause/resume functionality
 - Stream large files in chunks
 - Reduce bandwidth for partial updates
 
@@ -330,6 +332,7 @@ while let Ok(n) = stream.read(&mut buffer) {
 ```
 
 Benefits:
+
 - Constant memory usage regardless of file size
 - Process data on-the-fly
 - Suitable for large game assets

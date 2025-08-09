@@ -11,19 +11,22 @@ This directory contains comprehensive tests for the `blte` crate.
 The tests cover:
 
 ### Compression Modes
+
 - **None (N)** - Uncompressed data
 - **ZLib (Z)** - Deflate compression
-- **LZ4 (4)** - Fast compression  
+- **LZ4 (4)** - Fast compression
 - **Frame (F)** - Nested BLTE frames
 - **Encrypted (E)** - Salsa20/ARC4 encrypted blocks
 
 ### File Types
+
 - Single-chunk files
 - Multi-chunk files with multiple compression modes
 - Large file simulation
 - Encrypted content with both Salsa20 and ARC4
 
 ### Error Conditions
+
 - Invalid headers
 - Corrupted data
 - Missing encryption keys

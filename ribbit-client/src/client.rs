@@ -547,7 +547,7 @@ impl Response {
     ///
     /// # Errors
     /// Returns an error if the response has no data or BPSV parsing fails.
-    pub fn as_bpsv(&self) -> Result<ngdp_bpsv::BpsvDocument> {
+    pub fn as_bpsv(&self) -> Result<ngdp_bpsv::BpsvDocument<'_>> {
         match &self.data {
             Some(data) => {
                 // Parse directly - BPSV parser now correctly handles HEX:N as N bytes

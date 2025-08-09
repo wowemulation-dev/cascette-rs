@@ -9,6 +9,7 @@ use tempfile::TempDir;
 #[tokio::test]
 async fn test_cache_ttl_and_validity() -> Result<(), Box<dyn std::error::Error>> {
     let temp_dir = TempDir::new()?;
+    // SAFETY: Test runs in isolation. Setting XDG_CACHE_HOME for test environment is safe.
     unsafe {
         std::env::set_var("XDG_CACHE_HOME", temp_dir.path());
     }
@@ -20,6 +21,9 @@ async fn test_cache_ttl_and_validity() -> Result<(), Box<dyn std::error::Error>>
     cache
         .write("us", "certs", "test-cert-hash", test_data)
         .await?;
+
+    // Small delay to ensure filesystem operations complete
+    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
 
     // First read to verify data is written
     let data1 = cache.read("us", "certs", "test-cert-hash").await?;
@@ -50,6 +54,7 @@ async fn test_cache_ttl_and_validity() -> Result<(), Box<dyn std::error::Error>>
 #[tokio::test]
 async fn test_generic_cache_performance() -> Result<(), Box<dyn std::error::Error>> {
     let temp_dir = TempDir::new()?;
+    // SAFETY: Test runs in isolation. Setting XDG_CACHE_HOME for test environment is safe.
     unsafe {
         std::env::set_var("XDG_CACHE_HOME", temp_dir.path());
     }
@@ -87,6 +92,7 @@ async fn test_generic_cache_performance() -> Result<(), Box<dyn std::error::Erro
 #[tokio::test]
 async fn test_cache_file_structure() -> Result<(), Box<dyn std::error::Error>> {
     let temp_dir = TempDir::new()?;
+    // SAFETY: Test runs in isolation. Setting XDG_CACHE_HOME for test environment is safe.
     unsafe {
         std::env::set_var("XDG_CACHE_HOME", temp_dir.path());
     }

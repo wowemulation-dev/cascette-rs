@@ -14,10 +14,13 @@ pub mod cached_tact_client;
 pub mod cdn;
 pub mod error;
 pub mod generic;
+pub mod hybrid_version_client;
 pub mod ribbit;
+pub mod stats;
 
 pub use cdn::CdnCache;
 pub use error::{Error, Result};
+pub use stats::{CacheReport, CacheStats, CacheStatsSnapshot};
 
 /// Get the base NGDP cache directory
 ///

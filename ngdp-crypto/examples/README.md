@@ -9,6 +9,7 @@ Currently, the `ngdp-crypto` crate doesn't have standalone examples as it's prim
 ## Usage in Other Crates
 
 The `ngdp-crypto` crate is used extensively by:
+
 - `blte` - For decrypting encrypted BLTE blocks
 - `ngdp-client` - For key management commands
 - `tact-parser` - For handling encrypted manifest files
@@ -46,7 +47,7 @@ let decrypted = decrypt_salsa20(
     block_index
 )?;
 
-// ARC4 decryption (legacy content)  
+// ARC4 decryption (legacy content)
 let decrypted = decrypt_arc4(
     encrypted_data,
     key,

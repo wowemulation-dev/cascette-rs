@@ -1,1041 +1,499 @@
-# Implementation TODO for Cascette-RS
-
-## Overview
-
-This document provides a comprehensive, prioritized list of all missing functionality in cascette-rs. Tasks are organized by priority, with existing crates completed first, followed by new crates in dependency order.
-
-**Legend:**
+# Cascette-RS TODO
+
+> For completed work, see [ROADMAP.md](ROADMAP.md)
 
-- 🔴 **CRITICAL** - Blocks core functionality
-- 🟡 **HIGH** - Important for production use
-- 🟢 **MEDIUM** - Nice to have
-- 🔵 **LOW** - Future enhancement
-
----
-
-## Priority 1: Complete Existing Crates
-
-### 1.1 `tact-parser` - Complete File Format Support 🔴
-
-#### 1.1.1 Add 40-bit Integer Support ✅
-
-**Location:** `tact-parser/src/utils.rs` ✅
-
-```rust
-pub fn read_uint40(data: &[u8]) -> u64
-pub fn write_uint40(value: u64) -> [u8; 5]
-```
-
-**Implementation:**
-
-- [x] Create utils module for binary operations
-- [x] Implement 40-bit integer reading (little-endian)
-- [x] Implement 40-bit integer writing
-- [x] Add tests with known values
-**Testing:** Unit tests with test vectors from reference implementations ✅
-**Acceptance:** Can read/write 40-bit integers matching CascLib output ✅
-
-#### 1.1.2 Encoding File Parser ✅
-
-**Location:** `tact-parser/src/encoding.rs` ✅
-
-```rust
-pub struct EncodingFile {
-    header: EncodingHeader,
-    ckey_entries: HashMap<Vec<u8>, EncodingEntry>,
-    ekey_to_ckey: HashMap<Vec<u8>, Vec<u8>>,
-}
-```
-
-**Implementation:**
-
-- [x] Define header structure (BIG-ENDIAN values!)
-- [x] Implement page table parsing
-- [x] Parse CEKey pages (CKey → EKey mapping)
-- [x] Parse EKey spec pages (EKey → CKey reverse)
-- [x] Handle 40-bit file sizes
-- [x] Add checksum verification for pages
-- [x] Implement lookup methods:
-  - [x] `lookup_by_ckey(&[u8]) -> Option<EncodingEntry>`
-  - [x] `lookup_by_ekey(&[u8]) -> Option<&Vec<u8>>`
-  - [x] `get_ekey_for_ckey(&[u8]) -> Option<&Vec<u8>>`
-  - [x] `get_file_size(&[u8]) -> Option<u64>`
-**Dependencies:** 40-bit integer support ✅
-**Testing:** Parse test encoding file, verify known mappings ✅
-**Acceptance:** Can parse encoding files and perform bidirectional lookups ✅
-
-#### 1.1.3 Install Manifest Parser ✅
-
-**Location:** `tact-parser/src/install.rs` ✅
-
-```rust
-pub struct InstallManifest {
-    version: u8,
-    tags: Vec<InstallTag>,
-    entries: Vec<InstallEntry>,
-}
-```
-
-**Implementation:**
-
-- [x] Parse header with magic "IN" validation
-- [x] Implement tag system with bitmasks
-- [x] Parse file entries with paths and CKeys
-- [x] Calculate bits per tag: `(num_entries + 7) / 8`
-- [x] Resolve tags for each file entry
-- [x] Add filtering methods:
-  - [x] `get_files_for_tags(&[Tag]) -> Vec<FileInfo>`
-  - [x] `get_files_for_platform(Platform) -> Vec<FileInfo>`
-**Testing:** Parse install manifest, verify tag assignments ✅
-**Acceptance:** Can extract platform-specific file lists ✅
-
-#### 1.1.4 Download Manifest Parser ✅
-
-**Location:** `tact-parser/src/download.rs` ✅
-
-```rust
-pub struct DownloadManifest {
-    header: DownloadHeader,
-    entries: HashMap<Vec<u8>, DownloadEntry>,
-    priority_order: Vec<Vec<u8>>,
-    tags: Vec<DownloadTag>,
-}
-```
-
-**Implementation:**
-
-- [x] Parse download priority entries
-- [x] Extract file EKeys and sizes
-- [x] Implement priority sorting
-- [x] Support versions 1, 2, and 3
-- [x] Parse header with magic "DL" validation
-- [x] Implement tag-based filtering
-- [x] Add methods:
-  - [x] `get_priority_files(limit) -> Vec<(Vec<u8>, u8)>`
-  - [x] `get_files_for_tags(&[&str]) -> Vec<Vec<u8>>`
-  - [x] `get_entry(&[u8]) -> Option<&DownloadEntry>`
-**Testing:** Parse download manifest, verify priority order ✅
-**Acceptance:** Can identify high-priority download files ✅
-
-#### 1.1.5 Build/CDN Config Parser ✅
-
-**Location:** `tact-parser/src/config.rs` ✅
-
-```rust
-pub struct BuildConfig {
-    config: ConfigFile,
-}
-
-pub struct ConfigFile {
-    values: HashMap<String, String>,
-    hashes: HashMap<String, HashPair>,
-}
-```
-
-**Implementation:**
-
-- [x] Parse key-value format with " = " separator (and empty values "key =")
-- [x] Handle comments (lines starting with #)
-- [x] Parse hash-size pairs (e.g., "encoding = abc123 456789")
-- [x] Support both single-hash and hash-size pair formats
-- [x] Add lookup methods:
-  - [x] `get_value(&str) -> Option<&str>`
-  - [x] `get_hash(&str) -> Option<&str>`
-  - [x] `get_size(&str) -> Option<u64>`
-  - [x] `get_hash_pair(&str) -> Option<&HashPair>`
-- [x] Add BuildConfig helper methods:
-  - [x] `root_hash()`, `encoding_hash()`, `install_hash()`, `download_hash()`, `size_hash()`
-  - [x] `build_name()` for human-readable version strings
-  - [x] `extract_hash()` helper for both format types
-**Testing:** Parse build/CDN configs, verify known keys ✅
-**Testing with real CDN data:** Tested with wow_classic_era and wow (retail) ✅
-**Acceptance:** Can extract encoding, root, install hashes from both formats ✅
-
-#### 1.1.6 Size File Parser ✅
-
-**Location:** `tact-parser/src/size.rs` ✅
-
-```rust
-pub struct SizeFile {
-    header: SizeHeader,
-    entries: HashMap<Vec<u8>, SizeEntry>,
-    tags: Vec<SizeTag>,
-    size_order: Vec<Vec<u8>>,
-    parse_order: Vec<Vec<u8>>,
-}
-```
-
-**Implementation:**
-
-- [x] Parse size entries (partial EKey → size mapping)
-- [x] Parse header with magic "DS" validation
-- [x] Support tag-based size filtering
-- [x] Calculate total installation size
-- [x] Maintain parse order for tag mask application
-- [x] Add methods:
-  - [x] `get_file_size(&[u8]) -> Option<u32>`
-  - [x] `get_total_size() -> u64`
-  - [x] `get_size_for_tags(&[&str]) -> u64`
-  - [x] `get_largest_files(count) -> Vec<(&Vec<u8>, u32)>`
-  - [x] `get_statistics() -> SizeStatistics`
-**Testing:** Parse size file, verify total calculation ✅
-**Acceptance:** Can determine installation size requirements ✅
-
-#### 1.1.7 TVFS Parser ✅
-
-**Location:** `tact-parser/src/tvfs.rs` ✅
-
-```rust
-pub struct TVFSManifest {
-    header: TVFSHeader,
-    path_table: Vec<PathEntry>,
-    vfs_table: Vec<VFSEntry>,
-    cft_table: Vec<CFTEntry>,
-    espec_table: Option<Vec<String>>,
-}
-```
-
-**Implementation:**
-
-- [x] Parse TVFS header with magic validation (supports both TVFS and TFVS)
-- [x] Complete structure for all tables (path, VFS, CFT, EST)
-- [x] Implement path resolution methods
-- [x] Directory listing functionality
-- [x] File information retrieval
-- [x] Correct format based on real data:
-  - [x] Supports both TVFS and TFVS magic bytes
-  - [x] Uses big-endian byte order
-  - [x] Path table uses simple length bytes
-  - [x] Header uses int32 values for offsets
-- [x] EST (Extended Spec Table) support for additional metadata
-
-**Testing:** Comprehensive tests with real header structure ✅
-**Acceptance:** Parser correctly handles real TVFS data ✅
-
-#### 1.1.8 Add Variable-Length Integer Support ✅
-
-**Location:** `tact-parser/src/utils.rs` ✅
-
-```rust
-pub fn read_varint(data: &[u8]) -> Result<(u32, usize)>
-pub fn write_varint(value: u32) -> Vec<u8>
-```
-
-**Implementation:**
-
-- [x] Implement 7-bit encoding with continuation bit
-- [x] Handle up to 5 bytes (35 bits max)
-- [x] Add boundary checking
-- [x] Overflow protection
-**Testing:** Round-trip encoding/decoding tests ✅
-**Acceptance:** Matches protobuf varint implementation ✅
-
----
-
-### 1.2 `ngdp-cache` - Enhanced Caching 🟢
-
-#### 1.2.1 Cache Statistics 🟢
-
-**Location:** `ngdp-cache/src/stats.rs` (new file)
-
-```rust
-pub struct CacheStats {
-    hits: u64,
-    misses: u64,
-    evictions: u64,
-    bytes_saved: u64,
-}
-```
-
-**Implementation:**
-
-- [ ] Track cache hit/miss ratio
-- [ ] Monitor bandwidth saved
-- [ ] Track eviction count
-- [ ] Add reporting methods
-**Testing:** Verify statistics accuracy
-**Acceptance:** Can report cache effectiveness
-
-#### 1.2.2 Improved LRU Eviction 🟢
-
-**Location:** `ngdp-cache/src/lib.rs`
-**Implementation:**
-
-- [ ] Implement proper LRU with access tracking
-- [ ] Add configurable cache size limits
-- [ ] Implement cache warming from file list
-**Testing:** Verify LRU order under memory pressure
-**Acceptance:** Evicts least recently used items correctly
-
----
-
-### 1.3 `tact-client` - HTTP Enhancements 🟡
-
-#### 1.3.1 HTTP Range Requests ✅
-
-**Location:** `tact-client/src/http.rs` ✅
-**Implementation:**
-
-- [x] Add Range header support
-- [x] Handle 206 Partial Content responses  
-- [x] Implement chunked downloading
-- [x] Add method: `download_file_range(cdn_host, path, hash, range) -> Result<Response>`
-- [x] Add multi-range support: `download_file_multirange()`
-- [x] Integration with retry logic and error handling
-- [x] Example demonstrating range request usage
-**Testing:** Unit tests for header formatting, example program ✅
-**Acceptance:** Can download file segments ✅
-
-#### 1.3.2 Resume Support 🟡
-
-**Location:** `tact-client/src/resumable.rs` (new file)
-**Implementation:**
-
-- [ ] Track download progress
-- [ ] Persist partial downloads
-- [ ] Resume from last byte
-- [ ] Verify partial content integrity
-**Testing:** Interrupt and resume download
-**Acceptance:** Can resume interrupted downloads
-
----
-
-## Priority 2: Foundation Crates (New)
-
-### 2.1 `ngdp-crypto` - Encryption Support ✅
-
-#### 2.1.1 Create Crate Structure ✅
-
-**Location:** `ngdp-crypto/` ✅
-
-```toml
-[package]
-name = "ngdp-crypto"
-
-[dependencies]
-salsa20 = "0.10"
-cipher = "0.4"
-hex = "0.4"
-dirs = "6.0"
-thiserror = "2.0"
-tracing = "0.1"
-```
-
-**Implementation:**
-
-- [x] Create new crate in workspace
-- [x] Add to workspace Cargo.toml
-- [x] Create module structure:
-  - [x] `src/lib.rs` - Public API
-  - [x] `src/key_service.rs` - Key management
-  - [x] `src/salsa20.rs` - Salsa20 cipher
-  - [x] `src/arc4.rs` - ARC4 cipher ✅
-  - [x] `src/keys.rs` - Hardcoded keys
-  - [x] `src/error.rs` - Error types
-
-#### 2.1.2 Key Service Implementation ✅
-
-**Location:** `ngdp-crypto/src/key_service.rs` ✅
-
-```rust
-pub struct KeyService {
-    keys: HashMap<u64, [u8; 16]>,
-}
-```
-
-**Implementation:**
-
-- [x] Add initial hardcoded WoW keys (10 keys, more can be added)
-- [x] Implement key file loading (multiple formats):
-  - [x] CSV format: "keyname,keyhex"
-  - [x] TXT format: "keyname keyhex description"
-  - [x] TSV format: "keyname\tkeyhex"
-- [x] Search standard directories:
-  - [x] `~/.config/cascette/`
-  - [x] `~/.tactkeys/`
-  - [x] Environment variable: `CASCETTE_KEYS_PATH`
-- [x] Add methods:
-  - [x] `get_key(u64) -> Option<&[u8; 16]>`
-  - [x] `add_key(u64, [u8; 16])`
-  - [x] `load_key_file(&Path) -> Result<usize>`
-  - [x] `load_from_standard_dirs() -> Result<usize>`
-**Testing:** Load test keys, verify lookup ✅
-**Acceptance:** Can manage encryption keys ✅
-
-#### 2.1.3 Salsa20 Implementation ✅
-
-**Location:** `ngdp-crypto/src/salsa20.rs` ✅
-
-```rust
-pub fn decrypt_salsa20(data: &[u8], key: &[u8; 16], iv: &[u8], block_index: usize) -> Result<Vec<u8>>
-```
-
-**Implementation:**
-
-- [x] Extend 16-byte key to 32 bytes (duplicate)
-- [x] Extend 4-byte IV to 8 bytes (duplicate)
-- [x] XOR block index with IV first 4 bytes
-- [x] Apply Salsa20 stream cipher
-- [x] Add symmetric encrypt function
-**Critical:** Must match prototype's key extension exactly! ✅
-**Testing:** Decrypt known encrypted blocks ✅
-**Acceptance:** Round-trip encryption/decryption works ✅
-
-#### 2.1.4 ARC4 Implementation ✅
-
-**Location:** `ngdp-crypto/src/arc4.rs`
-
-```rust
-pub fn decrypt_arc4(data: &[u8], key: &[u8; 16], iv: &[u8], block_index: usize) -> Result<Vec<u8>>
-```
-
-**Implementation:**
-
-- [x] Combine: key (16) + IV (4) + block_index (4)
-- [x] Pad to 32 bytes with zeros
-- [x] Apply RC4 stream cipher
-**Testing:** Decrypt ARC4 encrypted blocks ✅
-**Acceptance:** Matches expected output ✅
-
----
-
-### 2.2 `blte` - BLTE Compression/Decompression ✅
-
-**CRITICAL:** Testing with real CDN data revealed that all manifest files (download, size, encoding, install) are BLTE-encoded. This crate is required before parsers can work with actual CDN files.
-
-#### 2.2.1 Create Crate Structure ✅
-
-**Location:** `blte/` ✅
-
-```toml
-[package]
-name = "blte"
-
-[dependencies]
-flate2 = "1.0"  # For zlib
-lz4-flex = "0.11"  # For LZ4
-ngdp-crypto = { path = "../ngdp-crypto" }
-```
-
-**Implementation:**
-
-- [x] Create new crate in workspace
-- [x] Create module structure:
-  - [x] `src/lib.rs` - Public API
-  - [x] `src/header.rs` - BLTE header parsing
-  - [x] `src/decompress.rs` - Decompression logic
-  - [ ] `src/compress.rs` - Compression logic (future)
-  - [x] `src/chunk.rs` - Chunk handling
-
-#### 2.2.2 BLTE Header Parser ✅
-
-**Location:** `blte/src/header.rs` ✅
-
-```rust
-pub struct BLTEHeader {
-    magic: [u8; 4],  // 'BLTE'
-    header_size: u32,
-    chunks: Vec<ChunkInfo>,
-}
-
-pub struct ChunkInfo {
-    compressed_size: u32,
-    decompressed_size: u32,
-    checksum: [u8; 16],
-}
-```
-
-**Implementation:**
-
-- [x] Validate magic bytes "BLTE"
-- [x] Parse header size (big-endian)
-- [x] Detect single vs multi-chunk
-- [x] Parse chunk table if multi-chunk
-- [x] Extract chunk information
-**Testing:** Parse various BLTE headers ✅
-**Acceptance:** Correctly identifies chunk structure ✅
-
-#### 2.2.3 Decompression Modes ✅
-
-**Location:** `blte/src/decompress.rs` ✅
-
-```rust
-pub fn decompress_chunk(data: &[u8], block_index: usize, key_service: Option<&KeyService>) -> Result<Vec<u8>>
-```
-
-**Implementation:**
-
-- [x] Mode 'N' (0x4E): Return data[1..] unchanged
-- [x] Mode 'Z' (0x5A): Decompress with zlib
-- [x] Mode '4' (0x34): Decompress with LZ4
-- [x] Mode 'F' (0x46): Recursive BLTE decompression
-- [x] Mode 'E' (0x45): Decrypt then decompress:
-  - [x] Parse encrypted block structure
-  - [x] Get key from KeyService
-  - [x] Decrypt based on type (Salsa20/ARC4)
-  - [x] Recursively decompress result
-**Dependencies:** ngdp-crypto for mode 'E' ✅
-**Testing:** Decompress all mode types ✅
-**Acceptance:** Output matches known decompressed files ✅
-
-#### 2.2.4 Multi-Chunk Support ✅
-
-**Location:** `blte/src/decompress.rs` ✅
-
-```rust
-pub fn decompress_multi_chunk(header: &BLTEHeader, data: &[u8], key_service: Option<&KeyService>) -> Result<Vec<u8>>
-```
-
-**Implementation:**
-
-- [x] Iterate through chunks sequentially
-- [x] Decompress each chunk with correct block_index
-- [x] Verify chunk checksums (MD5)
-- [x] Concatenate decompressed chunks
-- [ ] Add parallel decompression option (future enhancement)
-**Testing:** Decompress multi-chunk files ✅
-**Acceptance:** Large files decompress correctly ✅
-
-#### 2.2.5 Streaming Support ✅
-
-**Location:** `blte/src/stream.rs` ✅
-
-```rust
-pub struct BLTEStream {
-    blte_file: BLTEFile,
-    current_chunk: usize,
-    key_service: Option<KeyService>,
-    chunk_buffer: Vec<u8>,
-    chunk_position: usize,
-}
-```
-
-**Implementation:**
-
-- [x] Implement Read trait
-- [x] Stream chunk decompression
-- [x] Minimal memory usage for large files
-- [x] Support for all compression modes (N, Z, 4, F, E)
-- [x] Proper checksum verification per chunk
-- [x] Example showing streaming usage
-**Testing:** Stream decompress single and multi-chunk files ✅
-**Acceptance:** Memory usage stays constant ✅
-
----
-
-## Priority 3: Storage Layer
-
-### 3.1 `casc-storage` - Local CASC Storage 🔴
-
-#### 3.1.1 Create Crate Structure 🔴
-
-**Location:** `casc-storage/` (new crate)
-
-```toml
-[package]
-name = "casc-storage"
-
-[dependencies]
-blte = { path = "../blte" }
-tact-parser = { path = "../tact-parser" }
-memmap2 = "0.9"  # For memory-mapped files
-```
-
-**Implementation:**
-
-- [ ] Create crate structure:
-  - [ ] `src/lib.rs` - Storage API
-  - [ ] `src/index.rs` - Index file handling
-  - [ ] `src/archive.rs` - Archive file handling
-  - [ ] `src/bucket.rs` - Bucket calculations
-  - [ ] `src/storage.rs` - Main storage operations
-
-#### 3.1.2 Index File Parsing 🔴
-
-**Location:** `casc-storage/src/index.rs`
-
-```rust
-pub enum IndexFile {
-    V5(IndexV5),
-    V7(IndexV7),
-    V9(IndexV9),
-}
-
-pub struct IndexEntry {
-    ekey: [u8; 9],  // First 9 bytes of EKey
-    archive_index: u32,
-    archive_offset: u32,
-    size: u32,
-}
-```
-
-**Implementation:**
-
-- [ ] Detect index version from header
-- [ ] Parse index V5 (legacy format)
-- [ ] Parse index V7 (modern format)
-- [ ] Parse index V9 (latest format)
-- [ ] Implement bucket-based lookup:
-  - [ ] Calculate bucket: `ekey.iter().fold(0, |a, &b| a ^ b) & 0x0F`
-  - [ ] Binary search within bucket
-- [ ] Memory-map large index files
-**Testing:** Parse all index versions, lookup known EKeys
-**Acceptance:** Can locate files in archives
-
-#### 3.1.3 Archive File Reading 🔴
-
-**Location:** `casc-storage/src/archive.rs`
-
-```rust
-pub struct Archive {
-    file: MemoryMappedFile,
-    index: u32,
-}
-```
-
-**Implementation:**
-
-- [ ] Open archive files (data.XXX)
-- [ ] Read at specific offsets
-- [ ] Extract BLTE data
-- [ ] Handle archive header if present
-- [ ] Memory-map for performance
-**Dependencies:** blte for decompression
-**Testing:** Extract known files from archives
-**Acceptance:** Can read archive contents
-
-#### 3.1.4 Storage Operations 🔴
-
-**Location:** `casc-storage/src/storage.rs`
-
-```rust
-pub struct CascStorage {
-    path: PathBuf,
-    indices: HashMap<u8, IndexFile>,
-    archives: Vec<Archive>,
-}
-```
-
-**Implementation:**
-
-- [ ] Initialize from game directory
-- [ ] Build index from .idx files
-- [ ] Implement core operations:
-  - [ ] `read_by_ekey(&[u8]) -> Result<Vec<u8>>`
-  - [ ] `read_by_ckey(&[u8]) -> Result<Vec<u8>>` (via encoding)
-  - [ ] `exists(&[u8]) -> bool`
-- [ ] Support loose files (direct file storage)
-- [ ] Add write support for new files
-**Testing:** Full read/write cycle
-**Acceptance:** Can manage local game files
-
-#### 3.1.5 Storage Verification 🟡
-
-**Location:** `casc-storage/src/verify.rs` (new file)
-
-```rust
-pub fn verify_storage(storage: &CascStorage) -> VerifyReport
-```
-
-**Implementation:**
-
-- [ ] Check all index files
-- [ ] Verify archive integrity
-- [ ] Report missing/corrupted files
-- [ ] Calculate storage statistics
-**Testing:** Verify known good/bad storage
-**Acceptance:** Detects corruption accurately
-
----
-
-## Priority 4: Advanced Features
-
-### 4.1 `ngdp-patch` - Patch System 🟡
-
-#### 4.1.1 Create Crate Structure 🟡
-
-**Location:** `ngdp-patch/` (new crate)
-
-```toml
-[package]
-name = "ngdp-patch"
-
-[dependencies]
-blte = { path = "../blte" }
-bsdiff = "0.1"  # For patch application
-```
-
-**Implementation:**
-
-- [ ] Create crate structure:
-  - [ ] `src/lib.rs` - Patch API
-  - [ ] `src/zbsdiff.rs` - ZBSDIFF format
-  - [ ] `src/apply.rs` - Patch application
-
-#### 4.1.2 Patch File Parser 🟡
-
-**Location:** `ngdp-patch/src/patch.rs`
-
-```rust
-pub struct PatchFile {
-    entries: Vec<PatchEntry>,
-}
-
-pub struct PatchEntry {
-    old_ekey: [u8; 16],
-    new_ekey: [u8; 16],
-    patch_ekey: [u8; 16],
-    old_size: u64,
-    new_size: u64,
-}
-```
-
-**Implementation:**
-
-- [ ] Parse patch manifest
-- [ ] Extract patch mappings
-- [ ] Calculate patch requirements
-**Testing:** Parse patch files
-**Acceptance:** Can identify needed patches
-
-#### 4.1.3 ZBSDIFF Implementation 🟡
-
-**Location:** `ngdp-patch/src/zbsdiff.rs`
-
-```rust
-pub fn apply_patch(old_data: &[u8], patch_data: &[u8]) -> Result<Vec<u8>>
-```
-
-**Implementation:**
-
-- [ ] Decompress patch with zlib
-- [ ] Apply binary diff algorithm
-- [ ] Verify output checksum
-**Testing:** Apply known patches
-**Acceptance:** Patched files match expected
-
----
-
-### 4.2 `ngdp-client` - CLI Enhancements 🟡
-
-#### 4.2.0 TACT Parser Integration ✅
-
-**Location:** `ngdp-client/src/commands/` ✅
-**Implementation:**
-
-- [x] Added `inspect build-config` command with visual tree display
-- [x] Enhanced `products versions` with `--parse-config` flag
-- [x] Real CDN integration for downloading build configurations
-- [x] Visual tree representation using emoji and Unicode box-drawing
-- [x] Shows meaningful build information instead of cryptic hashes
-- [x] Support for all output formats (text, JSON, BPSV)
-- [x] File size display with proper units (MB, KB)
-- [x] VFS entry counting and patch status indication
-- [x] Added `inspect encoding` command for encoding file inspection
-- [x] Added `inspect install` command for install manifest inspection  
-- [x] Added `inspect download-manifest` command for download manifest inspection
-- [x] Added `inspect size` command for size file inspection
-- [x] All manifest commands download and decompress BLTE-encoded files from CDN
-**Testing:** Tested with real WoW products (wow, wow_classic_era, wowt) ✅
-**Acceptance:** Can analyze and display build configurations and manifests ✅
-
----
-
-#### 4.2.1 Keys Update Command ✅
-
-**Location:** `ngdp-client/src/commands/keys.rs` ✅
-
-```rust
-pub async fn handle_keys_command(command: KeysCommands) -> Result<()>
-```
-
-**Implementation:**
-
-- [x] Download latest TACTKeys from GitHub repository
-- [x] Parse and validate key format (CSV format)
-- [x] Save to ~/.config/cascette/WoW.txt (or custom path)
-- [x] Report number of keys found
-- [x] Add `keys status` command to show local database info
-- [x] Support for forced updates with `--force` flag
-**Testing:** Successfully downloads and parses TACTKeys ✅
-**Acceptance:** Updates local key database ✅
-
-#### 4.2.2 File Download Command ✅
-
-**Location:** `ngdp-client/src/commands/download.rs` ✅
-
-```rust
-pub async fn handle(cmd: DownloadCommands, format: OutputFormat) -> Result<()>
-```
-
-**Implementation:**
-
-- [x] Command structure and full implementation
-- [x] Support for content key and encoding key patterns
-- [x] BLTE decompression integration ready
-- [x] Build download command working with real CDN data
-- [x] Downloads BuildConfig, CDNConfig, ProductConfig, KeyRing
-- [x] Integration with cached Ribbit and CDN clients
-- [x] Pattern detection for content keys, encoding keys, file paths
-**Dependencies:** All core components ready ✅
-**Testing:** Tested with wow_classic_era build downloads ✅
-**Acceptance:** Successfully downloads build files from CDN ✅
-
-#### 4.2.3 Installation Command 🟡
-
-**Location:** `ngdp-client/src/commands/install.rs` (new file)
-
-```rust
-pub fn install_game(product: &str, path: &Path) -> Result<()>
-```
-
-**Implementation:**
-
-- [ ] Query latest version
-- [ ] Download manifests
-- [ ] Parse install manifest
-- [ ] Download required files
-- [ ] Build local CASC storage
-- [ ] Show progress bar
-**Testing:** Install minimal file set
-**Acceptance:** Creates valid CASC storage
-
-#### 4.2.4 Verification Command 🟡
-
-**Location:** `ngdp-client/src/commands/verify.rs` (new file)
-
-```rust
-pub fn verify_installation(path: &Path) -> Result<VerifyReport>
-```
-
-**Implementation:**
-
-- [ ] Check all files against manifests
-- [ ] Verify checksums
-- [ ] Report missing/corrupted files
-- [ ] Suggest repair actions
-**Testing:** Verify good/corrupted installation
-**Acceptance:** Accurately reports issues
-
----
-
-## Testing Strategy
-
-### Unit Testing Requirements
-
-Each component MUST have:
-
-- [ ] Basic functionality tests
-- [ ] Error condition tests
-- [ ] Edge case tests (empty, maximum size, etc.)
-- [ ] Known value tests (from reference implementations)
-
-### Integration Testing Requirements
-
-- [ ] Cross-crate integration tests
-- [ ] End-to-end file download and decompression
-- [ ] Full installation simulation
-- [ ] Update/patch application
-
-### Performance Testing
-
-- [ ] Benchmark critical paths
-- [ ] Memory usage profiling
-- [ ] Parallel processing verification
-- [ ] Large file handling (>1GB)
-
-### Test Data Requirements
-
-**Location:** `test-data/` (repository root)
-
-- [ ] Sample encoding file
-- [ ] Sample root file (V1 and V2)
-- [ ] Sample install manifest
-- [ ] Sample BLTE files (all modes)
-- [ ] Encrypted test blocks
-- [ ] Known key-value pairs
-
----
-
-## Documentation Requirements
+## Priority 1: Critical Format Parsing Gaps 🔴
+
+### ESpec (Encoding Specification) Parser - **CRITICAL**
+
+**Status:** ❌ **Missing completely** - We read but don't parse according to EBNF grammar  
+**Location:** `tact-parser/src/espec.rs` (create)
+
+**Issues Found:**
+- We read ESpec data from encoding files but **immediately discard it** (encoding.rs:91-93)
+- TVFS ESpec strings read as raw UTF-8 but not parsed into usable structures
+- No implementation of EBNF grammar from https://wowdev.wiki/BLTE#Encoding_Specification_(ESpec)
+
+**Required Implementation:**
+- [ ] **CRITICAL**: Implement complete EBNF grammar parser:
+  ```
+  e-spec = ( 'n' ) | ( 'z' [...] ) | ( 'e' [...] ) | ( 'b' [...] ) | ( 'c' [...] ) | ( 'g' [...] )
+  ```
+- [ ] Parse complex block specifications: `b:{164=z,16K*565=z,1656=z,140164=z}`  
+- [ ] Support nested compression modes and size expressions
+- [ ] Store parsed ESpec data in `EncodingFile` struct instead of discarding
+- [ ] Integration with BLTE decompression for proper file reconstruction
+- [ ] Tests with real-world ESpec examples from CDN data
+
+### TVFS Implementation Fix - **HIGH PRIORITY**
+
+**Status:** 🟡 **Major discrepancies** from wowdev.wiki specification  
+**Location:** `tact-parser/src/tvfs.rs` (fix existing)
+
+**Critical Issues Found:**
+1. ~~**Wrong Magic**: We use `TFVS` but spec shows `TVFS` (0x53465654)~~ ✅ **FIXED**
+2. **Wrong Field Types**: Using i32 instead of uint40_t for offsets/sizes
+3. **Missing 40-bit Integer Support**: TVFS uses 5-byte integers extensively
+4. **Wrong Header Structure**: Our struct doesn't match the specification
+5. **Missing Flags Support**: No proper flag parsing (INCLUDE_CKEY, WRITE_SUPPORT, etc.)
+
+**Required Fixes:**
+- [x] ~~**URGENT**: Fix magic bytes to match specification~~ ✅ **COMPLETED** 
+  - Fixed parser to only accept `TVFS` (0x53465654) instead of both `TFVS`/`TVFS`
+  - Updated documentation comments to reflect correct specification
+  - All tests pass - test data was already using correct `TVFS` magic
+- [ ] **CRITICAL**: Implement 40-bit integer reading for offsets and sizes  
+- [ ] **HIGH**: Update header structure to match specification exactly
+- [ ] **HIGH**: Add proper flag parsing and handling
+- [ ] **MEDIUM**: Validate against latest wowdev.wiki specification  
+- [ ] **LOW**: Add comprehensive tests with real TVFS data
+
+### 40-bit Integer Support - **FOUNDATION REQUIREMENT**
+
+**Status:** ❌ **Missing** - Required for TVFS and other TACT formats  
+**Location:** `tact-parser/src/utils.rs` (extend existing)
+
+**Background:** Multiple TACT formats use 5-byte (40-bit) integers:
+- TVFS: All offset/size fields are uint40_t  
+- Encoding: File sizes up to 1TB support
+- Other manifests: Various size fields
+
+**Required Implementation:**  
+- [ ] Add `read_uint40_le()` and `read_uint40_be()` functions
+- [ ] Support little-endian and big-endian variants  
+- [ ] Integration with existing utils module
+- [ ] Tests for edge cases (max values, overflow handling)
+
+### Research Findings Summary
+
+**Key Discoveries from docs/research/ analysis:**
+
+1. **Our ESpec Knowledge**: We documented the format structure in `blte-format-detailed.md` but never implemented parsing
+2. **Our TVFS Knowledge**: We have complete specification in `tvfs-specification.md` but implementation doesn't match
+3. **Reference Implementation Gaps**: Local references mentioned in CLAUDE.md aren't accessible in current session
+4. **Critical Missing Components**: 
+   - ESpec grammar parser (blocks write support entirely)
+   - 40-bit integer support (breaks TVFS and large file handling)  
+   - Proper TVFS implementation (affects modern game versions)
+
+**Impact Assessment:**
+- **ESpec Parser**: Without this, we cannot properly decompress complex BLTE files or implement write support
+- **TVFS Fixes**: Current implementation may fail with modern game builds that use correct TVFS format  
+- **40-bit Integers**: Fundamental requirement for handling large files and proper TVFS parsing
+
+## Priority 2: Write Support 🔴
+
+### TACT Format Writers
+
+#### Encoding File Writer
+
+**Location:** `tact-parser/src/encoding/writer.rs`
+
+- [ ] Create encoding header with proper magic and version
+- [ ] Build CEKey pages with 40-bit size encoding (BIG-ENDIAN)
+- [ ] Build EKey spec pages with proper layout
+- [ ] Calculate page checksums (MD5)
+- [ ] Support multiple EKeys per CKey
+- [ ] Write compressed BLTE output
+
+#### Install Manifest Writer
+
+**Location:** `tact-parser/src/install/writer.rs`
+
+- [ ] Write "IN" magic header
+- [ ] Build tag table with proper encoding
+- [ ] Calculate tag bitmask size
+- [ ] Write file entries with CKeys and paths
+- [ ] Apply tag bitmasks to entries
+- [ ] Compress with BLTE
+
+#### Download Manifest Writer
+
+**Location:** `tact-parser/src/download/writer.rs`
+
+- [ ] Write "DL" magic header
+- [ ] Support versions 1, 2, and 3 formats
+- [ ] Build priority-sorted entry list
+- [ ] Encode file sizes and priorities
+- [ ] Build tag table and apply to entries
+- [ ] Compress with BLTE
+
+#### Size File Writer
+
+**Location:** `tact-parser/src/size/writer.rs`
+
+- [ ] Write "SP" magic header
+- [ ] Encode partial EKey entries (9 bytes)
+- [ ] Build size table with proper encoding
+- [ ] Support tag-based filtering
+- [ ] Calculate total size statistics
+- [ ] Compress with BLTE
+
+#### Config File Writer
+
+**Location:** `tact-parser/src/config/writer.rs`
+
+- [ ] Write key-value pairs with " = " separator
+- [ ] Support empty values ("key = ")
+- [ ] Write hash-size pairs format
+- [ ] Add comments support
+- [ ] Maintain key ordering for consistency
+
+#### TVFS Writer
+
+**Location:** `tact-parser/src/tvfs/writer.rs`
+
+- [ ] Write TVFS/TFVS magic header (big-endian)
+- [ ] Build path table with compression
+- [ ] Build VFS table with file entries
+- [ ] Build CFT table with content info
+- [ ] Optional EST table for ESpec data
+- [ ] Compress with BLTE
+
+#### Root Manifest Writer
+
+**Location:** `tact-parser/src/root/writer.rs`
+
+- [ ] Parse and write root file format (version 1 and 2)
+- [ ] Handle FileDataID to CKey mappings
+- [ ] Support locale and content flags
+- [ ] Implement name hash lookups
+- [ ] Compress with BLTE
+
+### BPSV Writer
+
+**Location:** `ngdp-bpsv/src/writer.rs`
+
+- [ ] Write schema header line with field names and types
+- [ ] Encode values with proper type formatting
+- [ ] Support empty values and proper escaping
+- [ ] Maintain field ordering from schema
+- [ ] Generate compliant BPSV output
+
+### Key Service Extensions
+
+**Location:** `ngdp-crypto/src/key_service.rs`
+
+- [ ] Key generation using cryptographically secure RNG
+- [ ] Key ID generation algorithm
+- [ ] Export functionality for CSV/TSV/TXT formats
+- [ ] Key database persistence with atomic writes
+- [ ] Support for custom key naming schemes
+
+### FileDataID Manager
+
+**Location:** `tact-parser/src/fdid_manager.rs`
+
+- [ ] FileDataID assignment algorithm
+- [ ] Reserved ranges for different asset types
+- [ ] Listfile import/export for community compatibility
+- [ ] Collision detection and resolution
+- [ ] Integration with root manifest generation
+
+### CASC Index Writers
+
+#### IDX File Writer
+
+**Location:** `casc-storage/src/index/writers/idx_writer.rs`
+
+- [ ] Write .idx header with proper field sizes
+- [ ] Calculate header checksum
+- [ ] Write entries with 9-byte truncated EKeys
+- [ ] Maintain 16-byte alignment for data segments
+- [ ] Support version 7 format
+- [ ] Generate proper bucket assignment
+
+#### Group Index Writer
+
+**Location:** `casc-storage/src/index/writers/group_writer.rs`
+
+- [ ] Generate Jenkins hash for EKeys
+- [ ] Build binary format with proper endianness
+- [ ] Support variable field sizes
+- [ ] Create .index files compatible with game
+
+#### Archive Builder
+
+**Location:** `casc-storage/src/archive/builder.rs`
+
+- [ ] Build CASC archive files (data.XXX)
+- [ ] Compress files with BLTE
+- [ ] Track file offsets and sizes
+- [ ] Generate index entries for added files
+- [ ] Support 1GB archive size limit
+- [ ] Handle archive rollover
+
+## Priority 2: Content Management System 🔴
+
+### Core Components
+
+#### Asset Pipeline
+
+**Location:** `content-manager/src/pipeline.rs`
+
+- [ ] Model importers (OBJ → M2, FBX → WMO)
+- [ ] Texture converters (PNG/TGA → BLP)
+- [ ] Audio processors (WAV/OGG → game format)
+- [ ] Asset optimization (compression, LOD generation)
+- [ ] Metadata extraction and cataloging
+- [ ] Validation against game requirements
+
+#### Database Management
+
+**Location:** `content-manager/src/database.rs`
+
+- [ ] DBC/DB2 file parsing and writing
+- [ ] Schema validation for all tables
+- [ ] Referential integrity checking
+- [ ] Query engine for content developers
+- [ ] Bulk import/export operations
+- [ ] Change tracking and audit logs
+
+#### Version Control
+
+**Location:** `content-manager/src/versioning.rs`
+
+- [ ] Branch management for different environments
+- [ ] Atomic commits with rollback support
+- [ ] Conflict detection and resolution
+- [ ] Change tracking with audit trail
+- [ ] Diff generation for review
+- [ ] Tag system for releases
+
+### Tool Integrations
+
+#### Blender Integration
+
+**Location:** `content-manager/src/integrations/blender.rs`
+
+- [ ] Blender addon with Python API client
+- [ ] Model validation on import
+- [ ] Auto-generate collision mesh
+- [ ] Generate LODs with quality settings
+
+#### Quest Designer Integration
+
+**Location:** `content-manager/src/integrations/quest.rs`
+
+- [ ] Import quest chain definitions
+- [ ] Validate quest requirements and rewards
+- [ ] Compile quest scripts to bytecode
+- [ ] Generate quest text localizations
+
+#### Map Editor Integration
+
+**Location:** `content-manager/src/integrations/map.rs`
+
+- [ ] Import ADT (map tile) data
+- [ ] Process heightmaps and textures
+- [ ] Place doodads and WMOs on map
+- [ ] Generate navigation mesh for pathfinding
+
+## Priority 3: Build System 🔴
+
+### NGDP Builder
+
+**Location:** `ngdp-builder/`
+
+#### Product Builder Core
+
+- [ ] Integration with ContentManager for asset retrieval
+- [ ] Pull game databases from DatabaseManager
+- [ ] Generate unique CKeys for all files (MD5 hash)
+- [ ] Create EKeys for encoded content
+- [ ] Build complete encoding file with all mappings
+- [ ] Generate all required manifests
+- [ ] Create build and CDN configurations
+- [ ] Output complete CASC storage structure
+
+#### Content Processing Pipeline
+
+- [ ] Auto-detect file types for optimal compression
+- [ ] Apply appropriate BLTE compression
+- [ ] Generate encryption keys for sensitive files
+- [ ] Integrate with KeyService for key management
+- [ ] Generate ESpec strings for encoding
+- [ ] Calculate all checksums (MD5, XXH64)
+
+#### CASC Storage Generator
+
+- [ ] Create data.XXX archive files
+- [ ] Build .idx files for all buckets (00-0F)
+- [ ] Generate .index group indices
+- [ ] Create loose file structure
+- [ ] Generate .build.info file
+- [ ] Create complete Data/config structure
+
+## Priority 4: Server Implementation 🔴
+
+### Ribbit Server - Central Orchestrator
+
+**Location:** `ngdp-server/src/ribbit.rs`
+
+#### Build Management
+
+- [ ] Build ingestion pipeline from ngdp-builder
+- [ ] Build staging and validation before distribution
+- [ ] CDN distribution orchestration
+- [ ] Atomic version updates (all-or-nothing)
+- [ ] Region-specific build promotion
+- [ ] Build rollback capabilities
+
+#### Protocol Handling
+
+- [ ] Parse Ribbit protocol commands
+- [ ] Serve product version information
+- [ ] Support region-specific responses
+- [ ] Handle subscription-based updates
+- [ ] Generate properly formatted Ribbit responses
+
+### CDN Server - Distribution Endpoint
+
+**Location:** `ngdp-server/src/cdn.rs`
+
+#### Build Reception
+
+- [ ] Build reception protocol from Ribbit
+- [ ] Build validation and integrity checking
+- [ ] Atomic build deployment (staging → live)
+
+#### Content Serving
+
+- [ ] Implement CDN path structure
+- [ ] Support HTTP range requests for partial downloads
+- [ ] Implement caching layer for frequently accessed files
+- [ ] Support multiple CDN hosts for load balancing
+- [ ] Generate proper CDN responses with headers
+- [ ] Status reporting back to Ribbit orchestrator
+
+### TACT HTTP API Proxy
+
+**Location:** `ngdp-server/src/tact_proxy.rs`
+
+- [ ] Convert HTTP paths to Ribbit commands
+- [ ] Transform Ribbit pipe-delimited responses to JSON
+- [ ] Cache JSON transformations for performance
+- [ ] Handle region and version query parameters
+- [ ] Maintain compatibility with Battle.net client expectations
+- [ ] Support both Ribbit protocol and HTTP API from single data source
+
+## Priority 5: Advanced Features 🔵
+
+### BLTE Enhancements
+
+#### ESpec Parser
+
+**Location:** `blte/src/espec.rs`
+
+- [ ] Parse ESpec strings (z,9,{512*1024})
+- [ ] Size expression evaluation
+- [ ] Strategy application to data
+- [ ] Fallback handling when compression increases size
+- [ ] Integration with BLTEBuilder
+
+#### Parallel Compression
+
+**Location:** `blte/src/parallel.rs`
+
+- [ ] Split data into chunks for parallel compression
+- [ ] Thread pool management with configurable size
+- [ ] Maintain chunk order in final output
+- [ ] CPU core detection for optimal thread count
+
+#### Write Trait Implementation
+
+**Location:** `blte/src/writer.rs`
+
+- [ ] Implement Write trait for streaming compression
+- [ ] Automatic chunking when size limits reached
+- [ ] Memory-efficient for large file creation
+
+### CLI Enhancements
+
+#### Compression Commands
+
+**Location:** `ngdp-client/src/commands/compress.rs`
+
+- [ ] `ngdp compress file` command
+- [ ] `ngdp compress batch` for directories
+- [ ] `ngdp compress analyze` for statistics
+- [ ] Support for all compression modes
+- [ ] Encryption support with key management
+
+#### Build Commands
+
+**Location:** `ngdp-client/src/commands/build.rs`
+
+- [ ] `ngdp build create` from directory
+- [ ] `ngdp build from-manifest` with YAML
+- [ ] `ngdp build rebuild` from installation
+- [ ] `ngdp build validate` for verification
+
+### Research Areas 🔍
+
+#### Build System Research
+
+- [ ] Asset format conversion strategies
+- [ ] FileDataID assignment algorithms
+- [ ] Content dependency resolution
+- [ ] Version management approaches
+
+#### CDN Infrastructure Research
+
+- [ ] File upload and distribution processes
+- [ ] Path generation strategies
+- [ ] Cache invalidation mechanisms
+- [ ] Geographic distribution patterns
+
+#### Protocol Analysis
+
+- [ ] Battle.net client communication
+- [ ] Update detection mechanisms
+- [ ] Progress reporting protocols
+- [ ] Error handling strategies
+
+## Testing Requirements
+
+### Unit Tests
+
+- [ ] Writers for all TACT formats
+- [ ] Content management components
+- [ ] Build system functionality
+- [ ] Server implementation
+
+### Integration Tests
+
+- [ ] Round-trip write/read for all formats
+- [ ] Complete build generation
+- [ ] Server-client communication
+- [ ] Content pipeline workflow
+
+### Performance Tests
+
+- [ ] Large file handling (10GB+)
+- [ ] Concurrent client support
+- [ ] Build generation speed
+- [ ] CDN throughput
+
+## Documentation Needs
 
 ### API Documentation
 
-- [ ] All public types must have doc comments
-- [ ] All public methods must have:
-  - [ ] Description
-  - [ ] Parameters
-  - [ ] Return value
-  - [ ] Error conditions
-  - [ ] Example usage
+- [ ] Writer APIs for all formats
+- [ ] Content management interfaces
+- [ ] Server protocol specifications
+- [ ] Build system workflows
 
-### Guide Documentation
+### User Guides
 
-**Location:** `docs/`
+- [ ] Content creation workflow
+- [ ] Build generation tutorial
+- [ ] Server deployment guide
+- [ ] Migration from existing systems
 
-- [ ] Getting Started guide
-- [ ] Architecture overview
-- [ ] File format specifications
-- [ ] Troubleshooting guide
-- [ ] Contributing guide
+### Examples
 
-### Example Programs
-
-**Location:** `examples/`
-
-- [ ] Download single file
-- [ ] Parse manifest files
-- [ ] Verify installation
-- [ ] Extract game assets
-
----
-
-## Milestones
-
-### Milestone 1: Foundation ✅
-
-- [x] Ribbit client
-- [x] CDN client
-- [x] Basic caching
-- [x] CLI skeleton
-
-### Milestone 2: File Formats ✅
-
-- [x] Complete tact-parser core functionality
-- [x] Build configuration parser with real CDN integration
-- [x] Build config supports both single-hash and hash-size pair formats
-- [x] Encoding file parser with 40-bit integer support
-- [x] Install manifest parser with tag-based filtering
-- [x] Download manifest parser with priority sorting (versions 1-3)
-- [x] Size file parser with tag-based size calculation
-- [x] TVFS parser basic structure (needs format revision with real data)
-- [x] Variable-length integer support in utils
-- [x] CLI integration with visual tree display
-- [x] Tested parsers with real CDN data (discovered BLTE encoding requirement)
-
-### Milestone 3: Decompression ✅
-
-- [x] ngdp-crypto crate
-- [x] blte crate
-- [x] Encryption support (Salsa20 and ARC4)
-- [x] All compression modes (N, Z, 4, F, E)
-- [x] Key service with automatic loading from ~/.config/cascette/
-- [x] 19,419 WoW encryption keys loaded and working
-
-### Milestone 4: Storage 🔴
-
-- [ ] casc-storage crate
-- [ ] Index parsing
-- [ ] Archive reading
-- [ ] Local file management
-
-### Milestone 5: Production Ready 🔴
-
-- [ ] ngdp-patch crate
-- [ ] Complete CLI
-- [ ] Full test coverage
-- [ ] Performance optimization
-
-### Milestone 6: Release 🔴
-
-- [ ] Documentation complete
-- [ ] Cross-platform testing
-- [ ] Security audit
-- [ ] Version 1.0.0
-
----
-
-## Success Criteria
-
-### Functional Success
-
-- [ ] Can download any WoW game file
-- [ ] Can decrypt encrypted content
-- [ ] Can parse all TACT formats
-- [ ] Can manage CASC storage
-- [ ] Can apply patches
-
-### Performance Success
-
-- [ ] Download speed ≥ 10 MB/s
-- [ ] Decompression speed ≥ 100 MB/s
-- [ ] Memory usage < 500 MB for normal operations
-- [ ] Startup time < 1 second
-
-### Quality Success
-
-- [ ] Test coverage ≥ 80%
-- [ ] Zero security vulnerabilities
-- [ ] All clippy warnings resolved
-- [ ] Documentation coverage 100%
-
----
-
-## Risk Mitigation
-
-### Technical Risks
-
-1. **Encryption keys unavailable**
-   - Mitigation: Maintain comprehensive key database
-   - Fallback: Allow user-provided keys
-
-2. **Format changes in new versions**
-   - Mitigation: Version detection and branching
-   - Fallback: Support multiple format versions
-
-3. **Performance bottlenecks**
-   - Mitigation: Profile early and often
-   - Fallback: Add caching layers
-
-### Project Risks
-
-1. **Scope creep**
-   - Mitigation: Strict prioritization
-   - Focus: Core functionality first
-
-2. **Dependency issues**
-   - Mitigation: Minimal external dependencies
-   - Fallback: Implement critical parts internally
-
----
-
-## Notes for Implementers
-
-### Critical Implementation Details
-
-1. **Encoding file uses BIG-ENDIAN** - Different from most TACT formats!
-2. **40-bit integers** - Used throughout TACT, must handle correctly
-3. **Key extension** - Salsa20 needs 16→32 byte extension by duplication
-4. **Block index XOR** - Critical for multi-chunk encryption
-5. **Jenkins hash** - Must normalize paths (uppercase, backslash)
-6. **TVFS format** - Uses TFVS magic, big-endian, int32 offsets (not 40-bit)
-7. **All CDN files are BLTE-encoded** - Must decompress before parsing
-
-### Reference Implementations
-
-- **Prototype**: `/home/danielsreichenbach/Downloads/wow/cascette-rs` - Has complete BLTE/encryption
-- **CascLib**: Best for encryption keys and format variations
-- **TACT.Net**: Best for async patterns and structure
-- **TACTSharp**: Best for performance optimizations
-
-### Testing Resources
-
-- WowDev Wiki: Format specifications
-- CascLib test files: Known good test data
-- Prototype tests: Working implementation reference
-
----
-
-## Quick Start for Contributors
-
-1. **Start with**: Complete `tact-parser` (Priority 1.1)
-2. **Then**: Create `ngdp-crypto` (Priority 2.1)
-3. **Then**: Create `blte` (Priority 2.2)
-4. **Finally**: Create `casc-storage` (Priority 3.1)
-
-Each task is independent within its priority level and can be worked on in parallel by different contributors.
-
----
-
-*Last Updated: 2025-08-06*
-*Version: 1.5.0*
+- [ ] Writing each TACT format
+- [ ] Creating custom builds
+- [ ] Setting up servers
+- [ ] Content pipeline integration

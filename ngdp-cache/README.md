@@ -56,14 +56,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Cached CDN client - transparent caching for CDN content
     let cdn_client = CachedCdnClient::new().await?;
-    
+
     // Download content with automatic caching
     let response = cdn_client.download(
         "blzddist1-a.akamaihd.net",
         "tpr/wow",
         "2e9c1e3b5f5a0c9d9e8f1234567890ab"
     ).await?;
-    
+
     // Check if response came from cache
     println!("From cache: {}", response.is_from_cache());
     let data = response.bytes().await?;

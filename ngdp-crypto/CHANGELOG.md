@@ -5,6 +5,7 @@ All notable changes to the `ngdp-crypto` crate will be documented in this file.
 ## [0.1.0] - 2025-08-06
 
 ### Added
+
 - Initial implementation of NGDP encryption/decryption support
 - Salsa20 stream cipher implementation for modern BLTE encryption
   - Proper key extension (16 bytes → 32 bytes by duplication)

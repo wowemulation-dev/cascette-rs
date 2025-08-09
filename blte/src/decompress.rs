@@ -7,19 +7,37 @@ use flate2::read::ZlibDecoder;
 use std::io::{Cursor, Read};
 use tracing::{debug, trace};
 
+#[allow(deprecated)]
+use crate::memory_pool::{PooledBufferGuard, global_pool};
 use crate::{BLTEFile, CompressionMode, Error, Result};
+#[allow(deprecated)]
 use ngdp_crypto::{KeyService, arc4::decrypt_arc4, salsa20::decrypt_salsa20};
 
 /// Decompress a complete BLTE file
 pub fn decompress_blte(data: Vec<u8>, key_service: Option<&KeyService>) -> Result<Vec<u8>> {
+    decompress_blte_pooled(data, key_service, None)
+}
+
+/// Decompress a complete BLTE file using memory pooling
+pub fn decompress_blte_pooled(
+    data: Vec<u8>,
+    key_service: Option<&KeyService>,
+    pool: Option<&crate::BLTEMemoryPool>,
+) -> Result<Vec<u8>> {
     let blte_file = BLTEFile::parse(data)?;
 
     debug!(
-        "Decompressing BLTE file with {} chunks",
-        blte_file.chunk_count()
+        "Decompressing BLTE file with {} chunks (pooled={})",
+        blte_file.chunk_count(),
+        pool.is_some()
     );
 
-    let mut result = Vec::new();
+    // Estimate total decompressed size for better buffer allocation
+    let estimated_size = estimate_decompressed_size(&blte_file);
+
+    let pool = pool.unwrap_or_else(|| global_pool());
+    let mut result_guard = PooledBufferGuard::new(pool.get_buffer(estimated_size), pool.clone());
+    let result_vec = result_guard.buffer_mut().as_mut_vec();
 
     for chunk_index in 0..blte_file.chunk_count() {
         let chunk = blte_file.get_chunk_data(chunk_index)?;
@@ -32,11 +50,31 @@ pub fn decompress_blte(data: Vec<u8>, key_service: Option<&KeyService>) -> Resul
             });
         }
 
-        let decompressed = decompress_chunk(&chunk.data, chunk_index, key_service)?;
-        result.extend_from_slice(&decompressed);
+        let decompressed =
+            decompress_chunk_pooled(&chunk.data, chunk_index, key_service, Some(pool))?;
+        result_vec.extend_from_slice(&decompressed);
     }
 
+    // Clone the result and let the buffer return to pool automatically
+    let result = result_vec.clone();
     Ok(result)
+}
+
+/// Estimate decompressed size for better buffer pre-allocation
+fn estimate_decompressed_size(blte_file: &BLTEFile) -> usize {
+    if blte_file.is_single_chunk() {
+        // For single chunk, estimate based on common compression ratios
+        blte_file.data.len() * 3 // Conservative estimate for compressed data
+    } else {
+        // For multi-chunk, sum up the decompressed sizes
+        blte_file
+            .header
+            .chunks
+            .iter()
+            .map(|chunk| chunk.decompressed_size as usize)
+            .sum::<usize>()
+            .max(blte_file.data.len()) // Ensure we have at least the compressed size
+    }
 }
 
 /// Decompress a single chunk
@@ -44,6 +82,16 @@ pub fn decompress_chunk(
     data: &[u8],
     block_index: usize,
     key_service: Option<&KeyService>,
+) -> Result<Vec<u8>> {
+    decompress_chunk_pooled(data, block_index, key_service, None)
+}
+
+/// Decompress a single chunk using memory pooling
+pub fn decompress_chunk_pooled(
+    data: &[u8],
+    block_index: usize,
+    key_service: Option<&KeyService>,
+    pool: Option<&crate::BLTEMemoryPool>,
 ) -> Result<Vec<u8>> {
     if data.is_empty() {
         return Err(Error::TruncatedData {
@@ -55,48 +103,89 @@ pub fn decompress_chunk(
     let mode = CompressionMode::from_byte(data[0]).ok_or(Error::UnknownCompressionMode(data[0]))?;
 
     trace!(
-        "Decompressing chunk with mode {:?} (block_index={})",
-        mode, block_index
+        "Decompressing chunk with mode {:?} (block_index={}, pooled={})",
+        mode,
+        block_index,
+        pool.is_some()
     );
 
+    let pool = pool.unwrap_or_else(|| global_pool());
+
+    #[allow(deprecated)]
     match mode {
-        CompressionMode::None => decompress_none(&data[1..]),
-        CompressionMode::ZLib => decompress_zlib(&data[1..]),
-        CompressionMode::LZ4 => decompress_lz4(&data[1..]),
-        CompressionMode::Frame => decompress_frame(&data[1..], key_service),
+        CompressionMode::None => decompress_none_pooled(&data[1..], pool),
+        CompressionMode::ZLib => decompress_zlib_pooled(&data[1..], pool),
+        CompressionMode::LZ4 => decompress_lz4_pooled(&data[1..], pool),
+        CompressionMode::Frame => decompress_frame_pooled(&data[1..], key_service, pool),
         CompressionMode::Encrypted => {
             let key_service = key_service.ok_or_else(|| {
                 Error::DecompressionFailed("Key service required for encrypted blocks".to_string())
             })?;
-            decompress_encrypted(&data[1..], block_index, key_service)
+            decompress_encrypted_pooled(&data[1..], block_index, key_service, pool)
         }
     }
 }
 
 /// Mode 'N' - No compression
+#[allow(dead_code)]
 fn decompress_none(data: &[u8]) -> Result<Vec<u8>> {
-    trace!("No compression - returning {} bytes as-is", data.len());
-    Ok(data.to_vec())
+    decompress_none_pooled(data, global_pool())
 }
 
-/// Mode 'Z' - ZLib compression
-fn decompress_zlib(data: &[u8]) -> Result<Vec<u8>> {
-    trace!("ZLib decompression of {} bytes", data.len());
+/// Mode 'N' - No compression (pooled)
+fn decompress_none_pooled(data: &[u8], pool: &crate::BLTEMemoryPool) -> Result<Vec<u8>> {
+    trace!(
+        "No compression - returning {} bytes as-is (pooled)",
+        data.len()
+    );
 
-    let mut decoder = ZlibDecoder::new(data);
-    let mut result = Vec::new();
+    let mut buffer_guard = PooledBufferGuard::new(pool.get_buffer(data.len()), pool.clone());
+    let result_vec = buffer_guard.buffer_mut().as_mut_vec();
+    result_vec.extend_from_slice(data);
 
-    decoder
-        .read_to_end(&mut result)
-        .map_err(|e| Error::DecompressionFailed(format!("ZLib decompression failed: {e}")))?;
-
-    debug!("ZLib: {} bytes -> {} bytes", data.len(), result.len());
+    let result = result_vec.clone();
     Ok(result)
 }
 
-/// Mode '4' - LZ4 compression  
+/// Mode 'Z' - ZLib compression
+#[allow(dead_code)]
+fn decompress_zlib(data: &[u8]) -> Result<Vec<u8>> {
+    decompress_zlib_pooled(data, global_pool())
+}
+
+/// Mode 'Z' - ZLib compression (pooled)
+fn decompress_zlib_pooled(data: &[u8], pool: &crate::BLTEMemoryPool) -> Result<Vec<u8>> {
+    trace!("ZLib decompression of {} bytes (pooled)", data.len());
+
+    // Estimate decompressed size (ZLib typically compresses to ~30-70% of original)
+    let estimated_size = data.len() * 3; // Conservative estimate
+
+    let mut buffer_guard = PooledBufferGuard::new(pool.get_buffer(estimated_size), pool.clone());
+    let result_vec = buffer_guard.buffer_mut().as_mut_vec();
+
+    let mut decoder = ZlibDecoder::new(data);
+    decoder
+        .read_to_end(result_vec)
+        .map_err(|e| Error::DecompressionFailed(format!("ZLib decompression failed: {e}")))?;
+
+    debug!(
+        "ZLib: {} bytes -> {} bytes (pooled)",
+        data.len(),
+        result_vec.len()
+    );
+    let result = result_vec.clone();
+    Ok(result)
+}
+
+/// Mode '4' - LZ4 compression
+#[allow(dead_code)]
 fn decompress_lz4(data: &[u8]) -> Result<Vec<u8>> {
-    trace!("LZ4 decompression of {} bytes", data.len());
+    decompress_lz4_pooled(data, global_pool())
+}
+
+/// Mode '4' - LZ4 compression (pooled)
+fn decompress_lz4_pooled(data: &[u8], pool: &crate::BLTEMemoryPool) -> Result<Vec<u8>> {
+    trace!("LZ4 decompression of {} bytes (pooled)", data.len());
 
     if data.len() < 8 {
         return Err(Error::TruncatedData {
@@ -118,29 +207,68 @@ fn decompress_lz4(data: &[u8]) -> Result<Vec<u8>> {
     }
 
     let lz4_data = &data[8..];
-    let result = lz4_flex::decompress(lz4_data, decompressed_size)
+
+    // Use pooled buffer with exact decompressed size
+    let mut buffer_guard = PooledBufferGuard::new(pool.get_buffer(decompressed_size), pool.clone());
+    let result_vec = buffer_guard.buffer_mut().as_mut_vec();
+
+    // LZ4 decompression directly into our buffer
+    let decompressed_data = lz4_flex::decompress(lz4_data, decompressed_size)
         .map_err(|e| Error::DecompressionFailed(format!("LZ4 decompression failed: {e}")))?;
 
-    debug!("LZ4: {} bytes -> {} bytes", data.len(), result.len());
+    result_vec.extend_from_slice(&decompressed_data);
+
+    debug!(
+        "LZ4: {} bytes -> {} bytes (pooled)",
+        data.len(),
+        result_vec.len()
+    );
+    let result = result_vec.clone();
     Ok(result)
 }
 
 /// Mode 'F' - Frame/Recursive BLTE
+#[allow(dead_code)]
+#[allow(deprecated)]
 fn decompress_frame(data: &[u8], key_service: Option<&KeyService>) -> Result<Vec<u8>> {
-    trace!("Frame/recursive decompression of {} bytes", data.len());
+    decompress_frame_pooled(data, key_service, global_pool())
+}
+
+/// Mode 'F' - Frame/Recursive BLTE (pooled)
+#[allow(deprecated)]
+fn decompress_frame_pooled(
+    data: &[u8],
+    key_service: Option<&KeyService>,
+    pool: &crate::BLTEMemoryPool,
+) -> Result<Vec<u8>> {
+    trace!(
+        "Frame/recursive decompression of {} bytes (pooled)",
+        data.len()
+    );
 
     // The data contains another complete BLTE structure
-    decompress_blte(data.to_vec(), key_service)
+    decompress_blte_pooled(data.to_vec(), key_service, Some(pool))
 }
 
 /// Mode 'E' - Encrypted
+#[allow(dead_code)]
 fn decompress_encrypted(
     data: &[u8],
     block_index: usize,
     key_service: &KeyService,
 ) -> Result<Vec<u8>> {
+    decompress_encrypted_pooled(data, block_index, key_service, global_pool())
+}
+
+/// Mode 'E' - Encrypted (pooled)
+fn decompress_encrypted_pooled(
+    data: &[u8],
+    block_index: usize,
+    key_service: &KeyService,
+    pool: &crate::BLTEMemoryPool,
+) -> Result<Vec<u8>> {
     trace!(
-        "Encrypted decompression of {} bytes (block_index={})",
+        "Encrypted decompression of {} bytes (block_index={}, pooled)",
         data.len(),
         block_index
     );
@@ -189,11 +317,12 @@ fn decompress_encrypted(
     let encrypted_data = &data[cursor.position() as usize..];
 
     debug!(
-        "Decrypting block: key_name={:#018x}, enc_type={:#04x}, block_index={}",
+        "Decrypting block: key_name={:#018x}, enc_type={:#04x}, block_index={} (pooled)",
         key_name, enc_type, block_index
     );
 
     // Decrypt based on encryption type
+    #[allow(deprecated)]
     let decrypted = match enc_type {
         0x53 => {
             // Salsa20
@@ -209,7 +338,7 @@ fn decompress_encrypted(
     };
 
     debug!(
-        "Decrypted {} bytes -> {} bytes",
+        "Decrypted {} bytes -> {} bytes (pooled)",
         encrypted_data.len(),
         decrypted.len()
     );
@@ -218,8 +347,8 @@ fn decompress_encrypted(
     if !decrypted.is_empty() {
         let decrypted_mode = CompressionMode::from_byte(decrypted[0]);
         if decrypted_mode.is_some() && decrypted_mode != Some(CompressionMode::Encrypted) {
-            trace!("Recursively decompressing decrypted data");
-            return decompress_chunk(&decrypted, block_index, Some(key_service));
+            trace!("Recursively decompressing decrypted data (pooled)");
+            return decompress_chunk_pooled(&decrypted, block_index, Some(key_service), Some(pool));
         }
     }
 
@@ -269,6 +398,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(deprecated)]
     fn test_compression_mode_from_byte() {
         assert_eq!(
             CompressionMode::from_byte(b'N'),
@@ -329,8 +459,8 @@ mod tests {
         chunk2_full.push(b'Z'); // ZLib compression mode
         chunk2_full.extend_from_slice(&compressed2);
 
-        // Calculate header size
-        let header_size = 8 + 1 + 3 + 2 * 24; // magic + header_size + flags + chunk_count + 2 * chunk_info
+        // Calculate header size (does NOT include magic + header_size field itself)
+        let header_size = 1 + 3 + 2 * 24; // flags + chunk_count + 2 * chunk_info = 52
 
         // Build BLTE file
         let mut blte_data = Vec::new();

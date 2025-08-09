@@ -11,8 +11,17 @@ pub struct BLTEFile {
     pub data: Vec<u8>,
 }
 
+/// A BLTE file that borrows its data (zero-copy)
+#[derive(Debug)]
+pub struct BLTEFileRef<'a> {
+    /// BLTE header
+    pub header: BLTEHeader,
+    /// Raw data (everything after header)
+    pub data: &'a [u8],
+}
+
 impl BLTEFile {
-    /// Parse a BLTE file from bytes
+    /// Parse a BLTE file from bytes (allocates)
     pub fn parse(data: Vec<u8>) -> Result<Self> {
         let header = BLTEHeader::parse(&data)?;
         let data_offset = header.data_offset();
@@ -29,6 +38,24 @@ impl BLTEFile {
         Ok(BLTEFile {
             header,
             data: chunk_data,
+        })
+    }
+
+    /// Parse a BLTE file from bytes (zero-copy)
+    pub fn parse_ref(data: &[u8]) -> Result<BLTEFileRef<'_>> {
+        let header = BLTEHeader::parse(data)?;
+        let data_offset = header.data_offset();
+
+        if data.len() < data_offset {
+            return Err(Error::TruncatedData {
+                expected: data_offset,
+                actual: data.len(),
+            });
+        }
+
+        Ok(BLTEFileRef {
+            header,
+            data: &data[data_offset..],
         })
     }
 
@@ -100,6 +127,106 @@ impl BLTEFile {
     pub fn chunk_count(&self) -> usize {
         self.header.chunk_count()
     }
+
+    /// Get total size of BLTE file (header + data)
+    pub fn total_size(&self) -> usize {
+        self.header.data_offset() + self.data.len()
+    }
+
+    /// Get raw BLTE file data (header + chunk data)
+    pub fn raw_data(&self) -> Vec<u8> {
+        let header_size = self.header.data_offset();
+        let mut raw = Vec::with_capacity(self.total_size());
+
+        // Reconstruct header
+        raw.extend_from_slice(&crate::BLTE_MAGIC);
+        raw.extend_from_slice(&self.header.header_size.to_be_bytes());
+
+        // Add chunk table if multi-chunk
+        if !self.header.is_single_chunk() {
+            // Add chunk table data
+            if self.header.chunks.is_empty() {
+                // This shouldn't happen, but handle gracefully
+                raw.extend_from_slice(&[0x0F, 0x00, 0x00, 0x00]); // flags + 0 chunks
+            } else {
+                raw.push(0x0F); // Standard chunk flags
+                let chunk_count = self.header.chunks.len() as u32;
+                raw.extend_from_slice(&chunk_count.to_be_bytes()[1..]); // 3-byte chunk count
+
+                // Add chunk entries
+                for chunk in &self.header.chunks {
+                    raw.extend_from_slice(&chunk.compressed_size.to_be_bytes());
+                    raw.extend_from_slice(&chunk.decompressed_size.to_be_bytes());
+                    raw.extend_from_slice(&chunk.checksum);
+                }
+            }
+        }
+
+        // Pad to expected header size if needed
+        while raw.len() < header_size {
+            raw.push(0);
+        }
+
+        // Add chunk data
+        raw.extend_from_slice(&self.data);
+        raw
+    }
+}
+
+impl<'a> BLTEFileRef<'a> {
+    /// Get chunk data by index (zero-copy)
+    pub fn get_chunk_data(&self, chunk_index: usize) -> Result<ChunkDataRef<'a>> {
+        if self.header.is_single_chunk() {
+            if chunk_index != 0 {
+                return Err(Error::InvalidChunkCount(chunk_index as u32));
+            }
+
+            return Ok(ChunkDataRef {
+                data: self.data,
+                compressed_size: self.data.len() as u32,
+                decompressed_size: 0, // Unknown until decompressed
+                checksum: [0u8; 16],  // No checksum for single chunk
+            });
+        }
+
+        if chunk_index >= self.header.chunks.len() {
+            return Err(Error::InvalidChunkCount(chunk_index as u32));
+        }
+
+        let chunk_info = &self.header.chunks[chunk_index];
+
+        // Calculate offset for this chunk
+        let mut offset = 0;
+        for i in 0..chunk_index {
+            offset += self.header.chunks[i].compressed_size as usize;
+        }
+
+        let end_offset = offset + chunk_info.compressed_size as usize;
+
+        if end_offset > self.data.len() {
+            return Err(Error::TruncatedData {
+                expected: end_offset,
+                actual: self.data.len(),
+            });
+        }
+
+        Ok(ChunkDataRef {
+            data: &self.data[offset..end_offset],
+            compressed_size: chunk_info.compressed_size,
+            decompressed_size: chunk_info.decompressed_size,
+            checksum: chunk_info.checksum,
+        })
+    }
+
+    /// Get the total number of chunks
+    pub fn chunk_count(&self) -> usize {
+        self.header.chunk_count()
+    }
+
+    /// Check if the file is single-chunk
+    pub fn is_single_chunk(&self) -> bool {
+        self.header.is_single_chunk()
+    }
 }
 
 /// Data for a single chunk
@@ -107,6 +234,19 @@ impl BLTEFile {
 pub struct ChunkData {
     /// Raw chunk data (compressed)
     pub data: Vec<u8>,
+    /// Compressed size
+    pub compressed_size: u32,
+    /// Expected decompressed size (0 if unknown)
+    pub decompressed_size: u32,
+    /// MD5 checksum of compressed data
+    pub checksum: [u8; 16],
+}
+
+/// Chunk data reference (zero-copy)
+#[derive(Debug)]
+pub struct ChunkDataRef<'a> {
+    /// Raw chunk data reference (compressed)
+    pub data: &'a [u8],
     /// Compressed size
     pub compressed_size: u32,
     /// Expected decompressed size (0 if unknown)
@@ -159,8 +299,9 @@ mod tests {
 
         let mut data = Vec::new();
 
-        // Calculate header size: 4 (magic) + 4 (header_size) + 1 (flags) + 3 (chunk_count) + 2 * 24 (chunk_info)
-        let header_size = 8 + 1 + 3 + 2 * 24; // = 60
+        // Calculate header size: 1 (flags) + 3 (chunk_count) + 2 * 24 (chunk_info)
+        // Note: header_size does NOT include the 8 bytes for magic and header_size field itself
+        let header_size = 1 + 3 + 2 * 24; // = 52
 
         // Header
         data.extend_from_slice(b"BLTE");
@@ -256,6 +397,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(deprecated)]
     fn test_compression_mode_detection() {
         let test_cases = [
             (b'N', crate::CompressionMode::None),

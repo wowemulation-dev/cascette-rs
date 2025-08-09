@@ -7,6 +7,7 @@ This directory contains unit tests for the `ngdp-crypto` crate.
 The tests are located in the source files under `#[cfg(test)]` modules and cover:
 
 ### Key Service (`src/key_service.rs`)
+
 - Loading keys from CSV files
 - Loading keys from TXT files with descriptions
 - Loading keys from TSV files
@@ -15,12 +16,14 @@ The tests are located in the source files under `#[cfg(test)]` modules and cover
 - Hardcoded key verification
 
 ### Salsa20 Cipher (`src/salsa20.rs`)
+
 - Key extension (16 bytes → 32 bytes)
 - IV handling and block index operations
 - Round-trip encryption/decryption
 - Invalid input handling
 
 ### ARC4 Cipher (`src/arc4.rs`)
+
 - Key construction with IV and block index
 - Round-trip encryption/decryption
 - Different keys produce different outputs
@@ -31,18 +34,21 @@ The tests are located in the source files under `#[cfg(test)]` modules and cover
 ## Key File Formats Tested
 
 ### CSV Format
+
 ```
 FA505078126ACB3E,BDC51862ABED79B2DE48C8E7E66C6200
 ```
 
 ### TXT Format
+
 ```
 FA505078126ACB3E BDC51862ABED79B2DE48C8E7E66C6200 Description
 ```
 
 ### TSV Format
+
 ```
-FA505078126ACB3E	BDC51862ABED79B2DE48C8E7E66C6200
+FA505078126ACB3E BDC51862ABED79B2DE48C8E7E66C6200
 ```
 
 ## Running Tests

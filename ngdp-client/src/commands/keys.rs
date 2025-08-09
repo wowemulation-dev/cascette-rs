@@ -1,4 +1,6 @@
+use crate::OutputFormat;
 use clap::Subcommand;
+use serde_json;
 use std::fs;
 use std::path::PathBuf;
 use tracing::{info, warn};
@@ -20,16 +22,20 @@ pub enum KeysCommands {
     Status,
 }
 
-pub async fn handle_keys_command(command: KeysCommands) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn handle_keys_command(
+    command: KeysCommands,
+    format: OutputFormat,
+) -> Result<(), Box<dyn std::error::Error>> {
     match command {
-        KeysCommands::Update { output, force } => update_keys(output, force).await,
-        KeysCommands::Status => show_key_status(),
+        KeysCommands::Update { output, force } => update_keys(output, force, format).await,
+        KeysCommands::Status => show_key_status(format),
     }
 }
 
 async fn update_keys(
     output: Option<PathBuf>,
     force: bool,
+    format: OutputFormat,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Default path: ~/.config/cascette/WoW.txt
     let output_path = output.unwrap_or_else(|| {
@@ -53,7 +59,7 @@ async fn update_keys(
                     "Key file is recent ({}h old), skipping update. Use --force to override.",
                     age.as_secs() / 3600
                 );
-                return show_key_status();
+                return show_key_status(format);
             }
         }
     }
@@ -145,7 +151,7 @@ async fn update_keys(
     Ok(())
 }
 
-fn show_key_status() -> Result<(), Box<dyn std::error::Error>> {
+fn show_key_status(format: OutputFormat) -> Result<(), Box<dyn std::error::Error>> {
     let config_dir = dirs::config_dir()
         .unwrap_or_else(|| PathBuf::from("."))
         .join("cascette");
@@ -191,19 +197,40 @@ fn show_key_status() -> Result<(), Box<dyn std::error::Error>> {
         .map(|d| format!("{}h ago", d.as_secs() / 3600))
         .unwrap_or_else(|| "unknown".to_string());
 
-    info!("📊 Key Database Status");
-    info!("  Location: {}", key_file.display());
-    info!("  Total keys: {}", key_count);
-    info!("  File size: {} KB", file_size / 1024);
-    info!("  Last updated: {}", modified);
-
-    if !key_names.is_empty() {
-        info!("  Sample keys:");
-        for name in key_names {
-            info!("    - {}", name);
+    match format {
+        OutputFormat::Json | OutputFormat::JsonPretty => {
+            let status = serde_json::json!({
+                "location": key_file.display().to_string(),
+                "total_keys": key_count,
+                "file_size_bytes": file_size,
+                "file_size_kb": file_size / 1024,
+                "last_updated": modified,
+                "sample_keys": key_names,
+                "status": "loaded"
+            });
+            let output = if matches!(format, OutputFormat::JsonPretty) {
+                serde_json::to_string_pretty(&status)?
+            } else {
+                serde_json::to_string(&status)?
+            };
+            println!("{output}");
         }
-        if key_count > 5 {
-            info!("    ... and {} more", key_count - 5);
+        _ => {
+            info!("📊 Key Database Status");
+            info!("  Location: {}", key_file.display());
+            info!("  Total keys: {}", key_count);
+            info!("  File size: {} KB", file_size / 1024);
+            info!("  Last updated: {}", modified);
+
+            if !key_names.is_empty() {
+                info!("  Sample keys:");
+                for name in key_names {
+                    info!("    - {}", name);
+                }
+                if key_count > 5 {
+                    info!("    ... and {} more", key_count - 5);
+                }
+            }
         }
     }
 

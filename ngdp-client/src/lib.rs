@@ -5,8 +5,10 @@
 pub mod cached_client;
 pub mod cdn_config;
 pub mod commands;
+pub mod config_manager;
 pub mod fallback_client;
 pub mod output;
+pub mod pattern_extraction;
 pub mod wago_api;
 
 /// Common test constants
@@ -20,6 +22,7 @@ pub mod test_constants {
 pub use crate::commands::{
     certs::handle as handle_certs, config::handle as handle_config,
     download::handle as handle_download, inspect::handle as handle_inspect,
+    install::handle as handle_install, listfile::handle as handle_listfile,
     products::handle as handle_products, storage::handle as handle_storage,
 };
 
@@ -120,6 +123,20 @@ pub enum StorageCommands {
         path: PathBuf,
     },
 
+    /// Show NGDP configuration information from WoW installation
+    Config {
+        /// Path to WoW installation directory
+        #[arg(default_value = ".")]
+        path: PathBuf,
+    },
+
+    /// Show detailed storage statistics
+    Stats {
+        /// Path to storage directory
+        #[arg(default_value = ".")]
+        path: PathBuf,
+    },
+
     /// Verify storage integrity
     Verify {
         /// Path to storage directory
@@ -131,6 +148,76 @@ pub enum StorageCommands {
         fix: bool,
     },
 
+    /// Read a file by EKey
+    Read {
+        /// Path to storage directory
+        path: PathBuf,
+
+        /// Encoding key (hex)
+        ekey: String,
+
+        /// Output file (defaults to stdout)
+        #[arg(short = 'O', long)]
+        output: Option<PathBuf>,
+    },
+
+    /// Write a file to storage
+    Write {
+        /// Path to storage directory
+        path: PathBuf,
+
+        /// Encoding key (hex)
+        ekey: String,
+
+        /// Input file (defaults to stdin)
+        #[arg(short = 'I', long)]
+        input: Option<PathBuf>,
+    },
+
+    /// List all files in storage
+    List {
+        /// Path to storage directory
+        #[arg(default_value = ".")]
+        path: PathBuf,
+
+        /// Show detailed information
+        #[arg(short, long)]
+        detailed: bool,
+
+        /// Limit number of results
+        #[arg(short = 'n', long)]
+        limit: Option<usize>,
+    },
+
+    /// Rebuild storage indices
+    Rebuild {
+        /// Path to storage directory
+        #[arg(default_value = ".")]
+        path: PathBuf,
+
+        /// Force rebuild even if indices seem valid
+        #[arg(short, long)]
+        force: bool,
+    },
+
+    /// Optimize storage for performance
+    Optimize {
+        /// Path to storage directory
+        #[arg(default_value = ".")]
+        path: PathBuf,
+    },
+
+    /// Repair corrupted storage
+    Repair {
+        /// Path to storage directory
+        #[arg(default_value = ".")]
+        path: PathBuf,
+
+        /// Dry run (don't actually repair)
+        #[arg(short = 'n', long)]
+        dry_run: bool,
+    },
+
     /// Clean up unused data
     Clean {
         /// Path to storage directory
@@ -140,6 +227,142 @@ pub enum StorageCommands {
         /// Dry run (don't actually delete)
         #[arg(short = 'n', long)]
         dry_run: bool,
+    },
+
+    /// Extract a file by EKey with optional filename resolution
+    Extract {
+        /// Encoding key (hex)
+        ekey: String,
+
+        /// Path to storage directory
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+
+        /// Output file path (optional)
+        #[arg(short = 'O', long)]
+        output: Option<PathBuf>,
+
+        /// Path to community listfile for filename resolution
+        #[arg(long)]
+        listfile: Option<PathBuf>,
+
+        /// Resolve filename using listfile and TACT manifests
+        #[arg(long)]
+        resolve_filename: bool,
+    },
+
+    /// Extract a file by FileDataID (requires TACT manifests)
+    ExtractById {
+        /// FileDataID to extract
+        fdid: u32,
+
+        /// Path to storage directory
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+
+        /// Output file path (optional)
+        #[arg(short = 'O', long)]
+        output: Option<PathBuf>,
+
+        /// Path to root manifest file
+        #[arg(long)]
+        root_manifest: Option<PathBuf>,
+
+        /// Path to encoding manifest file
+        #[arg(long)]
+        encoding_manifest: Option<PathBuf>,
+    },
+
+    /// Extract a file by filename (requires TACT manifests and listfile)
+    ExtractByName {
+        /// Filename to extract
+        filename: String,
+
+        /// Path to storage directory
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+
+        /// Output file path (optional)
+        #[arg(short = 'O', long)]
+        output: Option<PathBuf>,
+
+        /// Path to root manifest file
+        #[arg(long)]
+        root_manifest: Option<PathBuf>,
+
+        /// Path to encoding manifest file
+        #[arg(long)]
+        encoding_manifest: Option<PathBuf>,
+
+        /// Path to community listfile for filename resolution
+        #[arg(long)]
+        listfile: Option<PathBuf>,
+    },
+
+    /// Load TACT manifests for enhanced operations
+    LoadManifests {
+        /// Path to storage directory
+        #[arg(default_value = ".")]
+        path: PathBuf,
+
+        /// Path to root manifest file
+        #[arg(long)]
+        root_manifest: Option<PathBuf>,
+
+        /// Path to encoding manifest file
+        #[arg(long)]
+        encoding_manifest: Option<PathBuf>,
+
+        /// Path to community listfile for filename resolution
+        #[arg(long)]
+        listfile: Option<PathBuf>,
+
+        /// Locale to use for filtering (default: all)
+        #[arg(long, default_value = "all")]
+        locale: String,
+
+        /// Only show info, don't persist
+        #[arg(long)]
+        info_only: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum ListfileCommands {
+    /// Download the latest community listfile
+    Download {
+        /// Output directory for listfile
+        #[arg(long, default_value = ".")]
+        output: PathBuf,
+
+        /// Force download even if file exists
+        #[arg(short, long)]
+        force: bool,
+    },
+
+    /// Show listfile information
+    Info {
+        /// Path to listfile
+        #[arg(default_value = "community-listfile.csv")]
+        path: PathBuf,
+    },
+
+    /// Search for files in listfile
+    Search {
+        /// Search pattern (regex)
+        pattern: String,
+
+        /// Path to listfile
+        #[arg(default_value = "community-listfile.csv")]
+        path: PathBuf,
+
+        /// Case-insensitive search
+        #[arg(short, long)]
+        ignore_case: bool,
+
+        /// Limit results
+        #[arg(short, long, default_value = "50")]
+        limit: usize,
     },
 }
 
@@ -160,6 +383,14 @@ pub enum DownloadCommands {
         /// Region
         #[arg(short, long, default_value = "us")]
         region: String,
+
+        /// Dry run - show what would be downloaded without actually downloading
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Filter by tags (comma-separated)
+        #[arg(long)]
+        tags: Option<String>,
     },
 
     /// Download specific files
@@ -177,6 +408,18 @@ pub enum DownloadCommands {
         /// Build ID or version
         #[arg(short, long)]
         build: Option<String>,
+
+        /// Dry run - show what would be downloaded without actually downloading
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Filter by tags (comma-separated)
+        #[arg(long)]
+        tags: Option<String>,
+
+        /// Limit number of files to download
+        #[arg(long)]
+        limit: Option<usize>,
     },
 
     /// Resume an interrupted download
@@ -184,6 +427,100 @@ pub enum DownloadCommands {
         /// Session ID or path
         session: String,
     },
+
+    /// Test resumable download with a known file (for testing)
+    TestResume {
+        /// File hash to download (32 hex chars)
+        hash: String,
+
+        /// CDN host
+        #[arg(short = 'H', long, default_value = "blzddist1-a.akamaihd.net")]
+        host: String,
+
+        /// Output file path
+        #[arg(long, default_value = "test_download.bin")]
+        output: PathBuf,
+
+        /// Enable resumable mode
+        #[arg(short, long)]
+        resumable: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum InstallCommands {
+    /// Install a game or product
+    Game {
+        /// Product name (e.g., wow, wow_classic)
+        product: String,
+
+        /// Installation directory
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+
+        /// Specific build to install (defaults to latest)
+        #[arg(short, long)]
+        build: Option<String>,
+
+        /// Region
+        #[arg(short, long, default_value = "us")]
+        region: String,
+
+        /// Installation type
+        #[arg(short = 't', long, value_enum, default_value = "minimal")]
+        install_type: InstallType,
+
+        /// Resume existing installation (detects .build.info and missing files)
+        #[arg(long)]
+        resume: bool,
+
+        /// Verify installation after completion
+        #[arg(short = 'v', long)]
+        verify: bool,
+
+        /// Dry run - show what would be installed without downloading
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Maximum concurrent downloads
+        #[arg(long, default_value = "5")]
+        max_concurrent: usize,
+
+        /// Filter by tags (comma-separated, e.g., "Windows,enUS")
+        #[arg(long)]
+        tags: Option<String>,
+    },
+
+    /// Repair an existing installation by verifying and re-downloading corrupted files
+    Repair {
+        /// Installation directory containing .build.info
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+
+        /// Verify checksums of existing files
+        #[arg(short = 'v', long)]
+        verify_checksums: bool,
+
+        /// Dry run - show what would be repaired without downloading
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Maximum concurrent downloads
+        #[arg(long, default_value = "5")]
+        max_concurrent: usize,
+    },
+}
+
+#[derive(clap::ValueEnum, Clone, Copy, Debug, PartialEq)]
+pub enum InstallType {
+    /// Only required files for basic functionality
+    Minimal,
+    /// All available content
+    Full,
+    /// Custom selection based on tags
+    Custom,
+    /// Only create .build.info and Data/config structure (no downloads)
+    MetadataOnly,
 }
 
 #[derive(Subcommand)]
@@ -360,7 +697,7 @@ pub enum CertFormat {
 }
 
 /// Output format options for the CLI
-#[derive(clap::ValueEnum, Clone, Copy, Debug)]
+#[derive(clap::ValueEnum, Clone, Copy, Debug, PartialEq)]
 pub enum OutputFormat {
     /// Plain text output
     Text,

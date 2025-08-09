@@ -5,8 +5,8 @@ use tracing::Level;
 
 use ngdp_client::commands::keys::KeysCommands;
 use ngdp_client::{
-    CertsCommands, ConfigCommands, DownloadCommands, InspectCommands, OutputFormat,
-    ProductsCommands, StorageCommands, cached_client, commands,
+    CertsCommands, ConfigCommands, DownloadCommands, InspectCommands, InstallCommands,
+    OutputFormat, ProductsCommands, StorageCommands, cached_client, commands,
 };
 
 #[derive(Parser)]
@@ -81,6 +81,10 @@ enum Commands {
     #[command(subcommand)]
     Download(DownloadCommands),
 
+    /// Install a game or product
+    #[command(subcommand)]
+    Install(InstallCommands),
+
     /// Inspect NGDP data structures
     #[command(subcommand)]
     Inspect(InspectCommands),
@@ -96,6 +100,10 @@ enum Commands {
     /// Certificate operations
     #[command(subcommand)]
     Certs(CertsCommands),
+
+    /// Manage community listfiles for filename resolution
+    #[command(subcommand)]
+    Listfile(ngdp_client::ListfileCommands),
 }
 
 #[tokio::main]
@@ -110,6 +118,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Set global color override if requested
     if cli.no_color {
+        // SAFETY: This is called once at program startup before any threads are spawned.
+        // The NO_COLOR environment variable is a standard convention for disabling colors
+        // and modifying it here won't cause data races.
         unsafe {
             std::env::set_var("NO_COLOR", "1");
         }
@@ -139,10 +150,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Commands::Products(cmd) => commands::products::handle(cmd, cli.format).await,
         Commands::Storage(cmd) => commands::storage::handle(cmd, cli.format).await,
         Commands::Download(cmd) => commands::download::handle(cmd, cli.format).await,
+        Commands::Install(cmd) => commands::install::handle(cmd, cli.format).await,
         Commands::Inspect(cmd) => commands::inspect::handle(cmd, cli.format).await,
         Commands::Config(cmd) => commands::config::handle(cmd, cli.format).await,
         Commands::Certs(cmd) => commands::certs::handle(cmd, cli.format).await,
-        Commands::Keys(cmd) => commands::keys::handle_keys_command(cmd).await,
+        Commands::Keys(cmd) => commands::keys::handle_keys_command(cmd, cli.format).await,
+        Commands::Listfile(cmd) => commands::listfile::handle(cmd, cli.format).await,
     };
 
     // Handle errors with more user-friendly messages

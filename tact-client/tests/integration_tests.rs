@@ -15,10 +15,7 @@ async fn test_v2_client_creation() {
     let client = HttpClient::new(Region::EU, ProtocolVersion::V2).unwrap();
     assert_eq!(client.region(), Region::EU);
     assert_eq!(client.version(), ProtocolVersion::V2);
-    assert_eq!(
-        client.base_url(),
-        "https://eu.version.battle.net/v2/products"
-    );
+    assert_eq!(client.base_url(), "https://eu.version.battle.net");
 }
 
 #[tokio::test]

@@ -158,11 +158,11 @@ fn test_encoding_header_endianness() {
     data.extend_from_slice(&[0x56, 0x78]); // EKey page size = 22136 KB
 
     // Page counts set to 0 for header-only test
-    data.extend_from_slice(&[0x00, 0x00, 0x00, 0x00]); // CKey page count = 0  
+    data.extend_from_slice(&[0x00, 0x00, 0x00, 0x00]); // CKey page count = 0
     data.extend_from_slice(&[0x00, 0x00, 0x00, 0x00]); // EKey page count = 0
 
     data.push(0); // Unknown
-    data.extend_from_slice(&[0x11, 0x22, 0x33, 0x44]); // ESpec block size
+    data.extend_from_slice(&[0x00, 0x00, 0x00, 0x00]); // ESpec block size (0 for header-only test)
 
     let encoding = EncodingFile::parse(&data).unwrap();
 
@@ -170,7 +170,7 @@ fn test_encoding_header_endianness() {
     assert_eq!(encoding.header.ekey_page_size_kb, 0x5678);
     assert_eq!(encoding.header.ckey_page_count, 0);
     assert_eq!(encoding.header.ekey_page_count, 0);
-    assert_eq!(encoding.header.espec_block_size, 0x11223344);
+    assert_eq!(encoding.header.espec_block_size, 0);
 }
 
 #[test]

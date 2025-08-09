@@ -45,6 +45,7 @@ if let Some(key) = key_service.get_key(key_name) {
 ### Key File Management
 
 The KeyService automatically searches for key files in:
+
 - `~/.config/cascette/`
 - `~/.tactkeys/`
 - Path specified in `CASCETTE_KEYS_PATH` environment variable
@@ -59,18 +60,20 @@ FA505078126ACB3E,BDC51862ABED79B2DE48C8E7E66C6200
 FA505078126ACB3E BDC51862ABED79B2DE48C8E7E66C6200 WoW 8.2.0.30898 Nazjatar Cinematic
 
 # TSV Format
-FA505078126ACB3E	BDC51862ABED79B2DE48C8E7E66C6200
+FA505078126ACB3E BDC51862ABED79B2DE48C8E7E66C6200
 ```
 
 ### Cipher Details
 
 #### Salsa20
+
 - Uses 16-byte keys extended to 32 bytes (by duplication)
-- 4-byte IV extended to 8 bytes (by duplication)  
+- 4-byte IV extended to 8 bytes (by duplication)
 - Block index XORed with first 4 bytes of IV
 - Compatible with WoW's BLTE encryption
 
 #### ARC4/RC4
+
 - Combines key (16 bytes) + IV (4 bytes) + block_index (4 bytes)
 - Padded to 32 bytes with zeros
 - Used for legacy content

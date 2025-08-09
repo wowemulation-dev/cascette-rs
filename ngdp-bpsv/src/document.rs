@@ -151,9 +151,9 @@ impl<'a> BpsvRow<'a> {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct OwnedBpsvRow {
     /// Raw string values as they appear in the BPSV
-    raw_values: Vec<String>,
+    pub raw_values: Vec<String>,
     /// Typed values (lazy-loaded)
-    typed_values: Option<Vec<BpsvValue>>,
+    pub typed_values: Option<Vec<BpsvValue>>,
 }
 
 impl OwnedBpsvRow {
@@ -179,6 +179,20 @@ impl OwnedBpsvRow {
             raw_values: self.raw_values.iter().map(|s| s.as_str()).collect(),
             typed_values: self.typed_values.clone(),
         }
+    }
+
+    /// Get the number of values
+    pub fn len(&self) -> usize {
+        if let Some(typed) = &self.typed_values {
+            typed.len()
+        } else {
+            self.raw_values.len()
+        }
+    }
+
+    /// Check if empty
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 }
 
@@ -368,6 +382,14 @@ impl<'a> BpsvDocument<'a> {
             maps.push(row.to_map(&self.schema)?);
         }
         Ok(maps)
+    }
+
+    /// Convert to owned rows for interning
+    pub fn into_owned_rows(self) -> Vec<OwnedBpsvRow> {
+        self.rows
+            .into_iter()
+            .map(|row| OwnedBpsvRow::from_borrowed(&row))
+            .collect()
     }
 }
 

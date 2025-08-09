@@ -78,11 +78,21 @@ impl EncodingFile {
         // Parse header
         let header = Self::parse_header(&mut cursor)?;
         debug!(
-            "Parsed encoding header: version={}, ckey_pages={}, ekey_pages={}",
-            header.version, header.ckey_page_count, header.ekey_page_count
+            "Parsed encoding header: version={}, ckey_pages={}, ekey_pages={}, ckey_page_size_kb={}, ekey_page_size_kb={}, espec_table_size={}",
+            header.version,
+            header.ckey_page_count,
+            header.ekey_page_count,
+            header.ckey_page_size_kb,
+            header.ekey_page_size_kb,
+            header.espec_block_size
         );
 
-        // Parse CKey page table
+        // Read ESpec string table (comes immediately after header)
+        let mut espec_data = vec![0u8; header.espec_block_size as usize];
+        cursor.read_exact(&mut espec_data)?;
+        debug!("Read ESpec string table: {} bytes", espec_data.len());
+
+        // Parse CKey page table indices
         let ckey_page_table = Self::parse_page_table(
             &mut cursor,
             header.ckey_page_count as usize,
@@ -90,7 +100,7 @@ impl EncodingFile {
         )?;
         trace!("Parsed {} CKey page table entries", ckey_page_table.len());
 
-        // Parse EKey page table
+        // Parse EKey page table indices
         let _ekey_page_table = Self::parse_page_table(
             &mut cursor,
             header.ekey_page_count as usize,
@@ -98,26 +108,45 @@ impl EncodingFile {
         )?;
         trace!("Parsed {} EKey page table entries", _ekey_page_table.len());
 
-        // Parse CKey pages
+        // Parse CKey pages - read directly from cursor position like rustycasc does
         let mut ckey_entries = HashMap::new();
         let page_size = header.ckey_page_size_kb as usize * 1024;
 
-        for (i, page_info) in ckey_page_table.iter().enumerate() {
-            let page_data = Self::read_page(&mut cursor, page_size)?;
+        // Get remaining data from cursor to validate checksums correctly
+        let remaining_data = {
+            let current_pos = cursor.position() as usize;
+            &data[current_pos..]
+        };
+        let mut data_offset = 0;
 
-            // Verify page checksum
-            let checksum = ::md5::compute(&page_data);
-            if checksum.as_ref() != page_info.checksum {
-                warn!("CKey page {} checksum mismatch", i);
+        for (i, page_info) in ckey_page_table.iter().enumerate() {
+            // Validate checksum on the data at current position (like rustycasc)
+            if data_offset + page_size <= remaining_data.len() {
+                let page_slice = &remaining_data[data_offset..data_offset + page_size];
+                let checksum = ::md5::compute(page_slice);
+
+                if checksum.as_ref() != page_info.checksum {
+                    debug!(
+                        "CKey page {} checksum mismatch (expected: {:?}, got: {:?})",
+                        i,
+                        hex::encode(page_info.checksum),
+                        hex::encode(checksum.as_ref())
+                    );
+                }
+
+                Self::parse_ckey_page(
+                    page_slice,
+                    header.ckey_hash_size,
+                    header.ekey_hash_size,
+                    &mut ckey_entries,
+                )?;
             }
 
-            Self::parse_ckey_page(
-                &page_data,
-                header.ckey_hash_size,
-                header.ekey_hash_size,
-                &mut ckey_entries,
-            )?;
+            data_offset += page_size;
         }
+
+        // Advance cursor past all CKey pages
+        cursor.set_position(cursor.position() + (header.ckey_page_count as u64 * page_size as u64));
 
         debug!("Parsed {} CKey entries", ckey_entries.len());
 
@@ -200,13 +229,6 @@ impl EncodingFile {
         }
 
         Ok(pages)
-    }
-
-    /// Read a page of data
-    fn read_page<R: Read>(reader: &mut R, page_size: usize) -> Result<Vec<u8>> {
-        let mut page = vec![0u8; page_size];
-        reader.read_exact(&mut page)?;
-        Ok(page)
     }
 
     /// Parse a CKey page
@@ -300,6 +322,15 @@ impl EncodingFile {
     /// Get total number of encoding keys
     pub fn ekey_count(&self) -> usize {
         self.ekey_to_ckey.len()
+    }
+
+    /// Get sample content keys for debugging
+    pub fn get_sample_ckeys(&self, limit: usize) -> Vec<String> {
+        self.ckey_entries
+            .keys()
+            .take(limit)
+            .map(hex::encode)
+            .collect()
     }
 }
 

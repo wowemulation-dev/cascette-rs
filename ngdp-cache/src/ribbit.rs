@@ -82,7 +82,23 @@ impl RibbitCache {
             ensure_dir(parent).await?;
         }
 
-        // Write data
+        // Use temporary files for atomic writes in the same directory
+        let temp_path = path.with_file_name(format!(
+            "{}.tmp",
+            path.file_name().unwrap().to_string_lossy()
+        ));
+        let temp_meta_path = meta_path.with_file_name(format!(
+            "{}.tmp",
+            meta_path.file_name().unwrap().to_string_lossy()
+        ));
+
+        // Get timestamp
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        // Write data to temporary file first
         trace!(
             "Writing {} bytes to Ribbit cache: {}/{}/{}",
             data.len(),
@@ -90,14 +106,28 @@ impl RibbitCache {
             product,
             endpoint
         );
-        tokio::fs::write(&path, data).await?;
 
-        // Write timestamp metadata
-        let timestamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-        tokio::fs::write(&meta_path, timestamp.to_string()).await?;
+        // Handle errors and cleanup temporary files
+        let write_result = async {
+            tokio::fs::write(&temp_path, data).await?;
+            tokio::fs::write(&temp_meta_path, timestamp.to_string()).await?;
+
+            // Atomically rename both files into place
+            // This ensures that both files appear simultaneously
+            tokio::fs::rename(&temp_path, &path).await?;
+            tokio::fs::rename(&temp_meta_path, &meta_path).await?;
+
+            Ok::<(), std::io::Error>(())
+        }
+        .await;
+
+        // Clean up temporary files on error
+        if write_result.is_err() {
+            let _ = tokio::fs::remove_file(&temp_path).await;
+            let _ = tokio::fs::remove_file(&temp_meta_path).await;
+        }
+
+        write_result?;
 
         Ok(())
     }

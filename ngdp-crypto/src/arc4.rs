@@ -22,7 +22,7 @@ use crate::{CryptoError, Result};
 ///
 /// * `data` - Encrypted data to decrypt
 /// * `key` - 16-byte base encryption key
-/// * `iv` - 4-byte initialization vector  
+/// * `iv` - 4-byte initialization vector
 /// * `block_index` - Block index for multi-chunk files
 ///
 /// # Returns
@@ -92,6 +92,7 @@ pub fn encrypt_arc4(data: &[u8], key: &[u8; 16], iv: &[u8], block_index: usize) 
 }
 
 #[cfg(test)]
+#[allow(deprecated)]
 mod tests {
     use super::*;
 
