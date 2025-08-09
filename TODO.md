@@ -1566,9 +1566,9 @@ fn test_bucket_distribution() {
 
 ## Priority 5: Advanced Features
 
-### 5.1 `ngdp-patch` - Patch System 🟡
+### 5.1 `ngdp-patch` - Patch System ✅
 
-#### 5.1.1 Create Crate Structure 🟡
+#### 5.1.1 Create Crate Structure ✅
 
 **Location:** `ngdp-patch/` (new crate)
 
@@ -1578,43 +1578,51 @@ name = "ngdp-patch"
 
 [dependencies]
 blte = { path = "../blte" }
-bsdiff = "0.1"  # For patch application
+flate2 = "1.0"  # For zlib compression
+md5 = "0.7"
+byteorder = "1.5"
 ```
 
 **Implementation:**
 
-- [ ] Create crate structure:
-  - [ ] `src/lib.rs` - Patch API
-  - [ ] `src/zbsdiff.rs` - ZBSDIFF format
-  - [ ] `src/apply.rs` - Patch application
+- [x] Create crate structure:
+  - [x] `src/lib.rs` - Patch API
+  - [x] `src/zbsdiff.rs` - ZBSDIFF format
+  - [x] `src/patch_file.rs` - Patch file parsing
+  - [x] `src/patch_entry.rs` - Patch entries
+  - [x] `src/error.rs` - Error handling
 
-#### 5.1.2 Patch File Parser 🟡
+#### 5.1.2 Patch File Parser ✅
 
-**Location:** `ngdp-patch/src/patch.rs`
+**Location:** `ngdp-patch/src/patch_file.rs`
 
 ```rust
 pub struct PatchFile {
-    entries: Vec<PatchEntry>,
+    header: PatchHeader,
+    entries: PatchIndex,
 }
 
 pub struct PatchEntry {
-    old_ekey: [u8; 16],
-    new_ekey: [u8; 16],
-    patch_ekey: [u8; 16],
+    old_ckey: ContentKey,
+    new_ckey: ContentKey,
+    patch_ekey: EncodingKey,
     old_size: u64,
     new_size: u64,
+    records: Vec<PatchRecord>,
 }
 ```
 
 **Implementation:**
 
-- [ ] Parse patch manifest
-- [ ] Extract patch mappings
-- [ ] Calculate patch requirements
-**Testing:** Parse patch files
-**Acceptance:** Can identify needed patches
+- [x] Parse patch manifest
+- [x] Extract patch mappings
+- [x] Calculate patch requirements
+- [x] Support incremental patches
+- [x] Patch chain resolution
+**Testing:** Parse patch files ✅
+**Acceptance:** Can identify needed patches ✅
 
-#### 5.1.3 ZBSDIFF Implementation 🟡
+#### 5.1.3 ZBSDIFF Implementation ✅
 
 **Location:** `ngdp-patch/src/zbsdiff.rs`
 
@@ -1624,10 +1632,11 @@ pub fn apply_patch(old_data: &[u8], patch_data: &[u8]) -> Result<Vec<u8>>
 
 **Implementation:**
 
-- [ ] Decompress patch with zlib
-- [ ] Apply binary diff algorithm
-- [ ] Verify output checksum
-**Testing:** Apply known patches
+- [x] Decompress patch with zlib
+- [x] Apply binary diff algorithm
+- [x] Verify output checksum
+- [x] Support for empty file patches
+**Testing:** Apply known patches ✅
 **Acceptance:** Patched files match expected
 
 ---
@@ -1895,7 +1904,7 @@ Each component MUST have:
 
 ### Milestone 6: Production Ready 🟡
 
-- [ ] ngdp-patch crate
+- [x] ngdp-patch crate ✅
 - [x] Complete CLI ✅
 - [x] Full test coverage ✅
 - [x] Performance optimization ✅
