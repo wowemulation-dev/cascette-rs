@@ -5,20 +5,24 @@ This directory contains comprehensive tests for the `casc-storage` crate, coveri
 ## Test Files
 
 ### Core Functionality
+
 - `binary_search_test.rs` - Binary search algorithm tests for index lookups
 - `lazy_loading_tests.rs` - Lazy loading and on-demand file access
 - `zero_copy_test.rs` - Zero-copy operations and memory efficiency
 
 ### Performance and Scaling
+
 - `large_archive_test.rs` - Handling of large CASC archives (>2GB)
 - `parallel_loading.rs` - Concurrent file loading and thread safety
 - `lockfree_cache_test.rs` - Lock-free cache implementation tests
 
 ### Progressive Loading
+
 - `progressive_loading_test.rs` - Progressive/streaming file access
 - `test_progressive_integration.rs` - Integration tests for progressive loading
 
 ### Real Data
+
 - `real_data_test.rs` - Tests with actual CASC data files
 - `tact_manifest_tests.rs` - TACT manifest parsing and integration
 
@@ -27,12 +31,14 @@ This directory contains comprehensive tests for the `casc-storage` crate, coveri
 The tests verify:
 
 ### Storage Operations
+
 - Opening and reading CASC storage
 - Index file parsing and lookups
 - Archive file access and extraction
 - Memory-mapped file operations
 
 ### Performance Features
+
 - Lazy loading of large files
 - Progressive chunk loading
 - Zero-copy data access
@@ -40,12 +46,14 @@ The tests verify:
 - Lock-free caching
 
 ### Data Integrity
+
 - Checksum verification
 - File existence checks
 - Proper error handling
 - Edge case handling
 
 ### Integration
+
 - TACT manifest integration
 - Real game data compatibility
 - Multi-archive support
@@ -73,6 +81,7 @@ cargo test -p casc-storage real_data -- --ignored
 ## Test Data Requirements
 
 Some tests require:
+
 - Sample CASC index files (.idx)
 - Sample CASC archive files
 - Valid TACT manifests
@@ -83,6 +92,7 @@ Tests that require real CASC data are marked with `#[ignore]` and must be run ex
 ## Performance Tests
 
 Performance-critical tests measure:
+
 - Index lookup speed
 - Archive extraction throughput
 - Memory usage patterns

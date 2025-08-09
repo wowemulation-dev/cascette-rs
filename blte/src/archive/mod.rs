@@ -87,7 +87,7 @@ pub struct ArchiveStats {
 pub struct CompressionModeStats {
     /// Number of files using no compression
     pub none_count: usize,
-    /// Number of files using ZLib compression  
+    /// Number of files using ZLib compression
     pub zlib_count: usize,
     /// Number of files using LZ4 compression
     pub lz4_count: usize,
@@ -102,7 +102,7 @@ pub struct CompressionModeStats {
 pub struct SizeDistribution {
     /// Smallest file size
     pub min_size: usize,
-    /// Largest file size  
+    /// Largest file size
     pub max_size: usize,
     /// Average file size
     pub avg_size: f64,

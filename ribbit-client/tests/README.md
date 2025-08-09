@@ -5,6 +5,7 @@ This directory contains comprehensive tests for the `ribbit-client` crate.
 ## Test Categories
 
 ### Unit Tests (in source files)
+
 Located in `src/` under `#[cfg(test)]` modules:
 
 - **Client Tests** (`src/client.rs`) - Core client functionality
@@ -16,10 +17,13 @@ Located in `src/` under `#[cfg(test)]` modules:
 - **Type Tests** (`src/types.rs`) - Protocol types and enums
 
 ### Integration Tests
+
 Located in this `tests/` directory:
 
 #### `integration_test.rs`
+
 End-to-end testing with real Ribbit servers:
+
 - Connection establishment
 - Protocol version switching
 - All endpoint types (summary, versions, CDNs, BGDL)
@@ -28,14 +32,18 @@ End-to-end testing with real Ribbit servers:
 - Mixed valid/invalid request handling
 
 #### `typed_response_test.rs`
+
 Typed response API testing:
+
 - Typed response parsing
 - Field access methods
 - Error handling for malformed data
 - Response convenience methods
 
 #### `signature_test.rs`
+
 Signature parsing and verification:
+
 - PKCS#7/CMS signature parsing
 - RSA signature verification
 - Certificate extraction
@@ -44,6 +52,7 @@ Signature parsing and verification:
 ## Test Coverage
 
 ### Protocol Features
+
 - ✅ V1 (MIME) and V2 (raw) protocols
 - ✅ All regions (US, EU, CN, KR, TW, SG)
 - ✅ All endpoint types
@@ -51,12 +60,14 @@ Signature parsing and verification:
 - ✅ DNS caching functionality
 
 ### MIME Processing
+
 - ✅ Multipart MIME parsing
 - ✅ Content extraction
 - ✅ Checksum validation
 - ✅ Signature attachment handling
 
 ### Cryptographic Features
+
 - ✅ PKCS#7/CMS signature parsing
 - ✅ RSA signature verification
 - ✅ Certificate processing
@@ -64,12 +75,14 @@ Signature parsing and verification:
 - ✅ OCSP response parsing
 
 ### Data Processing
+
 - ✅ BPSV format parsing
 - ✅ Typed response generation
 - ✅ Field validation and access
 - ✅ Error condition handling
 
 ### Network Features
+
 - ✅ Connection pooling
 - ✅ Automatic retries
 - ✅ DNS resolution caching
@@ -98,8 +111,9 @@ RUST_LOG=debug cargo test -p ribbit-client
 ## Network Requirements
 
 Integration tests require internet connectivity to reach Blizzard's Ribbit servers:
+
 - `us.version.battle.net` (US region)
-- `eu.version.battle.net` (EU region)  
+- `eu.version.battle.net` (EU region)
 - `kr.version.battle.net` (KR region)
 - `tw.version.battle.net` (TW region)
 - `cn.version.battle.net` (CN region - may timeout outside China)
@@ -109,6 +123,7 @@ Tests are designed to handle network failures gracefully and will skip or report
 ## Test Data
 
 Tests use a combination of:
+
 - **Live data** from Ribbit servers for integration testing
 - **Synthetic data** for unit testing edge cases
 - **Known signatures** for cryptographic verification testing

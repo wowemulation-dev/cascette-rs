@@ -31,7 +31,7 @@ This crate provides parsers for various TACT file formats used by Blizzard's con
   - CKey ↔ EKey bidirectional mapping
   - Page-based structure with checksums
   - Support for multiple encoding formats
-  
+
 - ✅ **Install Manifest** (`install.rs`)
   - Tag-based file filtering
   - File metadata (name, MD5, size)
@@ -117,6 +117,7 @@ if let Some(version) = config.get("version") {
 ## Performance
 
 The parsers are optimized for:
+
 - Memory efficiency with streaming where possible
 - Fast lookups using appropriate data structures
 - Minimal allocations during parsing
@@ -125,6 +126,7 @@ The parsers are optimized for:
 ## Integration
 
 This crate integrates with other cascette-rs components:
+
 - Uses `blte` for decompression
 - Works with `ngdp-crypto` for encrypted content
 - Compatible with `ngdp-cdn` for downloading files

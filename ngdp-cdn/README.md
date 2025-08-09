@@ -94,6 +94,7 @@ let response = client.download("tpr/wow", "content_hash").await?;
 
 By default, the fallback client includes two backup CDN servers that are only
 used after all Blizzard CDNs have been exhausted:
+
 - `http://cdn.arctium.tools/`
 - `https://tact.mirror.reliquaryhq.com/`
 
@@ -107,6 +108,7 @@ update existing ones, or remove inactive ones), please file a ticket on our
 [GitHub Issues](https://github.com/wowemulation-dev/cascette-rs/issues) page.
 
 When suggesting a community CDN, please include:
+
 - The CDN URL and confirmation it supports NGDP/TACT protocols
 - Information about who maintains it and its reliability
 - Any regional restrictions or limitations

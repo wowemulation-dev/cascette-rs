@@ -177,7 +177,7 @@ fn decompress_zlib_pooled(data: &[u8], pool: &crate::BLTEMemoryPool) -> Result<V
     Ok(result)
 }
 
-/// Mode '4' - LZ4 compression  
+/// Mode '4' - LZ4 compression
 #[allow(dead_code)]
 fn decompress_lz4(data: &[u8]) -> Result<Vec<u8>> {
     decompress_lz4_pooled(data, global_pool())

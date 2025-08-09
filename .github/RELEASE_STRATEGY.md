@@ -7,22 +7,28 @@ This document outlines the unified release strategy for the cascette-rs project.
 The release system uses semantic tag prefixes to automatically determine what to release:
 
 ### 1. Full Workspace Release: `v{version}`
+
 **Example**: `v0.3.0`
+
 - **Triggers**: Both library and CLI releases
-- **Libraries**: Published to crates.io 
+- **Libraries**: Published to crates.io
 - **CLI**: Cross-platform binaries with ephemeral signing
 - **Use Case**: Major version releases, coordinated updates
 
 ### 2. CLI-Only Release: `ngdp-client-v{version}`
-**Example**: `ngdp-client-v0.3.0`  
+
+**Example**: `ngdp-client-v0.3.0`
+
 - **Triggers**: CLI binary release only
 - **Libraries**: Not published to crates.io
 - **CLI**: Cross-platform binaries with ephemeral signing
 - **Use Case**: CLI improvements, bug fixes, new features
 
 ### 3. Libraries-Only Release: `libs-v{version}`
+
 **Example**: `libs-v0.3.0`
-- **Triggers**: Library release only  
+
+- **Triggers**: Library release only
 - **Libraries**: Published to crates.io
 - **CLI**: No binary release
 - **Use Case**: Library API changes, dependency updates
@@ -30,12 +36,13 @@ The release system uses semantic tag prefixes to automatically determine what to
 ## Manual Release Control
 
 ### Workflow Dispatch Options
+
 Use GitHub Actions → "Release" → "Run workflow" for manual control:
 
 - **Version**: Semantic version (e.g., 0.3.0)
-- **Release Type**: 
+- **Release Type**:
   - `all`: Both libraries and CLI
-  - `libraries`: Libraries only  
+  - `libraries`: Libraries only
   - `cli`: CLI only
 - **Dry Run**: Test without publishing (default: false)
 - **Skip Tests**: Skip test suite (default: false, use with caution)
@@ -47,7 +54,7 @@ Use GitHub Actions → "Release" → "Run workflow" for manual control:
 git tag ngdp-client-v0.3.0 -m "CLI improvements and ephemeral signing"
 git push --tags
 
-# Full workspace release  
+# Full workspace release
 git tag v0.3.0 -m "Major release with new features"
 git push --tags
 
@@ -63,12 +70,14 @@ git push --tags
 ## Release Process
 
 ### Automated (Tag-Based)
+
 1. **Create and push tag** using appropriate prefix
 2. **Release workflow triggers** automatically
 3. **System determines** what to release based on tag prefix
 4. **Builds, tests, and publishes** according to release type
 
 ### Manual (Workflow Dispatch)
+
 1. **Go to GitHub Actions** → "Release" workflow
 2. **Click "Run workflow"**
 3. **Configure options** (version, type, dry-run)
@@ -77,24 +86,28 @@ git push --tags
 ## Security Features
 
 ### Ephemeral Signing (CLI Releases)
+
 - **New keypair** generated for each release
 - **AGE encryption** protects private keys
 - **Complete audit trail** in signature metadata
 - **No long-term key management** required
 
 ### Concurrency Protection
+
 - **Prevents overlapping releases** to avoid conflicts
 - **Ensures consistent state** during release process
 
 ## Quality Gates
 
 ### Required Checks
+
 - ✅ **Version consistency** across all workspace crates
-- ✅ **Full test suite** (unless explicitly skipped)  
+- ✅ **Full test suite** (unless explicitly skipped)
 - ✅ **Cross-platform builds** for CLI releases
 - ✅ **Signature verification** for all binaries
 
 ### Optional Features
+
 - 🔄 **Dry run mode** for testing release process
 - 🔄 **Skip tests** for emergency releases (use carefully)
 - 🔄 **Partial releases** (libraries or CLI only)
@@ -102,16 +115,19 @@ git push --tags
 ## Troubleshooting
 
 ### Failed Library Publishing
+
 - **Check crates.io authentication** (`CRATES_IO_TOKEN`)
 - **Verify version numbers** haven't been published before
 - **Use dry run** to test publishing logic first
 
-### Failed CLI Builds  
+### Failed CLI Builds
+
 - **Check AGE keys** are properly configured
 - **Verify ephemeral signing** scripts are executable
 - **Monitor cross-compilation** for platform-specific issues
 
 ### Version Conflicts
+
 - **Ensure all workspace crates** have consistent versions
 - **Check for existing releases** with same version
 - **Use semantic versioning** for proper ordering
@@ -119,16 +135,19 @@ git push --tags
 ## Best Practices
 
 ### For Regular Development
+
 - **Use CLI-only releases** (`ngdp-client-v*`) for most updates
 - **Test with dry runs** before production releases
 - **Keep release notes updated** in commits
 
-### For Major Releases  
+### For Major Releases
+
 - **Coordinate library and CLI** versions with full release (`v*`)
 - **Ensure comprehensive testing** across all platforms
 - **Communicate breaking changes** clearly
 
 ### For Emergency Fixes
+
 - **Use CLI-only releases** for quick fixes
 - **Consider skip-tests** only if absolutely necessary
 - **Follow up with proper testing** in next release
@@ -136,10 +155,12 @@ git push --tags
 ## Migration from Old System
 
 ### Deprecated Workflows
+
 - ❌ **`release-libraries.yml`** - Removed (functionality moved to main release.yml)
 - ❌ **Manual version coordination** - Now automated based on workspace
 
 ### New Features
+
 - ✅ **Unified release workflow** with multiple trigger types
 - ✅ **Automatic release type detection** from tags
 - ✅ **Dry run capabilities** for testing

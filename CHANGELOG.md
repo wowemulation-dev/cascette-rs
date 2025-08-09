@@ -26,7 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **HTTP-first version discovery**: New `HybridVersionClient` that prioritizes modern HTTPS endpoints over legacy Ribbit protocol
   - Primary: `https://us.version.battle.net/wow/versions` and similar endpoints
-  - Fallback: Legacy Ribbit TCP protocol (:1119) for backward compatibility  
+  - Fallback: Legacy Ribbit TCP protocol (:1119) for backward compatibility
   - Transparent retry and error handling across both protocols
 
 - **Client installation functionality**: Complete `install` command for downloading and setting up game clients
@@ -39,7 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Cross-command compatibility through shared .build.info format
 
 - **Enhanced install manifest handling**: Proper filtering and validation of install manifest entries
-  - Silent filtering of missing keys (normal for region-specific builds) following CascLib patterns  
+  - Silent filtering of missing keys (normal for region-specific builds) following CascLib patterns
   - Size validation to detect and skip corrupted entries (e.g., >10GB files)
   - Comprehensive logging for debugging installation issues
 
@@ -98,7 +98,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `EncryptionMethod::ARC4` enum variant in BLTE compression
   - Modern implementations should use Salsa20 encryption instead
 
-- **Recursive BLTE (Frame mode)**: Frame compression mode marked as deprecated (will be removed in v0.5.0)  
+- **Recursive BLTE (Frame mode)**: Frame compression mode marked as deprecated (will be removed in v0.5.0)
   - `CompressionMode::Frame` enum variant
   - All Frame-related compression and decompression functions
   - Modern NGDP implementations use standard BLTE compression modes
@@ -169,6 +169,7 @@ This release introduces streaming capabilities, HTTP range request support, and 
 ### Added
 
 #### Core Features
+
 - **Streaming BLTE Decompression**: Memory-efficient streaming decompression for large files
   - `BLTEStream` struct implementing Read trait
   - Support for all compression modes (N, Z, 4, F, E)
@@ -190,6 +191,7 @@ This release introduces streaming capabilities, HTTP range request support, and 
   - Variable-length integer utilities
 
 #### CLI Enhancements
+
 - **Download Command**: Full implementation with CDN integration
   - Download by build, content key, encoding key, or file path
   - Automatic BLTE decompression
@@ -211,6 +213,7 @@ This release introduces streaming capabilities, HTTP range request support, and 
   - Support for 19,419 WoW encryption keys
 
 #### Infrastructure
+
 - **ngdp-crypto Crate**: Complete encryption/decryption support
   - Salsa20 cipher with proper key extension
   - ARC4 cipher implementation
@@ -365,7 +368,7 @@ This release introduces streaming capabilities, HTTP range request support, and 
 
 - **Historical builds command**:
   - Added `ngdp products builds` command to retrieve all historical builds for a product
-  - Integrates with Wago Tools API (https://wago.tools/api/builds) for comprehensive build history
+  - Integrates with Wago Tools API (<https://wago.tools/api/builds>) for comprehensive build history
   - Support for filtering by version pattern with `--filter`
   - Time-based filtering with `--days` option
   - Result limiting with `--limit` option
@@ -433,7 +436,6 @@ This release introduces streaming capabilities, HTTP range request support, and 
   - Replaced `vec!` with arrays for small fixed-size collections
   - Optimized string building in `ngdp-client` using iterator chains instead of manual loops
   - Fixed clippy warnings about format string inlining
-
 
 ## [0.1.0] - 2025-06-28
 
@@ -1295,7 +1297,6 @@ This release introduces streaming capabilities, HTTP range request support, and 
 - `regex` (1.11) - Regular expression support for tests
 - `serde_json` (1.0) - JSON support for tests
 
-[Unreleased]: https://github.com/wowemulation-dev/cascette-rs/compare/v0.4.0...HEAD
 [0.4.0]: https://github.com/wowemulation-dev/cascette-rs/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/wowemulation-dev/cascette-rs/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/wowemulation-dev/cascette-rs/compare/v0.2.0...v0.3.0

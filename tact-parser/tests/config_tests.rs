@@ -17,18 +17,18 @@ size = d8fbe632f4a0cf1d95ad2e663c32c1f1 56788
 size-size = d8fbe632f4a0cf1d95ad2e663c32c1f1 56788
 encoding = 9e3f7e6dc5e526ad88d14332fecb6a12 891234 0a3f7e6dc5e526ad88d14332fecb6a13 891235
 encoding-size = 9e3f7e6dc5e526ad88d14332fecb6a12 891234 0a3f7e6dc5e526ad88d14332fecb6a13 891235
-patch = 
-patch-size = 
-patch-config = 
+patch =
+patch-size =
+patch-config =
 build-name = 1.15.7.61582
 build-uid = wow_classic_era
 build-product = WoW
 build-playbuild-installer = ngdp:us:wow_classic_era
-build-partial-priority = 
+build-partial-priority =
 vfs-root = manifest.dat 0
 vfs-1 = interface.dat 0
-vfs-2 = 
-vfs-3 = 
+vfs-2 =
+vfs-3 =
     "#;
 
     let config = BuildConfig::parse(config_text).unwrap();
@@ -125,7 +125,7 @@ multi-hash = abc123 100 def456 200 789012 300
 quoted-value = "value with spaces"
 path-value = C:\Path\To\File.dat
 url-value = http://example.com/path
-empty-value = 
+empty-value =
     "#;
 
     let config = ConfigFile::parse(config_text).unwrap();
@@ -225,7 +225,7 @@ fn test_edge_cases() {
     // Test various edge cases
     let config_text = r#"
 # Leading/trailing spaces
-  spaced-key  =  spaced-value  
+  spaced-key  =  spaced-value
 # Multiple equals signs
 multi-equals = value = with = many = equals
 # No spaces around equals (should not parse)
@@ -233,7 +233,7 @@ nospace=value
 # Extra spaces around equals
 extra   =   spaces
 # Just key, no value
-#no-value = 
+#no-value =
 # Hash that's too short (less than 6 chars)
 short = abc 123
 # Hash with invalid characters

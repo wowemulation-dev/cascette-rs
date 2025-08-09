@@ -44,6 +44,7 @@ The BLTE streaming architecture processes compressed files chunk-by-chunk withou
 #### Implementation Details
 
 **BLTEStream Structure:**
+
 ```rust
 pub struct BLTEStream {
     blte_file: BLTEFile,        // Parsed BLTE header
@@ -88,6 +89,7 @@ The range request system enables partial file downloads for bandwidth optimizati
 #### Implementation Patterns
 
 **Single Range Request:**
+
 ```rust
 // Download first 1KB for header inspection
 client.download_file_range(
@@ -99,6 +101,7 @@ client.download_file_range(
 ```
 
 **Multi-Range Request:**
+
 ```rust
 // Download multiple non-contiguous sections
 let ranges = [
@@ -202,6 +205,7 @@ The complete pipeline combines streaming decompression with range requests for o
 **Scenario**: Download and decompress a 500MB game asset file
 
 **Traditional Approach**:
+
 1. Download entire 500MB file
 2. Load into memory
 3. Decompress to 2GB
@@ -209,6 +213,7 @@ The complete pipeline combines streaming decompression with range requests for o
 5. **Peak memory**: 2.5GB
 
 **Streaming Approach**:
+
 1. Start range request for first chunk
 2. Stream decompress as data arrives
 3. Write decompressed chunks progressively
@@ -219,12 +224,14 @@ The complete pipeline combines streaming decompression with range requests for o
 **Scenario**: Parse encoding manifest to find specific entries
 
 **Traditional Approach**:
+
 1. Download entire manifest (50MB)
 2. Decompress fully (200MB)
 3. Parse and search
 4. **Total download**: 50MB
 
 **Streaming Approach**:
+
 1. Download header (1KB)
 2. Identify relevant sections
 3. Range request specific pages
@@ -236,11 +243,13 @@ The complete pipeline combines streaming decompression with range requests for o
 **Scenario**: Resume download after 60% completion
 
 **Traditional Approach**:
+
 1. Restart from beginning
 2. Download entire file again
 3. **Wasted bandwidth**: 60% of file
 
 **Streaming Approach**:
+
 1. Check last byte received
 2. Range request from last position
 3. Continue streaming decompression
@@ -251,6 +260,7 @@ The complete pipeline combines streaming decompression with range requests for o
 ### When to Use Streaming
 
 **Recommended for:**
+
 - Files larger than 10MB
 - Memory-constrained environments
 - Real-time processing needs
@@ -258,6 +268,7 @@ The complete pipeline combines streaming decompression with range requests for o
 - Network-limited scenarios
 
 **Not recommended for:**
+
 - Small files (< 1MB)
 - Files accessed multiple times quickly
 - When full file needed immediately

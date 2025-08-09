@@ -398,7 +398,7 @@ impl HttpClient {
         self.execute_with_retry(&url).await
     }
 
-    /// Get CDN information using modern HTTP endpoint (V2 protocol)  
+    /// Get CDN information using modern HTTP endpoint (V2 protocol)
     /// Uses the primary endpoint: <https://us.version.battle.net/wow/cdns>
     pub async fn get_product_cdns_http(&self, product: &str) -> Result<Response> {
         if self.version != ProtocolVersion::V2 {

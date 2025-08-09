@@ -27,7 +27,7 @@ fn create_minimal_tvfs_data() -> Vec<u8> {
     // Header
     data.extend_from_slice(b"TVFS"); // Magic
     data.push(1); // Version
-    data.push(38); // Header size  
+    data.push(38); // Header size
     data.push(9); // EKey size
     data.push(9); // Patch key size
     data.extend_from_slice(&0i32.to_be_bytes()); // Flags

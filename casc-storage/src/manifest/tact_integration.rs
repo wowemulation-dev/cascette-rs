@@ -56,7 +56,7 @@ pub struct FileMapping {
 /// Lazy-loaded root manifest for memory efficiency
 #[allow(dead_code)] // Infrastructure for future full lazy loading implementation
 struct LazyRootManifest {
-    /// Raw decompressed data  
+    /// Raw decompressed data
     data: Vec<u8>,
     /// Partial cache of FileDataID mappings
     fdid_cache: HashMap<

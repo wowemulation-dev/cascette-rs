@@ -167,7 +167,7 @@ impl HybridVersionClient {
         )))
     }
 
-    /// Get CDN configuration with HTTP-first, Ribbit-fallback strategy  
+    /// Get CDN configuration with HTTP-first, Ribbit-fallback strategy
     pub async fn get_product_cdns(&self, product: &str) -> Result<ProductCdnsResponse> {
         debug!(
             "Getting CDN configuration for '{}' using hybrid approach",

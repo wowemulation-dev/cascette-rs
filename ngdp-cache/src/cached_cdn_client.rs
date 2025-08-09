@@ -485,7 +485,7 @@ impl CacheStats {
         format_bytes(self.data_size)
     }
 
-    /// Get patch size in human-readable format  
+    /// Get patch size in human-readable format
     pub fn patch_size_human(&self) -> String {
         format_bytes(self.patch_size)
     }

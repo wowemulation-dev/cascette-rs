@@ -11,7 +11,7 @@ use tact_parser::encoding::EncodingFile;
 use tact_parser::install::InstallManifest;
 use tracing::{debug, info, warn};
 
-/// Unified file entry for both install and download manifests  
+/// Unified file entry for both install and download manifests
 #[derive(Debug, Clone)]
 struct FileEntry {
     path: String,

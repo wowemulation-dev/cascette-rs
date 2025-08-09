@@ -5,7 +5,9 @@ This directory contains examples demonstrating how to use the `casc-storage` cra
 ## Available Examples
 
 ### `progressive_loading_demo.rs`
+
 Demonstrates progressive loading of CASC files:
+
 - Load files in chunks on demand
 - Memory-efficient streaming for large files
 - Lazy loading of archive contents
@@ -16,7 +18,9 @@ cargo run --example progressive_loading_demo
 ```
 
 ### `texture_streaming.rs`
+
 Shows texture streaming from CASC storage:
+
 - Stream texture data from CASC archives
 - Handle mipmap levels progressively
 - Memory management for texture data
@@ -29,6 +33,7 @@ cargo run --example texture_streaming
 ## Running Examples
 
 To run all examples:
+
 ```bash
 cargo run --example progressive_loading_demo -p casc-storage
 cargo run --example texture_streaming -p casc-storage
@@ -37,6 +42,7 @@ cargo run --example texture_streaming -p casc-storage
 ## Prerequisites
 
 These examples require:
+
 - A valid CASC storage directory (typically from a WoW installation)
 - Sufficient permissions to read game files
 - Understanding of CASC storage structure
@@ -44,6 +50,7 @@ These examples require:
 ## Example Data
 
 The examples demonstrate:
+
 - Loading files from CASC archives
 - Progressive/streaming patterns for large assets
 - Memory-efficient processing techniques

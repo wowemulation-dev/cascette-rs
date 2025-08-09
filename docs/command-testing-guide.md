@@ -555,7 +555,7 @@ echo "✅ Verified installation structure"
 cargo run --bin ngdp -- install game wow_classic_era --path /tmp/wow-complete-test --resume --dry-run
 echo "✅ Tested resume from metadata-only"
 
-# Step 4: Test download resume compatibility  
+# Step 4: Test download resume compatibility
 cargo run --bin ngdp -- download resume /tmp/wow-complete-test
 echo "✅ Tested download resume with .build.info"
 

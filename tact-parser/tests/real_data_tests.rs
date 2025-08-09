@@ -119,7 +119,7 @@ async fn get_build_info_for_product(product: &str) -> (String, String, String, S
     )
 }
 
-/// Test helper to get build config info  
+/// Test helper to get build config info
 async fn get_build_info() -> (String, String, String, String, String) {
     get_build_info_for_product("wow").await
 }
@@ -288,7 +288,7 @@ async fn test_ptr_build_config() {
 }
 
 #[tokio::test]
-#[ignore] // This test downloads large files, so we'll mark it as ignored by default  
+#[ignore] // This test downloads large files, so we'll mark it as ignored by default
 async fn test_ptr_encoding_file_encrypted() {
     let (cdn_host, cdn_path, build_config_hash, _, _) = get_build_info_for_product("wowt").await;
 

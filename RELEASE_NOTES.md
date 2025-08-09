@@ -7,16 +7,19 @@ cascette-rs v0.3.1 is a patch release that includes important fixes for code qua
 ## Key Highlights
 
 ### Bug Fixes
+
 - **Resolved clippy warnings**: Fixed all uninlined format arguments across multiple files
 - **Fixed release workflow**: Added missing crates to GitHub Actions publishing pipeline
 - **Corrected publishing order**: Ensures proper dependency resolution during crate publication
 
 ### Documentation Improvements
+
 - **TACT acronym correction**: Fixed to "Trusted Application Content Transfer"
 - **Enhanced crate descriptions**: Improved discoverability on crates.io
 - **Updated README files**: All crates now have proper installation instructions
 
 ### Developer Experience
+
 - **QA command documentation**: Created comprehensive rust-qa.md for local CI checks
 - **Workflow stability**: Implemented long-term fixes for CI/CD pipelines
 - **Code quality**: Enforces modern Rust idioms and best practices
@@ -72,6 +75,7 @@ cargo build --release
 ## Changes in This Release
 
 ### Fixed
+
 - Resolved all clippy uninlined format arguments warnings
 - Fixed missing crates in GitHub Actions release workflow
 - Corrected TACT acronym to "Trusted Application Content Transfer"
@@ -79,11 +83,13 @@ cargo build --release
 - Fixed crate publishing order to respect dependencies
 
 ### Changed
+
 - Updated all crates from version 0.3.0 to 0.3.1
 - Improved crate descriptions for better discoverability
 - Enhanced README files with installation instructions
 
 ### Added
+
 - Comprehensive rust-qa.md command documentation
 - QA checks matching GitHub Actions CI pipeline
 
@@ -110,8 +116,9 @@ Thank you to all contributors who helped make this release possible!
 ## Support
 
 For issues or questions:
-- GitHub Issues: https://github.com/wowemulation-dev/cascette-rs/issues
-- Documentation: https://github.com/wowemulation-dev/cascette-rs/tree/main/docs
+
+- GitHub Issues: <https://github.com/wowemulation-dev/cascette-rs/issues>
+- Documentation: <https://github.com/wowemulation-dev/cascette-rs/tree/main/docs>
 
 ## License
 

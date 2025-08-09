@@ -148,7 +148,7 @@ pub struct OriginalFileMetadata {
     pub compression_mode: CompressionMode,
     /// Original chunk structure
     pub chunk_structure: ChunkStructure,
-    /// Original header format (standard vs archive)  
+    /// Original header format (standard vs archive)
     pub header_format: HeaderFormat,
     /// Original checksums for verification
     pub checksums: Vec<[u8; 16]>,
@@ -268,7 +268,7 @@ fn recreate_multichunk_blte(file: &ExtractedFile) -> Result<Vec<u8>> {
     }
 }
 
-/// Verify recreated BLTE matches original metadata  
+/// Verify recreated BLTE matches original metadata
 fn verify_recreated_blte(recreated: &BLTEFile, original_meta: &OriginalFileMetadata) -> Result<()> {
     // Verify compression mode
     let recreated_mode = detect_compression_mode(recreated)?;

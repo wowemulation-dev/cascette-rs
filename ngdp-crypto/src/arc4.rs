@@ -22,7 +22,7 @@ use crate::{CryptoError, Result};
 ///
 /// * `data` - Encrypted data to decrypt
 /// * `key` - 16-byte base encryption key
-/// * `iv` - 4-byte initialization vector  
+/// * `iv` - 4-byte initialization vector
 /// * `block_index` - Block index for multi-chunk files
 ///
 /// # Returns

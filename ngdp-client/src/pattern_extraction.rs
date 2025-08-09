@@ -27,7 +27,7 @@ pub enum PatternType {
     Regex(Regex),
     /// 32-character hex content key
     ContentKey(String),
-    /// 18-character hex encoding key  
+    /// 18-character hex encoding key
     EncodingKey(String),
     /// Exact file path match
     FilePath(String),
@@ -96,7 +96,7 @@ pub struct MatchMetadata {
     pub file_size: Option<u64>,
     /// Content key if known
     pub content_key: Option<String>,
-    /// Encoding key if known  
+    /// Encoding key if known
     pub encoding_key: Option<String>,
     /// File type detected from extension
     pub file_type: Option<String>,

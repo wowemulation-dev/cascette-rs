@@ -57,7 +57,7 @@ impl PoolConfig {
         self
     }
 
-    /// Set maximum idle connections per host  
+    /// Set maximum idle connections per host
     pub fn with_max_idle_connections_per_host(mut self, max: usize) -> Self {
         self.max_idle_connections_per_host = max;
         self
@@ -75,7 +75,7 @@ impl PoolConfig {
         self
     }
 
-    /// Set connection timeout  
+    /// Set connection timeout
     pub fn with_connect_timeout(mut self, timeout: Duration) -> Self {
         self.connect_timeout = timeout;
         self

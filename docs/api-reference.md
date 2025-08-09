@@ -68,7 +68,7 @@ fn decompress_large_file(input_path: &str, output_path: &str) -> Result<()> {
     let blte_data = std::fs::read(input_path)?;
     let mut stream = create_streaming_reader(blte_data, None)?;
     let mut output = File::create(output_path)?;
-    
+
     // Stream in 64KB chunks
     let mut buffer = vec![0u8; 65536];
     loop {
@@ -77,7 +77,7 @@ fn decompress_large_file(input_path: &str, output_path: &str) -> Result<()> {
             n => output.write_all(&buffer[..n])?,
         }
     }
-    
+
     Ok(())
 }
 ```
@@ -165,7 +165,7 @@ ngdp-client download build wow_classic_era 1.15.5.57638 --output ./build-files/
 
 # Files downloaded:
 # - BuildConfig
-# - CDNConfig  
+# - CDNConfig
 # - ProductConfig
 # - KeyRing (if available)
 ```
@@ -208,7 +208,7 @@ async fn download_example() -> Result<()> {
     // Initialize clients
     let ribbit = CachedRibbitClient::new(Region::US).await?;
     let cdn = CachedCdnClient::new().await?;
-    
+
     // Download build files
     download_build(
         "wow_classic_era",
@@ -216,7 +216,7 @@ async fn download_example() -> Result<()> {
         Path::new("./output"),
         Region::US
     ).await?;
-    
+
     // Download specific file
     let content_key = "abc123def456789";
     download_file_by_key(
@@ -224,7 +224,7 @@ async fn download_example() -> Result<()> {
         content_key,
         Path::new("./file.dat")
     ).await?;
-    
+
     Ok(())
 }
 ```
@@ -320,7 +320,7 @@ match download_file().await {
 async fn download_large_file_optimized(
     client: &HttpClient,
     cdn_host: &str,
-    path: &str, 
+    path: &str,
     hash: &str,
     output_path: &Path
 ) -> Result<()> {
@@ -328,31 +328,31 @@ async fn download_large_file_optimized(
     let header_response = client.download_file_range(
         cdn_host, path, hash, (0, Some(0))
     ).await?;
-    
+
     let total_size = header_response
         .headers()
         .get("content-range")
         .and_then(|v| parse_total_size(v))
         .unwrap_or(0);
-    
+
     // Download in 1MB chunks
     const CHUNK_SIZE: u64 = 1024 * 1024;
     let mut output = File::create(output_path)?;
-    
+
     for offset in (0..total_size).step_by(CHUNK_SIZE as usize) {
         let end = (offset + CHUNK_SIZE - 1).min(total_size - 1);
-        
+
         let response = client.download_file_range(
             cdn_host, path, hash, (offset, Some(end))
         ).await?;
-        
+
         let chunk = response.bytes().await?;
         output.write_all(&chunk)?;
-        
+
         // Update progress
         println!("Downloaded {}/{} bytes", offset + chunk.len() as u64, total_size);
     }
-    
+
     Ok(())
 }
 ```
@@ -402,7 +402,7 @@ let response = client.download_file(cdn_host, path, hash).await?;
 
 // New: Download only what's needed
 let response = client.download_file_range(
-    cdn_host, path, hash, 
+    cdn_host, path, hash,
     (offset, Some(offset + needed_bytes - 1))
 ).await?;
 ```

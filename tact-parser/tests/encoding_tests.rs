@@ -158,7 +158,7 @@ fn test_encoding_header_endianness() {
     data.extend_from_slice(&[0x56, 0x78]); // EKey page size = 22136 KB
 
     // Page counts set to 0 for header-only test
-    data.extend_from_slice(&[0x00, 0x00, 0x00, 0x00]); // CKey page count = 0  
+    data.extend_from_slice(&[0x00, 0x00, 0x00, 0x00]); // CKey page count = 0
     data.extend_from_slice(&[0x00, 0x00, 0x00, 0x00]); // EKey page count = 0
 
     data.push(0); // Unknown

@@ -837,7 +837,7 @@ async fn resume_from_installation(install_path: &Path) -> Result<(), Box<dyn std
     Ok(())
 }
 
-/// Format bytes to human-readable string  
+/// Format bytes to human-readable string
 fn format_bytes(bytes: u64) -> String {
     const UNITS: &[&str] = &["B", "KB", "MB", "GB", "TB"];
     let mut size = bytes as f64;

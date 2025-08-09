@@ -5,16 +5,20 @@ This directory contains comprehensive tests for the `ngdp-cdn` crate.
 ## Test Categories
 
 ### Unit Tests (in source files)
+
 Located in `src/` under `#[cfg(test)]` modules:
 
 - **Client Tests** (`src/client.rs`) - Core client functionality and builder
 - **Fallback Tests** (`src/fallback.rs`) - CDN fallback and backup server logic
 
 ### Integration Tests
+
 Located in this `tests/` directory:
 
 #### `integration_test.rs`
+
 End-to-end testing with CDN operations:
+
 - Real CDN server connections
 - File download operations
 - Error condition handling
@@ -22,7 +26,9 @@ End-to-end testing with CDN operations:
 - Content verification
 
 #### `fallback_tests.rs`
+
 CDN fallback mechanism testing:
+
 - Primary CDN failure scenarios
 - Automatic fallback to backup servers
 - Community mirror integration
@@ -32,6 +38,7 @@ CDN fallback mechanism testing:
 ## Test Coverage
 
 ### Client Configuration
+
 - ✅ Builder pattern configuration
 - ✅ Connection timeout settings
 - ✅ Request timeout configuration
@@ -39,6 +46,7 @@ CDN fallback mechanism testing:
 - ✅ Custom user agent support
 
 ### Download Operations
+
 - ✅ Single file downloads
 - ✅ Parallel download operations
 - ✅ Streaming downloads for large files
@@ -46,6 +54,7 @@ CDN fallback mechanism testing:
 - ✅ Content verification
 
 ### Retry Logic
+
 - ✅ Exponential backoff implementation
 - ✅ Jitter factor application
 - ✅ Maximum retry limits
@@ -53,6 +62,7 @@ CDN fallback mechanism testing:
 - ✅ Rate limit detection and handling
 
 ### CDN Infrastructure
+
 - ✅ Primary CDN server connections
 - ✅ Backup server fallback logic
 - ✅ Community mirror integration
@@ -60,6 +70,7 @@ CDN fallback mechanism testing:
 - ✅ Load balancing verification
 
 ### Error Handling
+
 - ✅ Network connectivity failures
 - ✅ HTTP error responses (4xx, 5xx)
 - ✅ Content not found scenarios
@@ -92,12 +103,14 @@ RUST_LOG=debug cargo test -p ngdp-cdn
 Tests may require internet connectivity to reach:
 
 ### Primary CDN Servers
+
 - `us.patch.battle.net`
 - `eu.patch.battle.net`
 - `kr.patch.battle.net`
 - `cn.patch.battle.net`
 
 ### Backup CDN Mirrors
+
 - `cdn.arctium.tools` (Community mirror)
 - `tact.mirror.reliquaryhq.com` (Community mirror)
 
@@ -106,6 +119,7 @@ Tests handle network failures gracefully and will skip network-dependent tests w
 ## Performance Testing
 
 Integration tests include performance measurements:
+
 - **Download speed** testing with various file sizes
 - **Parallel download** throughput measurement
 - **Connection establishment** timing
@@ -115,6 +129,7 @@ Integration tests include performance measurements:
 ### Performance Benchmarks
 
 Expected performance characteristics:
+
 - Single file downloads: >10 MB/s on good connections
 - Parallel downloads: 3-5x speedup with 4-8 concurrent connections
 - Memory usage: Constant for streaming operations regardless of file size
@@ -123,6 +138,7 @@ Expected performance characteristics:
 ## Test Data
 
 Tests use a combination of:
+
 - **Real CDN files** for integration testing (small files to minimize bandwidth)
 - **Synthetic test data** for unit testing
 - **Error injection** for failure scenario testing
@@ -131,6 +147,7 @@ Tests use a combination of:
 ## Mock Testing
 
 Some tests use mock servers to:
+
 - Test error conditions reliably
 - Simulate rate limiting scenarios
 - Test retry logic with controlled failures
@@ -139,8 +156,9 @@ Some tests use mock servers to:
 ## Content Types
 
 Tests verify handling of all CDN content types:
+
 - **Config files** (`.config` paths)
-- **Data files** (`.data` paths)  
+- **Data files** (`.data` paths)
 - **Patch files** (`.patch` paths)
 - **Index files** (`.index` paths)
 

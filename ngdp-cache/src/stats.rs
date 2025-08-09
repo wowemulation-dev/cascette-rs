@@ -38,7 +38,7 @@ pub struct CacheStats {
 pub struct CacheStatsSnapshot {
     /// Total cache hits
     pub hits: u64,
-    /// Total cache misses  
+    /// Total cache misses
     pub misses: u64,
     /// Total cache evictions
     pub evictions: u64,

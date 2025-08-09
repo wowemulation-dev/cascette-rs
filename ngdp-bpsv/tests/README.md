@@ -11,8 +11,9 @@ This directory contains comprehensive tests for the `ngdp-bpsv` crate.
 The tests cover all aspects of BPSV parsing and building:
 
 ### Parser Tests (`src/parser.rs`)
+
 - Complete document parsing
-- Schema-only parsing  
+- Schema-only parsing
 - Raw row parsing without validation
 - Empty document handling
 - Invalid document error handling
@@ -21,6 +22,7 @@ The tests cover all aspects of BPSV parsing and building:
 - Statistics extraction
 
 ### Builder Tests (`src/builder.rs`)
+
 - Basic document building
 - Field addition and validation
 - Schema mismatch error handling
@@ -30,6 +32,7 @@ The tests cover all aspects of BPSV parsing and building:
 - Creating from existing BPSV data
 
 ### Schema Tests (`src/schema.rs`)
+
 - Header parsing with field definitions
 - Case-insensitive field type parsing
 - Field access methods
@@ -37,12 +40,14 @@ The tests cover all aspects of BPSV parsing and building:
 - Row validation against schema
 
 ### Field Type Tests (`src/field_type.rs`)
+
 - All field type parsing (STRING, HEX, DEC)
 - Value validation for each type
 - Display formatting
 - Value normalization
 
 ### Value Tests (`src/value.rs`)
+
 - Value parsing and conversion
 - Type compatibility checking
 - Accessor methods
@@ -50,6 +55,7 @@ The tests cover all aspects of BPSV parsing and building:
 - Invalid value handling
 
 ### Document Tests (`src/document.rs`)
+
 - Document creation and manipulation
 - Column access by name and index
 - Row operations
@@ -59,6 +65,7 @@ The tests cover all aspects of BPSV parsing and building:
 ## Integration Tests
 
 The integration tests use real BPSV data from:
+
 - WoW product versions
 - CDN configuration responses
 - Ribbit summary data
@@ -75,7 +82,7 @@ cargo test -p ngdp-bpsv -- --nocapture
 
 # Run specific test categories
 cargo test -p ngdp-bpsv parser
-cargo test -p ngdp-bpsv builder  
+cargo test -p ngdp-bpsv builder
 cargo test -p ngdp-bpsv schema
 cargo test -p ngdp-bpsv integration
 ```
@@ -83,6 +90,7 @@ cargo test -p ngdp-bpsv integration
 ## Benchmarks
 
 The crate includes performance benchmarks in `benches/` for:
+
 - Parsing documents of various sizes
 - Building operations
 - Column access patterns

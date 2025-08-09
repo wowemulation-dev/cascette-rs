@@ -655,7 +655,7 @@ impl CascStorage {
     }
 
     /// Enumerate all files in the storage
-    /// Returns an iterator over (EKey, ArchiveLocation) pairs  
+    /// Returns an iterator over (EKey, ArchiveLocation) pairs
     pub fn enumerate_files(&self) -> impl Iterator<Item = (EKey, ArchiveLocation)> + '_ {
         self.indices.iter().flat_map(|index_ref| {
             index_ref
@@ -765,7 +765,7 @@ impl CascStorage {
         manifests.load_root_from_data(data)
     }
 
-    /// Load encoding manifest from raw data  
+    /// Load encoding manifest from raw data
     pub fn load_encoding_manifest(&self, data: Vec<u8>) -> Result<()> {
         let manifests = self.tact_manifests.as_ref().ok_or_else(|| {
             CascError::ManifestNotLoaded("TACT manifests not initialized".to_string())

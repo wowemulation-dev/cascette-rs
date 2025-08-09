@@ -96,7 +96,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 fn create_text_data() -> Vec<u8> {
     br#"
-    Lorem ipsum dolor sit amet, consectetur adipiscing elit. 
+    Lorem ipsum dolor sit amet, consectetur adipiscing elit.
     Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
     Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris.
     "#

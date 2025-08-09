@@ -6,10 +6,10 @@
 //! - Batch operations
 //! - Background updates
 
-use casc_storage::{types::CascConfig, CascStorage};
+use casc_storage::{CascStorage, types::CascConfig};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
-use tracing::{info, Level};
+use tracing::{Level, info};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

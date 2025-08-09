@@ -419,7 +419,7 @@ impl BatchProcessor {
         // Try a simple request to check HTTP version
         // This is optimistic - we assume HTTP/2 support for HTTPS hosts
         // and rely on reqwest's automatic protocol negotiation
-        host.starts_with("https://") || 
+        host.starts_with("https://") ||
         // For CDN hosts, we know most support HTTP/2
         host.contains("akamai") || host.contains("cloudflare") || host.contains("blizzard")
     }

@@ -93,16 +93,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ### CLI Tool
 
 #### Install with Cargo
+
 ```bash
 cargo install ngdp-client
 ```
 
 #### Install with Script (Unix/Linux/macOS)
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/wowemulation-dev/cascette-rs/main/install.sh | bash
 ```
 
 #### Install with Script (Windows PowerShell)
+
 ```powershell
 irm https://raw.githubusercontent.com/wowemulation-dev/cascette-rs/main/install.ps1 | iex
 ```
