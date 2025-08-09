@@ -129,7 +129,7 @@ impl ArchiveReader {
     }
 
     /// Create a reader at a specific offset for streaming access (zero-copy when possible)
-    pub fn reader_at(&self, offset: u64, length: usize) -> Result<ArchiveSection> {
+    pub fn reader_at(&self, offset: u64, length: usize) -> Result<ArchiveSection<'_>> {
         if offset + length as u64 > self.size {
             return Err(CascError::InvalidArchiveFormat(format!(
                 "Read beyond archive bounds: offset={}, length={}, size={}",
@@ -150,7 +150,7 @@ impl ArchiveReader {
     }
 
     /// Read data at a specific offset (returns Cow for zero-copy when possible)
-    pub fn read_at_cow(&self, offset: u64, length: usize) -> Result<Cow<[u8]>> {
+    pub fn read_at_cow(&self, offset: u64, length: usize) -> Result<Cow<'_, [u8]>> {
         if offset + length as u64 > self.size {
             return Err(CascError::InvalidArchiveFormat(format!(
                 "Read beyond archive bounds: offset={}, length={}, size={}",

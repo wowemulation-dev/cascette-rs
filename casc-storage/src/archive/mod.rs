@@ -49,7 +49,7 @@ impl Archive {
     }
 
     /// Read data from a specific location in the archive (zero-copy when possible)
-    pub fn read_at_cow(&self, location: &ArchiveLocation) -> Result<Cow<[u8]>> {
+    pub fn read_at_cow(&self, location: &ArchiveLocation) -> Result<Cow<'_, [u8]>> {
         if let Some(ref reader) = self.reader {
             reader.read_at_cow(location.offset, location.size as usize)
         } else {
