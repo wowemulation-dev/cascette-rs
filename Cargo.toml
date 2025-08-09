@@ -9,7 +9,7 @@ members = [
   "tact-parser",
   "ngdp-client",
   "blte",
-  "casc-storage",
+  "casc-storage", "ngdp-patch",
 ]
 resolver = "2"
 
