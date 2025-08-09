@@ -153,7 +153,7 @@ impl HttpClient {
                 format!("http://{}.patch.battle.net:1119", self.region)
             }
             ProtocolVersion::V2 => {
-                format!("https://{}.version.battle.net/v2/products", self.region)
+                format!("https://{}.version.battle.net", self.region)
             }
         }
     }
@@ -382,7 +382,31 @@ impl HttpClient {
             return Err(Error::InvalidProtocolVersion);
         }
 
-        let url = format!("{}/{}", self.base_url(), product);
+        let url = format!("{}/v2/products/{}", self.base_url(), product);
+        self.execute_with_retry(&url).await
+    }
+
+    /// Get product versions using modern HTTP endpoint (V2 protocol)
+    /// Uses the primary endpoint: <https://us.version.battle.net/wow/versions>
+    pub async fn get_product_versions_http(&self, product: &str) -> Result<Response> {
+        if self.version != ProtocolVersion::V2 {
+            return Err(Error::InvalidProtocolVersion);
+        }
+
+        let url = format!("{}/{}/versions", self.base_url(), product);
+        debug!("Fetching product versions from HTTP endpoint: {}", url);
+        self.execute_with_retry(&url).await
+    }
+
+    /// Get CDN information using modern HTTP endpoint (V2 protocol)  
+    /// Uses the primary endpoint: <https://us.version.battle.net/wow/cdns>
+    pub async fn get_product_cdns_http(&self, product: &str) -> Result<Response> {
+        if self.version != ProtocolVersion::V2 {
+            return Err(Error::InvalidProtocolVersion);
+        }
+
+        let url = format!("{}/{}/cdns", self.base_url(), product);
+        debug!("Fetching CDN configuration from HTTP endpoint: {}", url);
         self.execute_with_retry(&url).await
     }
 
@@ -546,6 +570,23 @@ impl HttpClient {
         response_types::parse_cdns(&text)
     }
 
+    /// Get parsed product versions using modern HTTP endpoint
+    pub async fn get_product_versions_http_parsed(
+        &self,
+        product: &str,
+    ) -> Result<Vec<VersionEntry>> {
+        let response = self.get_product_versions_http(product).await?;
+        let text = response.text().await?;
+        response_types::parse_versions(&text)
+    }
+
+    /// Get parsed CDN configuration using modern HTTP endpoint
+    pub async fn get_product_cdns_http_parsed(&self, product: &str) -> Result<Vec<CdnEntry>> {
+        let response = self.get_product_cdns_http(product).await?;
+        let text = response.text().await?;
+        response_types::parse_cdns(&text)
+    }
+
     /// Get parsed BGDL manifest for a product
     pub async fn get_bgdl_parsed(&self, product: &str) -> Result<Vec<response_types::BgdlEntry>> {
         let response = self.get_bgdl(product).await?;
@@ -576,16 +617,10 @@ mod tests {
     #[test]
     fn test_base_url_v2() {
         let client = HttpClient::new(Region::US, ProtocolVersion::V2).unwrap();
-        assert_eq!(
-            client.base_url(),
-            "https://us.version.battle.net/v2/products"
-        );
+        assert_eq!(client.base_url(), "https://us.version.battle.net");
 
         let client = HttpClient::new(Region::EU, ProtocolVersion::V2).unwrap();
-        assert_eq!(
-            client.base_url(),
-            "https://eu.version.battle.net/v2/products"
-        );
+        assert_eq!(client.base_url(), "https://eu.version.battle.net");
     }
 
     #[test]

@@ -15,7 +15,7 @@ use crate::{Error, Result};
 /// TVFS header structure
 #[derive(Debug, Clone)]
 pub struct TVFSHeader {
-    /// Magic bytes "TFVS" (note: actually TFVS not TVFS)
+    /// Magic bytes "TVFS" (0x53465654)
     pub magic: [u8; 4],
     /// Version (typically 1)
     pub version: u8,
@@ -53,11 +53,11 @@ impl TVFSHeader {
         let mut magic = [0u8; 4];
         reader.read_exact(&mut magic)?;
 
-        // Note: The actual magic is 'TFVS' (0x53465654) not 'TVFS'
-        if &magic != b"TFVS" && &magic != b"TVFS" {
+        // Check for correct TVFS magic bytes (0x53465654)
+        if &magic != b"TVFS" {
             return Err(Error::IOError(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                format!("Invalid TVFS magic: {magic:?}, expected TFVS or TVFS"),
+                format!("Invalid TVFS magic: {magic:?}, expected TVFS"),
             )));
         }
 

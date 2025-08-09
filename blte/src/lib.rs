@@ -73,6 +73,13 @@ pub enum CompressionMode {
     /// LZ4 compression (mode '4')
     LZ4 = b'4' as isize,
     /// Frame/Recursive BLTE (mode 'F')
+    ///
+    /// **DEPRECATED**: Recursive BLTE (Frame mode) is deprecated and will be removed in v0.5.0.
+    /// Modern NGDP implementations do not use recursive BLTE compression.
+    #[deprecated(
+        since = "0.4.0",
+        note = "Recursive BLTE (Frame mode) is deprecated and will be removed in v0.5.0. Use standard BLTE modes instead."
+    )]
     Frame = b'F' as isize,
     /// Encrypted (mode 'E')
     Encrypted = b'E' as isize,
@@ -80,6 +87,7 @@ pub enum CompressionMode {
 
 impl CompressionMode {
     /// Parse compression mode from byte
+    #[allow(deprecated)]
     pub fn from_byte(byte: u8) -> Option<Self> {
         match byte {
             b'N' => Some(Self::None),

@@ -45,7 +45,7 @@ async fn test_batch_statistics() {
         // These counters should be incremented after batch processing
         assert!(stats.batches_processed > 0);
         assert!(stats.requests_processed > 0);
-        println!("Batch stats: {:?}", stats);
+        println!("Batch stats: {stats:?}");
     }
 }
 
@@ -55,7 +55,7 @@ async fn test_batch_performance_characteristics() {
     let client = CdnClient::new().unwrap();
 
     // Create a larger batch to test batching behavior
-    let hashes: Vec<String> = (0..50).map(|i| format!("hash{:04x}", i)).collect();
+    let hashes: Vec<String> = (0..50).map(|i| format!("hash{i:04x}")).collect();
 
     let start = Instant::now();
     let results = client
@@ -63,7 +63,7 @@ async fn test_batch_performance_characteristics() {
         .await; // Will return 404s
     let batch_duration = start.elapsed();
 
-    println!("Batched 50 requests in: {:?}", batch_duration);
+    println!("Batched 50 requests in: {batch_duration:?}");
 
     // Should get results for all hashes
     assert_eq!(results.len(), hashes.len());
@@ -74,7 +74,7 @@ async fn test_batch_performance_characteristics() {
         assert!(stats.requests_processed >= hashes.len() as u64);
         assert!(stats.avg_batch_time > Duration::ZERO);
 
-        println!("Final batch stats: {:?}", stats);
+        println!("Final batch stats: {stats:?}");
     }
 }
 
@@ -120,7 +120,7 @@ async fn test_specialized_batch_methods() {
 async fn test_batch_vs_parallel_comparison() {
     let client = CdnClient::new().unwrap();
 
-    let hashes: Vec<String> = (0..20).map(|i| format!("file{:04x}", i)).collect();
+    let hashes: Vec<String> = (0..20).map(|i| format!("file{i:04x}")).collect();
 
     // Test parallel downloads
     let start = Instant::now();
@@ -136,8 +136,8 @@ async fn test_batch_vs_parallel_comparison() {
         .await;
     let batch_duration = start.elapsed();
 
-    println!("Parallel duration: {:?}", parallel_duration);
-    println!("Batched duration: {:?}", batch_duration);
+    println!("Parallel duration: {parallel_duration:?}");
+    println!("Batched duration: {batch_duration:?}");
 
     // Both should return same number of results
     assert_eq!(parallel_results.len(), hashes.len());
@@ -145,7 +145,7 @@ async fn test_batch_vs_parallel_comparison() {
 
     // Check that batch statistics were updated
     if let Some(stats) = client.get_batch_stats().await {
-        println!("Final comparison stats: {:?}", stats);
+        println!("Final comparison stats: {stats:?}");
         assert!(stats.batches_processed > 0);
     }
 }
@@ -174,7 +174,7 @@ async fn test_concurrent_batching() {
 
     // Check final stats
     if let Some(stats) = client.get_batch_stats().await {
-        println!("Concurrent batching stats: {:?}", stats);
+        println!("Concurrent batching stats: {stats:?}");
         assert!(stats.batches_processed >= 3); // At least 3 batches processed
         assert!(stats.requests_processed >= 6); // At least 6 requests total
     }
@@ -202,8 +202,8 @@ async fn test_batch_error_handling() {
     // All should be errors (404 status)
     for (i, result) in results.iter().enumerate() {
         match result {
-            Ok(_) => println!("Request {} unexpectedly succeeded", i),
-            Err(e) => println!("Request {} failed as expected: {}", i, e),
+            Ok(_) => println!("Request {i} unexpectedly succeeded"),
+            Err(e) => println!("Request {i} failed as expected: {e}"),
         }
     }
 }
@@ -238,7 +238,7 @@ async fn benchmark_batch_vs_parallel() {
     let client = CdnClient::new().unwrap();
 
     // Large batch for meaningful benchmark
-    let hashes: Vec<String> = (0..100).map(|i| format!("benchmark{:06x}", i)).collect();
+    let hashes: Vec<String> = (0..100).map(|i| format!("benchmark{i:06x}")).collect();
 
     println!("Benchmarking with {} files...", hashes.len());
 
@@ -261,19 +261,19 @@ async fn benchmark_batch_vs_parallel() {
         .await;
     let batch_time = start.elapsed();
 
-    println!("Parallel time: {:?}", parallel_time);
-    println!("Batched time: {:?}", batch_time);
+    println!("Parallel time: {parallel_time:?}");
+    println!("Batched time: {batch_time:?}");
 
     if batch_time < parallel_time {
         let improvement = parallel_time.as_millis() as f64 / batch_time.as_millis() as f64;
-        println!("Batching is {:.2}x faster", improvement);
+        println!("Batching is {improvement:.2}x faster");
     } else {
         let regression = batch_time.as_millis() as f64 / parallel_time.as_millis() as f64;
-        println!("Batching is {:.2}x slower (unexpected)", regression);
+        println!("Batching is {regression:.2}x slower (unexpected)");
     }
 
     // Show final statistics
     if let Some(stats) = client.get_batch_stats().await {
-        println!("Final benchmark stats: {:#?}", stats);
+        println!("Final benchmark stats: {stats:#?}");
     }
 }

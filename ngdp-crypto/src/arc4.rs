@@ -92,6 +92,7 @@ pub fn encrypt_arc4(data: &[u8], key: &[u8; 16], iv: &[u8], block_index: usize) 
 }
 
 #[cfg(test)]
+#[allow(deprecated)]
 mod tests {
     use super::*;
 

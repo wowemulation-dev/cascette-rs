@@ -23,26 +23,27 @@ Pipeline) for World of Warcraft emulation.
 | Component       | Version | Status      | Description                                        |
 | --------------- | ------- | ----------- | -------------------------------------------------- |
 | `ngdp-bpsv`     | 0.3.1   | ✅ Stable   | BPSV parser/writer for NGDP formats                |
-| `ribbit-client` | 0.3.1   | ✅ Stable   | Ribbit protocol client with signature verification |
-| `tact-client`   | 0.3.1   | ✅ Stable   | TACT HTTP client for version/CDN queries          |
+| `ribbit-client` | 0.3.1   | ✅ Stable   | Ribbit protocol client with signature verification (legacy fallback) |
+| `tact-client`   | 0.3.1   | ✅ Stable   | TACT HTTP client with modern HTTPS endpoints primary |
 | `tact-parser`   | 0.3.1   | ✅ Stable   | TACT file format parser (encoding, install, etc.) |
 | `ngdp-cdn`      | 0.3.1   | ✅ Stable   | CDN content delivery with parallel downloads       |
-| `ngdp-cache`    | 0.3.1   | ✅ Stable   | Caching layer for NGDP operations                 |
-| `blte`          | 0.3.1   | ✅ Stable   | BLTE decompression with encryption support        |
-| `ngdp-crypto`   | 0.3.1   | ✅ Stable   | Encryption/decryption for TACT files              |
+| `ngdp-cache`    | 0.3.1   | ✅ Stable   | Hybrid caching with HTTP-first version discovery  |
+| `blte`          | 0.3.1   | ✅ Stable   | BLTE decompression (ARC4/Frame modes deprecated)  |
+| `ngdp-crypto`   | 0.3.1   | ✅ Stable   | Modern encryption with Salsa20 (ARC4 deprecated)  |
 | `ngdp-client`   | 0.3.1   | ✅ Stable   | CLI tool for NGDP operations                      |
 
 ### Implementation Progress
 
-- ✅ **Ribbit Protocol**: Full implementation including V1/V2, signature verification, all endpoints
-- ✅ **TACT Protocol**: HTTP/HTTPS clients for version and CDN queries
+- ✅ **Modern Version Discovery**: HTTP-first approach with HTTPS endpoints, Ribbit fallback for compatibility
+- ✅ **TACT Protocol**: Full HTTP/HTTPS clients for version and CDN queries with retry logic
 - ✅ **BPSV Format**: Complete parser and builder with zero-copy optimizations
 - ✅ **TACT Parsers**: Full support for encoding, install, download, size, build config, TVFS
-- ✅ **BLTE Decompression**: All compression modes including encrypted content
-- ✅ **Encryption**: Salsa20 and ARC4 cipher support with key management
+- ✅ **BLTE Decompression**: Modern compression modes (ARC4/Frame deprecated in v0.4.0)
+- ✅ **Encryption**: Modern Salsa20 cipher with key management (ARC4 deprecated)
 - ✅ **CDN Operations**: Parallel downloads, streaming, retry logic, rate limiting
-- ✅ **Caching**: Transparent caching for all protocols with TTL support
-- ✅ **CLI Tool**: Feature-complete command-line interface with key management
+- ✅ **Hybrid Caching**: HTTP-first caching with transparent fallbacks and TTL support
+- ✅ **Install Command**: Full client installation with .build.info generation for restoration
+- ✅ **Build Config**: Proper uncompressed handling and download order (encoding before manifests)
 - 🚧 **CASC Storage**: Local storage implementation (planned for future release)
 - 🔄 **TVFS**: Basic parser implemented, needs real-world data testing
 
@@ -61,17 +62,18 @@ blte = "0.3"
 ngdp-crypto = "0.3"
 ```
 
-Basic example:
+Basic example (modern HTTP-first approach):
 
 ```rust
-use ribbit_client::{Region, RibbitClient};
+use ngdp_cache::hybrid_version_client::HybridVersionClient;
+use ribbit_client::Region;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Create a client for US region
-    let client = RibbitClient::new(Region::US);
+    // Create a hybrid client (HTTP primary, Ribbit fallback)
+    let client = HybridVersionClient::new(Region::US).await?;
 
-    // Request WoW versions with typed API
+    // Request WoW versions with modern HTTPS endpoints
     let versions = client.get_product_versions("wow").await?;
 
     // Print version information
@@ -119,6 +121,48 @@ cd cascette-rs
 cargo build --release
 # CLI binary will be at target/release/ngdp
 ```
+
+## 🖥️ CLI Usage
+
+The `ngdp-client` provides a comprehensive command-line interface for NGDP operations:
+
+### Install Game Clients
+
+```bash
+# Install WoW Classic Era (minimal installation)
+ngdp install game wow_classic_era --install-type minimal --path ./wow-client
+
+# Full installation with verification
+ngdp install game wow --install-type full --verify --path ./wow-retail
+
+# Dry-run to see what would be installed
+ngdp install game wow_classic --install-type minimal --dry-run --path ./test
+```
+
+### Version and CDN Information
+
+```bash
+# Query product versions (uses modern HTTPS endpoints)
+ngdp query versions wow
+
+# Get CDN configuration
+ngdp query cdns wow
+
+# Inspect build configurations
+ngdp inspect build-config <hash>
+```
+
+### BPSV and File Analysis
+
+```bash
+# Parse and display BPSV files
+ngdp inspect bpsv ./file.bpsv
+
+# Analyze BLTE files
+ngdp inspect blte ./encrypted.blte
+```
+
+All commands support multiple output formats (`--format json|text|bpsv`) and the install command automatically creates `.build.info` files for client restoration.
 
 ## 📚 Documentation
 

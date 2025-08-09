@@ -397,6 +397,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(deprecated)]
     fn test_compression_mode_detection() {
         let test_cases = [
             (b'N', crate::CompressionMode::None),

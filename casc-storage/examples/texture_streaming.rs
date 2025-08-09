@@ -9,9 +9,7 @@ use casc_storage::{CascStorage, EKey, ProgressiveConfig, SizeHint};
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
-use tokio;
 use tracing::{debug, info, warn};
-use tracing_subscriber;
 
 /// Simulated texture manager that uses progressive loading
 struct TextureManager {

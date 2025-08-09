@@ -115,8 +115,7 @@ fn test_positioned_reads_thread_safety() {
                 let actual_value = u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
                 assert_eq!(
                     actual_value, expected_value,
-                    "Thread {} failed at position {}",
-                    thread_id, i
+                    "Thread {thread_id} failed at position {i}"
                 );
             }
 
@@ -178,7 +177,7 @@ fn test_memory_mapping_vs_file_reading_performance() {
     }
     let mmap_time = start.elapsed();
 
-    println!("Memory-mapped reads: {:?}", mmap_time);
+    println!("Memory-mapped reads: {mmap_time:?}");
 
     // Note: We can't easily test file-only performance without creating
     // a mock that forces file reading, but this test verifies the
@@ -282,8 +281,7 @@ fn test_large_archive_simulation() {
             .unwrap();
         assert_eq!(
             read_data, sim_file.content,
-            "Simulated file {} content mismatch",
-            i
+            "Simulated file {i} content mismatch"
         );
     }
 

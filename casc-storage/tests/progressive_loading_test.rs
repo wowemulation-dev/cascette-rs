@@ -171,7 +171,7 @@ async fn test_progressive_file_with_mock_data() {
         .await
         .expect("Failed to read");
     assert_eq!(data2.len(), 300);
-    assert_eq!(data2[0], (100 % 256) as u8); // Should start at offset 100
+    assert_eq!(data2[0], 100_u8); // Should start at offset 100
 
     // Should not have loaded additional chunks
     assert_eq!(chunk_load_count.load(Ordering::SeqCst), initial_loads);
@@ -193,7 +193,7 @@ async fn test_progressive_file_with_mock_data() {
     assert!(stats.bytes_loaded > 0);
     assert!(stats.cache_hits > 0 || stats.cache_misses > 0);
 
-    println!("Progressive loading stats: {:#?}", stats);
+    println!("Progressive loading stats: {stats:#?}");
 }
 
 #[tokio::test]
@@ -227,7 +227,7 @@ async fn test_progressive_loading_with_real_storage() {
 
     // Get size hint from storage
     let size_hint = storage.get_size_hint_for_ekey(&test_ekey);
-    println!("Size hint for test file: {:?}", size_hint);
+    println!("Size hint for test file: {size_hint:?}");
 
     // Create progressive file
     let progressive_file = storage
@@ -261,7 +261,7 @@ async fn test_progressive_loading_with_real_storage() {
 
     // Verify statistics
     let stats = progressive_file.get_stats().await;
-    println!("Real storage progressive loading stats: {:#?}", stats);
+    println!("Real storage progressive loading stats: {stats:#?}");
     assert!(stats.chunks_loaded > 0);
     assert!(stats.bytes_loaded > 0);
 }
@@ -328,7 +328,7 @@ async fn test_progressive_cleanup_and_stats() {
 
     // Get global progressive stats
     let global_stats = storage.get_progressive_stats().await;
-    println!("Global progressive stats: {:#?}", global_stats);
+    println!("Global progressive stats: {global_stats:#?}");
     assert_eq!(global_stats.len(), 2); // Should have stats for both files
 
     // Test cleanup (won't remove files since they're recently accessed)
@@ -405,7 +405,7 @@ async fn test_concurrent_progressive_reads() {
 
     // Check final statistics
     let final_stats = progressive_file.get_stats().await;
-    println!("Concurrent reads stats: {:#?}", final_stats);
+    println!("Concurrent reads stats: {final_stats:#?}");
     assert!(final_stats.chunks_loaded > 0);
     assert!(final_stats.bytes_loaded > 6144); // At least 3 * 2048 bytes
 }
@@ -449,13 +449,13 @@ async fn test_progressive_vs_traditional_performance() {
     assert_eq!(traditional_data.len(), progressive_data.len());
     assert_eq!(traditional_data, progressive_data);
 
-    println!("Traditional read time: {:?}", traditional_time);
-    println!("Progressive read time: {:?}", progressive_time);
+    println!("Traditional read time: {traditional_time:?}");
+    println!("Progressive read time: {progressive_time:?}");
 
     // Progressive reading should be reasonably competitive
     // (might be slower for full reads due to chunking overhead, but should be close)
     let ratio = progressive_time.as_nanos() as f64 / traditional_time.as_nanos() as f64;
-    println!("Progressive/Traditional ratio: {:.2}x", ratio);
+    println!("Progressive/Traditional ratio: {ratio:.2}x");
 
     // For full file reads, progressive should be within 3x of traditional
     // The main benefit is for partial reads and memory usage
@@ -475,7 +475,7 @@ async fn test_progressive_vs_traditional_performance() {
     assert_eq!(partial_data.len(), 4096);
     assert_eq!(partial_data, test_data[1_000_000..1_004_096]);
 
-    println!("Progressive partial read time: {:?}", partial_time);
+    println!("Progressive partial read time: {partial_time:?}");
 
     // Partial reads should be fast since they don't need to load the entire file
     assert!(

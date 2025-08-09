@@ -301,6 +301,8 @@ mod tests {
     fn test_config_get_set() {
         // Use a temporary directory for this test
         let temp_dir = TempDir::new().unwrap();
+        // SAFETY: This is in a test context where we control the environment.
+        // Setting XDG_CONFIG_HOME is safe as tests run in isolation.
         unsafe {
             env::set_var("XDG_CONFIG_HOME", temp_dir.path());
         }

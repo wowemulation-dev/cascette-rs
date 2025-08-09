@@ -14,6 +14,7 @@ pub mod cached_tact_client;
 pub mod cdn;
 pub mod error;
 pub mod generic;
+pub mod hybrid_version_client;
 pub mod ribbit;
 pub mod stats;
 

@@ -21,6 +21,7 @@ use std::io::Write;
 ///
 /// # Returns
 /// Compressed data with mode byte prefix
+#[allow(deprecated)]
 pub fn compress_chunk(data: &[u8], mode: CompressionMode, level: Option<u8>) -> Result<Vec<u8>> {
     match mode {
         CompressionMode::None => compress_none(data),
@@ -78,6 +79,7 @@ fn compress_lz4(data: &[u8]) -> Result<Vec<u8>> {
 }
 
 /// Mode 'F' - Recursive BLTE compression
+#[allow(deprecated)]
 fn compress_frame(data: &[u8], level: Option<u8>) -> Result<Vec<u8>> {
     // First compress the data with ZLib
     let compressed_inner = compress_zlib(data, level.unwrap_or(6))?;
@@ -285,6 +287,13 @@ pub enum EncryptionMethod {
     /// Salsa20 stream cipher (modern)
     Salsa20,
     /// ARC4/RC4 stream cipher (legacy)
+    ///
+    /// **DEPRECATED**: ARC4 encryption is deprecated and will be removed in v0.5.0.
+    /// Modern NGDP implementations use Salsa20 encryption instead.
+    #[deprecated(
+        since = "0.4.0",
+        note = "ARC4 encryption is deprecated and will be removed in v0.5.0. Use Salsa20 instead."
+    )]
     ARC4,
 }
 
@@ -306,6 +315,7 @@ pub fn compress_encrypted(
     iv: &[u8; 4],
     block_index: usize,
 ) -> Result<Vec<u8>> {
+    #[allow(deprecated)]
     let encrypted = match method {
         EncryptionMethod::Salsa20 => ngdp_crypto::encrypt_salsa20(data, key, iv, block_index)
             .map_err(|e| Error::DecompressionFailed(format!("Salsa20 encryption failed: {e}")))?,
@@ -560,6 +570,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(deprecated)]
     fn test_encrypt_arc4() {
         let data = b"Hello, encrypted BLTE world!";
         let key = [0x01u8; 16];
@@ -630,6 +641,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(deprecated)]
     fn test_encrypted_multi_chunk() {
         let data = vec![b'X'; 1000]; // 1KB of data
         let key = [0x55u8; 16];
@@ -660,6 +672,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(deprecated)]
     fn test_encryption_integration() {
         // Test that our encryption functions work with the crypto library
         let data = b"Round-trip test data for encryption";
@@ -687,6 +700,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(deprecated)]
     fn test_full_round_trip_encryption() {
         use ngdp_crypto::KeyService;
 

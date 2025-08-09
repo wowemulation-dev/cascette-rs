@@ -47,7 +47,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await;
     let parallel_duration = start.elapsed();
 
-    println!("   - Duration: {:?}", parallel_duration);
+    println!("   - Duration: {parallel_duration:?}");
     println!(
         "   - Success: {}/{}",
         parallel_results.iter().filter(|r| r.is_ok()).count(),
@@ -62,7 +62,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await;
     let batch_duration = start.elapsed();
 
-    println!("   - Duration: {:?}", batch_duration);
+    println!("   - Duration: {batch_duration:?}");
     println!(
         "   - Success: {}/{}",
         batch_results.iter().filter(|r| r.is_ok()).count(),
@@ -72,12 +72,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Performance comparison
     if parallel_duration > batch_duration {
         let improvement = parallel_duration.as_millis() as f64 / batch_duration.as_millis() as f64;
-        println!("   - HTTP/2 batching is {:.2}x faster!", improvement);
+        println!("   - HTTP/2 batching is {improvement:.2}x faster!");
     } else if batch_duration > parallel_duration {
         let overhead = batch_duration.as_millis() as f64 / parallel_duration.as_millis() as f64;
         println!(
-            "   - HTTP/2 batching has {:.2}x overhead (possibly due to network conditions)",
-            overhead
+            "   - HTTP/2 batching has {overhead:.2}x overhead (possibly due to network conditions)"
         );
     } else {
         println!("   - Performance is equivalent");
@@ -176,10 +175,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     let concurrent_duration = start.elapsed();
 
-    println!(
-        "Concurrent batching completed in: {:?}",
-        concurrent_duration
-    );
+    println!("Concurrent batching completed in: {concurrent_duration:?}");
     println!(
         "Results: {}/{}, {}/{}, {}/{}",
         results1.iter().filter(|r| r.is_ok()).count(),

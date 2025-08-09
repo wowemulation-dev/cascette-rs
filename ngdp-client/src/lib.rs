@@ -22,8 +22,8 @@ pub mod test_constants {
 pub use crate::commands::{
     certs::handle as handle_certs, config::handle as handle_config,
     download::handle as handle_download, inspect::handle as handle_inspect,
-    listfile::handle as handle_listfile, products::handle as handle_products,
-    storage::handle as handle_storage,
+    install::handle as handle_install, listfile::handle as handle_listfile,
+    products::handle as handle_products, storage::handle as handle_storage,
 };
 
 use clap::Subcommand;
@@ -448,6 +448,82 @@ pub enum DownloadCommands {
 }
 
 #[derive(Subcommand)]
+pub enum InstallCommands {
+    /// Install a game or product
+    Game {
+        /// Product name (e.g., wow, wow_classic)
+        product: String,
+
+        /// Installation directory
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+
+        /// Specific build to install (defaults to latest)
+        #[arg(short, long)]
+        build: Option<String>,
+
+        /// Region
+        #[arg(short, long, default_value = "us")]
+        region: String,
+
+        /// Installation type
+        #[arg(short = 't', long, value_enum, default_value = "minimal")]
+        install_type: InstallType,
+
+        /// Resume existing installation (detects .build.info and missing files)
+        #[arg(long)]
+        resume: bool,
+
+        /// Verify installation after completion
+        #[arg(short = 'v', long)]
+        verify: bool,
+
+        /// Dry run - show what would be installed without downloading
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Maximum concurrent downloads
+        #[arg(long, default_value = "5")]
+        max_concurrent: usize,
+
+        /// Filter by tags (comma-separated, e.g., "Windows,enUS")
+        #[arg(long)]
+        tags: Option<String>,
+    },
+
+    /// Repair an existing installation by verifying and re-downloading corrupted files
+    Repair {
+        /// Installation directory containing .build.info
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+
+        /// Verify checksums of existing files
+        #[arg(short = 'v', long)]
+        verify_checksums: bool,
+
+        /// Dry run - show what would be repaired without downloading
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Maximum concurrent downloads
+        #[arg(long, default_value = "5")]
+        max_concurrent: usize,
+    },
+}
+
+#[derive(clap::ValueEnum, Clone, Copy, Debug, PartialEq)]
+pub enum InstallType {
+    /// Only required files for basic functionality
+    Minimal,
+    /// All available content
+    Full,
+    /// Custom selection based on tags
+    Custom,
+    /// Only create .build.info and Data/config structure (no downloads)
+    MetadataOnly,
+}
+
+#[derive(Subcommand)]
 pub enum InspectCommands {
     /// Parse and display BPSV data
     Bpsv {
@@ -621,7 +697,7 @@ pub enum CertFormat {
 }
 
 /// Output format options for the CLI
-#[derive(clap::ValueEnum, Clone, Copy, Debug)]
+#[derive(clap::ValueEnum, Clone, Copy, Debug, PartialEq)]
 pub enum OutputFormat {
     /// Plain text output
     Text,

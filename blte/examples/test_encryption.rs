@@ -3,6 +3,8 @@
 //! This example shows how to create encrypted BLTE files using both
 //! Salsa20 and ARC4 encryption methods.
 
+#![allow(deprecated)] // ARC4 is deprecated but still supported for compatibility
+
 use blte::{
     CompressionMode, EncryptionMethod, compress_data_encrypted_multi,
     compress_data_encrypted_single,

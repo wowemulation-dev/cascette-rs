@@ -9,6 +9,7 @@ use std::io::{Cursor, Read, Result as IoResult, Seek, SeekFrom};
 use tracing::{debug, trace, warn};
 
 use crate::{BLTEHeader, CompressionMode, Error, Result};
+#[allow(deprecated)]
 use ngdp_crypto::{KeyService, arc4::decrypt_arc4, salsa20::decrypt_salsa20};
 
 /// A true streaming BLTE decompressor
@@ -268,6 +269,7 @@ fn decompress_chunk_streaming(
         mode, block_index
     );
 
+    #[allow(deprecated)]
     match mode {
         CompressionMode::None => decompress_none_streaming(&data[1..]),
         CompressionMode::ZLib => decompress_zlib_streaming(&data[1..]),
@@ -346,6 +348,7 @@ fn decompress_lz4_streaming(data: &[u8]) -> Result<Vec<u8>> {
 }
 
 /// Mode 'F' - Frame/Recursive BLTE (streaming)
+#[allow(deprecated)]
 fn decompress_frame_streaming(data: &[u8], key_service: Option<&KeyService>) -> Result<Vec<u8>> {
     trace!(
         "Frame/recursive decompression (streaming) of {} bytes",
@@ -418,6 +421,7 @@ fn decompress_encrypted_streaming(
     );
 
     // Decrypt based on encryption type
+    #[allow(deprecated)]
     let decrypted = match enc_type {
         0x53 => {
             // Salsa20

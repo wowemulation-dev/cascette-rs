@@ -357,40 +357,104 @@ rm /tmp/extracted-file
 
 ---
 
-## 6. Download Commands
+## 6. Installation Commands
 
-Test downloading content from CDN servers.
+Test game installation functionality with .build.info and Data/config structure.
 
-### 6.1 Resume Check
+### 6.1 Metadata-Only Installation
 
 ```bash
-# Test: Check for resumable downloads
-cargo run --bin ngdp -- download resume .
+# Test: Create metadata-only installation (safe, fast)
+cargo run --bin ngdp -- install game wow_classic_era --install-type metadata-only --path /tmp/wow-meta-test
 
-# Test: With different directory
-cargo run --bin ngdp -- download resume /tmp
+# Test: Check what was created
+ls -la /tmp/wow-meta-test/
+ls -la /tmp/wow-meta-test/Data/config/
+
+# Test: View .build.info file
+cat /tmp/wow-meta-test/.build.info
 ```
 
-**Expected**: Reports no resumable downloads (unless you have partial downloads)
+**Expected**: Creates .build.info and Data/config/ with CDN-style subdirectories containing build and CDN configurations
 
-### 6.2 Build Download
+### 6.2 Minimal Installation
+
+```bash
+# Test: Minimal installation (dry run - safe)
+cargo run --bin ngdp -- install game wow_classic_era --install-type minimal --path /tmp/wow-minimal --dry-run
+
+# Test: Full dry run to see complete installation plan
+cargo run --bin ngdp -- install game wow_classic_era --install-type full --path /tmp/wow-full --dry-run
+
+# Test: JSON output for installation plan
+cargo run --bin ngdp -- install game wow_classic_era --install-type minimal --path /tmp/wow-minimal --dry-run -o json
+```
+
+**Expected**: Shows installation plan with file counts and sizes
+
+### 6.3 Resume Installation
+
+```bash
+# Test: Resume from metadata-only installation
+cargo run --bin ngdp -- install game wow_classic_era --path /tmp/wow-meta-test --resume --dry-run
+
+# Test: Resume after partial installation (if you have one)
+cargo run --bin ngdp -- install game wow_classic_era --path /tmp/partial-install --resume
+```
+
+**Expected**: Detects existing .build.info, loads configuration, and resumes missing files
+
+### 6.4 Installation Repair
+
+```bash
+# Test: Repair existing installation (dry run)
+cargo run --bin ngdp -- install repair --path /tmp/wow-meta-test --dry-run
+
+# Test: Repair with checksum verification
+cargo run --bin ngdp -- install repair --path /tmp/wow-meta-test --verify-checksums --dry-run
+```
+
+**Expected**: Checks for missing or corrupted files and shows repair plan
+
+---
+
+## 7. Download Commands
+
+Test downloading content from CDN servers with .build.info compatibility.
+
+### 7.1 Resume Check
+
+```bash
+# Test: Check for resumable downloads in directory
+cargo run --bin ngdp -- download resume /tmp
+
+# Test: Resume from installation directory (with .build.info)
+cargo run --bin ngdp -- download resume /tmp/wow-meta-test
+
+# Test: Resume specific .download file
+# cargo run --bin ngdp -- download resume /path/to/file.download
+```
+
+**Expected**: Reports resumable downloads or installation status
+
+### 7.2 Build Download
 
 ⚠️ **Warning**: This will actually download data! Use a temporary directory and be prepared for large downloads.
 
 ```bash
 # Test: Dry run build download (safe to run)
-cargo run --bin ngdp -- download build wow_classic_era 61582 --output /tmp/wow-test --dry-run
+cargo run --bin ngdp -- download build wow_classic_era 61582 --output /tmp/wow-build-test --dry-run
 
 # Test: Build download with tags filter
-cargo run --bin ngdp -- download build wow_classic_era 61582 --output /tmp/wow-test --dry-run --tags Windows
+cargo run --bin ngdp -- download build wow_classic_era 61582 --output /tmp/wow-build-test --dry-run --tags Windows
 
 # Test: Different region with dry run
-cargo run --bin ngdp -- download build wow_classic_era 61582 --region eu --output /tmp/wow-test --dry-run
+cargo run --bin ngdp -- download build wow_classic_era 61582 --region eu --output /tmp/wow-build-test --dry-run
 ```
 
-**Expected**: Downloads the specified build to the output directory
+**Expected**: Creates Data/config/ structure, .build.info, and downloads configurations with CDN-style subdirectories
 
-### 6.3 File Download
+### 7.3 File Download
 
 ```bash
 # Test: Download specific files by pattern (Note: patterns are positional arguments)
@@ -404,11 +468,11 @@ cargo run --bin ngdp -- download files wow_classic_era "*.dll" "*.exe"
 
 ---
 
-## 7. Certificate Management
+## 8. Certificate Management
 
 Test certificate operations for CDN verification.
 
-### 7.1 Certificate Download
+### 8.1 Certificate Download
 
 ```bash
 # Test: Download certificate by SKI (Subject Key Identifier)
@@ -425,11 +489,11 @@ cargo run --bin ngdp -- certs download ribbit.version --details
 
 ---
 
-## 8. Listfile Management
+## 9. Listfile Management
 
 Test community listfile operations for filename resolution.
 
-### 8.1 Listfile Information
+### 9.1 Listfile Information
 
 ```bash
 # Test: Show listfile info (will show error if not downloaded)
@@ -441,7 +505,7 @@ cargo run --bin ngdp -- listfile info -o json
 
 **Expected**: Either shows listfile stats or reports file not found
 
-### 8.2 Listfile Download
+### 9.2 Listfile Download
 
 ```bash
 # Test: Download community listfile
@@ -453,7 +517,7 @@ cargo run --bin ngdp -- listfile info
 
 **Expected**: Downloads community listfile and shows statistics
 
-### 8.3 Listfile Search
+### 9.3 Listfile Search
 
 ```bash
 # Test: Search for files (after downloading listfile)
@@ -467,6 +531,66 @@ cargo run --bin ngdp -- listfile search --pattern "*.dll" --limit 10
 ```
 
 **Expected**: Shows matching filenames from the listfile
+
+---
+
+## 10. Complete Installation Workflow
+
+Test the complete end-to-end installation workflow with .build.info and resume functionality.
+
+### 10.1 Complete Installation Workflow
+
+```bash
+# Step 1: Create metadata-only installation
+cargo run --bin ngdp -- install game wow_classic_era --install-type metadata-only --path /tmp/wow-complete-test
+echo "✅ Created metadata-only installation"
+
+# Step 2: Verify .build.info and Data/config structure
+ls -la /tmp/wow-complete-test/
+ls -la /tmp/wow-complete-test/Data/config/
+cat /tmp/wow-complete-test/.build.info | head -2
+echo "✅ Verified installation structure"
+
+# Step 3: Resume installation to minimal
+cargo run --bin ngdp -- install game wow_classic_era --path /tmp/wow-complete-test --resume --dry-run
+echo "✅ Tested resume from metadata-only"
+
+# Step 4: Test download resume compatibility  
+cargo run --bin ngdp -- download resume /tmp/wow-complete-test
+echo "✅ Tested download resume with .build.info"
+
+# Step 5: Test download build with .build.info creation
+cargo run --bin ngdp -- download build wow_classic_era 61582 --output /tmp/wow-download-test --dry-run
+echo "✅ Tested download build with .build.info generation"
+
+# Step 6: Test repair functionality
+cargo run --bin ngdp -- install repair --path /tmp/wow-complete-test --dry-run
+echo "✅ Tested repair functionality"
+
+# Cleanup
+rm -rf /tmp/wow-complete-test /tmp/wow-download-test
+echo "✅ Cleaned up test installations"
+```
+
+**Expected**: All commands work together seamlessly with .build.info and Data/config structure
+
+### 10.2 Cross-Command Compatibility
+
+```bash
+# Create installation with download command
+cargo run --bin ngdp -- download build wow_classic_era latest --output /tmp/wow-cross-test --dry-run
+
+# Resume with install command
+cargo run --bin ngdp -- install game wow_classic_era --path /tmp/wow-cross-test --resume --dry-run
+
+# Resume with download command
+cargo run --bin ngdp -- download resume /tmp/wow-cross-test
+
+# Repair with install command
+cargo run --bin ngdp -- install repair --path /tmp/wow-cross-test --dry-run
+```
+
+**Expected**: Commands are interoperable through shared .build.info format
 
 ---
 

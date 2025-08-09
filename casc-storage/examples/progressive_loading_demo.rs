@@ -7,9 +7,7 @@ use casc_storage::types::CascConfig;
 use casc_storage::{CascStorage, EKey, ProgressiveConfig, SizeHint};
 use std::path::Path;
 use std::time::Instant;
-use tokio;
 use tracing::{info, warn};
-use tracing_subscriber;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

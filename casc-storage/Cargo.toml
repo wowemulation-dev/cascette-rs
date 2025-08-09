@@ -39,8 +39,8 @@ async-trait = "0.1"
 serde_json = "1"
 
 # Internal dependencies
-blte = { path = "../blte", version = "0.3" }
-tact-parser = { path = "../tact-parser", version = "0.3" }
+blte = { path = "../blte", version = "0.4.0" }
+tact-parser = { path = "../tact-parser", version = "0.4.0" }
 
 # Optional performance optimizations
 rayon = { version = "1", optional = true }

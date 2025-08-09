@@ -1,5 +1,6 @@
 use crate::pattern_extraction::{PatternConfig, PatternExtractor};
 use crate::{DownloadCommands, OutputFormat};
+use ngdp_bpsv::{BpsvBuilder, BpsvFieldType, BpsvValue};
 use ngdp_cache::cached_cdn_client::CachedCdnClient;
 use ngdp_cache::cached_ribbit_client::CachedRibbitClient;
 use ngdp_cdn::CdnClientWithFallback;
@@ -169,9 +170,29 @@ async fn download_build(
             .download_build_config(cdn_host, &cdn_entry.path, &version_entry.build_config)
             .await?;
 
-        let build_config_path = output.join("build_config");
-        tokio::fs::write(&build_config_path, build_config_response.bytes().await?).await?;
-        info!("💾 Saved BuildConfig to: {:?}", build_config_path);
+        let build_config_data = build_config_response.bytes().await?;
+
+        // Save build config using .build.info compatible structure
+        let config_dir = output.join("Data/config");
+        tokio::fs::create_dir_all(&config_dir).await?;
+
+        // Save with CDN-style subdirectory structure
+        let build_config_hash = &version_entry.build_config;
+        let build_config_subdir =
+            format!("{}/{}", &build_config_hash[0..2], &build_config_hash[2..4]);
+        let build_config_subdir_path = config_dir.join(&build_config_subdir);
+        tokio::fs::create_dir_all(&build_config_subdir_path).await?;
+        let build_config_path = build_config_subdir_path.join(build_config_hash);
+        tokio::fs::write(&build_config_path, &build_config_data).await?;
+        info!(
+            "💾 Saved BuildConfig to: {}/{}",
+            build_config_subdir, build_config_hash
+        );
+
+        // Also save legacy flat file for backwards compatibility
+        let legacy_path = output.join("build_config");
+        tokio::fs::write(&legacy_path, &build_config_data).await?;
+        info!("💾 Saved BuildConfig (legacy) to: {:?}", legacy_path);
     }
 
     // Download CDN configuration
@@ -183,9 +204,28 @@ async fn download_build(
             .download_cdn_config(cdn_host, &cdn_entry.path, &version_entry.cdn_config)
             .await?;
 
-        let cdn_config_path = output.join("cdn_config");
-        tokio::fs::write(&cdn_config_path, cdn_config_response.bytes().await?).await?;
-        info!("💾 Saved CDNConfig to: {:?}", cdn_config_path);
+        let cdn_config_data = cdn_config_response.bytes().await?;
+
+        // Save CDN config using .build.info compatible structure
+        let config_dir = output.join("Data/config");
+        tokio::fs::create_dir_all(&config_dir).await?;
+
+        // Save with CDN-style subdirectory structure
+        let cdn_config_hash = &version_entry.cdn_config;
+        let cdn_config_subdir = format!("{}/{}", &cdn_config_hash[0..2], &cdn_config_hash[2..4]);
+        let cdn_config_subdir_path = config_dir.join(&cdn_config_subdir);
+        tokio::fs::create_dir_all(&cdn_config_subdir_path).await?;
+        let cdn_config_path = cdn_config_subdir_path.join(cdn_config_hash);
+        tokio::fs::write(&cdn_config_path, &cdn_config_data).await?;
+        info!(
+            "💾 Saved CDNConfig to: {}/{}",
+            cdn_config_subdir, cdn_config_hash
+        );
+
+        // Also save legacy flat file for backwards compatibility
+        let legacy_path = output.join("cdn_config");
+        tokio::fs::write(&legacy_path, &cdn_config_data).await?;
+        info!("💾 Saved CDNConfig (legacy) to: {:?}", legacy_path);
     }
 
     // Download product configuration
@@ -228,8 +268,35 @@ async fn download_build(
     if dry_run {
         info!("✅ Dry run completed - showed what would be downloaded");
     } else {
+        // Generate .build.info file for compatibility with install commands
+        info!("📄 Writing .build.info file...");
+
+        let region_enum = match region {
+            Region::US => ribbit_client::Region::US,
+            Region::EU => ribbit_client::Region::EU,
+            Region::KR => ribbit_client::Region::KR,
+            Region::TW => ribbit_client::Region::TW,
+            _ => ribbit_client::Region::US,
+        };
+
+        write_build_info_for_download(
+            output,
+            product,
+            version_entry,
+            &version_entry.build_config,
+            &version_entry.cdn_config,
+            cdn_entry,
+            region_enum,
+        )
+        .await?;
+
+        info!("✓ .build.info file written");
         info!("✅ Build download completed successfully!");
         info!("📂 Files saved to: {:?}", output);
+        info!(
+            "💡 Use 'ngdp download resume {}' to continue incomplete installations",
+            output.display()
+        );
     }
 
     Ok(())
@@ -536,12 +603,22 @@ fn get_comprehensive_file_list() -> Vec<String> {
     ]
 }
 
-/// Resume a download from a progress file or directory
+/// Resume a download from a progress file, directory, or installation with .build.info
 async fn resume_download(session: &str) -> Result<(), Box<dyn std::error::Error>> {
     let session_path = PathBuf::from(session);
 
     if session_path.is_dir() {
-        // Find all resumable downloads in the directory
+        // Check if this is an installation directory with .build.info
+        let build_info_path = session_path.join(".build.info");
+        if build_info_path.exists() {
+            info!(
+                "🏗️ Detected installation directory with .build.info: {:?}",
+                session_path
+            );
+            return resume_from_installation(&session_path).await;
+        }
+
+        // Find all resumable downloads in the directory (existing behavior)
         info!(
             "🔍 Searching for resumable downloads in: {:?}",
             session_path
@@ -588,12 +665,190 @@ async fn resume_download(session: &str) -> Result<(), Box<dyn std::error::Error>
         resumable_download.cleanup_completed().await?;
     } else {
         return Err(format!(
-            "Invalid session path: {session}. Must be a directory or .download file"
+            "Invalid session path: {session}. Must be a directory, .download file, or installation with .build.info"
         )
         .into());
     }
 
     Ok(())
+}
+
+/// Resume download from an existing installation with .build.info and Data/config structure
+async fn resume_from_installation(install_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    info!("📋 Reading installation metadata from .build.info...");
+
+    // Read and parse .build.info file
+    let build_info_path = install_path.join(".build.info");
+    let build_info_content = tokio::fs::read_to_string(&build_info_path).await?;
+
+    // Parse BPSV format to extract product, version, and CDN information
+    let build_info = ngdp_bpsv::BpsvDocument::parse(&build_info_content)?;
+
+    // Extract key information from .build.info
+    let rows = build_info.rows();
+    if rows.is_empty() {
+        return Err("No entries found in .build.info file".into());
+    }
+
+    let schema = build_info.schema();
+    let row = &rows[0]; // Use first entry
+    let product = row
+        .get_raw_by_name("Product", schema)
+        .ok_or("Product not found in .build.info")?;
+    let version = row
+        .get_raw_by_name("Version", schema)
+        .ok_or("Version not found in .build.info")?;
+    let branch = row
+        .get_raw_by_name("Branch", schema)
+        .ok_or("Branch not found in .build.info")?;
+    let build_key = row
+        .get_raw_by_name("Build Key", schema)
+        .ok_or("Build Key not found in .build.info")?;
+    let cdn_path = row
+        .get_raw_by_name("CDN Path", schema)
+        .ok_or("CDN Path not found in .build.info")?;
+    let cdn_hosts_str = row
+        .get_raw_by_name("CDN Hosts", schema)
+        .ok_or("CDN Hosts not found in .build.info")?;
+
+    // Parse CDN hosts (space-separated)
+    let cdn_hosts: Vec<&str> = cdn_hosts_str.split_whitespace().collect();
+    let cdn_host = cdn_hosts.first().ok_or("No CDN hosts available")?;
+
+    info!("📦 Installation details:");
+    info!("  • Product: {}", product);
+    info!("  • Version: {}", version);
+    info!("  • Branch: {}", branch);
+    info!("  • Build Key: {}", build_key);
+    info!("  • CDN Host: {}", cdn_host);
+    info!("  • CDN Path: {}", cdn_path);
+
+    // Read build configuration from Data/config/ structure
+    let build_config_subdir = format!("{}/{}", &build_key[0..2], &build_key[2..4]);
+    let build_config_path = install_path
+        .join("Data/config")
+        .join(&build_config_subdir)
+        .join(build_key);
+
+    if !build_config_path.exists() {
+        return Err(format!(
+            "Build configuration not found at: {}. Run metadata-only installation first.",
+            build_config_path.display()
+        )
+        .into());
+    }
+
+    let build_config_data = tokio::fs::read_to_string(&build_config_path).await?;
+    let build_config = tact_parser::config::BuildConfig::parse(&build_config_data)?;
+
+    info!("✓ Loaded build configuration from local cache");
+
+    // Initialize CDN client for downloading
+    let cdn_client = CachedCdnClient::new().await?;
+
+    // Get install manifest information
+    let install_value = build_config
+        .config
+        .get_value("install")
+        .ok_or("Missing install field in build config")?;
+    let install_parts: Vec<&str> = install_value.split_whitespace().collect();
+
+    // Use encoding key if available, otherwise use content key
+    let install_ekey = if install_parts.len() >= 2 {
+        install_parts[1].to_string()
+    } else {
+        // Need to look up content key in encoding file first
+        return Err("Install manifest content key lookup not yet implemented for resume. Use direct encoding key.".into());
+    };
+
+    info!(
+        "📥 Resuming installation using install manifest: {}",
+        install_ekey
+    );
+
+    // Download and parse install manifest
+    let install_data = cdn_client
+        .download_data(cdn_host, cdn_path, &install_ekey)
+        .await?
+        .bytes()
+        .await?;
+
+    let install_data = if install_data.starts_with(b"BLTE") {
+        blte::decompress_blte(install_data.to_vec(), None)?
+    } else {
+        install_data.to_vec()
+    };
+
+    let install_manifest = tact_parser::install::InstallManifest::parse(&install_data)?;
+
+    info!(
+        "📋 Install manifest loaded: {} files",
+        install_manifest.entries.len()
+    );
+
+    // Check which files are missing from Data/data/
+    let data_dir = install_path.join("Data/data");
+    tokio::fs::create_dir_all(&data_dir).await?;
+
+    let mut missing_files = Vec::new();
+    let mut total_missing_size = 0u64;
+
+    info!("🔍 Checking for missing files...");
+    for entry in &install_manifest.entries {
+        // For install manifest, we need encoding key to download
+        // For now, assume the path contains the encoding key (simplified)
+        let ckey_hex = hex::encode(&entry.ckey);
+        let expected_path = data_dir.join(&ckey_hex);
+
+        if !expected_path.exists() {
+            missing_files.push(entry);
+            total_missing_size += entry.size as u64;
+        }
+    }
+
+    if missing_files.is_empty() {
+        info!("✅ No missing files found - installation appears complete!");
+        return Ok(());
+    }
+
+    info!(
+        "📊 Found {} missing files ({} bytes total)",
+        missing_files.len(),
+        format_bytes(total_missing_size)
+    );
+
+    // For now, just report what would be downloaded
+    info!("🚧 Resume functionality implementation in progress");
+    info!("📋 Missing files that would be downloaded:");
+    for (i, entry) in missing_files.iter().take(10).enumerate() {
+        info!("  {}: {} ({} bytes)", i + 1, entry.path, entry.size);
+    }
+
+    if missing_files.len() > 10 {
+        info!("  ... and {} more files", missing_files.len() - 10);
+    }
+
+    info!(
+        "💡 Use 'ngdp install game {} --path {} --resume' for full resume functionality",
+        product,
+        install_path.display()
+    );
+
+    Ok(())
+}
+
+/// Format bytes to human-readable string  
+fn format_bytes(bytes: u64) -> String {
+    const UNITS: &[&str] = &["B", "KB", "MB", "GB", "TB"];
+    let mut size = bytes as f64;
+    let mut unit_index = 0;
+
+    while size >= 1024.0 && unit_index < UNITS.len() - 1 {
+        size /= 1024.0;
+        unit_index += 1;
+    }
+
+    format!("{:.2} {}", size, UNITS[unit_index])
 }
 
 /// Test resumable download functionality
@@ -657,4 +912,96 @@ async fn create_tact_client() -> Result<HttpClient, Box<dyn std::error::Error>> 
         .with_user_agent("ngdp-client/0.3.1");
 
     Ok(client)
+}
+
+/// Write .build.info file for downloaded build configurations
+async fn write_build_info_for_download(
+    output_path: &Path,
+    product: &str,
+    version_entry: &ribbit_client::VersionEntry,
+    build_config_hash: &str,
+    cdn_config_hash: &str,
+    cdn_entry: &ribbit_client::CdnEntry,
+    region: ribbit_client::Region,
+) -> Result<(), Box<dyn std::error::Error>> {
+    // For download command, we may not have parsed the build config yet
+    // Use placeholder values and let the user know
+    let install_key = ""; // Empty - not available without parsing build config
+
+    // Create CDN hosts string (space-separated)
+    let cdn_hosts = cdn_entry.hosts.join(" ");
+
+    // Create CDN servers string (space-separated with parameters)
+    let cdn_servers = if cdn_entry.servers.is_empty() {
+        // Generate default server URLs from hosts if servers list is empty
+        cdn_entry
+            .hosts
+            .iter()
+            .flat_map(|host| {
+                vec![
+                    format!("http://{}/?maxhosts=4", host),
+                    format!("https://{}/?maxhosts=4&fallback=1", host),
+                ]
+            })
+            .collect::<Vec<_>>()
+            .join(" ")
+    } else {
+        cdn_entry.servers.join(" ")
+    };
+
+    // Generate basic tags (platform/architecture)
+    let tags = format!(
+        "Windows x86_64 {}? acct-{}?",
+        region.as_str().to_uppercase(),
+        region.as_str().to_uppercase()
+    );
+
+    // Build .build.info using BPSV builder
+    let mut builder = BpsvBuilder::new();
+
+    // Add fields according to .build.info schema
+    builder.add_field("Branch", BpsvFieldType::String(0))?;
+    builder.add_field("Active", BpsvFieldType::Decimal(1))?;
+    builder.add_field("Build Key", BpsvFieldType::Hex(16))?;
+    builder.add_field("CDN Key", BpsvFieldType::Hex(16))?;
+    builder.add_field("Install Key", BpsvFieldType::Hex(16))?;
+    builder.add_field("IM Size", BpsvFieldType::Decimal(4))?;
+    builder.add_field("CDN Path", BpsvFieldType::String(0))?;
+    builder.add_field("CDN Hosts", BpsvFieldType::String(0))?;
+    builder.add_field("CDN Servers", BpsvFieldType::String(0))?;
+    builder.add_field("Tags", BpsvFieldType::String(0))?;
+    builder.add_field("Armadillo", BpsvFieldType::String(0))?;
+    builder.add_field("Last Activated", BpsvFieldType::String(0))?;
+    builder.add_field("Version", BpsvFieldType::String(0))?;
+    builder.add_field("KeyRing", BpsvFieldType::Hex(16))?;
+    builder.add_field("Product", BpsvFieldType::String(0))?;
+
+    // Add the data row
+    builder.add_row(vec![
+        BpsvValue::String(region.as_str().to_string()), // Branch
+        BpsvValue::Decimal(1),                          // Active (always 1)
+        BpsvValue::Hex(build_config_hash.to_string()),  // Build Key
+        BpsvValue::Hex(cdn_config_hash.to_string()),    // CDN Key
+        BpsvValue::Hex(install_key.to_string()),        // Install Key (empty)
+        BpsvValue::Decimal(0),                          // IM Size (empty)
+        BpsvValue::String(cdn_entry.path.clone()),      // CDN Path
+        BpsvValue::String(cdn_hosts),                   // CDN Hosts
+        BpsvValue::String(cdn_servers),                 // CDN Servers
+        BpsvValue::String(tags),                        // Tags
+        BpsvValue::String(String::new()),               // Armadillo (empty)
+        BpsvValue::String(String::new()),               // Last Activated (empty)
+        BpsvValue::String(version_entry.versions_name.clone()), // Version
+        BpsvValue::Hex(version_entry.key_ring.as_deref().unwrap_or("").to_string()), // KeyRing
+        BpsvValue::String(product.to_string()),         // Product
+    ])?;
+
+    // Build the BPSV content
+    let build_info_content = builder.build_string()?;
+
+    // Write .build.info file to output directory
+    let build_info_path = output_path.join(".build.info");
+    tokio::fs::write(&build_info_path, build_info_content).await?;
+
+    debug!("Written .build.info to: {}", build_info_path.display());
+    Ok(())
 }

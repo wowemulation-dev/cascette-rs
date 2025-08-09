@@ -1042,7 +1042,9 @@ unsafe impl Sync for CascStorageChunkLoader {}
 #[async_trait::async_trait]
 impl ChunkLoader for CascStorageChunkLoader {
     async fn load_chunk(&self, ekey: EKey, offset: u64, size: usize) -> Result<Vec<u8>> {
-        // Safety: The storage pointer is valid for the lifetime of the progressive manager
+        // SAFETY: The storage pointer is valid for the entire lifetime of CascStorageChunkLoader
+        // as it's created from a reference to CascStorage and the lifetime 'a ensures that
+        // the CascStorage outlives this ChunkLoader instance.
         let storage = unsafe { &*self.storage };
 
         // Get the location of the file

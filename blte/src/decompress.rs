@@ -7,8 +7,10 @@ use flate2::read::ZlibDecoder;
 use std::io::{Cursor, Read};
 use tracing::{debug, trace};
 
+#[allow(deprecated)]
 use crate::memory_pool::{PooledBufferGuard, global_pool};
 use crate::{BLTEFile, CompressionMode, Error, Result};
+#[allow(deprecated)]
 use ngdp_crypto::{KeyService, arc4::decrypt_arc4, salsa20::decrypt_salsa20};
 
 /// Decompress a complete BLTE file
@@ -109,6 +111,7 @@ pub fn decompress_chunk_pooled(
 
     let pool = pool.unwrap_or_else(|| global_pool());
 
+    #[allow(deprecated)]
     match mode {
         CompressionMode::None => decompress_none_pooled(&data[1..], pool),
         CompressionMode::ZLib => decompress_zlib_pooled(&data[1..], pool),
@@ -226,11 +229,13 @@ fn decompress_lz4_pooled(data: &[u8], pool: &crate::BLTEMemoryPool) -> Result<Ve
 
 /// Mode 'F' - Frame/Recursive BLTE
 #[allow(dead_code)]
+#[allow(deprecated)]
 fn decompress_frame(data: &[u8], key_service: Option<&KeyService>) -> Result<Vec<u8>> {
     decompress_frame_pooled(data, key_service, global_pool())
 }
 
 /// Mode 'F' - Frame/Recursive BLTE (pooled)
+#[allow(deprecated)]
 fn decompress_frame_pooled(
     data: &[u8],
     key_service: Option<&KeyService>,
@@ -317,6 +322,7 @@ fn decompress_encrypted_pooled(
     );
 
     // Decrypt based on encryption type
+    #[allow(deprecated)]
     let decrypted = match enc_type {
         0x53 => {
             // Salsa20
@@ -392,6 +398,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(deprecated)]
     fn test_compression_mode_from_byte() {
         assert_eq!(
             CompressionMode::from_byte(b'N'),

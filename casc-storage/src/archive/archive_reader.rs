@@ -91,6 +91,8 @@ impl ArchiveReader {
 
         // Try to memory-map the file (support for large archives >2GB)
         let mmap = if size > 0 && Self::can_memory_map(size) {
+            // SAFETY: The file handle is valid and will remain open for the lifetime of the mmap.
+            // The mmap is read-only and the file won't be modified while mapped.
             match unsafe { MmapOptions::new().map(&file) } {
                 Ok(mmap) => {
                     debug!("Successfully memory-mapped archive ({} bytes)", size);

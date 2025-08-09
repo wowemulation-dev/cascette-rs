@@ -13,6 +13,7 @@ use tempfile::TempDir;
 async fn test_ribbit_cache_directory_structure() -> Result<(), Box<dyn std::error::Error>> {
     // Use a temporary directory for testing
     let temp_dir = TempDir::new()?;
+    // SAFETY: Test runs in isolation. Setting XDG_CACHE_HOME for test environment is safe.
     unsafe {
         std::env::set_var("XDG_CACHE_HOME", temp_dir.path());
     }
@@ -58,6 +59,7 @@ async fn test_ribbit_cache_directory_structure() -> Result<(), Box<dyn std::erro
 #[tokio::test]
 async fn test_ribbit_cache_file_naming() -> Result<(), Box<dyn std::error::Error>> {
     let temp_dir = TempDir::new()?;
+    // SAFETY: Test runs in isolation. Setting XDG_CACHE_HOME for test environment is safe.
     unsafe {
         std::env::set_var("XDG_CACHE_HOME", temp_dir.path());
     }
