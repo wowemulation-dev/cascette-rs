@@ -42,7 +42,7 @@ impl BLTEFile {
     }
 
     /// Parse a BLTE file from bytes (zero-copy)
-    pub fn parse_ref(data: &[u8]) -> Result<BLTEFileRef> {
+    pub fn parse_ref(data: &[u8]) -> Result<BLTEFileRef<'_>> {
         let header = BLTEHeader::parse(data)?;
         let data_offset = header.data_offset();
 
