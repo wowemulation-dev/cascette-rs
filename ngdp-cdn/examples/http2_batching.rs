@@ -70,16 +70,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // Performance comparison
-    if parallel_duration > batch_duration {
-        let improvement = parallel_duration.as_millis() as f64 / batch_duration.as_millis() as f64;
-        println!("   - HTTP/2 batching is {improvement:.2}x faster!");
-    } else if batch_duration > parallel_duration {
-        let overhead = batch_duration.as_millis() as f64 / parallel_duration.as_millis() as f64;
-        println!(
-            "   - HTTP/2 batching has {overhead:.2}x overhead (possibly due to network conditions)"
-        );
-    } else {
-        println!("   - Performance is equivalent");
+    match parallel_duration.cmp(&batch_duration) {
+        std::cmp::Ordering::Greater => {
+            let improvement = parallel_duration.as_millis() as f64 / batch_duration.as_millis() as f64;
+            println!("   - HTTP/2 batching is {improvement:.2}x faster!");
+        }
+        std::cmp::Ordering::Less => {
+            let overhead = batch_duration.as_millis() as f64 / parallel_duration.as_millis() as f64;
+            println!(
+                "   - HTTP/2 batching has {overhead:.2}x overhead (possibly due to network conditions)"
+            );
+        }
+        std::cmp::Ordering::Equal => {
+            println!("   - Performance is equivalent");
+        }
     }
 
     // Show detailed batch statistics

@@ -48,13 +48,13 @@ impl<'a> ArchiveSection<'a> {
     }
 }
 
-impl<'a> Read for ArchiveSection<'a> {
+impl Read for ArchiveSection<'_> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         self.data.read(buf)
     }
 }
 
-impl<'a> Seek for ArchiveSection<'a> {
+impl Seek for ArchiveSection<'_> {
     fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
         self.data.seek(pos)
     }
