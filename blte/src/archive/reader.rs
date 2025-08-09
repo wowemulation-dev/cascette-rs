@@ -25,7 +25,7 @@ impl<R: Read + Seek> ArchiveReader<R> {
             current_position: 0,
             scanned: false,
         };
-        
+
         archive_reader.scan_archive()?;
         Ok(archive_reader)
     }
@@ -41,57 +41,54 @@ impl<R: Read + Seek> ArchiveReader<R> {
         self.entries.clear();
 
         let mut buffer = [0u8; 8];
-        let mut entry_index = 0;
+        let mut _entry_index = 0;
 
-        loop {
-            // Try to read potential BLTE header
-            match self.reader.read_exact(&mut buffer) {
-                Ok(()) => {
-                    // Check for BLTE magic signature
-                    if &buffer[0..4] == b"BLTE" {
-                        // Read the size field (4 bytes after BLTE magic)
-                        let size = u32::from_be_bytes([buffer[4], buffer[5], buffer[6], buffer[7]]);
-                        
-                        debug!("Found BLTE file at position {} with size {}", self.current_position, size);
-                        
-                        let entry = ArchiveEntry {
-                            offset: self.current_position as usize,
-                            size: size as usize,
-                            blte: None,
-                            metadata: super::EntryMetadata {
-                                compressed_size: size as usize,
-                                decompressed_size: None,
-                                chunk_count: 0,
-                                validated: false,
-                            },
-                        };
-                        
-                        self.entries.push(entry);
-                        entry_index += 1;
+        while let Ok(()) = self.reader.read_exact(&mut buffer) {
+            // Check for BLTE magic signature
+            if &buffer[0..4] == b"BLTE" {
+                // Read the size field (4 bytes after BLTE magic)
+                let size = u32::from_be_bytes([buffer[4], buffer[5], buffer[6], buffer[7]]);
 
-                        // Skip to next potential file (after the current BLTE data)
-                        let next_position = self.current_position + 8 + size as u64;
-                        if self.reader.seek(SeekFrom::Start(next_position)).is_ok() {
-                            self.current_position = next_position;
-                        } else {
-                            break;
-                        }
-                    } else {
-                        // Not a BLTE header, advance by 1 byte and try again
-                        self.current_position += 1;
-                        self.reader.seek(SeekFrom::Start(self.current_position))?;
-                    }
-                }
-                Err(_) => {
-                    // End of file reached
+                debug!(
+                    "Found BLTE file at position {} with size {}",
+                    self.current_position, size
+                );
+
+                let entry = ArchiveEntry {
+                    offset: self.current_position as usize,
+                    size: size as usize,
+                    blte: None,
+                    metadata: super::EntryMetadata {
+                        compressed_size: size as usize,
+                        decompressed_size: None,
+                        chunk_count: 0,
+                        validated: false,
+                    },
+                };
+
+                self.entries.push(entry);
+                _entry_index += 1;
+
+                // Skip to next potential file (after the current BLTE data)
+                let next_position = self.current_position + 8 + size as u64;
+                if self.reader.seek(SeekFrom::Start(next_position)).is_ok() {
+                    self.current_position = next_position;
+                } else {
                     break;
                 }
+            } else {
+                // Not a BLTE header, advance by 1 byte and try again
+                self.current_position += 1;
+                self.reader.seek(SeekFrom::Start(self.current_position))?;
             }
         }
 
         self.scanned = true;
-        debug!("Archive scan complete: found {} BLTE files", self.entries.len());
-        
+        debug!(
+            "Archive scan complete: found {} BLTE files",
+            self.entries.len()
+        );
+
         // Reset to beginning for reading
         self.reader.seek(SeekFrom::Start(0))?;
         self.current_position = 0;
@@ -107,14 +104,14 @@ impl<R: Read + Seek> ArchiveReader<R> {
         }
 
         let entry = &self.entries[self.current_index];
-        
+
         // Seek to the file position
         self.reader.seek(SeekFrom::Start(entry.offset as u64))?;
-        
+
         // Read the entire BLTE file data
-        let mut file_data = vec![0u8; entry.size as usize + 8]; // +8 for BLTE header
+        let mut file_data = vec![0u8; entry.size + 8]; // +8 for BLTE header
         self.reader.read_exact(&mut file_data)?;
-        
+
         // Parse the BLTE file
         match BLTEFile::parse(file_data) {
             Ok(blte_file) => {
@@ -122,9 +119,20 @@ impl<R: Read + Seek> ArchiveReader<R> {
                 Ok(Some(blte_file))
             }
             Err(e) => {
-                warn!("Failed to parse BLTE file at index {}: {}", self.current_index, e);
+                warn!(
+                    "Failed to parse BLTE file at index {}: {}",
+                    self.current_index, e
+                );
                 self.current_index += 1;
-                Err(std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Invalid BLTE file at index {}: {}", self.current_index - 1, e)).into())
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!(
+                        "Invalid BLTE file at index {}: {}",
+                        self.current_index - 1,
+                        e
+                    ),
+                )
+                .into())
             }
         }
     }
@@ -132,14 +140,22 @@ impl<R: Read + Seek> ArchiveReader<R> {
     /// Skip to specific file index
     pub fn seek_to_file(&mut self, index: usize) -> Result<()> {
         if index >= self.entries.len() {
-            return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, format!("File index {} out of range (max: {})", index, self.entries.len())).into());
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!(
+                    "File index {} out of range (max: {})",
+                    index,
+                    self.entries.len()
+                ),
+            )
+            .into());
         }
 
         self.current_index = index;
         let entry = &self.entries[index];
         self.reader.seek(SeekFrom::Start(entry.offset as u64))?;
         self.current_position = entry.offset as u64;
-        
+
         Ok(())
     }
 
@@ -182,7 +198,7 @@ mod tests {
         let data = vec![0u8; 1024];
         let cursor = Cursor::new(data);
         let reader = ArchiveReader::new(cursor).unwrap();
-        
+
         assert_eq!(reader.file_count(), 0);
     }
 
@@ -192,10 +208,10 @@ mod tests {
         data.extend_from_slice(b"BLTE"); // Magic
         data.extend_from_slice(&16u32.to_be_bytes()); // Size = 16 bytes of data after header
         data.extend_from_slice(&[0u8; 16]); // 16 bytes of BLTE data
-        
+
         let cursor = Cursor::new(data);
         let reader = ArchiveReader::new(cursor).unwrap();
-        
+
         assert_eq!(reader.file_count(), 1);
         assert_eq!(reader.get_entry(0).unwrap().size, 16);
         assert_eq!(reader.get_entry(0).unwrap().offset, 0);
@@ -204,20 +220,20 @@ mod tests {
     #[test]
     fn test_archive_reader_multiple_files() {
         let mut data = Vec::new();
-        
+
         // First BLTE file
         data.extend_from_slice(b"BLTE");
         data.extend_from_slice(&8u32.to_be_bytes());
         data.extend_from_slice(&[1u8; 8]);
-        
+
         // Second BLTE file
         data.extend_from_slice(b"BLTE");
         data.extend_from_slice(&12u32.to_be_bytes());
         data.extend_from_slice(&[2u8; 12]);
-        
+
         let cursor = Cursor::new(data);
         let reader = ArchiveReader::new(cursor).unwrap();
-        
+
         assert_eq!(reader.file_count(), 2);
         assert_eq!(reader.get_entry(0).unwrap().size, 8);
         assert_eq!(reader.get_entry(1).unwrap().size, 12);
@@ -227,26 +243,26 @@ mod tests {
     #[test]
     fn test_seek_to_file() {
         let mut data = Vec::new();
-        
+
         // Multiple BLTE files
         for i in 0..3 {
             data.extend_from_slice(b"BLTE");
             data.extend_from_slice(&4u32.to_be_bytes());
             data.extend_from_slice(&[i as u8; 4]);
         }
-        
+
         let cursor = Cursor::new(data);
         let mut reader = ArchiveReader::new(cursor).unwrap();
-        
+
         assert_eq!(reader.file_count(), 3);
-        
+
         // Test seeking to different files
         reader.seek_to_file(1).unwrap();
         assert_eq!(reader.current_index(), 1);
-        
+
         reader.seek_to_file(0).unwrap();
         assert_eq!(reader.current_index(), 0);
-        
+
         // Test seeking beyond range
         assert!(reader.seek_to_file(3).is_err());
     }

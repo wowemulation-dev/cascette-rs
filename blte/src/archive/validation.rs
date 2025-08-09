@@ -61,10 +61,11 @@ impl BLTEArchive {
     /// Validate all BLTE files in archive
     pub fn validate(&self) -> Result<ValidationReport> {
         let start_time = std::time::Instant::now();
-        let mut report = ValidationReport::default();
-        
-        report.total_files = self.files.len();
-        
+        let mut report = ValidationReport {
+            total_files: self.files.len(),
+            ..Default::default()
+        };
+
         for (index, entry) in self.files.iter().enumerate() {
             let result = self.validate_entry(index, entry);
             if result.is_valid {
@@ -74,7 +75,7 @@ impl BLTEArchive {
             }
             report.results.push(result);
         }
-        
+
         report.total_time_us = start_time.elapsed().as_micros() as u64;
         Ok(report)
     }
@@ -84,7 +85,7 @@ impl BLTEArchive {
         let start_time = std::time::Instant::now();
         let mut valid_headers = 0;
         let mut invalid_headers = 0;
-        
+
         for entry in &self.files {
             // Basic validation - check if entry has reasonable size and metadata
             if entry.size > 8 && entry.metadata.compressed_size > 0 {
@@ -93,7 +94,7 @@ impl BLTEArchive {
                 invalid_headers += 1;
             }
         }
-        
+
         Ok(HeaderValidationReport {
             total_files: self.files.len(),
             valid_headers,
@@ -105,11 +106,11 @@ impl BLTEArchive {
     /// Deep validation (full decompression)
     pub fn validate_deep(&mut self) -> Result<DeepValidationReport> {
         let basic = self.validate()?;
-        
+
         let mut decompressed_files = 0;
         let mut decompression_errors = 0;
         let mut total_decompressed_bytes = 0;
-        
+
         // For deep validation, we would need to parse each BLTE file
         // This is a simplified implementation
         for entry in &self.files {
@@ -120,7 +121,7 @@ impl BLTEArchive {
                 decompression_errors += 1;
             }
         }
-        
+
         Ok(DeepValidationReport {
             basic,
             decompressed_files,
@@ -135,19 +136,19 @@ impl BLTEArchive {
             return Ok(ValidationResult {
                 file_index: index,
                 is_valid: false,
-                error: Some(format!("File index {} out of range", index)),
+                error: Some(format!("File index {index} out of range")),
                 validation_time_us: 0,
             });
         }
-        
+
         let entry = &self.files[index];
         Ok(self.validate_entry(index, entry))
     }
-    
+
     /// Validate a single archive entry
     fn validate_entry(&self, index: usize, entry: &super::ArchiveEntry) -> ValidationResult {
         let start_time = std::time::Instant::now();
-        
+
         // Basic validation of entry structure
         if entry.size == 0 {
             return ValidationResult {
@@ -157,7 +158,7 @@ impl BLTEArchive {
                 validation_time_us: start_time.elapsed().as_micros() as u64,
             };
         }
-        
+
         if entry.metadata.compressed_size == 0 {
             return ValidationResult {
                 file_index: index,
@@ -166,7 +167,7 @@ impl BLTEArchive {
                 validation_time_us: start_time.elapsed().as_micros() as u64,
             };
         }
-        
+
         // If we get here, the entry structure is valid
         ValidationResult {
             file_index: index,
