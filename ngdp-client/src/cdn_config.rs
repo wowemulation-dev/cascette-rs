@@ -38,7 +38,7 @@ pub async fn create_cdn_client_with_config(
 /// Get a boolean configuration value
 fn get_config_bool(key: &str) -> Option<bool> {
     use crate::config_manager::ConfigManager;
-    
+
     match ConfigManager::new() {
         Ok(config_manager) => {
             match config_manager.get(key) {
@@ -51,7 +51,7 @@ fn get_config_bool(key: &str) -> Option<bool> {
                     }
                 }
             }
-        },
+        }
         Err(_) => {
             // Fallback to defaults if config manager fails
             match key {
@@ -65,7 +65,7 @@ fn get_config_bool(key: &str) -> Option<bool> {
 /// Get a string configuration value
 fn get_config_string(key: &str) -> Option<String> {
     use crate::config_manager::ConfigManager;
-    
+
     match ConfigManager::new() {
         Ok(config_manager) => {
             match config_manager.get(key) {
@@ -78,7 +78,7 @@ fn get_config_string(key: &str) -> Option<String> {
                     }
                 }
             }
-        },
+        }
         Err(_) => {
             // Fallback to defaults if config manager fails
             match key {

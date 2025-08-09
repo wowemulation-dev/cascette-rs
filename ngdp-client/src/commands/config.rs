@@ -1,6 +1,6 @@
 use crate::{
     ConfigCommands, OutputFormat,
-    config_manager::{ConfigManager, ConfigError},
+    config_manager::{ConfigError, ConfigManager},
     output::{
         OutputStyle, create_table, format_error, format_success, header_cell, print_section_header,
         regular_cell,
@@ -64,7 +64,7 @@ async fn set_config(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut config_manager = ConfigManager::new()?;
     config_manager.set(key.clone(), value.clone())?;
-    
+
     match format {
         OutputFormat::Json | OutputFormat::JsonPretty => {
             let result = serde_json::json!({
@@ -143,7 +143,7 @@ async fn reset_config(yes: bool, format: OutputFormat) -> Result<(), Box<dyn std
 
     let mut config_manager = ConfigManager::new()?;
     config_manager.reset()?;
-    
+
     match format {
         OutputFormat::Json | OutputFormat::JsonPretty => {
             let result = serde_json::json!({

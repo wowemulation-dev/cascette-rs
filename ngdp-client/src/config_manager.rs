@@ -83,7 +83,7 @@ impl ConfigManager {
     pub fn new() -> Result<Self, ConfigError> {
         let config_path = Self::get_config_path()?;
         let config = Self::load_config(&config_path)?;
-        
+
         Ok(Self {
             config_path,
             config,
@@ -95,12 +95,12 @@ impl ConfigManager {
         let config_dir = dirs::config_dir()
             .unwrap_or_else(|| PathBuf::from("."))
             .join("cascette");
-        
+
         // Ensure directory exists
         if !config_dir.exists() {
             fs::create_dir_all(&config_dir)?;
         }
-        
+
         Ok(config_dir.join("ngdp-client.toml"))
     }
 
@@ -144,9 +144,13 @@ impl ConfigManager {
             "timeout" => return Ok(self.config.defaults.timeout.to_string()),
             "cache_enabled" => return Ok(self.config.defaults.cache_enabled.to_string()),
             "cache_ttl" => return Ok(self.config.defaults.cache_ttl.to_string()),
-            "max_concurrent_downloads" => return Ok(self.config.defaults.max_concurrent_downloads.to_string()),
+            "max_concurrent_downloads" => {
+                return Ok(self.config.defaults.max_concurrent_downloads.to_string());
+            }
             "user_agent" => &self.config.defaults.user_agent,
-            "verify_certificates" => return Ok(self.config.defaults.verify_certificates.to_string()),
+            "verify_certificates" => {
+                return Ok(self.config.defaults.verify_certificates.to_string());
+            }
             "proxy_url" => &self.config.defaults.proxy_url,
             "ribbit_timeout" => return Ok(self.config.defaults.ribbit_timeout.to_string()),
             "tact_timeout" => return Ok(self.config.defaults.tact_timeout.to_string()),
@@ -154,9 +158,15 @@ impl ConfigManager {
             "log_file" => &self.config.defaults.log_file,
             "color_output" => return Ok(self.config.defaults.color_output.to_string()),
             "fallback_to_tact" => return Ok(self.config.defaults.fallback_to_tact.to_string()),
-            "use_community_cdn_fallbacks" => return Ok(self.config.defaults.use_community_cdn_fallbacks.to_string()),
+            "use_community_cdn_fallbacks" => {
+                return Ok(self.config.defaults.use_community_cdn_fallbacks.to_string());
+            }
             "custom_cdn_fallbacks" => &self.config.defaults.custom_cdn_fallbacks,
-            _ => return Err(ConfigError::KeyNotFound { key: key.to_string() }),
+            _ => {
+                return Err(ConfigError::KeyNotFound {
+                    key: key.to_string(),
+                });
+            }
         };
 
         Ok(value.clone())
@@ -173,31 +183,82 @@ impl ConfigManager {
     /// Get all configuration values as a HashMap
     pub fn get_all(&self) -> HashMap<String, String> {
         let mut all_config = HashMap::new();
-        
+
         // Add built-in defaults
-        all_config.insert("default_region".to_string(), self.config.defaults.default_region.clone());
-        all_config.insert("cache_dir".to_string(), self.config.defaults.cache_dir.clone());
-        all_config.insert("timeout".to_string(), self.config.defaults.timeout.to_string());
-        all_config.insert("cache_enabled".to_string(), self.config.defaults.cache_enabled.to_string());
-        all_config.insert("cache_ttl".to_string(), self.config.defaults.cache_ttl.to_string());
-        all_config.insert("max_concurrent_downloads".to_string(), self.config.defaults.max_concurrent_downloads.to_string());
-        all_config.insert("user_agent".to_string(), self.config.defaults.user_agent.clone());
-        all_config.insert("verify_certificates".to_string(), self.config.defaults.verify_certificates.to_string());
-        all_config.insert("proxy_url".to_string(), self.config.defaults.proxy_url.clone());
-        all_config.insert("ribbit_timeout".to_string(), self.config.defaults.ribbit_timeout.to_string());
-        all_config.insert("tact_timeout".to_string(), self.config.defaults.tact_timeout.to_string());
-        all_config.insert("retry_attempts".to_string(), self.config.defaults.retry_attempts.to_string());
-        all_config.insert("log_file".to_string(), self.config.defaults.log_file.clone());
-        all_config.insert("color_output".to_string(), self.config.defaults.color_output.to_string());
-        all_config.insert("fallback_to_tact".to_string(), self.config.defaults.fallback_to_tact.to_string());
-        all_config.insert("use_community_cdn_fallbacks".to_string(), self.config.defaults.use_community_cdn_fallbacks.to_string());
-        all_config.insert("custom_cdn_fallbacks".to_string(), self.config.defaults.custom_cdn_fallbacks.clone());
-        
+        all_config.insert(
+            "default_region".to_string(),
+            self.config.defaults.default_region.clone(),
+        );
+        all_config.insert(
+            "cache_dir".to_string(),
+            self.config.defaults.cache_dir.clone(),
+        );
+        all_config.insert(
+            "timeout".to_string(),
+            self.config.defaults.timeout.to_string(),
+        );
+        all_config.insert(
+            "cache_enabled".to_string(),
+            self.config.defaults.cache_enabled.to_string(),
+        );
+        all_config.insert(
+            "cache_ttl".to_string(),
+            self.config.defaults.cache_ttl.to_string(),
+        );
+        all_config.insert(
+            "max_concurrent_downloads".to_string(),
+            self.config.defaults.max_concurrent_downloads.to_string(),
+        );
+        all_config.insert(
+            "user_agent".to_string(),
+            self.config.defaults.user_agent.clone(),
+        );
+        all_config.insert(
+            "verify_certificates".to_string(),
+            self.config.defaults.verify_certificates.to_string(),
+        );
+        all_config.insert(
+            "proxy_url".to_string(),
+            self.config.defaults.proxy_url.clone(),
+        );
+        all_config.insert(
+            "ribbit_timeout".to_string(),
+            self.config.defaults.ribbit_timeout.to_string(),
+        );
+        all_config.insert(
+            "tact_timeout".to_string(),
+            self.config.defaults.tact_timeout.to_string(),
+        );
+        all_config.insert(
+            "retry_attempts".to_string(),
+            self.config.defaults.retry_attempts.to_string(),
+        );
+        all_config.insert(
+            "log_file".to_string(),
+            self.config.defaults.log_file.clone(),
+        );
+        all_config.insert(
+            "color_output".to_string(),
+            self.config.defaults.color_output.to_string(),
+        );
+        all_config.insert(
+            "fallback_to_tact".to_string(),
+            self.config.defaults.fallback_to_tact.to_string(),
+        );
+        all_config.insert(
+            "use_community_cdn_fallbacks".to_string(),
+            self.config.defaults.use_community_cdn_fallbacks.to_string(),
+        );
+        all_config.insert(
+            "custom_cdn_fallbacks".to_string(),
+            self.config.defaults.custom_cdn_fallbacks.clone(),
+        );
+
         // Override with custom values
         for (key, value) in &self.config.custom {
             all_config.insert(key.clone(), value.clone());
         }
-        
+
         all_config
     }
 
@@ -212,24 +273,26 @@ impl ConfigManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::TempDir;
     use std::env;
+    use tempfile::TempDir;
 
     #[test]
     fn test_config_creation_and_persistence() {
         let temp_dir = TempDir::new().unwrap();
         let config_path = temp_dir.path().join("test-config.toml");
-        
+
         // Create config with custom value
         let mut config = NgdpConfig::default();
-        config.custom.insert("test.key".to_string(), "test_value".to_string());
-        
+        config
+            .custom
+            .insert("test.key".to_string(), "test_value".to_string());
+
         // Save it
         ConfigManager::save_config_to_file(&config_path, &config).unwrap();
-        
+
         // Load it back
         let loaded_config = ConfigManager::load_config(&config_path).unwrap();
-        
+
         assert_eq!(loaded_config.custom.get("test.key").unwrap(), "test_value");
         assert_eq!(loaded_config.defaults.default_region, "us");
     }
@@ -238,19 +301,23 @@ mod tests {
     fn test_config_get_set() {
         // Use a temporary directory for this test
         let temp_dir = TempDir::new().unwrap();
-        env::set_var("XDG_CONFIG_HOME", temp_dir.path());
-        
+        unsafe {
+            env::set_var("XDG_CONFIG_HOME", temp_dir.path());
+        }
+
         let mut manager = ConfigManager::new().unwrap();
-        
+
         // Test setting and getting custom value
-        manager.set("test.product".to_string(), "wow_classic_era".to_string()).unwrap();
+        manager
+            .set("test.product".to_string(), "wow_classic_era".to_string())
+            .unwrap();
         let value = manager.get("test.product").unwrap();
         assert_eq!(value, "wow_classic_era");
-        
+
         // Test getting default value
         let default_region = manager.get("default_region").unwrap();
         assert_eq!(default_region, "us");
-        
+
         // Test non-existent key
         let result = manager.get("nonexistent.key");
         assert!(result.is_err());

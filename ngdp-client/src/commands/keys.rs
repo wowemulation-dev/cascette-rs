@@ -1,5 +1,5 @@
-use clap::Subcommand;
 use crate::OutputFormat;
+use clap::Subcommand;
 use serde_json;
 use std::fs;
 use std::path::PathBuf;
@@ -22,7 +22,10 @@ pub enum KeysCommands {
     Status,
 }
 
-pub async fn handle_keys_command(command: KeysCommands, format: OutputFormat) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn handle_keys_command(
+    command: KeysCommands,
+    format: OutputFormat,
+) -> Result<(), Box<dyn std::error::Error>> {
     match command {
         KeysCommands::Update { output, force } => update_keys(output, force, format).await,
         KeysCommands::Status => show_key_status(format),
