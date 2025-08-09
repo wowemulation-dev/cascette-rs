@@ -8,6 +8,7 @@ pub mod commands;
 pub mod config_manager;
 pub mod fallback_client;
 pub mod output;
+pub mod pattern_extraction;
 pub mod wago_api;
 
 /// Common test constants

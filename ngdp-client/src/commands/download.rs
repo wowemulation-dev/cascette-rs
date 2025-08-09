@@ -1,3 +1,4 @@
+use crate::pattern_extraction::{PatternConfig, PatternExtractor};
 use crate::{DownloadCommands, OutputFormat};
 use ngdp_cache::cached_cdn_client::CachedCdnClient;
 use ngdp_cache::cached_ribbit_client::CachedRibbitClient;
@@ -6,7 +7,7 @@ use ribbit_client::Region;
 use std::path::{Path, PathBuf};
 use tact_client::resumable::{DownloadProgress, ResumableDownload, find_resumable_downloads};
 use tact_client::{HttpClient, ProtocolVersion as TactProtocolVersion, Region as TactRegion};
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
 pub async fn handle(
     cmd: DownloadCommands,
@@ -108,11 +109,11 @@ async fn download_build(
         "📋 Initializing build download for {} build {}",
         product, build
     );
-    
+
     if dry_run {
         info!("🔍 DRY RUN mode - no files will be downloaded");
     }
-    
+
     if let Some(tags) = &tags {
         info!("🏷️ Filtering by tags: {}", tags);
     }
@@ -159,7 +160,10 @@ async fn download_build(
     // Download build configuration
     info!("⬇️ Downloading BuildConfig...");
     if dry_run {
-        info!("🔍 Would download BuildConfig: {}", version_entry.build_config);
+        info!(
+            "🔍 Would download BuildConfig: {}",
+            version_entry.build_config
+        );
     } else {
         let build_config_response = cdn_client
             .download_build_config(cdn_host, &cdn_entry.path, &version_entry.build_config)
@@ -187,7 +191,10 @@ async fn download_build(
     // Download product configuration
     info!("⬇️ Downloading ProductConfig...");
     if dry_run {
-        info!("🔍 Would download ProductConfig: {}", version_entry.product_config);
+        info!(
+            "🔍 Would download ProductConfig: {}",
+            version_entry.product_config
+        );
     } else {
         let product_config_response = cdn_client
             .download_product_config(
@@ -239,62 +246,294 @@ async fn download_files(
     limit: Option<usize>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     info!(
-        "📋 Initializing file download for {} with {} patterns",
+        "📋 Initializing pattern-based file download for {} with {} patterns",
         product,
         patterns.len()
     );
-    
+
     if dry_run {
-        info!("🔍 DRY RUN mode - no files will be downloaded");
+        info!("🔍 DRY RUN mode - analyzing patterns and showing matches");
     }
-    
+
     if let Some(tags) = &tags {
         info!("🏷️ Filtering by tags: {}", tags);
     }
-    
+
     if let Some(limit) = limit {
-        info!("📊 Limiting to {} files", limit);
+        info!("📊 Limiting to {} files per pattern", limit);
     }
 
     // Create output directory
     tokio::fs::create_dir_all(output).await?;
     info!("📁 Created output directory: {:?}", output);
 
-    // For now, provide detailed information about what each pattern type would do
-    for (i, pattern) in patterns.iter().enumerate() {
-        info!("🔍 Pattern {}: {}", i + 1, pattern);
+    // Initialize pattern extractor with configuration
+    let pattern_config = PatternConfig {
+        max_matches_per_pattern: limit,
+        ..Default::default()
+    };
 
-        if pattern.len() == 32 && pattern.chars().all(|c| c.is_ascii_hexdigit()) {
-            info!("  → Detected as content key (32 hex chars)");
-            info!("  → Would download from CDN data endpoint");
-        } else if pattern.len() == 18 && pattern.chars().all(|c| c.is_ascii_hexdigit()) {
-            info!("  → Detected as encoding key (18 hex chars)");
-            info!("  → Would resolve via encoding file to content key");
-        } else if pattern.contains('/') || pattern.contains('\\') {
-            info!("  → Detected as file path");
-            info!("  → Would resolve via root file to content key");
-        } else {
-            info!("  → Unknown pattern type, would attempt all resolution methods");
+    let mut extractor = PatternExtractor::with_config(pattern_config);
+
+    // Add all patterns to the extractor
+    for pattern in patterns {
+        match extractor.add_pattern(pattern) {
+            Ok(()) => info!("✅ Added pattern: {}", pattern),
+            Err(e) => {
+                error!("❌ Invalid pattern '{}': {}", pattern, e);
+                return Err(format!("Invalid pattern '{pattern}': {e}").into());
+            }
         }
     }
 
-    if let Some(build_id) = build {
-        info!("🏗️ Specific build requested: {}", build_id);
-    } else {
-        info!("🏗️ Using latest build");
+    // Show pattern statistics
+    let stats = extractor.get_stats();
+    info!("📊 Pattern Analysis:");
+    info!("  • Total patterns: {}", stats.total_patterns);
+    info!("  • Glob patterns: {}", stats.glob_patterns);
+    info!("  • Regex patterns: {}", stats.regex_patterns);
+    info!("  • Content keys: {}", stats.content_keys);
+    info!("  • Encoding keys: {}", stats.encoding_keys);
+    info!("  • File paths: {}", stats.file_paths);
+
+    if dry_run {
+        // For dry run, demonstrate pattern matching with sample data
+        info!("🔍 DRY RUN: Demonstrating pattern matching with sample file list");
+
+        let sample_files = get_sample_file_list();
+        let matches = extractor.match_files(&sample_files);
+
+        if matches.is_empty() {
+            info!("📝 No matches found in sample data");
+            info!("💡 Sample files available for testing:");
+            for (i, file) in sample_files.iter().take(10).enumerate() {
+                info!("  {}: {}", i + 1, file);
+            }
+        } else {
+            info!("🎯 Found {} pattern matches in sample data:", matches.len());
+
+            for (i, pattern_match) in matches.iter().take(20).enumerate() {
+                info!(
+                    "  {}: {} (pattern: {}, priority: {})",
+                    i + 1,
+                    pattern_match.file_path,
+                    pattern_match.pattern,
+                    pattern_match.metadata.priority_score
+                );
+            }
+
+            if matches.len() > 20 {
+                info!("  ... and {} more matches", matches.len() - 20);
+            }
+        }
+
+        info!("✅ Dry run completed - patterns would be applied to real manifest data");
+        return Ok(());
     }
 
-    info!("📝 Implementation notes:");
-    info!("  • Need to parse BuildConfig to get encoding/root file hashes");
-    info!("  • Download and parse encoding file for key resolution");
-    info!("  • Download and parse root file for path resolution");
-    info!("  • Download actual content files via content keys");
-    info!("  • Decompress BLTE data and decrypt if needed");
-    info!("  • Save files with proper directory structure");
+    // Initialize clients for actual download
+    let region = Region::US; // Default region, could be parameterized
+    let ribbit_client = CachedRibbitClient::new(region).await?;
+    let cdn_client = CachedCdnClient::new().await?;
 
-    warn!("🚧 Full file download implementation pending API integration refinement");
+    info!("🌐 Getting product versions from Ribbit...");
+    let versions = ribbit_client.get_product_versions(product).await?;
+
+    // Find the specific build or use latest
+    let version_entry = if let Some(build_id) = build {
+        versions
+            .entries
+            .iter()
+            .find(|v| v.build_id.to_string() == build_id || v.versions_name == build_id)
+            .ok_or_else(|| format!("Build '{build_id}' not found for product '{product}'"))?
+    } else {
+        versions
+            .entries
+            .first()
+            .ok_or("No versions available for product")?
+    };
+
+    info!(
+        "📦 Found build: {} ({})",
+        version_entry.versions_name, version_entry.build_id
+    );
+
+    // Get CDN configuration
+    info!("🌐 Getting CDN configuration...");
+    let cdns = ribbit_client.get_product_cdns(product).await?;
+    let cdn_entry = cdns.entries.first().ok_or("No CDN servers available")?;
+    let cdn_host = cdn_entry.hosts.first().ok_or("No CDN hosts available")?;
+
+    info!("🔗 Using CDN host: {}", cdn_host);
+
+    // Download and parse build configuration to get manifest hashes
+    info!("⬇️ Downloading BuildConfig...");
+    let build_config_response = cdn_client
+        .download_build_config(cdn_host, &cdn_entry.path, &version_entry.build_config)
+        .await?;
+
+    let build_config_data = build_config_response.bytes().await?;
+
+    // Parse build configuration to extract manifest file hashes
+    let build_config_text = String::from_utf8_lossy(&build_config_data);
+
+    info!("📋 Parsing BuildConfig to extract manifest hashes...");
+    let (encoding_hash, root_hash, install_hash) = parse_build_config_hashes(&build_config_text)?;
+
+    info!("🔑 Found manifest hashes:");
+    info!("  • Encoding: {}", encoding_hash);
+    info!("  • Root: {}", root_hash.as_deref().unwrap_or("None"));
+    info!("  • Install: {}", install_hash.as_deref().unwrap_or("None"));
+
+    // For now, demonstrate what would happen with real manifest integration
+    info!("🚧 Next steps for full implementation:");
+    info!("  1. Download and decompress BLTE-encoded encoding file");
+    info!("  2. Parse encoding file to build CKey → EKey mapping");
+    info!("  3. Download and decompress root file if available");
+    info!("  4. Parse root file to build path → CKey mapping");
+    info!("  5. Apply patterns to real file list from manifest");
+    info!("  6. Download matched files from CDN data endpoint");
+    info!("  7. Decompress BLTE data and save with directory structure");
+
+    // Apply patterns to mock data for demonstration
+    let mock_file_list = get_comprehensive_file_list();
+    let matches = extractor.match_files(&mock_file_list);
+
+    if matches.is_empty() {
+        warn!("📝 No pattern matches found");
+        return Ok(());
+    }
+
+    info!(
+        "🎯 Pattern matching results: {} files matched",
+        matches.len()
+    );
+
+    // Show what files would be downloaded
+    for (i, pattern_match) in matches.iter().take(limit.unwrap_or(10)).enumerate() {
+        info!(
+            "  {}: {} (pattern: '{}', priority: {})",
+            i + 1,
+            pattern_match.file_path,
+            pattern_match.pattern,
+            pattern_match.metadata.priority_score
+        );
+
+        // Show file type if detected
+        if let Some(file_type) = &pattern_match.metadata.file_type {
+            debug!("    File type: {}", file_type);
+        }
+    }
+
+    info!("✅ Pattern-based file extraction analysis completed!");
+    info!("💡 Use --dry-run to see pattern matching without attempting downloads");
+
+    warn!(
+        "🚧 Full manifest integration and download implementation pending TACT parser integration"
+    );
 
     Ok(())
+}
+
+type BuildConfigResult =
+    Result<(String, Option<String>, Option<String>), Box<dyn std::error::Error>>;
+
+/// Parse build configuration to extract manifest file hashes
+fn parse_build_config_hashes(build_config: &str) -> BuildConfigResult {
+    let mut encoding_hash = None;
+    let mut root_hash = None;
+    let mut install_hash = None;
+
+    for line in build_config.lines() {
+        let line = line.trim();
+        if line.starts_with("encoding = ") {
+            encoding_hash = Some(
+                line.split_whitespace()
+                    .nth(2)
+                    .unwrap_or_default()
+                    .to_string(),
+            );
+        } else if line.starts_with("root = ") {
+            root_hash = Some(
+                line.split_whitespace()
+                    .nth(2)
+                    .unwrap_or_default()
+                    .to_string(),
+            );
+        } else if line.starts_with("install = ") {
+            install_hash = Some(
+                line.split_whitespace()
+                    .nth(2)
+                    .unwrap_or_default()
+                    .to_string(),
+            );
+        }
+    }
+
+    let encoding = encoding_hash.ok_or("No encoding hash found in build config")?;
+
+    Ok((encoding, root_hash, install_hash))
+}
+
+/// Get sample file list for pattern testing
+fn get_sample_file_list() -> Vec<String> {
+    vec![
+        "achievement.dbc".to_string(),
+        "spell.dbc".to_string(),
+        "item.db2".to_string(),
+        "world/maps/azeroth/azeroth.wdt".to_string(),
+        "interface/framexml/uiparent.lua".to_string(),
+        "interface/addons/blizzard_auctionui/blizzard_auctionui.lua".to_string(),
+        "sound/music/zonemusic/stormwind.ogg".to_string(),
+        "sound/spells/frostbolt.ogg".to_string(),
+        "textures/interface/buttons/ui-button.blp".to_string(),
+        "creature/human/male/humanmale.m2".to_string(),
+        "world/wmo/stormwind/stormwind_keep.wmo".to_string(),
+    ]
+}
+
+/// Get comprehensive file list for pattern testing
+fn get_comprehensive_file_list() -> Vec<String> {
+    vec![
+        // Database files
+        "achievement.dbc".to_string(),
+        "spell.dbc".to_string(),
+        "item.db2".to_string(),
+        "creature.dbc".to_string(),
+        "gameobject.dbc".to_string(),
+        // Interface files
+        "interface/framexml/uiparent.lua".to_string(),
+        "interface/framexml/worldframe.lua".to_string(),
+        "interface/framexml/chatframe.lua".to_string(),
+        "interface/addons/blizzard_auctionui/blizzard_auctionui.lua".to_string(),
+        "interface/addons/blizzard_raidui/blizzard_raidui.lua".to_string(),
+        "interface/framexml/uiparent.xml".to_string(),
+        // Sound files
+        "sound/music/zonemusic/stormwind.ogg".to_string(),
+        "sound/music/zonemusic/ironforge.ogg".to_string(),
+        "sound/spells/frostbolt.ogg".to_string(),
+        "sound/spells/fireball.ogg".to_string(),
+        "sound/creature/human/humanvoicemale01.ogg".to_string(),
+        // Texture files
+        "textures/interface/buttons/ui-button.blp".to_string(),
+        "textures/interface/icons/spell_frost_frostbolt.blp".to_string(),
+        "textures/world/azeroth/stormwind/stormwind_cobblestone.blp".to_string(),
+        "textures/character/human/male/humanmale_face00_00.blp".to_string(),
+        // 3D Models
+        "creature/human/male/humanmale.m2".to_string(),
+        "creature/orc/male/orcmale.m2".to_string(),
+        "item/weapon/sword/2h_sword_01.m2".to_string(),
+        // World files
+        "world/maps/azeroth/azeroth.wdt".to_string(),
+        "world/maps/azeroth/azeroth_31_49.adt".to_string(),
+        "world/wmo/stormwind/stormwind_keep.wmo".to_string(),
+        "world/wmo/ironforge/ironforge_main.wmo".to_string(),
+        // Misc files
+        "fonts/frizqt__.ttf".to_string(),
+        "tileset/generic/dirt.blp".to_string(),
+        "character/human/male/humanmale.skin".to_string(),
+        "character/bloodelf/female/bloodelffemale.skin".to_string(),
+    ]
 }
 
 /// Resume a download from a progress file or directory
