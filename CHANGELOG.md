@@ -5,7 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.4.1] - 2025-08-11
+## [0.4.2] - 2025-08-11
+
+### Fixed
+
+- **Test Utils**: Marked test-utils as non-publishable (internal testing only)
+  - Added `publish = false` to prevent crates.io publishing issues
+  - test-utils is only used as dev-dependency
+
+## [0.4.1] - 2025-08-11 (Failed Release)
 
 ### Fixed
 
