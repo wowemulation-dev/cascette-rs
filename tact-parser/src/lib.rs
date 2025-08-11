@@ -60,6 +60,7 @@ pub mod config;
 pub mod download;
 pub mod encoding;
 mod error;
+pub mod espec;
 pub mod install;
 mod ioutils;
 pub mod jenkins3;

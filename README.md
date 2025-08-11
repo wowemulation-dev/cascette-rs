@@ -5,7 +5,7 @@ Pipeline) for World of Warcraft emulation.
 
 <div align="center">
 
-[![Discord](https://img.shields.io/discord/1394228766414471219?logo=discord&style=flat-square)](https://discord.gg/QbXn7Vqb)
+[![Discord](https://img.shields.io/discord/1394228766414471219?logo=discord&style=flat-square)](https://discord.gg/Q44pPMvGEd)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE-APACHE)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE-MIT)
 [![CI Status](https://github.com/wowemulation-dev/cascette-rs/workflows/CI/badge.svg)](https://github.com/wowemulation-dev/cascette-rs/actions)
@@ -16,21 +16,23 @@ Pipeline) for World of Warcraft emulation.
 
 ## 🎯 Project Status
 
-**Current Version**: 0.3.1
+**Current Version**: 0.4.0
 
 ### Core Components
 
 | Component       | Version | Status      | Description                                        |
 | --------------- | ------- | ----------- | -------------------------------------------------- |
-| `ngdp-bpsv`     | 0.3.1   | ✅ Stable   | BPSV parser/writer for NGDP formats                |
-| `ribbit-client` | 0.3.1   | ✅ Stable   | Ribbit protocol client with signature verification (legacy fallback) |
-| `tact-client`   | 0.3.1   | ✅ Stable   | TACT HTTP client with modern HTTPS endpoints primary |
-| `tact-parser`   | 0.3.1   | ✅ Stable   | TACT file format parser (encoding, install, etc.) |
-| `ngdp-cdn`      | 0.3.1   | ✅ Stable   | CDN content delivery with parallel downloads       |
-| `ngdp-cache`    | 0.3.1   | ✅ Stable   | Hybrid caching with HTTP-first version discovery  |
-| `blte`          | 0.3.1   | ✅ Stable   | BLTE decompression (ARC4/Frame modes deprecated)  |
-| `ngdp-crypto`   | 0.3.1   | ✅ Stable   | Modern encryption with Salsa20 (ARC4 deprecated)  |
-| `ngdp-client`   | 0.3.1   | ✅ Stable   | CLI tool for NGDP operations                      |
+| `ngdp-bpsv`     | 0.4.0   | ✅ Stable   | BPSV parser/writer for NGDP formats                |
+| `ribbit-client` | 0.4.0   | ✅ Stable   | Ribbit protocol client with signature verification |
+| `tact-client`   | 0.4.0   | ✅ Stable   | TACT HTTP client with retry logic and batching     |
+| `tact-parser`   | 0.4.0   | ✅ Stable   | TACT file format parser (encoding, install, etc.) |
+| `ngdp-cdn`      | 0.4.0   | ✅ Stable   | CDN client with fallback hosts and connection pooling |
+| `ngdp-cache`    | 0.4.0   | ✅ Stable   | Comprehensive caching layer with LRU eviction     |
+| `blte`          | 0.4.0   | ✅ Stable   | BLTE decompression with memory pooling            |
+| `ngdp-crypto`   | 0.4.0   | ✅ Stable   | Modern encryption with Salsa20 and key service    |
+| `ngdp-client`   | 0.4.0   | ✅ Stable   | CLI tool for NGDP operations                      |
+| `casc-storage`  | 0.1.0   | 🚧 Beta     | CASC storage implementation (in development)      |
+| `ngdp-patch`    | 0.4.0   | 🚧 Beta     | Patch file support (in development)               |
 
 ### Implementation Progress
 
@@ -55,11 +57,11 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-ribbit-client = "0.3"
-ngdp-bpsv = "0.3"
-tact-parser = "0.3"
-blte = "0.3"
-ngdp-crypto = "0.3"
+ribbit-client = "0.4"
+ngdp-bpsv = "0.4"
+tact-parser = "0.4"
+blte = "0.4"
+ngdp-crypto = "0.4"
 ```
 
 Basic example (modern HTTP-first approach):
@@ -87,6 +89,55 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 ```
+
+## 🧪 Testing with Real WoW Data
+
+Many tests and examples can work with real WoW installation data for comprehensive testing. This is optional - all tests will skip gracefully if no data is available.
+
+### Setup Environment Variables
+
+Set environment variables pointing to your WoW installation Data directories:
+
+```bash
+# Classic Era (1.15.x)
+export WOW_CLASSIC_ERA_DATA="$HOME/Downloads/wow/1.15.2.55140.windows-win64/Data"
+
+# Classic with expansions
+export WOW_CLASSIC_DATA="$HOME/Downloads/wow/classic/Data"  
+
+# Retail (current)
+export WOW_RETAIL_DATA="$HOME/Downloads/wow/retail/Data"
+```
+
+### Valid Data Directory Structure
+
+The Data directory should contain CASC structure:
+```
+Data/
+├── data/          # CASC archive files (required)
+├── indices/       # CASC index files  
+├── config/        # CASC configuration files
+└── ...
+```
+
+### Running Tests with Real Data
+
+```bash
+# Run all tests (will skip those requiring WoW data if not available)
+cargo test
+
+# Run specific integration tests
+cargo test -p casc-storage --test real_data_integration
+
+# Run examples that use real data
+cargo run -p casc-storage --example list_casc_files
+```
+
+Tests and examples will automatically:
+- Use environment variables when available
+- Fall back to common installation paths
+- Skip gracefully with helpful setup instructions if no data found
+- Work in CI environments without WoW data
 
 ## 📦 Installation
 

@@ -24,22 +24,4 @@ tokio = { workspace = true, features = ["macros", "rt"] }
 ureq = "2.10"
 
 [[example]]
-name = "test_compress"
-
-[[example]]
 name = "real_blte_roundtrip"
-
-[[example]]
-name = "test_large_blte"
-
-[[example]]
-name = "analyze_large_blte"
-
-[[example]]
-name = "test_first_blte"
-
-[[example]]
-name = "investigate_blte_formats"
-
-[[example]]
-name = "test_wow_archives"

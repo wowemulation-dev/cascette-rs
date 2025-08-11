@@ -6,9 +6,13 @@ use std::path::PathBuf;
 
 /// Test data directory for isolated testing
 async fn test_cache_dir() -> PathBuf {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+
+    let unique_id = COUNTER.fetch_add(1, Ordering::SeqCst);
     let dir = std::env::temp_dir()
         .join("ngdp_cache_test")
-        .join("cached_ribbit");
+        .join(format!("cached_ribbit_{}", unique_id));
     tokio::fs::create_dir_all(&dir).await.unwrap();
     dir
 }

@@ -3,15 +3,19 @@
 #[cfg(target_os = "linux")]
 use ngdp_cache::{generic::GenericCache, ribbit::RibbitCache};
 #[cfg(target_os = "linux")]
+use serial_test::serial;
+#[cfg(target_os = "linux")]
 use tempfile::TempDir;
 
 #[cfg(target_os = "linux")]
 #[tokio::test]
+#[serial]
 async fn test_cache_ttl_and_validity() -> Result<(), Box<dyn std::error::Error>> {
     let temp_dir = TempDir::new()?;
+    let unique_cache_dir = temp_dir.path().join("cache_ttl_test");
     // SAFETY: Test runs in isolation. Setting XDG_CACHE_HOME for test environment is safe.
     unsafe {
-        std::env::set_var("XDG_CACHE_HOME", temp_dir.path());
+        std::env::set_var("XDG_CACHE_HOME", &unique_cache_dir);
     }
 
     let cache = RibbitCache::new().await?;
@@ -22,8 +26,15 @@ async fn test_cache_ttl_and_validity() -> Result<(), Box<dyn std::error::Error>>
         .write("us", "certs", "test-cert-hash", test_data)
         .await?;
 
-    // Small delay to ensure filesystem operations complete
-    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    // Longer delay to ensure filesystem operations complete and metadata is written
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+    // Force filesystem sync (on Linux)
+    #[cfg(target_os = "linux")]
+    {
+        use std::process::Command;
+        let _ = Command::new("sync").output();
+    }
 
     // First read to verify data is written
     let data1 = cache.read("us", "certs", "test-cert-hash").await?;
@@ -52,11 +63,13 @@ async fn test_cache_ttl_and_validity() -> Result<(), Box<dyn std::error::Error>>
 
 #[cfg(target_os = "linux")]
 #[tokio::test]
+#[serial]
 async fn test_generic_cache_performance() -> Result<(), Box<dyn std::error::Error>> {
     let temp_dir = TempDir::new()?;
+    let unique_cache_dir = temp_dir.path().join("cache_perf_test");
     // SAFETY: Test runs in isolation. Setting XDG_CACHE_HOME for test environment is safe.
     unsafe {
-        std::env::set_var("XDG_CACHE_HOME", temp_dir.path());
+        std::env::set_var("XDG_CACHE_HOME", &unique_cache_dir);
     }
 
     let cache = GenericCache::new().await?;
@@ -90,11 +103,13 @@ async fn test_generic_cache_performance() -> Result<(), Box<dyn std::error::Erro
 
 #[cfg(target_os = "linux")]
 #[tokio::test]
+#[serial]
 async fn test_cache_file_structure() -> Result<(), Box<dyn std::error::Error>> {
     let temp_dir = TempDir::new()?;
+    let unique_cache_dir = temp_dir.path().join("cache_struct_test");
     // SAFETY: Test runs in isolation. Setting XDG_CACHE_HOME for test environment is safe.
     unsafe {
-        std::env::set_var("XDG_CACHE_HOME", temp_dir.path());
+        std::env::set_var("XDG_CACHE_HOME", &unique_cache_dir);
     }
 
     // Test RibbitCache structure
@@ -104,20 +119,22 @@ async fn test_cache_file_structure() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
     ribbit_cache.write("eu", "wow", "cdns", b"cdn data").await?;
 
-    // Verify directory structure
-    let cache_base = temp_dir.path().join("ngdp/ribbit");
-    let us_dir = cache_base.join("us");
-    let eu_dir = cache_base.join("eu");
-
-    assert!(us_dir.exists(), "US region directory should exist");
-    assert!(eu_dir.exists(), "EU region directory should exist");
-
-    // Verify files exist (the exact file structure depends on implementation)
-    let us_versions = us_dir.join("wow").join("versions");
-    let eu_cdns = eu_dir.join("wow").join("cdns");
+    // Verify directory structure using actual cache paths
+    let us_versions = ribbit_cache.cache_path("us", "wow", "versions");
+    let eu_cdns = ribbit_cache.cache_path("eu", "wow", "cdns");
 
     assert!(us_versions.exists(), "US versions file should exist");
     assert!(eu_cdns.exists(), "EU cdns file should exist");
+
+    // Verify parent directories exist
+    assert!(
+        us_versions.parent().unwrap().exists(),
+        "US/wow directory should exist"
+    );
+    assert!(
+        eu_cdns.parent().unwrap().exists(),
+        "EU/wow directory should exist"
+    );
 
     unsafe {
         std::env::remove_var("XDG_CACHE_HOME");

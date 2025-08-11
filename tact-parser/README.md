@@ -8,7 +8,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-tact-parser = "0.3"
+tact-parser = "0.4"
 ```
 
 ## Overview
@@ -22,6 +22,7 @@ This crate provides parsers for various TACT file formats used by Blizzard's con
 - **Build Configurations** - Key-value format for build metadata
 - **WoW Root Files** - Maps file IDs to content hashes
 - **TVFS (TACT Virtual File System)** - Virtual filesystem structure
+- **ESpec Parser** - Encoding specification parser for BLTE compression modes
 
 ## Features
 
@@ -58,13 +59,21 @@ This crate provides parsers for various TACT file formats used by Blizzard's con
   - Efficient lookup structures
 
 - ✅ **TVFS** (`tvfs.rs`)
-  - Virtual filesystem parsing
-  - Directory structure recreation
-  - File attribute support
+  - Virtual filesystem parsing with specification compliance
+  - Big-endian 40-bit integer support for modern game builds
+  - Directory structure recreation and file attribute support
+
+- ✅ **ESpec Parser** (`espec.rs`)
+  - Complete EBNF grammar implementation for BLTE compression
+  - Support for all modes: None, ZLib, Encrypted, BlockTable, BCPack, GDeflate
+  - Complex block specifications with size expressions (K/M units, multipliers)
+  - Integration with BLTE decompression system
 
 ### Utility Features
 
-- **40-bit Integer Support** - Custom type for TACT's 40-bit integers
+- **Enhanced 40-bit Integer Support** - Complete big/little-endian implementation
+  - Standard 40-bit integers and TACT encoding format (1 byte + 4-byte BE u32)
+  - Support for file sizes up to 1TB with proper endianness handling
 - **Variable-length Integer Parsing** - Efficient varint implementation
 - **Jenkins Hash** - TACT's hash algorithm implementation
 - **Compression Support** - Integration with BLTE decompression
@@ -98,6 +107,22 @@ let files = install.filter_files(&["enUS", "Windows"]);
 for file in files {
     println!("{}: {} bytes", file.name, file.size);
 }
+```
+
+### Parse ESpec Compression Specification
+
+```rust
+use tact_parser::ESpec;
+
+// Parse a complex block table specification
+let spec = ESpec::parse("b:{1M*3=z:9,512K=n,*=z:6}")?;
+
+// Check compression properties
+println!("Uses compression: {}", spec.is_compressed());
+println!("Type: {}", spec.compression_type());
+
+// Convert back to string format
+println!("ESpec: {}", spec.to_string());
 ```
 
 ### Parse Build Configuration

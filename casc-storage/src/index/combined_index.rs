@@ -57,12 +57,12 @@ impl CombinedIndex {
 
         // Fallback: compute bucket and try direct lookup
         let computed_bucket = ekey.bucket_index();
-        if let Some(bucket_index) = self.bucket_indices.get(&computed_bucket) {
-            if let Some(location) = bucket_index.get(ekey) {
-                // Update global index for next time
-                self.global_index.insert(*ekey, computed_bucket);
-                return Some(*location);
-            }
+        if let Some(bucket_index) = self.bucket_indices.get(&computed_bucket)
+            && let Some(location) = bucket_index.get(ekey)
+        {
+            // Update global index for next time
+            self.global_index.insert(*ekey, computed_bucket);
+            return Some(*location);
         }
 
         // Last resort: search all buckets (should rarely happen)

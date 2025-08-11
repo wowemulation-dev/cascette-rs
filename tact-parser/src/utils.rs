@@ -248,6 +248,99 @@ pub fn read_cstring(data: &[u8]) -> Result<(String, usize)> {
     Ok((string, null_pos + 1)) // +1 for null terminator
 }
 
+/// Read a 40-bit (5-byte) unsigned integer from a byte slice (big-endian)
+///
+/// 40-bit integers are used throughout TACT formats for file sizes and offsets.
+/// They allow representing values up to 1TB while saving space compared to 64-bit.
+///
+/// # Arguments
+/// * `data` - Byte slice containing at least 5 bytes
+///
+/// # Returns
+/// * The 40-bit value as a u64
+///
+/// # Errors
+/// * Returns error if data contains less than 5 bytes
+///
+/// # Example
+/// ```
+/// use tact_parser::utils::read_uint40_be;
+///
+/// let data = [0x01, 0x00, 0x00, 0x00, 0x00]; // 4GB file
+/// let value = read_uint40_be(&data).unwrap();
+/// assert_eq!(value, 0x100000000);
+/// ```
+pub fn read_uint40_be(data: &[u8]) -> Result<u64> {
+    if data.len() < 5 {
+        return Err(Error::IOError(std::io::Error::new(
+            std::io::ErrorKind::UnexpectedEof,
+            format!("Need 5 bytes for uint40, got {}", data.len()),
+        )));
+    }
+
+    // TACT encoding format: 1 byte for high bits (32-39) + 4 bytes big-endian u32 (0-31)
+    let high_byte = data[0] as u64;
+    let low_u32 = u32::from_be_bytes([data[1], data[2], data[3], data[4]]) as u64;
+
+    Ok((high_byte << 32) | low_u32)
+}
+
+/// Write a 40-bit (5-byte) unsigned integer to a byte array (big-endian)
+///
+/// # Arguments
+/// * `value` - The value to write (must fit in 40 bits)
+///
+/// # Returns
+/// * A 5-byte array containing the value in big-endian format
+///
+/// # Panics
+/// * Panics if value exceeds 40-bit range (>= 2^40)
+///
+/// # Example
+/// ```
+/// use tact_parser::utils::write_uint40_be;
+///
+/// let bytes = write_uint40_be(0x100000000); // 4GB
+/// assert_eq!(bytes, [0x01, 0x00, 0x00, 0x00, 0x00]);
+/// ```
+pub fn write_uint40_be(value: u64) -> [u8; 5] {
+    assert!(
+        value < (1u64 << 40),
+        "Value {value:#x} exceeds 40-bit range"
+    );
+
+    // TACT encoding format: 1 byte for high bits (32-39) + 4 bytes big-endian u32 (0-31)
+    let high_byte = ((value >> 32) & 0xFF) as u8;
+    let low_u32 = (value & 0xFFFFFFFF) as u32;
+    let low_bytes = low_u32.to_be_bytes();
+
+    [
+        high_byte,
+        low_bytes[0],
+        low_bytes[1],
+        low_bytes[2],
+        low_bytes[3],
+    ]
+}
+
+/// Read a 40-bit unsigned integer from a cursor (big-endian)
+///
+/// This is a convenience function for use with `std::io::Cursor` or `BufReader`.
+///
+/// # Arguments
+/// * `reader` - A reader implementing `std::io::Read`
+///
+/// # Returns
+/// * The 40-bit value as a u64
+///
+/// # Errors
+/// * Returns error if unable to read 5 bytes
+pub fn read_uint40_be_from<R: std::io::Read>(reader: &mut R) -> Result<u64> {
+    let mut buf = [0u8; 5];
+    reader.read_exact(&mut buf)?;
+    read_uint40_be(&buf)
+}
+
 /// Read a C string from a reader
 ///
 /// # Arguments
@@ -397,5 +490,35 @@ mod tests {
     fn test_cstring_no_terminator() {
         let data = b"No null here";
         assert!(read_cstring(data).is_err());
+    }
+
+    #[test]
+    fn test_uint40_big_endian() {
+        // Test TACT encoding format: 1 high byte + 4 bytes big-endian u32
+        // Example: 4GB file (0x100000000)
+        let data = [0x01, 0x00, 0x00, 0x00, 0x00];
+        let value = read_uint40_be(&data).unwrap();
+        assert_eq!(value, 0x100000000); // 4GB
+
+        // Test a more complex value: 0x0A << 32 | 0x12345678
+        let data = [0x0A, 0x12, 0x34, 0x56, 0x78];
+        let value = read_uint40_be(&data).unwrap();
+        assert_eq!(value, 0x0A12345678);
+
+        // Test round-trip
+        let original = 0x0A12345678u64;
+        let bytes = write_uint40_be(original);
+        let restored = read_uint40_be(&bytes).unwrap();
+        assert_eq!(original, restored);
+    }
+
+    #[test]
+    fn test_uint40_be_from_reader() {
+        use std::io::Cursor;
+
+        let data = [0x01, 0x00, 0x00, 0x00, 0x00]; // 4GB
+        let mut cursor = Cursor::new(&data);
+        let value = read_uint40_be_from(&mut cursor).unwrap();
+        assert_eq!(value, 0x100000000);
     }
 }

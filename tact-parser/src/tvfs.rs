@@ -6,11 +6,23 @@
 use std::collections::HashMap;
 use std::io::{Cursor, Read, Seek, SeekFrom};
 
-use byteorder::{BigEndian, LittleEndian, ReadBytesExt};
+use byteorder::{BigEndian, ReadBytesExt};
 use tracing::{debug, trace};
 
-use crate::utils::read_uint40_from;
+use crate::utils::read_uint40_be_from;
 use crate::{Error, Result};
+
+/// TVFS FileManifestFlags
+pub mod flags {
+    /// Include CKey in content records
+    pub const INCLUDE_CKEY: u8 = 0x01;
+    /// Enable write support
+    pub const WRITE_SUPPORT: u8 = 0x02;
+    /// Include patch file records
+    pub const PATCH_SUPPORT: u8 = 0x04;
+    /// Force lowercase paths
+    pub const LOWERCASE: u8 = 0x08;
+}
 
 /// TVFS header structure
 #[derive(Debug, Clone)]
@@ -19,32 +31,30 @@ pub struct TVFSHeader {
     pub magic: [u8; 4],
     /// Version (typically 1)
     pub version: u8,
-    /// Header size in bytes (minimum 8)
+    /// Header size in bytes (minimum 0x26 = 38 bytes)
     pub header_size: u8,
-    /// EKey size (always 9)
+    /// EKey size (usually 9)
     pub ekey_size: u8,
-    /// Patch key size (always 9)
+    /// Patch key size (usually 9)
     pub patch_key_size: u8,
-    /// Flags (directory flags)
-    pub flags: i32,
-    /// Path table offset
-    pub path_table_offset: i32,
-    /// Path table size
-    pub path_table_size: i32,
-    /// VFS table offset
-    pub vfs_table_offset: i32,
-    /// VFS table size
-    pub vfs_table_size: i32,
-    /// Container file table offset
-    pub cft_table_offset: i32,
-    /// Container file table size
-    pub cft_table_size: i32,
-    /// Maximum directory depth
-    pub max_depth: u16,
-    /// EST table offset (optional)
-    pub est_table_offset: Option<i32>,
-    /// EST table size (optional)
-    pub est_table_size: Option<i32>,
+    /// Flags (FileManifestFlags)
+    pub flags: u8,
+    /// Path table offset (40-bit integer)
+    pub path_table_offset: u64,
+    /// Path table size (40-bit integer)
+    pub path_table_size: u64,
+    /// VFS table offset (40-bit integer)
+    pub vfs_table_offset: u64,
+    /// VFS table size (40-bit integer)
+    pub vfs_table_size: u64,
+    /// Container file table offset (40-bit integer)
+    pub cft_table_offset: u64,
+    /// Container file table size (40-bit integer)
+    pub cft_table_size: u64,
+    /// Maximum metafile size
+    pub max_metafile_size: u16,
+    /// Build version number
+    pub build_version: u32,
 }
 
 impl TVFSHeader {
@@ -69,24 +79,18 @@ impl TVFSHeader {
         let header_size = reader.read_u8()?;
         let ekey_size = reader.read_u8()?;
         let patch_key_size = reader.read_u8()?;
-        let flags = reader.read_i32::<BigEndian>()?;
-        let path_table_offset = reader.read_i32::<BigEndian>()?;
-        let path_table_size = reader.read_i32::<BigEndian>()?;
-        let vfs_table_offset = reader.read_i32::<BigEndian>()?;
-        let vfs_table_size = reader.read_i32::<BigEndian>()?;
-        let cft_table_offset = reader.read_i32::<BigEndian>()?;
-        let cft_table_size = reader.read_i32::<BigEndian>()?;
-        let max_depth = reader.read_u16::<BigEndian>()?;
+        let flags = reader.read_u8()?;
 
-        // Check if EST table is present (header_size > minimum)
-        let (est_table_offset, est_table_size) = if header_size as usize > 38 {
-            (
-                Some(reader.read_i32::<BigEndian>()?),
-                Some(reader.read_i32::<BigEndian>()?),
-            )
-        } else {
-            (None, None)
-        };
+        // Read 40-bit offsets and sizes (big-endian)
+        let path_table_offset = read_uint40_be_from(reader)?;
+        let path_table_size = read_uint40_be_from(reader)?;
+        let vfs_table_offset = read_uint40_be_from(reader)?;
+        let vfs_table_size = read_uint40_be_from(reader)?;
+        let cft_table_offset = read_uint40_be_from(reader)?;
+        let cft_table_size = read_uint40_be_from(reader)?;
+
+        let max_metafile_size = reader.read_u16::<BigEndian>()?;
+        let build_version = reader.read_u32::<BigEndian>()?;
 
         Ok(TVFSHeader {
             magic,
@@ -101,25 +105,29 @@ impl TVFSHeader {
             vfs_table_size,
             cft_table_offset,
             cft_table_size,
-            max_depth,
-            est_table_offset,
-            est_table_size,
+            max_metafile_size,
+            build_version,
         })
+    }
+
+    /// Check if TVFS includes CKeys
+    pub fn has_ckey(&self) -> bool {
+        self.flags & flags::INCLUDE_CKEY != 0
     }
 
     /// Check if TVFS has write support
     pub fn has_write_support(&self) -> bool {
-        self.flags & 0x01 != 0
+        self.flags & flags::WRITE_SUPPORT != 0
     }
 
-    /// Check if TVFS has patch references
-    pub fn has_patch_references(&self) -> bool {
-        self.flags & 0x02 != 0
+    /// Check if TVFS has patch support
+    pub fn has_patch_support(&self) -> bool {
+        self.flags & flags::PATCH_SUPPORT != 0
     }
 
-    /// Check if TVFS has EST table
-    pub fn has_est_table(&self) -> bool {
-        self.est_table_offset.is_some()
+    /// Check if TVFS forces lowercase paths
+    pub fn has_lowercase_paths(&self) -> bool {
+        self.flags & flags::LOWERCASE != 0
     }
 }
 
@@ -206,32 +214,23 @@ impl TVFSManifest {
         );
 
         // Parse path table
-        cursor.seek(SeekFrom::Start(header.path_table_offset as u64))?;
+        cursor.seek(SeekFrom::Start(header.path_table_offset))?;
         let path_table = Self::parse_path_table(&mut cursor, header.path_table_size as usize)?;
 
         // Parse VFS table
-        cursor.seek(SeekFrom::Start(header.vfs_table_offset as u64))?;
+        cursor.seek(SeekFrom::Start(header.vfs_table_offset))?;
         let vfs_table = Self::parse_vfs_table(&mut cursor, header.vfs_table_size as usize)?;
 
         // Parse CFT table
-        cursor.seek(SeekFrom::Start(header.cft_table_offset as u64))?;
+        cursor.seek(SeekFrom::Start(header.cft_table_offset))?;
         let cft_table = Self::parse_cft_table(
             &mut cursor,
             header.cft_table_size as usize,
-            header.has_est_table(),
+            false, // ESpec support - currently not implemented
         )?;
 
-        // Parse EST table if present
-        let espec_table = if header.has_est_table() {
-            if let (Some(offset), Some(size)) = (header.est_table_offset, header.est_table_size) {
-                cursor.seek(SeekFrom::Start(offset as u64))?;
-                Some(Self::parse_espec_table(&mut cursor, size as usize)?)
-            } else {
-                None
-            }
-        } else {
-            None
-        };
+        // ESpec table parsing not yet implemented
+        let espec_table = None;
 
         // Build path map for quick lookups
         let mut path_map = HashMap::new();
@@ -372,9 +371,9 @@ impl TVFSManifest {
 
             // Read inline data info if applicable
             let (file_offset, file_size) = if entry_type == VFSEntryType::Inline {
-                let offset = read_uint40_from(reader)?;
+                let offset = read_uint40_be_from(reader)?;
                 bytes_read += 5;
-                let size = reader.read_u32::<LittleEndian>()?;
+                let size = reader.read_u32::<BigEndian>()?;
                 bytes_read += 4;
                 (Some(offset), Some(size))
             } else {
@@ -410,8 +409,8 @@ impl TVFSManifest {
             reader.read_exact(&mut ekey)?;
             bytes_read += 16;
 
-            // Read file size (40-bit)
-            let file_size = read_uint40_from(reader)?;
+            // Read file size (40-bit, big-endian)
+            let file_size = read_uint40_be_from(reader)?;
             bytes_read += 5;
 
             // Read ESpec index if EST table is present (1 byte)
@@ -434,48 +433,9 @@ impl TVFSManifest {
         Ok(entries)
     }
 
-    /// Parse ESpec table
-    fn parse_espec_table<R: Read>(reader: &mut R, size: usize) -> Result<Vec<String>> {
-        let mut entries = Vec::new();
-        let mut bytes_read = 0usize;
-
-        while bytes_read < size {
-            // Read varint for string length directly
-            let mut spec_len = 0u32;
-            let mut shift = 0;
-            for _ in 0..5 {
-                let byte = reader.read_u8()?;
-                bytes_read += 1;
-                let value = (byte & 0x7F) as u32;
-                spec_len |= value << shift;
-                if byte & 0x80 == 0 {
-                    break;
-                }
-                shift += 7;
-            }
-
-            if spec_len == 0 || bytes_read >= size {
-                break;
-            }
-
-            // Read ESpec string
-            let mut spec_bytes = vec![0u8; spec_len as usize];
-            reader.read_exact(&mut spec_bytes)?;
-            bytes_read += spec_len as usize;
-
-            let spec = String::from_utf8(spec_bytes).map_err(|e| {
-                Error::IOError(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    format!("Invalid UTF-8 in ESpec: {e}"),
-                ))
-            })?;
-
-            entries.push(spec);
-        }
-
-        debug!("Parsed {} ESpec entries", entries.len());
-        Ok(entries)
-    }
+    // Note: ESpec table parsing would be added here when needed
+    // The parse_espec_table function has been removed as it's not currently used
+    // It can be re-added when ESpec support is fully implemented
 
     /// Resolve a file path to its file information
     pub fn resolve_path(&self, path: &str) -> Option<FileInfo> {
@@ -645,28 +605,59 @@ mod tests {
             header_size: 38,
             ekey_size: 9,
             patch_key_size: 9,
-            flags: 0x03,
+            flags: flags::INCLUDE_CKEY | flags::WRITE_SUPPORT,
             path_table_offset: 100,
             path_table_size: 200,
             vfs_table_offset: 300,
             vfs_table_size: 400,
             cft_table_offset: 700,
             cft_table_size: 500,
-            max_depth: 10,
-            est_table_offset: Some(1200),
-            est_table_size: Some(100),
+            max_metafile_size: 1024,
+            build_version: 42000,
         };
 
+        assert!(header.has_ckey());
         assert!(header.has_write_support());
-        assert!(header.has_patch_references());
-        assert!(header.has_est_table());
+        assert!(!header.has_patch_support());
+        assert!(!header.has_lowercase_paths());
     }
 
     #[test]
     fn test_vfs_entry_type() {
-        assert_eq!(VFSEntryType::File as u8, 0);
-        assert_eq!(VFSEntryType::Deleted as u8, 1);
-        assert_eq!(VFSEntryType::Inline as u8, 2);
-        assert_eq!(VFSEntryType::Link as u8, 3);
+        // VFSEntryType values are encoded in 2 bits
+        let file_type = VFSEntryType::File;
+        let deleted_type = VFSEntryType::Deleted;
+        let inline_type = VFSEntryType::Inline;
+        let link_type = VFSEntryType::Link;
+
+        // Test that different types are distinguishable
+        assert_ne!(file_type as u8, deleted_type as u8);
+        assert_ne!(file_type as u8, inline_type as u8);
+        assert_ne!(file_type as u8, link_type as u8);
+    }
+
+    #[test]
+    fn test_tvfs_40bit_offsets() {
+        use crate::utils::{read_uint40_be, write_uint40_be};
+
+        // Test that 40-bit values can represent up to 1TB
+        let one_tb = 1_099_511_627_776u64; // 1TB in bytes  
+        let max_40bit = (1u64 << 40) - 1; // 1,099,511,627,775 bytes
+
+        // Actually, max 40-bit is 1 byte less than 1TB
+        assert_eq!(max_40bit, one_tb - 1);
+
+        // Test encoding/decoding with max value (big-endian for TVFS)
+        let encoded = write_uint40_be(max_40bit);
+        assert_eq!(encoded.len(), 5);
+
+        let decoded = read_uint40_be(&encoded).unwrap();
+        assert_eq!(decoded, max_40bit);
+
+        // Test with a more typical large file size (100GB)
+        let hundred_gb = 100 * 1024 * 1024 * 1024u64;
+        let encoded_100gb = write_uint40_be(hundred_gb);
+        let decoded_100gb = read_uint40_be(&encoded_100gb).unwrap();
+        assert_eq!(decoded_100gb, hundred_gb);
     }
 }

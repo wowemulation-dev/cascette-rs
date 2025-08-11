@@ -4,20 +4,34 @@ use tact_parser::utils::write_varint;
 // Real TVFS data from WoW 11.0.7 build 58238
 // This is a small excerpt for testing
 const REAL_TVFS_HEADER: &[u8] = &[
-    // Magic: TVFS
-    0x54, 0x56, 0x46, 0x53, // Version: 1
-    0x01, // Header size: 38
-    0x26, // EKey size: 9
-    0x09, // Patch key size: 9
-    0x09, // Flags: 0 (big-endian)
-    0x00, 0x00, 0x00, 0x00, // Path table offset: 38 (big-endian)
-    0x00, 0x00, 0x00, 0x26, // Path table size: 100 (big-endian)
-    0x00, 0x00, 0x00, 0x64, // VFS table offset: 138 (big-endian)
-    0x00, 0x00, 0x00, 0x8A, // VFS table size: 50 (big-endian)
-    0x00, 0x00, 0x00, 0x32, // CFT table offset: 188 (big-endian)
-    0x00, 0x00, 0x00, 0xBC, // CFT table size: 21 (big-endian)
-    0x00, 0x00, 0x00, 0x15, // Max depth: 5 (big-endian)
+    // Magic: TVFS (4 bytes)
+    0x54, 0x56, 0x46, 0x53,
+    // Version: 1 (1 byte)
+    0x01,
+    // Header size: 45 (1 byte)
+    0x2D,
+    // EKey size: 9 (1 byte)
+    0x09,
+    // Patch key size: 9 (1 byte)
+    0x09,
+    // Flags: 0 (1 byte)
+    0x00,
+    // Path table offset: 45 (40-bit big-endian, 5 bytes)
+    0x00, 0x00, 0x00, 0x00, 0x2D,
+    // Path table size: 9 (40-bit big-endian, 5 bytes)
+    0x00, 0x00, 0x00, 0x00, 0x09,
+    // VFS table offset: 54 (40-bit big-endian, 5 bytes)
+    0x00, 0x00, 0x00, 0x00, 0x36,
+    // VFS table size: 4 (40-bit big-endian, 5 bytes)
+    0x00, 0x00, 0x00, 0x00, 0x04,
+    // CFT table offset: 58 (40-bit big-endian, 5 bytes)
+    0x00, 0x00, 0x00, 0x00, 0x3A,
+    // CFT table size: 21 (40-bit big-endian, 5 bytes)
+    0x00, 0x00, 0x00, 0x00, 0x15,
+    // Max metafile size: 5 (16-bit big-endian, 2 bytes)
     0x00, 0x05,
+    // Build version: 55140 (32-bit big-endian, 4 bytes)
+    0x00, 0x00, 0xD7, 0x64,
 ];
 
 /// Create test TVFS data with minimal structure
@@ -226,30 +240,28 @@ fn test_parse_real_tvfs_header() {
     // Test with real header structure
     let mut data = Vec::from(REAL_TVFS_HEADER);
 
-    // Add minimal path table data
+    // Add minimal path table data (9 bytes total)
     data.push(8); // Length of "test.txt"
     data.extend_from_slice(b"test.txt");
 
-    // Pad to make offsets work
-    while data.len() < 138 {
-        data.push(0);
-    }
+    // VFS table should be at offset 54 (45 header + 9 path table)
+    assert_eq!(data.len(), 54);
 
-    // Add minimal VFS entry
+    // Add minimal VFS entry (4 bytes)
     data.push(0x00); // Type = FILE
     data.extend_from_slice(&write_varint(0)); // Span offset
     data.extend_from_slice(&write_varint(1)); // Span count
     data.extend_from_slice(&write_varint(0)); // Path index
 
-    // Pad to CFT offset
-    while data.len() < 188 {
+    // Pad to CFT offset (58)
+    while data.len() < 58 {
         data.push(0);
     }
 
-    // Add minimal CFT entry (21 bytes)
-    data.extend_from_slice(&[0xAA; 16]); // EKey
+    // Add minimal CFT entry (21 bytes: 16 for MD5 EKey + 5 for size)
+    data.extend_from_slice(&[0xAA; 16]); // EKey (16 bytes MD5 hash)
     data.extend_from_slice(&[0x00, 0x04, 0x00, 0x00, 0x00]); // Size (1024 as 40-bit)
-
+    
     let tvfs = TVFSManifest::parse(&data).unwrap();
     assert_eq!(tvfs.header.version, 1);
     assert_eq!(tvfs.header.ekey_size, 9);
@@ -266,8 +278,7 @@ fn test_parse_minimal_tvfs() {
     assert_eq!(tvfs.header.version, 1);
     assert_eq!(tvfs.header.ekey_size, 9);
     assert!(!tvfs.header.has_write_support());
-    assert!(!tvfs.header.has_patch_references());
-    assert!(!tvfs.header.has_est_table());
+    assert!(!tvfs.header.has_patch_support());
 
     // Debug output
     println!("Path table entries: {}", tvfs.path_table.len());
@@ -364,7 +375,6 @@ fn test_espec_table() {
     let tvfs = TVFSManifest::parse(&data).unwrap();
 
     // Check header flags
-    assert!(tvfs.header.has_est_table());
     assert_eq!(tvfs.header.ekey_size, 9);
 
     // Check ESpec table

@@ -3,21 +3,20 @@
 //! This module provides functionality for configuring CDN clients based on
 //! application settings, including custom CDN fallback support.
 
-use ngdp_cdn::CdnClientWithFallback;
+use ngdp_cache::cached_cdn_client::CachedCdnClient;
 use std::error::Error;
 
 /// Create a CDN client with configured fallbacks
 pub async fn create_cdn_client_with_config(
     primary_cdns: Vec<String>,
-) -> Result<CdnClientWithFallback, Box<dyn Error>> {
-    let mut builder = CdnClientWithFallback::builder();
+) -> Result<CachedCdnClient, Box<dyn Error>> {
+    let client = CachedCdnClient::new().await?;
 
     // Add primary CDNs (Blizzard servers)
-    builder = builder.add_primary_cdns(primary_cdns);
+    client.add_primary_hosts(primary_cdns);
 
     // Check if community CDN fallbacks are enabled
     let use_community_cdns = get_config_bool("use_community_cdn_fallbacks").unwrap_or(true);
-    builder = builder.use_default_backups(use_community_cdns);
 
     // Add custom CDN fallbacks from configuration
     if let Some(custom_cdns_str) = get_config_string("custom_cdn_fallbacks") {
@@ -28,11 +27,17 @@ pub async fn create_cdn_client_with_config(
                 .filter(|s| !s.is_empty())
                 .collect();
 
-            builder = builder.add_custom_cdns(custom_cdns);
+            client.add_fallback_hosts(custom_cdns);
         }
     }
 
-    Ok(builder.build()?)
+    // Add default community CDNs if enabled
+    if use_community_cdns {
+        client.add_fallback_host("cdn.arctium.tools");
+        client.add_fallback_host("tact.mirror.reliquaryhq.com");
+    }
+
+    Ok(client)
 }
 
 /// Get a boolean configuration value
@@ -101,7 +106,7 @@ mod tests {
         ];
 
         let client = create_cdn_client_with_config(primary_cdns).await.unwrap();
-        let hosts = client.get_all_cdn_hosts();
+        let hosts = client.get_all_hosts();
 
         // Should include primary CDNs
         assert!(hosts.contains(&"blzddist1-a.akamaihd.net".to_string()));

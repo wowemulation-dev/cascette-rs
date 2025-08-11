@@ -97,6 +97,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[allow(deprecated)]
     fn test_arc4_roundtrip() {
         let key = [0x01u8; 16];
         let iv = [0x02, 0x03, 0x04, 0x05];
@@ -117,6 +118,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(deprecated)]
     fn test_arc4_block_index_affects_output() {
         let key = [0x01u8; 16];
         let iv = [0x02, 0x03, 0x04, 0x05];
@@ -138,6 +140,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(deprecated)]
     fn test_arc4_different_keys_produce_different_output() {
         let key1 = [0x01u8; 16];
         let key2 = [0x02u8; 16];
@@ -153,6 +156,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(deprecated)]
     fn test_arc4_invalid_iv_size() {
         let key = [0x01u8; 16];
         let invalid_iv = [0x02, 0x03]; // Only 2 bytes instead of 4
@@ -164,6 +168,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(deprecated)]
     fn test_arc4_key_construction() {
         let key = [0xAAu8; 16];
         let iv = [0xBB, 0xCC, 0xDD, 0xEE];
@@ -184,6 +189,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(deprecated)]
     fn test_arc4_empty_data() {
         let key = [0x01u8; 16];
         let iv = [0x02, 0x03, 0x04, 0x05];

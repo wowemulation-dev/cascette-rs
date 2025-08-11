@@ -3,7 +3,6 @@ use crate::{DownloadCommands, OutputFormat};
 use ngdp_bpsv::{BpsvBuilder, BpsvFieldType, BpsvValue};
 use ngdp_cache::cached_cdn_client::CachedCdnClient;
 use ngdp_cache::cached_ribbit_client::CachedRibbitClient;
-use ngdp_cdn::CdnClientWithFallback;
 use ribbit_client::Region;
 use std::path::{Path, PathBuf};
 use tact_client::resumable::{DownloadProgress, ResumableDownload, find_resumable_downloads};
@@ -888,8 +887,13 @@ async fn test_resumable_download(
         // Use CDN client with fallback for regular download
         info!("📥 Starting regular CDN download with fallback...");
 
-        let cdn_client = CdnClientWithFallback::new()?;
-        let response = cdn_client.download_data("/tpr/wow", hash).await?;
+        let cdn_client = CachedCdnClient::new().await?;
+        // Add fallback hosts for better reliability
+        cdn_client.add_fallback_host("cdn.arctium.tools");
+        cdn_client.add_fallback_host("tact.mirror.reliquaryhq.com");
+        let response = cdn_client
+            .download_data("cdn.blizzard.com", "/tpr/wow", hash)
+            .await?;
         let bytes = response.bytes().await?;
 
         tokio::fs::write(output, bytes).await?;

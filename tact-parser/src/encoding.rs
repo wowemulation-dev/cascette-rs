@@ -254,11 +254,11 @@ impl EncodingFile {
                 break; // End of entries
             }
 
-            // Read file size (40-bit integer!)
+            // Read file size (40-bit integer - big-endian like the header!)
             if offset + 5 > data.len() {
                 break;
             }
-            let size = crate::utils::read_uint40(&data[offset..offset + 5])?;
+            let size = crate::utils::read_uint40_be(&data[offset..offset + 5])?;
             offset += 5;
 
             // Read content key

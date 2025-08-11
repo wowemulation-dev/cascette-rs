@@ -115,22 +115,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             );
 
                             // Demonstrate reading from different positions
-                            if let SizeHint::Exact(size) = progressive_file.get_size_hint() {
-                                if size > 10240 {
-                                    // Read from middle of file
-                                    let middle_offset = size / 2;
-                                    let middle_start = Instant::now();
-                                    match progressive_file.read(middle_offset, 1024).await {
-                                        Ok(_) => {
-                                            info!(
-                                                "Read 1KB from middle (offset {}) in {:?}",
-                                                middle_offset,
-                                                middle_start.elapsed()
-                                            );
-                                        }
-                                        Err(e) => {
-                                            warn!("Failed to read from middle: {}", e);
-                                        }
+                            if let SizeHint::Exact(size) = progressive_file.get_size_hint()
+                                && size > 10240
+                            {
+                                // Read from middle of file
+                                let middle_offset = size / 2;
+                                let middle_start = Instant::now();
+                                match progressive_file.read(middle_offset, 1024).await {
+                                    Ok(_) => {
+                                        info!(
+                                            "Read 1KB from middle (offset {}) in {:?}",
+                                            middle_offset,
+                                            middle_start.elapsed()
+                                        );
+                                    }
+                                    Err(e) => {
+                                        warn!("Failed to read from middle: {}", e);
                                     }
                                 }
                             }

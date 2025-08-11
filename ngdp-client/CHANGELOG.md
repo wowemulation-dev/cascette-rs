@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **Archive Index Parsing**: 
+  - Fixed parsing to use correct 4096-byte block format (170 entries per block)
+  - Proper handling of 24-byte entries with big-endian size/offset fields
+  - Now compatible with BuildBackup and CascLib implementations
+
+- **Installation Command**:
+  - Fixed CDN path to use "tpr/wow" for all WoW products (not product-specific)
+  - Proper CKey to EKey resolution through encoding file
+  - Archive indices now load correctly with 5M+ entries
+
+### Added
+
+- **Manifest Abstraction**: New type-safe manifest handling system
+  - `ContentKey` and `EncodingKey` wrapper types prevent key confusion
+  - `TypedManifest` enum for compile-time type safety
+  - Proper resolution flow: Install manifest (CKey) → Encoding file → EKey → Archive
+
+- **HTTP Optimization**: Added HEAD request checks before downloads
+  - Faster CDN fallback by checking file existence first
+  - Reduced unnecessary download attempts
+
 ## [0.3.0] - 2025-08-06
 
 ### Added

@@ -5,6 +5,59 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2025-08-09
+
+### Added
+
+- **Complete ESpec EBNF Grammar Parser**:
+  - Full implementation of BLTE encoding specification parser (`espec.rs`)
+  - Support for all compression modes: None ('n'), ZLib ('z'), Encrypted ('e'), BlockTable ('b'), BCPack ('c'), GDeflate ('g')
+  - Complex block specification parsing with size expressions (K/M units, count multipliers)
+  - Nested compression modes and encryption support
+  - Integration with BLTE decompression system
+  - 11 comprehensive tests covering all ESpec variants
+
+- **40-bit Integer Support**:
+  - Complete big-endian and little-endian 40-bit integer functions (`utils.rs`)
+  - `read_uint40()` and `write_uint40()` for little-endian format
+  - `read_uint40_be()` and `write_uint40_be()` for big-endian format
+  - TACT encoding format support (1 high byte + 4-byte big-endian u32)
+  - Reader functions for `std::io::Read` traits
+  - Comprehensive test coverage with edge cases up to 1TB
+
+- **Real Data Testing**:
+  - Integration test with actual WoW encoding files from Blizzard CDN
+  - Validation of 40-bit integer parsing accuracy with production data
+  - CDN client usage examples demonstrating proper download patterns
+
+### Fixed
+
+- **TVFS Implementation Compliance**:
+  - Magic bytes fixed to only accept 'TVFS' (0x53465654) - specification compliant
+  - All offset/size fields converted to 40-bit big-endian integers
+  - Header structure updated to match wowdev.wiki specification exactly
+  - Big-endian compliance for all multi-byte values
+  - Path table and VFS table parsing corrections
+
+- **Encoding File Parser**:
+  - Correct 40-bit integer parsing for file sizes in encoding pages
+  - Implementation of TACT encoding format (1 byte + 4-byte big-endian u32)
+  - Fixed endianness issues in page data parsing
+  - Validated against real WoW encoding files (176MB decompressed with 124,062 entries)
+
+- **Code Quality Issues**:
+  - Fixed Clippy warnings (unnecessary casts, map_or simplifications)
+  - Resolved deprecated function warnings with proper suppression attributes
+  - Fixed documentation URL formatting for rustdoc compliance
+  - Improved error handling and validation throughout
+
+### Changed
+
+- Updated crate version from 0.2.0 to 0.4.0
+- Enhanced documentation with specification compliance details
+- Improved test coverage with real data validation
+- Better integration examples for CDN client usage
+
 ## [0.2.0] - 2025-08-06
 
 ### Added

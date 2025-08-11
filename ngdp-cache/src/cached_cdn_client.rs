@@ -142,6 +142,36 @@ impl CachedCdnClient {
         })
     }
 
+    /// Add a primary CDN host
+    pub fn add_primary_host(&self, host: impl Into<String>) {
+        self.client.add_primary_host(host);
+    }
+
+    /// Add multiple primary CDN hosts
+    pub fn add_primary_hosts(&self, hosts: impl IntoIterator<Item = impl Into<String>>) {
+        self.client.add_primary_hosts(hosts);
+    }
+
+    /// Add a fallback CDN host
+    pub fn add_fallback_host(&self, host: impl Into<String>) {
+        self.client.add_fallback_host(host);
+    }
+
+    /// Add multiple fallback CDN hosts
+    pub fn add_fallback_hosts(&self, hosts: impl IntoIterator<Item = impl Into<String>>) {
+        self.client.add_fallback_hosts(hosts);
+    }
+
+    /// Set primary CDN hosts, replacing any existing ones
+    pub fn set_primary_hosts(&self, hosts: impl IntoIterator<Item = impl Into<String>>) {
+        self.client.set_primary_hosts(hosts);
+    }
+
+    /// Get all configured hosts (primary first, then fallback)
+    pub fn get_all_hosts(&self) -> Vec<String> {
+        self.client.get_all_hosts()
+    }
+
     /// Enable or disable caching
     pub fn set_caching_enabled(&mut self, enabled: bool) {
         self.enabled = enabled;

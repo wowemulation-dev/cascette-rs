@@ -2,6 +2,18 @@
 
 All notable changes to the `ngdp-crypto` crate will be documented in this file.
 
+## [0.4.0] - 2025-08-09
+
+### Fixed
+
+- **Code Quality Issues**:
+  - Added proper suppression for deprecated ARC4 function warnings in test code
+  - Fixed Clippy warnings and improved code documentation
+
+### Changed
+
+- Updated crate version from 0.1.0 to 0.4.0 for consistency with workspace
+
 ## [0.1.0] - 2025-08-06
 
 ### Added

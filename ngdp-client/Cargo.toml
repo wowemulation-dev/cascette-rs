@@ -50,6 +50,7 @@ hex.workspace = true
 regex = "1.10.2"
 indicatif = "0.17"
 futures = "0.3"
+byteorder = "1.5"
 
 [dev-dependencies]
 assert_cmd = "2.0.17"
