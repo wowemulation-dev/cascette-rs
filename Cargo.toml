@@ -25,6 +25,7 @@ repository = "https://github.com/wowemulation-dev/cascette-rs"
 homepage = "https://github.com/wowemulation-dev/cascette-rs"
 
 [workspace.dependencies]
+anyhow = "1.0"
 byteorder = "1.5"
 clap = "4.5"
 criterion = "0.7"
