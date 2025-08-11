@@ -1,6 +1,6 @@
 [package]
 name = "tact-client"
-version = "0.4.0"
+version = "0.4.1"
 authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -17,7 +17,7 @@ categories = [
 
 [dependencies]
 futures-util = "0.3.31"
-ngdp-bpsv = { path = "../ngdp-bpsv", version = "0.4.0" }
+ngdp-bpsv = { path = "../ngdp-bpsv", version = "0.4.1" }
 rand.workspace = true
 reqwest = { version = "0.12.22", default-features = false, features = ["rustls-tls", "json", "stream"] }
 serde = { workspace = true, features = ["derive"] }

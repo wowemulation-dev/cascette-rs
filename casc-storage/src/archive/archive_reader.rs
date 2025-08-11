@@ -268,14 +268,14 @@ impl ArchiveReader {
     }
 
     /// Prefetch data into memory (hint to OS)
+    #[allow(unused_variables)] // `offset` and `length` are only used on Unix
     pub fn prefetch(&self, offset: u64, length: usize) -> Result<()> {
         if let Some(ref mmap) = self.mmap {
-            let start = offset as usize;
-            let end = (offset as usize).saturating_add(length).min(mmap.len());
-
             // Advise the OS that we'll need this data soon
             #[cfg(unix)]
             {
+                let start = offset as usize;
+                let end = (offset as usize).saturating_add(length).min(mmap.len());
                 use memmap2::Advice;
                 let _ = mmap.advise_range(Advice::WillNeed, start, end - start);
             }

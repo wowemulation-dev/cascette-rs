@@ -132,7 +132,7 @@ jobs:
       - name: Verify versions match
         run: |
           VERSION="${{ needs.determine-release-type.outputs.version }}"
-          for crate in ngdp-bpsv ribbit-client tact-client tact-parser ngdp-cdn ngdp-cache ngdp-crypto blte ngdp-client; do
+          for crate in ngdp-bpsv ribbit-client tact-client tact-parser ngdp-cdn ngdp-cache ngdp-crypto blte casc-storage ngdp-client; do
             CRATE_VERSION=$(cargo metadata --format-version 1 --no-deps | jq -r ".packages[] | select(.name == \"$crate\") | .version")
             if [[ "$CRATE_VERSION" != "$VERSION" ]]; then
               echo "Version mismatch for $crate: expected $VERSION, found $CRATE_VERSION"
@@ -160,8 +160,9 @@ jobs:
           echo "  7. ngdp-cdn (→ tact-client)"
           echo "Level 3 (depends on Level 2):"
           echo "  8. ngdp-cache (→ ngdp-cdn, ribbit-client, tact-client)"
+          echo "  9. casc-storage (→ blte, tact-parser)"
           echo "Level 4 (depends on all):"
-          echo "  9. ngdp-client (→ all crates)"
+          echo "  10. ngdp-client (→ all crates)"
           echo "::notice::No actual publishing performed"
           
       - name: Publish to crates.io (Production)
@@ -196,6 +197,7 @@ jobs:
           # Level 3: Depend on Level 2
           echo "::group::Level 3 - Third level dependencies"
           cargo publish -p ngdp-cache       # → ngdp-cdn, ribbit-client, tact-client
+          cargo publish -p casc-storage     # → blte, tact-parser
           echo "::endgroup::"
           sleep 45  # Wait for Level 3 to be indexed
           
@@ -223,6 +225,7 @@ jobs:
             - blte
             - ngdp-cdn
             - ngdp-cache
+            - casc-storage
             - ngdp-client
 
             ### Installation

@@ -12,7 +12,7 @@ homepage.workspace = true
 [dependencies]
 flate2 = "1.1"
 lz4_flex = "0.11.5"
-ngdp-crypto = { path = "../ngdp-crypto", version = "0.4.0" }
+ngdp-crypto = { path = "../ngdp-crypto", version = "0.4.1" }
 md5 = "0.8"
 tracing.workspace = true
 thiserror.workspace = true

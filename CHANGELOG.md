@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 2025-08-11
+
+### Fixed
+
+- **Release Workflow**: Added casc-storage crate to publishing order
+  - Fixed missing crate in version verification
+  - Added casc-storage to dependency publishing hierarchy  
+  - Proper dependency order for crates.io publishing
+
+- **Windows Compilation**: Fixed unused variable warnings in casc-storage
+  - Moved Unix-specific variables into cfg(unix) block
+  - Fixed prefetch function for cross-platform compatibility
+
 ## [0.4.0] - 2025-08-11
 
 ### Added
