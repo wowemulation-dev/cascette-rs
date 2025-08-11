@@ -9,22 +9,22 @@ use std::collections::HashMap;
 pub trait BpsvRowOps {
     /// Get the number of values in this row
     fn len(&self) -> usize;
-    
+
     /// Check if the row is empty
     fn is_empty(&self) -> bool {
         self.len() == 0
     }
-    
+
     /// Get a raw string value by index
     fn get_raw(&self, index: usize) -> Option<&str>;
-    
+
     /// Get a raw string value by field name using the schema
     fn get_raw_by_name(&self, field_name: &str, schema: &BpsvSchema) -> Option<&str> {
         schema
             .get_field(field_name)
             .and_then(|field| self.get_raw(field.index))
     }
-    
+
     /// Convert row to a map of field names to raw values
     fn to_map(&self, schema: &BpsvSchema) -> Result<HashMap<String, String>> {
         if self.len() != schema.field_count() {
@@ -240,17 +240,17 @@ impl OwnedBpsvRow {
     pub fn is_empty(&self) -> bool {
         BpsvRowOps::is_empty(self)
     }
-    
+
     /// Get a raw string value by index
     pub fn get_raw(&self, index: usize) -> Option<&str> {
         BpsvRowOps::get_raw(self, index)
     }
-    
+
     /// Get a raw string value by field name using the schema
     pub fn get_raw_by_name(&self, field_name: &str, schema: &BpsvSchema) -> Option<&str> {
         BpsvRowOps::get_raw_by_name(self, field_name, schema)
     }
-    
+
     /// Convert row to a map of field names to raw values
     pub fn to_map(&self, schema: &BpsvSchema) -> Result<HashMap<String, String>> {
         BpsvRowOps::to_map(self, schema)

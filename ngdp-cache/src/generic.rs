@@ -3,7 +3,7 @@
 use parking_lot::Mutex;
 use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
-use std::sync::{atomic::AtomicU64, atomic::Ordering, Arc};
+use std::sync::{Arc, atomic::AtomicU64, atomic::Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::{debug, trace, warn};
 
@@ -178,7 +178,7 @@ impl GenericCache {
     /// Update access order for LRU tracking - optimized to O(1) for most cases
     fn update_access_order(&self, key: &str) {
         let mut lru_state = self.lru_state.lock();
-        
+
         // Check if key is already at the back (most recent)
         if lru_state.access_order.back() == Some(&key.to_string()) {
             // Already most recent, just update metadata
@@ -191,7 +191,7 @@ impl GenericCache {
 
         // Remove key from current position (still O(n) worst case)
         lru_state.access_order.retain(|k| k != key);
-        
+
         // Add to back (most recent)
         lru_state.access_order.push_back(key.to_string());
 
@@ -239,7 +239,8 @@ impl GenericCache {
             let (key_to_evict, entry_size) = {
                 let lru_state = self.lru_state.lock();
                 let key = lru_state.access_order.front().cloned();
-                let size = key.as_ref()
+                let size = key
+                    .as_ref()
                     .and_then(|k| lru_state.metadata.get(k))
                     .map(|e| e.size)
                     .unwrap_or(0);
@@ -304,9 +305,10 @@ impl GenericCache {
 
         // Remove from tracking structures with single lock
         let mut lru_state = self.lru_state.lock();
-        
+
         if let Some(entry_metadata) = lru_state.metadata.remove(key) {
-            self.current_size.fetch_sub(entry_metadata.size, Ordering::Relaxed);
+            self.current_size
+                .fetch_sub(entry_metadata.size, Ordering::Relaxed);
         }
 
         lru_state.access_order.retain(|k| k != key);
@@ -378,7 +380,8 @@ impl GenericCache {
             let mut lru_state = self.lru_state.lock();
 
             // Update size tracking atomically
-            self.current_size.fetch_sub(existing_size, Ordering::Relaxed);
+            self.current_size
+                .fetch_sub(existing_size, Ordering::Relaxed);
             self.current_size.fetch_add(data_size, Ordering::Relaxed);
 
             // Update or create entry metadata
@@ -450,7 +453,8 @@ impl GenericCache {
             let mut lru_state = self.lru_state.lock();
 
             if let Some(entry_metadata) = lru_state.metadata.remove(key) {
-                self.current_size.fetch_sub(entry_metadata.size, Ordering::Relaxed);
+                self.current_size
+                    .fetch_sub(entry_metadata.size, Ordering::Relaxed);
             }
 
             lru_state.access_order.retain(|k| k != key);
@@ -479,7 +483,7 @@ impl GenericCache {
         // Clear tracking metadata with single lock
         {
             let mut lru_state = self.lru_state.lock();
-            
+
             lru_state.metadata.clear();
             lru_state.access_order.clear();
             self.current_size.store(0, Ordering::Relaxed);
@@ -511,13 +515,20 @@ impl GenericCache {
     /// Get most recently used keys (up to limit)
     pub fn get_mru_keys(&self, limit: usize) -> Vec<String> {
         let lru_state = self.lru_state.lock();
-        lru_state.access_order.iter().rev().take(limit).cloned().collect()
+        lru_state
+            .access_order
+            .iter()
+            .rev()
+            .take(limit)
+            .cloned()
+            .collect()
     }
 
     /// Get cache entry metadata
     pub fn get_entry_info(&self, key: &str) -> Option<(u64, u64, u64)> {
         let lru_state = self.lru_state.lock();
-        lru_state.metadata
+        lru_state
+            .metadata
             .get(key)
             .map(|e| (e.size, e.last_accessed, e.access_count))
     }
@@ -630,7 +641,8 @@ impl GenericCache {
             let mut lru_state = self.lru_state.lock();
 
             // Update size tracking atomically
-            self.current_size.fetch_sub(existing_size, Ordering::Relaxed);
+            self.current_size
+                .fetch_sub(existing_size, Ordering::Relaxed);
             self.current_size.fetch_add(bytes_copied, Ordering::Relaxed);
 
             // Update or create entry metadata
