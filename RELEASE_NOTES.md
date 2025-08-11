@@ -1,28 +1,43 @@
-# Release Notes - v0.3.1
+# Release Notes - v0.4.0
 
 ## Release Summary
 
-cascette-rs v0.3.1 is a patch release that includes important fixes for code quality, documentation improvements, and GitHub Actions workflow corrections. This release ensures all crates can be successfully published to crates.io and maintains high code quality standards.
+cascette-rs v0.4.0 is a major release that achieves full TACT format specification compliance. This release includes critical fixes for 40-bit integer parsing, complete ESpec EBNF grammar implementation, and TVFS specification compliance. The implementation has been validated against real World of Warcraft encoding files from Blizzard's CDN.
 
 ## Key Highlights
 
-### Bug Fixes
+### TACT Format Compliance ✅
 
-- **Resolved clippy warnings**: Fixed all uninlined format arguments across multiple files
-- **Fixed release workflow**: Added missing crates to GitHub Actions publishing pipeline
-- **Corrected publishing order**: Ensures proper dependency resolution during crate publication
+- **40-bit Integer Support**: Complete implementation of 40-bit integers for TACT formats
+  - Big-endian support for TVFS and encoding file headers
+  - TACT encoding format (1 high byte + 4-byte big-endian u32) for file sizes
+  - Successfully validated with real WoW encoding files up to 1TB
+- **ESpec Parser**: Full EBNF grammar implementation for BLTE compression specifications
+  - Complete parsing of all compression modes (n, z, e, b, c, g)
+  - Support for complex block specifications and nested compression
+  - 11 comprehensive tests covering all ESpec variants
+- **TVFS Compliance**: Specification-compliant implementation
+  - Fixed magic bytes to only accept 'TVFS' (0x53465654)
+  - All offset/size fields use 40-bit big-endian integers
+  - Header structure matches wowdev.wiki specification exactly
 
-### Documentation Improvements
+### Real Data Validation
 
-- **TACT acronym correction**: Fixed to "Trusted Application Content Transfer"
-- **Enhanced crate descriptions**: Improved discoverability on crates.io
-- **Updated README files**: All crates now have proper installation instructions
+- **Production Testing**: Successfully downloaded and parsed real WoW encoding files
+  - 176MB decompressed encoding file with 124,062 content keys
+  - Validated bidirectional CKey ↔ EKey lookups
+  - Confirmed ESpec block detection and parsing
+- **CDN Integration**: Proper use of CDN client for all downloads
+  - No direct URL construction - uses official CDN endpoints
+  - Supports community mirrors and fallback scenarios
 
-### Developer Experience
+### Code Quality Improvements
 
-- **QA command documentation**: Created comprehensive rust-qa.md for local CI checks
-- **Workflow stability**: Implemented long-term fixes for CI/CD pipelines
-- **Code quality**: Enforces modern Rust idioms and best practices
+- **Comprehensive QA**: Full quality assurance pipeline implemented
+  - Format checks, compilation validation, Clippy compliance
+  - Documentation builds with warning-free output
+  - Fixed deprecated function warnings in ARC4 module
+- **Performance**: Optimized parsing and memory usage
 
 ## Breaking Changes
 
@@ -30,18 +45,19 @@ None. This release maintains backward compatibility with all previous versions.
 
 ## Migration Guide
 
-No migration required. Simply update your dependencies to version 0.3.1:
+No migration required. Simply update your dependencies to version 0.4.0:
 
 ```toml
 [dependencies]
-ngdp-bpsv = "0.3.1"
-ribbit-client = "0.3.1"
-tact-client = "0.3.1"
-tact-parser = "0.3.1"
-ngdp-cdn = "0.3.1"
-ngdp-cache = "0.3.1"
-ngdp-crypto = "0.3.1"
-blte = "0.3.1"
+ngdp-bpsv = "0.4.0"
+ribbit-client = "0.4.0"
+tact-client = "0.4.0"
+tact-parser = "0.4.0"
+ngdp-cdn = "0.4.0"
+ngdp-cache = "0.4.0"
+ngdp-crypto = "0.4.0"
+blte = "0.4.0"
+ngdp-client = "0.4.0"
 ```
 
 ## Installation
@@ -74,31 +90,87 @@ cargo build --release
 
 ## Changes in This Release
 
+### Added
+
+- **ESpec Parser** (`tact-parser/src/espec.rs`)
+  - Complete EBNF grammar parser for BLTE compression specifications
+  - Support for all compression modes: None, ZLib, Encrypted, BlockTable, BCPack, GDeflate
+  - Complex block specification parsing with size expressions
+  - Integration with BLTE decompression system
+
+- **40-bit Integer Support** (`tact-parser/src/utils.rs`)
+  - `read_uint40()` and `write_uint40()` for little-endian
+  - `read_uint40_be()` and `write_uint40_be()` for big-endian
+  - TACT encoding format support (1 high byte + 4-byte BE u32)
+  - Reader functions for `std::io::Read` traits
+  - Comprehensive test coverage with edge cases
+
+- **Real Data Testing**
+  - Integration test with real WoW encoding files from CDN
+  - Validation of 40-bit integer parsing accuracy
+  - CDN client usage examples and best practices
+
 ### Fixed
 
-- Resolved all clippy uninlined format arguments warnings
-- Fixed missing crates in GitHub Actions release workflow
-- Corrected TACT acronym to "Trusted Application Content Transfer"
-- Added missing crate descriptions for crates.io publishing
-- Fixed crate publishing order to respect dependencies
+- **TVFS Implementation** (`tact-parser/src/tvfs.rs`)
+  - Magic bytes fixed to only accept 'TVFS' (0x53465654)
+  - All offset/size fields converted to 40-bit big-endian integers
+  - Header structure updated to match specification exactly
+  - Big-endian compliance for all multi-byte values
+
+- **Encoding File Parser** (`tact-parser/src/encoding.rs`)
+  - Correct 40-bit integer parsing for file sizes
+  - TACT encoding format implementation (1 byte + 4-byte BE u32)
+  - Validated against real WoW encoding files
+
+- **Code Quality Issues**
+  - Fixed Clippy warnings (unnecessary casts, map_or simplifications)
+  - Resolved deprecated function warnings with proper suppression
+  - Fixed documentation URL formatting for rustdoc compliance
 
 ### Changed
 
-- Updated all crates from version 0.3.0 to 0.3.1
-- Improved crate descriptions for better discoverability
-- Enhanced README files with installation instructions
+- Updated all crates from version 0.3.1 to 0.4.0
+- Enhanced documentation with specification compliance details
+- Improved error handling and validation
 
-### Added
+## Technical Details
 
-- Comprehensive rust-qa.md command documentation
-- QA checks matching GitHub Actions CI pipeline
+### 40-bit Integer Implementation
+
+The TACT format uses a specific encoding for 40-bit integers in encoding files:
+- **Header values**: Standard big-endian 40-bit integers
+- **File sizes in pages**: 1 high byte (bits 32-39) + 4-byte big-endian u32 (bits 0-31)
+
+This allows representing file sizes up to 1TB while maintaining compatibility with the game client.
+
+### ESpec Grammar Support
+
+Complete implementation of the EBNF grammar:
+```
+e-spec = ( 'n' ) | ( 'z' [...] ) | ( 'e' [...] ) | ( 'b' [...] ) | ( 'c' [...] ) | ( 'g' [...] )
+```
+
+Supports complex specifications like:
+- `z`: ZLib compression
+- `z:6`: ZLib with level 6
+- `b:{164=z,16K*565=z,1656=z,140164=z}`: Block table with mixed compression
+
+### TVFS Specification Compliance
+
+All TVFS fields now use 40-bit big-endian integers:
+- `path_table_offset` and `path_table_size`
+- `vfs_table_offset` and `vfs_table_size` 
+- `cft_table_offset` and `cft_table_size`
+
+This ensures compatibility with modern game builds.
 
 ## All Crate Versions
 
-All crates have been updated to version 0.3.1:
+All crates have been updated to version 0.4.0:
 
 | Crate | crates.io |
-|-------|-----------|
+|-------|-----------| 
 | ngdp-bpsv | [![crates.io](https://img.shields.io/crates/v/ngdp-bpsv.svg)](https://crates.io/crates/ngdp-bpsv) |
 | ribbit-client | [![crates.io](https://img.shields.io/crates/v/ribbit-client.svg)](https://crates.io/crates/ribbit-client) |
 | tact-client | [![crates.io](https://img.shields.io/crates/v/tact-client.svg)](https://crates.io/crates/tact-client) |

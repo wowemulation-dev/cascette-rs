@@ -1,7 +1,7 @@
 //! Integration tests for encoding file parsing
 
 use tact_parser::encoding::EncodingFile;
-use tact_parser::utils::write_uint40;
+use tact_parser::utils::write_uint40_be;
 
 /// Helper to create a test encoding file with given entries
 fn create_test_encoding_file(entries: Vec<(Vec<u8>, Vec<Vec<u8>>, u64)>) -> Vec<u8> {
@@ -48,8 +48,8 @@ fn create_test_encoding_file(entries: Vec<(Vec<u8>, Vec<Vec<u8>>, u64)>) -> Vec<
         for (ckey, ekeys, size) in &entries {
             // Key count
             page_data.push(ekeys.len() as u8);
-            // File size (40-bit)
-            page_data.extend_from_slice(&write_uint40(*size));
+            // File size (40-bit, big-endian)
+            page_data.extend_from_slice(&write_uint40_be(*size));
             // CKey
             page_data.extend_from_slice(ckey);
             // EKeys

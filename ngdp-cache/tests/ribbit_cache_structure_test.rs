@@ -6,17 +6,24 @@
 #[cfg(target_os = "linux")]
 use ngdp_cache::ribbit::RibbitCache;
 #[cfg(target_os = "linux")]
+use serial_test::serial;
+#[cfg(target_os = "linux")]
 use tempfile::TempDir;
 
 #[cfg(target_os = "linux")]
 #[tokio::test]
+#[serial]
 async fn test_ribbit_cache_directory_structure() -> Result<(), Box<dyn std::error::Error>> {
     // Use a temporary directory for testing
     let temp_dir = TempDir::new()?;
+    let unique_cache_dir = temp_dir.path().join("ribbit_dir_test");
     // SAFETY: Test runs in isolation. Setting XDG_CACHE_HOME for test environment is safe.
     unsafe {
-        std::env::set_var("XDG_CACHE_HOME", temp_dir.path());
+        std::env::set_var("XDG_CACHE_HOME", &unique_cache_dir);
     }
+
+    // Small delay to ensure environment variable is properly set
+    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
 
     // Create RibbitCache and write test data for different regions
     let cache = RibbitCache::new().await?;
@@ -27,8 +34,23 @@ async fn test_ribbit_cache_directory_structure() -> Result<(), Box<dyn std::erro
         cache.write(region, "summary", "test", b"test data").await?;
     }
 
+    // Small delay to ensure all files are written
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
     // Verify the expected cache directory structure
-    let cache_base = temp_dir.path().join("ngdp").join("ribbit");
+    let cache_base = unique_cache_dir.join("ngdp").join("ribbit");
+    if !cache_base.exists() {
+        eprintln!("Cache base directory does not exist: {:?}", cache_base);
+        eprintln!(
+            "Contents of unique_cache_dir: {:?}",
+            std::fs::read_dir(&unique_cache_dir)
+        );
+        if let Ok(entries) = std::fs::read_dir(&unique_cache_dir) {
+            for entry in entries.flatten() {
+                eprintln!("  - {:?}", entry.path());
+            }
+        }
+    }
     assert!(cache_base.exists(), "Cache base directory should exist");
 
     // Check that region directories exist
@@ -57,12 +79,17 @@ async fn test_ribbit_cache_directory_structure() -> Result<(), Box<dyn std::erro
 
 #[cfg(target_os = "linux")]
 #[tokio::test]
+#[serial]
 async fn test_ribbit_cache_file_naming() -> Result<(), Box<dyn std::error::Error>> {
     let temp_dir = TempDir::new()?;
+    let unique_cache_dir = temp_dir.path().join("ribbit_file_test");
     // SAFETY: Test runs in isolation. Setting XDG_CACHE_HOME for test environment is safe.
     unsafe {
-        std::env::set_var("XDG_CACHE_HOME", temp_dir.path());
+        std::env::set_var("XDG_CACHE_HOME", &unique_cache_dir);
     }
+
+    // Small delay to ensure environment variable is properly set
+    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
 
     let cache = RibbitCache::new().await?;
 
@@ -85,7 +112,7 @@ async fn test_ribbit_cache_file_naming() -> Result<(), Box<dyn std::error::Error
     }
 
     // Verify files exist with expected names
-    let cache_dir = temp_dir.path().join("ngdp").join("ribbit").join("us");
+    let cache_dir = unique_cache_dir.join("ngdp").join("ribbit").join("us");
 
     // Check that the expected directories/files exist
     assert!(

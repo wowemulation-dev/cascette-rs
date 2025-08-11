@@ -9,7 +9,9 @@ members = [
   "tact-parser",
   "ngdp-client",
   "blte",
-  "casc-storage", "ngdp-patch",
+  "casc-storage", 
+  "ngdp-patch",
+  "test-utils",
 ]
 resolver = "2"
 
@@ -31,6 +33,7 @@ hex = "0.4.3"
 modular-bitfield = "0.12.0"
 rand = "0.9"
 serde = "1.0"
+tempfile = "3.20"
 thiserror = "2.0"
 tokio = "1.47"
 toml = "0.8"

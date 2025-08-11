@@ -7,6 +7,7 @@ pub mod cdn_config;
 pub mod commands;
 pub mod config_manager;
 pub mod fallback_client;
+pub mod manifest;
 pub mod output;
 pub mod pattern_extraction;
 pub mod wago_api;

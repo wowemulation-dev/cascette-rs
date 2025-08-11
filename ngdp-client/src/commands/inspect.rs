@@ -9,7 +9,7 @@ use crate::{
 };
 use blte::decompress_blte;
 use ngdp_bpsv::BpsvDocument;
-use ngdp_cdn::CdnClient;
+use ngdp_cache::cached_cdn_client::CachedCdnClient;
 use ngdp_crypto::KeyService;
 use ribbit_client::{Endpoint, ProductCdnsResponse, ProductVersionsResponse, Region};
 use std::str::FromStr;
@@ -280,7 +280,11 @@ async fn inspect_build_config(
     // Step 3: Download the build config file
     print_subsection_header("Downloading Build Configuration", &style);
 
-    let cdn_client = CdnClient::new()?;
+    let cdn_client = CachedCdnClient::new().await?;
+    // Add CDN hosts
+    cdn_client.add_primary_hosts(cdn_entry.hosts.iter().cloned());
+    cdn_client.add_fallback_host("cdn.arctium.tools");
+    cdn_client.add_fallback_host("tact.mirror.reliquaryhq.com");
     let cdn_host = &cdn_entry.hosts[0]; // Use first CDN host
     let cdn_path = &cdn_entry.path;
 
@@ -746,7 +750,11 @@ async fn download_and_decompress_manifest(
         .ok_or("CDN not found")?;
 
     // Step 3: Download build config
-    let cdn_client = CdnClient::new()?;
+    let cdn_client = CachedCdnClient::new().await?;
+    // Add CDN hosts
+    cdn_client.add_primary_hosts(cdn_entry.hosts.iter().cloned());
+    cdn_client.add_fallback_host("cdn.arctium.tools");
+    cdn_client.add_fallback_host("tact.mirror.reliquaryhq.com");
     let cdn_host = &cdn_entry.hosts[0];
     let cdn_path = &cdn_entry.path;
 

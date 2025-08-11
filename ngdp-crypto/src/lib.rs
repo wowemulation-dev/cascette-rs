@@ -7,6 +7,8 @@
 //! - Hardcoded WoW encryption keys
 //! - Key file loading from multiple formats
 
+#![cfg_attr(test, allow(deprecated))]
+
 #[deprecated(
     since = "0.4.0",
     note = "ARC4 module is deprecated and will be removed in v0.5.0. Use salsa20 module instead."

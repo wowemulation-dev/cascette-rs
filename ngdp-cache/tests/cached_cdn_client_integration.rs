@@ -25,15 +25,24 @@ async fn test_cached_cdn_client_basic_caching() {
     let test_hash = "abcdef1234567890abcdef1234567890";
     let test_content = b"Test CDN content data";
 
-    // Set up mock to track request count
-    let mock = Mock::given(method("GET"))
+    // Set up HEAD mock for existence check
+    let head_mock = Mock::given(method("HEAD"))
+        .and(path_regex(
+            r"^/tpr/wow/ab/cd/abcdef1234567890abcdef1234567890$",
+        ))
+        .respond_with(ResponseTemplate::new(200));
+
+    mock_server.register(head_mock).await;
+
+    // Set up GET mock to track request count
+    let get_mock = Mock::given(method("GET"))
         .and(path_regex(
             r"^/tpr/wow/ab/cd/abcdef1234567890abcdef1234567890$",
         ))
         .respond_with(mock_cdn_response(test_content))
         .expect(1); // Should only be called once due to caching
 
-    mock_server.register(mock).await;
+    mock_server.register(get_mock).await;
 
     // Create client with temp cache directory
     let temp_dir = TempDir::new().unwrap();
@@ -104,6 +113,14 @@ async fn test_cached_cdn_client_content_types() {
         let next_two = &hash[2..4];
         let mock_path = format!("^/{path}/{first_two}/{next_two}/{hash}$");
 
+        // Set up HEAD mock for existence check
+        Mock::given(method("HEAD"))
+            .and(path_regex(&mock_path))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&mock_server)
+            .await;
+
+        // Set up GET mock for actual download
         Mock::given(method("GET"))
             .and(path_regex(&mock_path))
             .respond_with(mock_cdn_response(content))
@@ -137,7 +154,16 @@ async fn test_cached_cdn_client_disable_caching() {
     let test_hash = "d1234567890abcdef1234567890abcde";
     let test_content = b"Test content with caching disabled";
 
-    // Mock should be called twice since caching is disabled
+    // Set up HEAD mock for existence checks
+    Mock::given(method("HEAD"))
+        .and(path_regex(
+            r"^/data/d1/23/d1234567890abcdef1234567890abcde$",
+        ))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&mock_server)
+        .await;
+
+    // GET mock should be called twice since caching is disabled
     Mock::given(method("GET"))
         .and(path_regex(
             r"^/data/d1/23/d1234567890abcdef1234567890abcde$",
@@ -238,6 +264,16 @@ async fn test_cached_cdn_client_streaming() {
     let test_hash = "5678901234567890abcdef1234567890";
     let test_content = b"Streaming test content that is larger than usual";
 
+    // Set up HEAD mock for existence check
+    Mock::given(method("HEAD"))
+        .and(path_regex(
+            r"^/data/56/78/5678901234567890abcdef1234567890$",
+        ))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&mock_server)
+        .await;
+
+    // Set up GET mock for streaming download
     Mock::given(method("GET"))
         .and(path_regex(
             r"^/data/56/78/5678901234567890abcdef1234567890$",

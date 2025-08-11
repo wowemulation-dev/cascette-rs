@@ -145,6 +145,24 @@ pub fn filter_builds_by_product(builds: WagoBuildsResponse, product: &str) -> Ve
     }
 }
 
+/// Extract build ID from version string (e.g., "1.15.2.55140" -> "55140")
+pub fn extract_build_id(version: &str) -> Option<String> {
+    version.split('.').next_back().map(|s| s.to_string())
+}
+
+/// Find a specific build by build ID in the filtered builds
+pub fn find_build_by_id<'a>(builds: &'a [WagoBuild], build_id: &str) -> Option<&'a WagoBuild> {
+    builds.iter().find(|build| {
+        // Try exact match on build ID extracted from version
+        if let Some(extracted_id) = extract_build_id(&build.version) {
+            extracted_id == build_id
+        } else {
+            // Also try direct version string match
+            build.version == build_id
+        }
+    })
+}
+
 /// Parse a date string from Wago API format to DateTime
 pub fn parse_wago_date(date_str: &str) -> Option<DateTime<Utc>> {
     // Wago uses format: "2025-07-14 22:25:16"

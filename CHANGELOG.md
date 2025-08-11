@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Architecture Improvements Tasks**: Comprehensive plan for enhancing codebase quality
+  - Dependency injection for better testability
+  - Trait abstractions for modularity
+  - Structured metrics and observability
+  - Configuration centralization
+
+- **CLI Pipe Handling Documentation**: Complete implementation guide for proper pipe handling
+  - SIGPIPE signal handling for Unix systems
+  - Broken pipe error suppression
+  - TTY detection for appropriate output formatting
+
+### Changed
+
+- **CDN Client Architecture Refactoring**: Simplified from 3 variants to 2
+  - Merged `CdnClient` and `CdnClientWithFallback` into single base client
+  - Base client now includes fallback host support
+  - `CachedCdnClient` wraps the unified client
+  - All commands now use cached client for performance
+
+### Fixed
+
+- **CDN Path Usage**: Fixed to use server-announced paths instead of hardcoded values
+  - Now properly uses CDN path from server response
+  - Removed hardcoded "tpr/wow" assumptions
+  
+- **Test Infrastructure**: Fixed failing tests in ngdp-cache
+  - Added HEAD request mocks for CDN client tests
+  - Fixed race condition in `test_ribbit_cache_file_naming`
+  
+- **Code Formatting**: Applied consistent formatting across all test files
+
 ## [0.4.0] - 2025-08-09
 
 ### Added

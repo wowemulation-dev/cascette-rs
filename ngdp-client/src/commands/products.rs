@@ -9,7 +9,7 @@ use crate::{
     wago_api,
 };
 use chrono::{Duration, Utc};
-use ngdp_cdn::CdnClient;
+use ngdp_cache::cached_cdn_client::CachedCdnClient;
 use ribbit_client::{
     CdnEntry, Endpoint, ProductCdnsResponse, ProductVersionsResponse, Region, SummaryResponse,
 };
@@ -158,7 +158,11 @@ async fn show_versions(
 
         // Get CDN configuration for the region
         if let Some(cdn_entry) = cdns.entries.iter().find(|e| e.name == region.as_str()) {
-            let cdn_client = CdnClient::new()?;
+            let cdn_client = CachedCdnClient::new().await?;
+            // Add CDN hosts
+            cdn_client.add_primary_hosts(cdn_entry.hosts.iter().cloned());
+            cdn_client.add_fallback_host("cdn.arctium.tools");
+            cdn_client.add_fallback_host("tact.mirror.reliquaryhq.com");
             let cdn_host = &cdn_entry.hosts[0]; // Use first CDN host
             let cdn_path = &cdn_entry.path;
 
