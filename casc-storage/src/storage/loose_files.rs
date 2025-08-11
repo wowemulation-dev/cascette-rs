@@ -51,15 +51,15 @@ impl LooseFileStorage {
             let entry = entry?;
             let path = entry.path();
 
-            if path.is_file()
-                && let Some(filename) = path.file_stem().and_then(|s| s.to_str())
-            {
-                // Try to parse filename as hex EKey
-                if filename.len() == 32
-                    && let Some(ekey) = Self::parse_hex_filename(filename)
-                {
-                    debug!("Found loose file: {}", ekey);
-                    self.files.insert(ekey, path);
+            if path.is_file() {
+                if let Some(filename) = path.file_stem().and_then(|s| s.to_str()) {
+                    // Try to parse filename as hex EKey
+                    if filename.len() == 32 {
+                        if let Some(ekey) = Self::parse_hex_filename(filename) {
+                            debug!("Found loose file: {}", ekey);
+                            self.files.insert(ekey, path);
+                        }
+                    }
                 }
             }
         }

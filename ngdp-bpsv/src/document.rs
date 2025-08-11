@@ -53,7 +53,7 @@ pub struct BpsvRow<'a> {
     typed_values: Option<Vec<BpsvValue>>,
 }
 
-impl<'a> BpsvRowOps for BpsvRow<'a> {
+impl BpsvRowOps for BpsvRow<'_> {
     fn len(&self) -> usize {
         if let Some(typed) = &self.typed_values {
             typed.len()

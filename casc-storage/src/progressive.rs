@@ -630,10 +630,10 @@ impl ProgressiveFileManager {
             let active_files = self.active_files.read().await;
             for (ekey, file) in active_files.iter() {
                 let pattern = file.access_pattern.read().await;
-                if let Some(last_access) = pattern.last_access
-                    && now.duration_since(last_access) > max_idle_time
-                {
-                    to_remove.push(*ekey);
+                if let Some(last_access) = pattern.last_access {
+                    if now.duration_since(last_access) > max_idle_time {
+                        to_remove.push(*ekey);
+                    }
                 }
             }
         }

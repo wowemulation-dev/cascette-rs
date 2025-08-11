@@ -457,12 +457,12 @@ impl TactManifests {
             let line = line_result?;
 
             // Parse CSV format: "FileDataID;Filename"
-            if let Some(sep_pos) = line.find(';')
-                && let Ok(fdid) = line[..sep_pos].parse::<u32>()
-            {
-                let filename = line[sep_pos + 1..].to_string();
-                cache.insert(filename, fdid);
-                count += 1;
+            if let Some(sep_pos) = line.find(';') {
+                if let Ok(fdid) = line[..sep_pos].parse::<u32>() {
+                    let filename = line[sep_pos + 1..].to_string();
+                    cache.insert(filename, fdid);
+                    count += 1;
+                }
             }
         }
 
@@ -481,10 +481,10 @@ impl TactManifests {
         }
 
         // Try lazy loading first if enabled
-        if self.config.lazy_loading
-            && let Some(result) = self.lookup_fdid_lazy(fdid)?
-        {
-            return Ok(result);
+        if self.config.lazy_loading {
+            if let Some(result) = self.lookup_fdid_lazy(fdid)? {
+                return Ok(result);
+            }
         }
 
         // Fallback to fully loaded manifests

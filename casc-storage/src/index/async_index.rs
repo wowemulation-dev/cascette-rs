@@ -125,25 +125,25 @@ impl AsyncIndexManager {
 
         while let Some(entry) = entries.next_entry().await? {
             let path = entry.path();
-            if let Some(ext) = path.extension()
-                && (ext == "idx" || ext == "index")
-            {
-                index_files.push(path);
+            if let Some(ext) = path.extension() {
+                if ext == "idx" || ext == "index" {
+                    index_files.push(path);
+                }
             }
         }
 
         // Also check subdirectories like data/ and indices/
         for subdir in &["data", "indices"] {
             let subpath = path.join(subdir);
-            if subpath.exists()
-                && let Ok(mut entries) = tokio::fs::read_dir(&subpath).await
-            {
-                while let Some(entry) = entries.next_entry().await? {
-                    let path = entry.path();
-                    if let Some(ext) = path.extension()
-                        && (ext == "idx" || ext == "index")
-                    {
-                        index_files.push(path);
+            if subpath.exists() {
+                if let Ok(mut entries) = tokio::fs::read_dir(&subpath).await {
+                    while let Some(entry) = entries.next_entry().await? {
+                        let path = entry.path();
+                        if let Some(ext) = path.extension() {
+                            if ext == "idx" || ext == "index" {
+                                index_files.push(path);
+                            }
+                        }
                     }
                 }
             }
@@ -173,24 +173,24 @@ impl AsyncIndexManager {
     /// Perform an async lookup
     pub async fn lookup(&self, ekey: &EKey) -> Option<ArchiveLocation> {
         // Check cache first
-        if self.config.enable_caching
-            && let Some(location) = self.lookup_cache.get(ekey)
-        {
-            trace!("Cache hit for {}", ekey);
-            return Some(*location);
+        if self.config.enable_caching {
+            if let Some(location) = self.lookup_cache.get(ekey) {
+                trace!("Cache hit for {}", ekey);
+                return Some(*location);
+            }
         }
 
         // Check the appropriate bucket
         let bucket = ekey.bucket_index();
 
-        if let Some(index) = self.bucket_indices.get(&bucket)
-            && let Some(location) = index.lookup(ekey).await
-        {
-            // Update cache
-            if self.config.enable_caching {
-                self.update_cache(*ekey, location);
+        if let Some(index) = self.bucket_indices.get(&bucket) {
+            if let Some(location) = index.lookup(ekey).await {
+                // Update cache
+                if self.config.enable_caching {
+                    self.update_cache(*ekey, location);
+                }
+                return Some(location);
             }
-            return Some(location);
         }
 
         // Fallback: search all buckets (rare)
@@ -431,10 +431,10 @@ impl AsyncIndex {
             .ok_or_else(|| CascError::InvalidIndexFormat("Invalid filename".into()))?;
 
         // Try to parse bucket from filename (e.g., "00.idx" -> 0x00)
-        if filename.len() >= 2
-            && let Ok(bucket) = u8::from_str_radix(&filename[..2], 16)
-        {
-            return Ok(bucket);
+        if filename.len() >= 2 {
+            if let Ok(bucket) = u8::from_str_radix(&filename[..2], 16) {
+                return Ok(bucket);
+            }
         }
 
         // Default to bucket 0 if can't determine
