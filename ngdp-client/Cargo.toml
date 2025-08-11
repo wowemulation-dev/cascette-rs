@@ -1,6 +1,6 @@
 [package]
 name = "ngdp-client"
-version = "0.4.2"
+version = "0.4.3"
 authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -23,15 +23,15 @@ path = "src/main.rs"
 clap = { workspace = true, features = ["derive", "cargo", "env"] }
 comfy-table = "7.1.4"
 owo-colors = { version = "4.2.2", features = ["supports-colors"] }
-ribbit-client = { path = "../ribbit-client", version = "0.4.2" }
-tact-client = { path = "../tact-client", version = "0.4.2" }
-ngdp-bpsv = { path = "../ngdp-bpsv", version = "0.4.2" }
-ngdp-cache = { path = "../ngdp-cache", version = "0.4.2" }
-ngdp-cdn = { path = "../ngdp-cdn", version = "0.4.2" }
-tact-parser = { path = "../tact-parser", version = "0.4.2" }
-blte = { path = "../blte", version = "0.4.2" }
-ngdp-crypto = { path = "../ngdp-crypto", version = "0.4.2" }
-casc-storage = { path = "../casc-storage", version = "0.4.2" }
+ribbit-client = { path = "../ribbit-client", version = "0.4.3" }
+tact-client = { path = "../tact-client", version = "0.4.3" }
+ngdp-bpsv = { path = "../ngdp-bpsv", version = "0.4.3" }
+ngdp-cache = { path = "../ngdp-cache", version = "0.4.3" }
+ngdp-cdn = { path = "../ngdp-cdn", version = "0.4.3" }
+tact-parser = { path = "../tact-parser", version = "0.4.3" }
+blte = { path = "../blte", version = "0.4.3" }
+ngdp-crypto = { path = "../ngdp-crypto", version = "0.4.3" }
+casc-storage = { path = "../casc-storage", version = "0.4.3" }
 tokio = { workspace = true, features = ["full"] }
 tracing.workspace = true
 tracing-subscriber.workspace = true

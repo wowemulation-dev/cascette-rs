@@ -16,23 +16,23 @@ Pipeline) for World of Warcraft emulation.
 
 ## 🎯 Project Status
 
-**Current Version**: 0.4.2
+**Current Version**: 0.4.3
 
 ### Core Components
 
 | Component       | Version | Status      | Description                                        |
 | --------------- | ------- | ----------- | -------------------------------------------------- |
-| `ngdp-bpsv`     | 0.4.2   | ✅ Stable   | BPSV parser/writer for NGDP formats                |
-| `ribbit-client` | 0.4.2   | ✅ Stable   | Ribbit protocol client with signature verification |
-| `tact-client`   | 0.4.2   | ✅ Stable   | TACT HTTP client with retry logic and batching     |
-| `tact-parser`   | 0.4.2   | ✅ Stable   | TACT file format parser (encoding, install, etc.) |
-| `ngdp-cdn`      | 0.4.2   | ✅ Stable   | CDN client with fallback hosts and connection pooling |
-| `ngdp-cache`    | 0.4.2   | ✅ Stable   | Comprehensive caching layer with LRU eviction     |
-| `blte`          | 0.4.2   | ✅ Stable   | BLTE decompression with memory pooling            |
-| `ngdp-crypto`   | 0.4.2   | ✅ Stable   | Modern encryption with Salsa20 and key service    |
-| `ngdp-client`   | 0.4.2   | ✅ Stable   | CLI tool for NGDP operations                      |
-| `casc-storage`  | 0.4.2   | 🚧 Beta     | CASC storage implementation (in development)      |
-| `ngdp-patch`    | 0.4.2   | 🚧 Beta     | Patch file support (in development)               |
+| `ngdp-bpsv`     | 0.4.3   | ✅ Stable   | BPSV parser/writer for NGDP formats                |
+| `ribbit-client` | 0.4.3   | ✅ Stable   | Ribbit protocol client with signature verification |
+| `tact-client`   | 0.4.3   | ✅ Stable   | TACT HTTP client with retry logic and batching     |
+| `tact-parser`   | 0.4.3   | ✅ Stable   | TACT file format parser (encoding, install, etc.) |
+| `ngdp-cdn`      | 0.4.3   | ✅ Stable   | CDN client with fallback hosts and connection pooling |
+| `ngdp-cache`    | 0.4.3   | ✅ Stable   | Comprehensive caching layer with LRU eviction     |
+| `blte`          | 0.4.3   | ✅ Stable   | BLTE decompression with memory pooling            |
+| `ngdp-crypto`   | 0.4.3   | ✅ Stable   | Modern encryption with Salsa20 and key service    |
+| `ngdp-client`   | 0.4.3   | ✅ Stable   | CLI tool for NGDP operations                      |
+| `casc-storage`  | 0.4.3   | 🚧 Beta     | CASC storage implementation (in development)      |
+| `ngdp-patch`    | 0.4.3   | 🚧 Beta     | Patch file support (in development)               |
 
 ### Implementation Progress
 
@@ -57,11 +57,11 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-ribbit-client = "0.4.2"
-ngdp-bpsv = "0.4.2"
-tact-parser = "0.4.2"
-blte = "0.4.2"
-ngdp-crypto = "0.4.2"
+ribbit-client = "0.4.3"
+ngdp-bpsv = "0.4.3"
+tact-parser = "0.4.3"
+blte = "0.4.3"
+ngdp-crypto = "0.4.3"
 ```
 
 Basic example (modern HTTP-first approach):

@@ -1,15 +1,14 @@
-# Release Notes - v0.4.2
+# Release Notes - v0.4.3
 
 ## Release Summary
 
-cascette-rs v0.4.2 is a patch release that fixes critical issues with the v0.4.0 release workflow and Windows compilation. This release ensures all crates can be properly published to crates.io and builds successfully on all platforms.
+cascette-rs v0.4.3 is a patch release that fixes the remaining crates.io publishing issue from v0.4.2.
 
-## Key Fixes
+## Key Fix
 
-- **Release Workflow**: Added missing casc-storage crate to publishing workflow
-- **Windows Compilation**: Fixed unused variable warnings in casc-storage that caused build failures
-- **Dependency Order**: Proper crates.io publishing order with casc-storage included
-- **Test Utils**: Marked test-utils as non-publishable to fix crates.io dependency resolution
+- **casc-storage**: Removed test-utils dev-dependency to enable crates.io publishing
+  - Removed integration tests that required local WoW installations
+  - Core functionality remains unchanged
 
 ---
 
@@ -80,16 +79,16 @@ No migration required. Simply update your dependencies to version 0.4.0:
 
 ```toml
 [dependencies]
-ngdp-bpsv = "0.4.2"
-ribbit-client = "0.4.2"
-tact-client = "0.4.2"
-tact-parser = "0.4.2"
-ngdp-cdn = "0.4.2"
-ngdp-cache = "0.4.2"
-ngdp-crypto = "0.4.2"
-blte = "0.4.2"
-casc-storage = "0.4.2"
-ngdp-client = "0.4.2"
+ngdp-bpsv = "0.4.3"
+ribbit-client = "0.4.3"
+tact-client = "0.4.3"
+tact-parser = "0.4.3"
+ngdp-cdn = "0.4.3"
+ngdp-cache = "0.4.3"
+ngdp-crypto = "0.4.3"
+blte = "0.4.3"
+casc-storage = "0.4.3"
+ngdp-client = "0.4.3"
 ```
 
 ## Installation
@@ -224,7 +223,7 @@ This ensures compatibility with modern game builds.
 
 ## All Crate Versions
 
-All crates have been updated to version 0.4.2:
+All crates have been updated to version 0.4.3:
 
 | Crate | crates.io |
 |-------|-----------| 
