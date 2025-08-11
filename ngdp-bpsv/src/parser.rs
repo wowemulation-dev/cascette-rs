@@ -77,8 +77,8 @@ impl BpsvParser {
     /// - `## seqn: 12345`
     /// - `## seqn 12345`
     fn parse_sequence_line(line: &str) -> Result<Option<u32>> {
-        // Start after "## seqn"
-        let after_seqn = &line[7..].trim_start();
+        // Start after "## seqn" - use safe slicing to prevent panic
+        let after_seqn = line.get(7..).unwrap_or("").trim_start();
 
         if after_seqn.is_empty() {
             return Err(Error::InvalidSequenceNumber {
@@ -86,11 +86,11 @@ impl BpsvParser {
             });
         }
 
-        // Handle different separators
+        // Handle different separators using safe slicing
         let number_str = if let Some(eq_pos) = after_seqn.find('=') {
-            after_seqn[eq_pos + 1..].trim()
+            after_seqn.get(eq_pos + 1..).unwrap_or("").trim()
         } else if let Some(colon_pos) = after_seqn.find(':') {
-            after_seqn[colon_pos + 1..].trim()
+            after_seqn.get(colon_pos + 1..).unwrap_or("").trim()
         } else {
             // No separator, just whitespace
             after_seqn

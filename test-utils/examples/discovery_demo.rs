@@ -4,7 +4,7 @@
 //! using environment variables and fallback paths.
 
 use test_utils::{
-    find_wow_data, find_any_wow_data, is_valid_wow_data, print_setup_instructions, WowVersion,
+    WowVersion, find_any_wow_data, find_wow_data, is_valid_wow_data, print_setup_instructions,
 };
 
 fn main() {
@@ -12,12 +12,16 @@ fn main() {
     println!("======================\n");
 
     // Try to find specific versions
-    for &version in &[WowVersion::ClassicEra, WowVersion::Classic, WowVersion::Retail] {
+    for &version in &[
+        WowVersion::ClassicEra,
+        WowVersion::Classic,
+        WowVersion::Retail,
+    ] {
         print!("Looking for {}... ", version.display_name());
-        
+
         if let Some(path) = find_wow_data(version) {
             println!("✓ Found at: {}", path.display());
-            
+
             // Validate the path
             if is_valid_wow_data(&path) {
                 println!("  ✓ Data directory structure is valid");

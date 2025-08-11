@@ -193,8 +193,12 @@ impl HttpClient {
         Duration::from_millis(final_backoff)
     }
 
-    /// Execute an HTTP request with retry logic
-    async fn execute_with_retry(&self, url: &str) -> Result<Response> {
+    /// Execute an HTTP request with retry logic and optional headers
+    async fn execute_with_retry_internal(
+        &self,
+        url: &str,
+        headers: Option<&[(&str, &str)]>,
+    ) -> Result<Response> {
         let mut last_error = None;
 
         for attempt in 0..=self.max_retries {
@@ -209,6 +213,13 @@ impl HttpClient {
             let mut request = self.client.get(url);
             if let Some(ref user_agent) = self.user_agent {
                 request = request.header("User-Agent", user_agent);
+            }
+
+            // Add custom headers if provided
+            if let Some(headers) = headers {
+                for &(key, value) in headers {
+                    request = request.header(key, value);
+                }
             }
 
             match request.send().await {
@@ -260,80 +271,18 @@ impl HttpClient {
         Err(last_error.unwrap_or(Error::InvalidResponse))
     }
 
+    /// Execute an HTTP request with retry logic
+    async fn execute_with_retry(&self, url: &str) -> Result<Response> {
+        self.execute_with_retry_internal(url, None).await
+    }
+
     /// Execute an HTTP request with additional headers and retry logic
     async fn execute_with_retry_and_headers(
         &self,
         url: &str,
         headers: &[(&str, &str)],
     ) -> Result<Response> {
-        let mut last_error = None;
-
-        for attempt in 0..=self.max_retries {
-            if attempt > 0 {
-                let backoff = self.calculate_backoff(attempt - 1);
-                debug!("Retry attempt {} after {:?} backoff", attempt, backoff);
-                sleep(backoff).await;
-            }
-
-            debug!("HTTP request to {} (attempt {})", url, attempt + 1);
-
-            let mut request = self.client.get(url);
-            if let Some(ref user_agent) = self.user_agent {
-                request = request.header("User-Agent", user_agent);
-            }
-
-            // Add custom headers
-            for &(key, value) in headers {
-                request = request.header(key, value);
-            }
-
-            match request.send().await {
-                Ok(response) => {
-                    trace!("Response status: {}", response.status());
-
-                    // Check if we should retry based on status code
-                    let status = response.status();
-                    if (status.is_server_error()
-                        || status == reqwest::StatusCode::TOO_MANY_REQUESTS)
-                        && attempt < self.max_retries
-                    {
-                        warn!(
-                            "Request returned {} (attempt {}): will retry",
-                            status,
-                            attempt + 1
-                        );
-                        last_error = Some(Error::InvalidResponse);
-                        continue;
-                    }
-
-                    return Ok(response);
-                }
-                Err(e) => {
-                    // Check if error is retryable
-                    let is_retryable = e.is_connect() || e.is_timeout() || e.is_request();
-
-                    if is_retryable && attempt < self.max_retries {
-                        warn!(
-                            "Request failed (attempt {}): {}, will retry",
-                            attempt + 1,
-                            e
-                        );
-                        last_error = Some(Error::Http(e));
-                    } else {
-                        // Non-retryable error or final attempt
-                        debug!(
-                            "Request failed (attempt {}): {}, not retrying",
-                            attempt + 1,
-                            e
-                        );
-                        return Err(Error::Http(e));
-                    }
-                }
-            }
-        }
-
-        // This should only be reached if all retries failed
-        Err(last_error.unwrap_or(Error::InvalidResponse))
+        self.execute_with_retry_internal(url, Some(headers)).await
     }
 
     /// Get versions manifest for a product (V1 protocol)

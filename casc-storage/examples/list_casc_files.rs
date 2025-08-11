@@ -35,17 +35,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Loading CASC storage...");
     let storage = CascStorage::new(config)?;
-    
+
     // Load indices
     println!("Loading indices...");
     storage.load_indices()?;
-    
+
     // Load archives
     println!("Loading archives...");
     storage.load_archives()?;
-    
+
     println!("✓ CASC storage loaded successfully");
-    
+
     println!("✓ Example completed - CASC storage is ready for use");
 
     Ok(())

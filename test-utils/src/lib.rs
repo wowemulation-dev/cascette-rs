@@ -1,5 +1,5 @@
 //! Test utilities for cascette-rs
-//! 
+//!
 //! Provides utilities for discovering WoW installation data for tests and examples.
 
 use std::path::{Path, PathBuf};
@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 pub enum WowVersion {
     /// World of Warcraft Classic Era (1.15.x)
     ClassicEra,
-    /// World of Warcraft Classic (Season of Discovery, etc.) 
+    /// World of Warcraft Classic (Season of Discovery, etc.)
     Classic,
     /// World of Warcraft Retail (current)
     Retail,
@@ -20,7 +20,7 @@ impl WowVersion {
     pub fn env_var(&self) -> &'static str {
         match self {
             WowVersion::ClassicEra => "WOW_CLASSIC_ERA_DATA",
-            WowVersion::Classic => "WOW_CLASSIC_DATA", 
+            WowVersion::Classic => "WOW_CLASSIC_DATA",
             WowVersion::Retail => "WOW_RETAIL_DATA",
         }
     }
@@ -69,7 +69,7 @@ fn get_common_wow_paths(version: WowVersion) -> Vec<PathBuf> {
     let base_dirs = if cfg!(windows) {
         vec![
             "C:\\Program Files\\World of Warcraft",
-            "C:\\Program Files (x86)\\World of Warcraft", 
+            "C:\\Program Files (x86)\\World of Warcraft",
             "C:\\Games\\World of Warcraft",
         ]
     } else if cfg!(target_os = "macos") {
@@ -80,7 +80,7 @@ fn get_common_wow_paths(version: WowVersion) -> Vec<PathBuf> {
     } else {
         vec![
             "~/wow",
-            "~/Downloads/wow", 
+            "~/Downloads/wow",
             "/opt/wow",
             "/usr/local/games/wow",
             // User's home directory patterns
@@ -101,7 +101,7 @@ fn get_common_wow_paths(version: WowVersion) -> Vec<PathBuf> {
                 paths.push(base.join("1.15.2.55140.windows-win64/Data"));
                 paths.push(base.join("1.14.4.54070.windows-win64/Data"));
                 paths.push(base.join("1.13.7.46902.windows-win64/Data"));
-                
+
                 // Generic patterns
                 for pattern in version.version_patterns() {
                     if let Some(entry) = find_matching_directory(&base, pattern) {
@@ -114,7 +114,7 @@ fn get_common_wow_paths(version: WowVersion) -> Vec<PathBuf> {
                 paths.push(base.join("wow_classic/Data"));
                 paths.push(base.join("classic/Data"));
                 paths.push(base.join("season-of-discovery/Data"));
-                
+
                 // Version patterns
                 for pattern in version.version_patterns() {
                     if let Some(entry) = find_matching_directory(&base, pattern) {
@@ -127,7 +127,7 @@ fn get_common_wow_paths(version: WowVersion) -> Vec<PathBuf> {
                 paths.push(base.join("retail/Data"));
                 paths.push(base.join("wow-retail/Data"));
                 paths.push(base.join("Data")); // Direct Data folder
-                
+
                 // Version patterns
                 for pattern in version.version_patterns() {
                     if let Some(entry) = find_matching_directory(&base, pattern) {
@@ -163,7 +163,7 @@ pub fn is_valid_wow_data(path: &Path) -> bool {
 
     // Check for CASC structure
     let has_indices = path.join("indices").exists();
-    let has_data = path.join("data").exists(); 
+    let has_data = path.join("data").exists();
     let has_config = path.join("config").exists();
 
     // At minimum, we need the data directory and some indices or config
@@ -172,7 +172,11 @@ pub fn is_valid_wow_data(path: &Path) -> bool {
 
 /// Find any available WoW data directory from any version
 pub fn find_any_wow_data() -> Option<(WowVersion, PathBuf)> {
-    for &version in &[WowVersion::ClassicEra, WowVersion::Classic, WowVersion::Retail] {
+    for &version in &[
+        WowVersion::ClassicEra,
+        WowVersion::Classic,
+        WowVersion::Retail,
+    ] {
         if let Some(path) = find_wow_data(version) {
             return Some((version, path));
         }
@@ -188,24 +192,30 @@ pub fn print_setup_instructions() {
     println!("To run tests and examples that require WoW game files, set environment variables:");
     println!();
 
-    for &version in &[WowVersion::ClassicEra, WowVersion::Classic, WowVersion::Retail] {
+    for &version in &[
+        WowVersion::ClassicEra,
+        WowVersion::Classic,
+        WowVersion::Retail,
+    ] {
         println!("  {} = /path/to/wow/Data", version.env_var());
         println!("    For: {}", version.display_name());
         println!();
     }
 
     println!("Examples:");
-    println!("  export WOW_CLASSIC_ERA_DATA=\"$HOME/Downloads/wow/1.15.2.55140.windows-win64/Data\"");
+    println!(
+        "  export WOW_CLASSIC_ERA_DATA=\"$HOME/Downloads/wow/1.15.2.55140.windows-win64/Data\""
+    );
     println!("  export WOW_CLASSIC_DATA=\"$HOME/Downloads/wow/classic/Data\"");
     println!("  export WOW_RETAIL_DATA=\"$HOME/Downloads/wow/retail/Data\"");
     println!();
-    
+
     println!("The Data directory should contain:");
     println!("  - data/          (CASC archive files)");
     println!("  - indices/       (CASC index files) ");
     println!("  - config/        (CASC configuration files)");
     println!();
-    
+
     println!("Alternatively, place WoW installations in common locations:");
     if cfg!(windows) {
         println!("  C:\\Program Files\\World of Warcraft\\Data");
@@ -230,7 +240,7 @@ macro_rules! skip_test_if_no_wow_data {
     ($version:expr) => {
         if $crate::find_wow_data($version).is_none() {
             println!("Skipping test - no {} data found", $version.display_name());
-            $crate::print_setup_instructions(); 
+            $crate::print_setup_instructions();
             return;
         }
     };
@@ -273,18 +283,18 @@ mod tests {
         assert!(classic_era.version_patterns().contains(&"1.15."));
     }
 
-    #[test] 
+    #[test]
     fn test_path_validation() {
         // Invalid path
         assert!(!is_valid_wow_data(&PathBuf::from("/nonexistent/path")));
-        
+
         // Test with temporary directory structure
         let temp_dir = tempfile::tempdir().unwrap();
         let temp_path = temp_dir.path();
-        
+
         // Empty directory is not valid
         assert!(!is_valid_wow_data(temp_path));
-        
+
         // Directory with data subdirectory and config is valid
         std::fs::create_dir(temp_path.join("data")).unwrap();
         std::fs::create_dir(temp_path.join("config")).unwrap();

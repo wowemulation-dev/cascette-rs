@@ -5,6 +5,45 @@ use crate::schema::BpsvSchema;
 use crate::value::BpsvValue;
 use std::collections::HashMap;
 
+/// Common functionality for BPSV row types
+pub trait BpsvRowOps {
+    /// Get the number of values in this row
+    fn len(&self) -> usize;
+    
+    /// Check if the row is empty
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+    
+    /// Get a raw string value by index
+    fn get_raw(&self, index: usize) -> Option<&str>;
+    
+    /// Get a raw string value by field name using the schema
+    fn get_raw_by_name(&self, field_name: &str, schema: &BpsvSchema) -> Option<&str> {
+        schema
+            .get_field(field_name)
+            .and_then(|field| self.get_raw(field.index))
+    }
+    
+    /// Convert row to a map of field names to raw values
+    fn to_map(&self, schema: &BpsvSchema) -> Result<HashMap<String, String>> {
+        if self.len() != schema.field_count() {
+            return Err(Error::SchemaMismatch {
+                expected: schema.field_count(),
+                actual: self.len(),
+            });
+        }
+
+        let mut map = HashMap::new();
+        for (field_index, field) in schema.fields().iter().enumerate() {
+            if let Some(value) = self.get_raw(field_index) {
+                map.insert(field.name.clone(), value.to_string());
+            }
+        }
+        Ok(map)
+    }
+}
+
 /// A single row in a BPSV document with borrowed data
 #[derive(Debug, Clone, PartialEq)]
 pub struct BpsvRow<'a> {
@@ -12,6 +51,20 @@ pub struct BpsvRow<'a> {
     raw_values: Vec<&'a str>,
     /// Typed values (lazy-loaded)
     typed_values: Option<Vec<BpsvValue>>,
+}
+
+impl<'a> BpsvRowOps for BpsvRow<'a> {
+    fn len(&self) -> usize {
+        if let Some(typed) = &self.typed_values {
+            typed.len()
+        } else {
+            self.raw_values.len()
+        }
+    }
+
+    fn get_raw(&self, index: usize) -> Option<&str> {
+        self.raw_values.get(index).copied()
+    }
 }
 
 impl<'a> BpsvRow<'a> {
@@ -34,28 +87,22 @@ impl<'a> BpsvRow<'a> {
 
     /// Get the number of values in this row
     pub fn len(&self) -> usize {
-        if let Some(typed) = &self.typed_values {
-            typed.len()
-        } else {
-            self.raw_values.len()
-        }
+        BpsvRowOps::len(self)
     }
 
     /// Check if the row is empty
     pub fn is_empty(&self) -> bool {
-        self.len() == 0
+        BpsvRowOps::is_empty(self)
     }
 
     /// Get a raw string value by index
     pub fn get_raw(&self, index: usize) -> Option<&str> {
-        self.raw_values.get(index).copied()
+        BpsvRowOps::get_raw(self, index)
     }
 
     /// Get a raw string value by field name using the schema
     pub fn get_raw_by_name(&self, field_name: &str, schema: &BpsvSchema) -> Option<&str> {
-        schema
-            .get_field(field_name)
-            .and_then(|field| self.get_raw(field.index))
+        BpsvRowOps::get_raw_by_name(self, field_name, schema)
     }
 
     /// Get all raw values
@@ -107,18 +154,7 @@ impl<'a> BpsvRow<'a> {
 
     /// Convert row to a map of field names to raw values
     pub fn to_map(&self, schema: &BpsvSchema) -> Result<HashMap<String, String>> {
-        if self.raw_values.len() != schema.field_count() {
-            return Err(Error::SchemaMismatch {
-                expected: schema.field_count(),
-                actual: self.raw_values.len(),
-            });
-        }
-
-        let mut map = HashMap::new();
-        for (field, value) in schema.fields().iter().zip(self.raw_values.iter()) {
-            map.insert(field.name.clone(), value.to_string());
-        }
-        Ok(map)
+        BpsvRowOps::to_map(self, schema)
     }
 
     /// Convert row to a map of field names to typed values
@@ -156,6 +192,20 @@ pub struct OwnedBpsvRow {
     pub typed_values: Option<Vec<BpsvValue>>,
 }
 
+impl BpsvRowOps for OwnedBpsvRow {
+    fn len(&self) -> usize {
+        if let Some(typed) = &self.typed_values {
+            typed.len()
+        } else {
+            self.raw_values.len()
+        }
+    }
+
+    fn get_raw(&self, index: usize) -> Option<&str> {
+        self.raw_values.get(index).map(|s| s.as_str())
+    }
+}
+
 impl OwnedBpsvRow {
     /// Create a new row from owned string values
     pub fn new(values: Vec<String>) -> Self {
@@ -183,16 +233,27 @@ impl OwnedBpsvRow {
 
     /// Get the number of values
     pub fn len(&self) -> usize {
-        if let Some(typed) = &self.typed_values {
-            typed.len()
-        } else {
-            self.raw_values.len()
-        }
+        BpsvRowOps::len(self)
     }
 
     /// Check if empty
     pub fn is_empty(&self) -> bool {
-        self.len() == 0
+        BpsvRowOps::is_empty(self)
+    }
+    
+    /// Get a raw string value by index
+    pub fn get_raw(&self, index: usize) -> Option<&str> {
+        BpsvRowOps::get_raw(self, index)
+    }
+    
+    /// Get a raw string value by field name using the schema
+    pub fn get_raw_by_name(&self, field_name: &str, schema: &BpsvSchema) -> Option<&str> {
+        BpsvRowOps::get_raw_by_name(self, field_name, schema)
+    }
+    
+    /// Convert row to a map of field names to raw values
+    pub fn to_map(&self, schema: &BpsvSchema) -> Result<HashMap<String, String>> {
+        BpsvRowOps::to_map(self, schema)
     }
 }
 

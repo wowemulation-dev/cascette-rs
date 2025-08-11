@@ -3,7 +3,7 @@
 use parking_lot::Mutex;
 use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{atomic::AtomicU64, atomic::Ordering, Arc};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::{debug, trace, warn};
 
@@ -20,20 +20,27 @@ struct CacheEntryMetadata {
     access_count: u64,
 }
 
+/// Combined LRU state to reduce lock contention
+#[derive(Debug)]
+struct LruState {
+    /// Metadata for each cache entry
+    metadata: HashMap<String, CacheEntryMetadata>,
+    /// Access order for LRU eviction (most recent at back)
+    access_order: VecDeque<String>,
+}
+
 /// Generic cache for storing arbitrary data with LRU eviction
 pub struct GenericCache {
     /// Base directory for this cache
     base_dir: PathBuf,
-    /// LRU tracking metadata
-    lru_metadata: Arc<Mutex<HashMap<String, CacheEntryMetadata>>>,
-    /// Access order for LRU eviction (most recent at back)
-    access_order: Arc<Mutex<VecDeque<String>>>,
+    /// Combined LRU tracking state (reduced lock contention)
+    lru_state: Arc<Mutex<LruState>>,
     /// Maximum cache size in bytes (None for unlimited)
     max_size_bytes: Option<u64>,
     /// Maximum number of entries (None for unlimited)
     max_entries: Option<usize>,
-    /// Current cache size in bytes
-    current_size: Arc<Mutex<u64>>,
+    /// Current cache size in bytes (atomic for better performance)
+    current_size: Arc<AtomicU64>,
     /// Cache statistics
     stats: Arc<CacheStats>,
 }
@@ -84,11 +91,13 @@ impl GenericCache {
         let stats = stats.unwrap_or_else(|| Arc::new(CacheStats::new()));
         let cache = Self {
             base_dir: base_dir.clone(),
-            lru_metadata: Arc::new(Mutex::new(HashMap::new())),
-            access_order: Arc::new(Mutex::new(VecDeque::new())),
+            lru_state: Arc::new(Mutex::new(LruState {
+                metadata: HashMap::new(),
+                access_order: VecDeque::new(),
+            })),
             max_size_bytes,
             max_entries,
-            current_size: Arc::new(Mutex::new(0)),
+            current_size: Arc::new(AtomicU64::new(0)),
             stats,
         };
 
@@ -132,13 +141,10 @@ impl GenericCache {
         // Sort by modification time (oldest first for proper LRU order)
         file_entries.sort_by_key(|(_, _, time)| *time);
 
-        // Now update the internal state with locks held for minimal time
+        // Now update the internal state with single lock acquisition
         {
-            let mut metadata = self.lru_metadata.lock();
-            let mut access_order = self.access_order.lock();
-            let mut current_size = self.current_size.lock();
-
-            *current_size = total_size;
+            let mut lru_state = self.lru_state.lock();
+            self.current_size.store(total_size, Ordering::Relaxed);
 
             for (key, size, time) in file_entries {
                 let entry_metadata = CacheEntryMetadata {
@@ -147,14 +153,14 @@ impl GenericCache {
                     access_count: 0,
                 };
 
-                metadata.insert(key.clone(), entry_metadata);
-                access_order.push_back(key);
+                lru_state.metadata.insert(key.clone(), entry_metadata);
+                lru_state.access_order.push_back(key);
             }
 
             debug!(
                 "Initialized cache with {} entries, total size: {} bytes",
-                metadata.len(),
-                *current_size
+                lru_state.metadata.len(),
+                total_size
             );
         }
 
@@ -169,19 +175,28 @@ impl GenericCache {
             .as_secs()
     }
 
-    /// Update access order for LRU tracking
+    /// Update access order for LRU tracking - optimized to O(1) for most cases
     fn update_access_order(&self, key: &str) {
-        let mut access_order = self.access_order.lock();
-        let mut metadata = self.lru_metadata.lock();
+        let mut lru_state = self.lru_state.lock();
+        
+        // Check if key is already at the back (most recent)
+        if lru_state.access_order.back() == Some(&key.to_string()) {
+            // Already most recent, just update metadata
+            if let Some(entry) = lru_state.metadata.get_mut(key) {
+                entry.last_accessed = Self::current_timestamp();
+                entry.access_count += 1;
+            }
+            return;
+        }
 
-        // Remove key from current position
-        access_order.retain(|k| k != key);
-
+        // Remove key from current position (still O(n) worst case)
+        lru_state.access_order.retain(|k| k != key);
+        
         // Add to back (most recent)
-        access_order.push_back(key.to_string());
+        lru_state.access_order.push_back(key.to_string());
 
         // Update access metadata
-        if let Some(entry) = metadata.get_mut(key) {
+        if let Some(entry) = lru_state.metadata.get_mut(key) {
             entry.last_accessed = Self::current_timestamp();
             entry.access_count += 1;
         }
@@ -196,8 +211,8 @@ impl GenericCache {
             return Ok(()); // No limits set
         }
 
-        let current_size = *self.current_size.lock();
-        let current_entries = self.lru_metadata.lock().len();
+        let current_size = self.current_size.load(Ordering::Relaxed);
+        let current_entries = self.lru_state.lock().metadata.len();
 
         // Check if eviction is needed
         let size_exceeded = max_size
@@ -221,17 +236,17 @@ impl GenericCache {
         let mut evicted_bytes = 0;
 
         loop {
-            let key_to_evict = {
-                let access_order = self.access_order.lock();
-                access_order.front().cloned()
+            let (key_to_evict, entry_size) = {
+                let lru_state = self.lru_state.lock();
+                let key = lru_state.access_order.front().cloned();
+                let size = key.as_ref()
+                    .and_then(|k| lru_state.metadata.get(k))
+                    .map(|e| e.size)
+                    .unwrap_or(0);
+                (key, size)
             };
 
             let Some(key) = key_to_evict else { break };
-
-            let entry_size = {
-                let metadata = self.lru_metadata.lock();
-                metadata.get(&key).map(|e| e.size).unwrap_or(0)
-            };
 
             // Remove the file and metadata
             if let Err(e) = self.evict_entry(&key).await {
@@ -244,8 +259,8 @@ impl GenericCache {
             self.stats.record_eviction(entry_size);
 
             // Check if we have enough space now
-            let new_current_size = *self.current_size.lock();
-            let new_current_entries = self.lru_metadata.lock().len();
+            let new_current_size = self.current_size.load(Ordering::Relaxed);
+            let new_current_entries = self.lru_state.lock().metadata.len();
 
             let size_ok = max_size
                 .map(|max| new_current_size + new_entry_size <= max)
@@ -287,16 +302,14 @@ impl GenericCache {
             tokio::fs::remove_file(&path).await?;
         }
 
-        // Remove from tracking structures
-        let mut metadata = self.lru_metadata.lock();
-        let mut access_order = self.access_order.lock();
-        let mut current_size = self.current_size.lock();
-
-        if let Some(entry_metadata) = metadata.remove(key) {
-            *current_size = current_size.saturating_sub(entry_metadata.size);
+        // Remove from tracking structures with single lock
+        let mut lru_state = self.lru_state.lock();
+        
+        if let Some(entry_metadata) = lru_state.metadata.remove(key) {
+            self.current_size.fetch_sub(entry_metadata.size, Ordering::Relaxed);
         }
 
-        access_order.retain(|k| k != key);
+        lru_state.access_order.retain(|k| k != key);
 
         trace!("Evicted cache entry: {}", key);
         Ok(())
@@ -314,12 +327,12 @@ impl GenericCache {
 
     /// Get current cache size in bytes
     pub fn current_size(&self) -> u64 {
-        *self.current_size.lock()
+        self.current_size.load(Ordering::Relaxed)
     }
 
     /// Get current number of entries
     pub fn current_entries(&self) -> usize {
-        self.lru_metadata.lock().len()
+        self.lru_state.lock().metadata.len()
     }
 
     /// Get cache configuration
@@ -353,20 +366,20 @@ impl GenericCache {
 
         // Check if this is an existing entry (for size tracking)
         let existing_size = {
-            let metadata = self.lru_metadata.lock();
-            metadata.get(key).map(|e| e.size).unwrap_or(0)
+            let lru_state = self.lru_state.lock();
+            lru_state.metadata.get(key).map(|e| e.size).unwrap_or(0)
         };
 
         trace!("Writing {} bytes to cache key: {}", data.len(), key);
         tokio::fs::write(&path, data).await?;
 
-        // Update tracking metadata
+        // Update tracking metadata with single lock
         {
-            let mut metadata = self.lru_metadata.lock();
-            let mut current_size = self.current_size.lock();
+            let mut lru_state = self.lru_state.lock();
 
-            // Update size tracking
-            *current_size = current_size.saturating_sub(existing_size) + data_size;
+            // Update size tracking atomically
+            self.current_size.fetch_sub(existing_size, Ordering::Relaxed);
+            self.current_size.fetch_add(data_size, Ordering::Relaxed);
 
             // Update or create entry metadata
             let entry_metadata = CacheEntryMetadata {
@@ -374,7 +387,7 @@ impl GenericCache {
                 size: data_size,
                 access_count: 0, // Will be incremented to 1 by update_access_order below
             };
-            metadata.insert(key.to_string(), entry_metadata);
+            lru_state.metadata.insert(key.to_string(), entry_metadata);
         }
 
         // Update access order
@@ -432,17 +445,15 @@ impl GenericCache {
             tokio::fs::remove_file(&path).await?;
         }
 
-        // Update tracking metadata
+        // Update tracking metadata with single lock
         {
-            let mut metadata = self.lru_metadata.lock();
-            let mut access_order = self.access_order.lock();
-            let mut current_size = self.current_size.lock();
+            let mut lru_state = self.lru_state.lock();
 
-            if let Some(entry_metadata) = metadata.remove(key) {
-                *current_size = current_size.saturating_sub(entry_metadata.size);
+            if let Some(entry_metadata) = lru_state.metadata.remove(key) {
+                self.current_size.fetch_sub(entry_metadata.size, Ordering::Relaxed);
             }
 
-            access_order.retain(|k| k != key);
+            lru_state.access_order.retain(|k| k != key);
         }
 
         // Record delete statistics
@@ -465,15 +476,13 @@ impl GenericCache {
             }
         }
 
-        // Clear tracking metadata
+        // Clear tracking metadata with single lock
         {
-            let mut metadata = self.lru_metadata.lock();
-            let mut access_order = self.access_order.lock();
-            let mut current_size = self.current_size.lock();
-
-            metadata.clear();
-            access_order.clear();
-            *current_size = 0;
+            let mut lru_state = self.lru_state.lock();
+            
+            lru_state.metadata.clear();
+            lru_state.access_order.clear();
+            self.current_size.store(0, Ordering::Relaxed);
         }
 
         Ok(())
@@ -495,20 +504,20 @@ impl GenericCache {
 
     /// Get LRU ordered list of cache keys (least recently used first)
     pub fn get_lru_keys(&self) -> Vec<String> {
-        let access_order = self.access_order.lock();
-        access_order.iter().cloned().collect()
+        let lru_state = self.lru_state.lock();
+        lru_state.access_order.iter().cloned().collect()
     }
 
     /// Get most recently used keys (up to limit)
     pub fn get_mru_keys(&self, limit: usize) -> Vec<String> {
-        let access_order = self.access_order.lock();
-        access_order.iter().rev().take(limit).cloned().collect()
+        let lru_state = self.lru_state.lock();
+        lru_state.access_order.iter().rev().take(limit).cloned().collect()
     }
 
     /// Get cache entry metadata
     pub fn get_entry_info(&self, key: &str) -> Option<(u64, u64, u64)> {
-        let metadata = self.lru_metadata.lock();
-        metadata
+        let lru_state = self.lru_state.lock();
+        lru_state.metadata
             .get(key)
             .map(|e| (e.size, e.last_accessed, e.access_count))
     }
@@ -596,8 +605,8 @@ impl GenericCache {
 
         // Check if this is an existing entry (for size tracking)
         let existing_size = {
-            let metadata = self.lru_metadata.lock();
-            metadata.get(key).map(|e| e.size).unwrap_or(0)
+            let lru_state = self.lru_state.lock();
+            lru_state.metadata.get(key).map(|e| e.size).unwrap_or(0)
         };
 
         let path = self.get_path(key);
@@ -616,13 +625,13 @@ impl GenericCache {
         // Check if we need to evict entries after writing
         self.evict_if_needed(0).await?; // Size check after write
 
-        // Update tracking metadata
+        // Update tracking metadata with single lock
         {
-            let mut metadata = self.lru_metadata.lock();
-            let mut current_size = self.current_size.lock();
+            let mut lru_state = self.lru_state.lock();
 
-            // Update size tracking
-            *current_size = current_size.saturating_sub(existing_size) + bytes_copied;
+            // Update size tracking atomically
+            self.current_size.fetch_sub(existing_size, Ordering::Relaxed);
+            self.current_size.fetch_add(bytes_copied, Ordering::Relaxed);
 
             // Update or create entry metadata
             let entry_metadata = CacheEntryMetadata {
@@ -630,7 +639,7 @@ impl GenericCache {
                 size: bytes_copied,
                 access_count: 0, // Will be incremented to 1 by update_access_order below
             };
-            metadata.insert(key.to_string(), entry_metadata);
+            lru_state.metadata.insert(key.to_string(), entry_metadata);
         }
 
         // Update access order
@@ -1135,8 +1144,8 @@ mod tests {
 
         // Clear access order (simulate cache restart)
         {
-            let mut access_order = cache.access_order.lock();
-            access_order.clear();
+            let mut lru_state = cache.lru_state.lock();
+            lru_state.access_order.clear();
         }
 
         // Warm cache with specific keys
