@@ -31,7 +31,7 @@ Pipeline) for World of Warcraft emulation.
 | `blte`          | 0.4.0   | ✅ Stable   | BLTE decompression with memory pooling            |
 | `ngdp-crypto`   | 0.4.0   | ✅ Stable   | Modern encryption with Salsa20 and key service    |
 | `ngdp-client`   | 0.4.0   | ✅ Stable   | CLI tool for NGDP operations                      |
-| `casc-storage`  | 0.1.0   | 🚧 Beta     | CASC storage implementation (in development)      |
+| `casc-storage`  | 0.4.0   | 🚧 Beta     | CASC storage implementation (in development)      |
 | `ngdp-patch`    | 0.4.0   | 🚧 Beta     | Patch file support (in development)               |
 
 ### Implementation Progress

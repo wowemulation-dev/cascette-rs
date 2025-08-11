@@ -2,7 +2,7 @@
 
 ## Release Summary
 
-cascette-rs v0.4.0 is a major release that achieves full TACT format specification compliance. This release includes critical fixes for 40-bit integer parsing, complete ESpec EBNF grammar implementation, and TVFS specification compliance. The implementation has been validated against real World of Warcraft encoding files from Blizzard's CDN.
+cascette-rs v0.4.0 is a major release that achieves full TACT format specification compliance with significant performance improvements and enhanced safety. This release includes critical fixes for 40-bit integer parsing, complete ESpec EBNF grammar implementation, TVFS specification compliance, and major architectural improvements. The implementation has been validated against real World of Warcraft encoding files from Blizzard's CDN with comprehensive testing on both Rust 1.86 (MSRV) and 1.89 (stable).
 
 ## Key Highlights
 
@@ -31,13 +31,29 @@ cascette-rs v0.4.0 is a major release that achieves full TACT format specificati
   - No direct URL construction - uses official CDN endpoints
   - Supports community mirrors and fallback scenarios
 
-### Code Quality Improvements
+### Performance & Safety Improvements
 
-- **Comprehensive QA**: Full quality assurance pipeline implemented
-  - Format checks, compilation validation, Clippy compliance
-  - Documentation builds with warning-free output
-  - Fixed deprecated function warnings in ARC4 module
-- **Performance**: Optimized parsing and memory usage
+- **LRU Cache Optimization**: Reduced from O(n) to O(1) operations
+  - Consolidated mutex-protected structures for better lock management
+  - Significant performance gains in cache-heavy operations
+- **Atomic Operations**: Replaced Arc<Mutex<u64>> with AtomicU64
+  - Better concurrency with lock-free atomic counters
+  - Reduced contention in multi-threaded scenarios
+- **Memory Safety**: Eliminated all potential runtime panics
+  - Fixed unsafe string slicing in ngdp-bpsv parser
+  - Proper bounds checking in all parsers
+  - Safe indexing operations throughout
+- **Code Quality**: Major refactoring and deduplication
+  - Created BpsvRowOps trait to eliminate duplicate logic
+  - Consolidated HTTP retry logic in tact-client
+  - Comprehensive QA with 520+ tests passing
+
+### MSRV Compatibility
+
+- **Rust 1.86 Support**: Full compatibility with minimum supported Rust version
+  - Fixed 17 let-chain syntax instances across codebase
+  - All unstable features removed
+  - CI/CD validates both MSRV (1.86) and stable (1.89)
 
 ## Breaking Changes
 
@@ -105,10 +121,22 @@ cargo build --release
   - Reader functions for `std::io::Read` traits
   - Comprehensive test coverage with edge cases
 
-- **Real Data Testing**
-  - Integration test with real WoW encoding files from CDN
-  - Validation of 40-bit integer parsing accuracy
-  - CDN client usage examples and best practices
+- **Progressive Loading Infrastructure** (`casc-storage/src/progressive.rs`)
+  - Chunk-based file loading with configurable sizes
+  - Predictive prefetching based on access patterns
+  - Memory-efficient streaming operations
+  - Statistics tracking for cache efficiency
+
+- **Test Infrastructure** (`test-utils` crate)
+  - WoW data discovery utility with cross-platform support
+  - Environment variable support for test data paths
+  - CI-friendly test skipping when data unavailable
+  - Serial test execution to prevent race conditions
+
+- **Performance Improvements**
+  - BpsvRowOps trait for code deduplication
+  - Atomic operations for simple counters
+  - Optimized LRU cache implementation
 
 ### Fixed
 
@@ -123,16 +151,29 @@ cargo build --release
   - TACT encoding format implementation (1 byte + 4-byte BE u32)
   - Validated against real WoW encoding files
 
+- **MSRV Compatibility**
+  - Fixed 17 let-chain syntax instances for Rust 1.86
+  - Removed all unstable features
+  - Ensured CI/CD validates both MSRV and stable
+
+- **Memory Safety**
+  - Fixed unsafe string slicing in ngdp-bpsv parser
+  - Proper bounds checking in all parsers
+  - Eliminated unsafe indexing operations
+
 - **Code Quality Issues**
   - Fixed Clippy warnings (unnecessary casts, map_or simplifications)
   - Resolved deprecated function warnings with proper suppression
   - Fixed documentation URL formatting for rustdoc compliance
+  - Fixed race conditions in cache tests
 
 ### Changed
 
 - Updated all crates from version 0.3.1 to 0.4.0
 - Enhanced documentation with specification compliance details
 - Improved error handling and validation
+- CDN client architecture simplified from 3 to 2 variants
+- casc-storage version aligned with other crates (0.1.0 → 0.4.0)
 
 ## Technical Details
 
@@ -180,6 +221,8 @@ All crates have been updated to version 0.4.0:
 | ngdp-crypto | [![crates.io](https://img.shields.io/crates/v/ngdp-crypto.svg)](https://crates.io/crates/ngdp-crypto) |
 | blte | [![crates.io](https://img.shields.io/crates/v/blte.svg)](https://crates.io/crates/blte) |
 | ngdp-client | [![crates.io](https://img.shields.io/crates/v/ngdp-client.svg)](https://crates.io/crates/ngdp-client) |
+| casc-storage | [![crates.io](https://img.shields.io/crates/v/casc-storage.svg)](https://crates.io/crates/casc-storage) |
+| test-utils | Internal testing utility (not published) |
 
 ## Contributors
 

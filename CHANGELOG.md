@@ -5,42 +5,81 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.4.0] - 2025-08-11
 
 ### Added
 
-- **Architecture Improvements Tasks**: Comprehensive plan for enhancing codebase quality
-  - Dependency injection for better testability
-  - Trait abstractions for modularity
-  - Structured metrics and observability
-  - Configuration centralization
+- **40-bit Integer Support**: Complete implementation for TACT/NGDP formats
+  - Full support for 40-bit integers in encoding files
+  - Proper handling in TVFS (TACT Virtual File System) 
+  - Correct big-endian byte ordering in parsers
 
-- **CLI Pipe Handling Documentation**: Complete implementation guide for proper pipe handling
-  - SIGPIPE signal handling for Unix systems
-  - Broken pipe error suppression
-  - TTY detection for appropriate output formatting
+- **ESpec Parser**: Complete implementation in tact-parser
+  - Full BLTE encoding specification support
+  - Handles all compression and encryption modes
+  - Integration with encoding file parsing
+
+- **TVFS Compliance**: Full TACT Virtual File System support
+  - Correct 40-bit offset and size handling
+  - Proper header structure (45 bytes)
+  - Support for both TVFS and TFVS magic bytes
+
+- **Architecture Improvements**: Major refactoring for performance and maintainability
+  - LRU cache optimized from O(n) to O(1) operations
+  - Replaced Arc<Mutex<u64>> with AtomicU64 for better concurrency
+  - Created BpsvRowOps trait to eliminate code duplication
+  - Consolidated HTTP retry logic in tact-client
+  - Fixed unsafe string slicing in ngdp-bpsv parser
+
+- **Test Infrastructure**: Enhanced testing framework
+  - test-utils crate with WoW data discovery
+  - Environment variable support for test data paths
+  - CI-friendly test skipping when data unavailable
+  - Serial test execution to prevent race conditions
+
+- **Progressive Loading**: Infrastructure for handling large files
+  - Chunk-based file loading with configurable sizes
+  - Predictive prefetching based on access patterns
+  - Memory-efficient streaming operations
+  - Statistics tracking for cache efficiency
 
 ### Changed
 
-- **CDN Client Architecture Refactoring**: Simplified from 3 variants to 2
+- **CDN Client Architecture**: Simplified from 3 variants to 2
   - Merged `CdnClient` and `CdnClientWithFallback` into single base client
   - Base client now includes fallback host support
   - `CachedCdnClient` wraps the unified client
   - All commands now use cached client for performance
 
+- **MSRV Compatibility**: Ensured compatibility with Rust 1.86
+  - Fixed all let-chain syntax (17 instances)
+  - Removed unstable features
+  - All 520+ tests passing on both 1.86 and 1.89
+
 ### Fixed
 
-- **CDN Path Usage**: Fixed to use server-announced paths instead of hardcoded values
+- **Let-chain Syntax**: Fixed 17 instances for MSRV 1.86 compatibility
+  - casc-storage: 15 instances across multiple files
+  - ngdp-cache: 2 instances in tests
+  - All converted to nested if statements
+
+- **CDN Path Usage**: Fixed to use server-announced paths
   - Now properly uses CDN path from server response
   - Removed hardcoded "tpr/wow" assumptions
-  
-- **Test Infrastructure**: Fixed failing tests in ngdp-cache
+
+- **Test Infrastructure**: Fixed multiple test issues
   - Added HEAD request mocks for CDN client tests
   - Fixed race condition in `test_ribbit_cache_file_naming`
-  
-- **Code Formatting**: Applied consistent formatting across all test files
+  - Added serial_test for environment variable tests
 
-## [0.4.0] - 2025-08-09
+- **Memory Safety**: Fixed potential runtime panics
+  - Safe string slicing in ngdp-bpsv parser
+  - Proper bounds checking in all parsers
+  - Eliminated unsafe indexing operations
+
+### Previous 0.4.0 Pre-release Content
+
+#### Added from development
 
 ### Added
 
