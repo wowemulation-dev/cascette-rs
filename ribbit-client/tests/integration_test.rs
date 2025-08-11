@@ -271,7 +271,6 @@ async fn test_ribbit_connection_failure() {
     use ribbit_client::Error;
     use std::io;
 
-    // Test IO error conversion
     let io_error = io::Error::new(io::ErrorKind::ConnectionRefused, "Connection refused");
     let ribbit_error: Error = io_error.into();
     match ribbit_error {
@@ -279,7 +278,6 @@ async fn test_ribbit_connection_failure() {
         _ => panic!("Expected IO error variant"),
     }
 
-    // Test connection failed error
     let conn_error = Error::ConnectionFailed {
         host: "invalid.host".to_string(),
         port: 1119,

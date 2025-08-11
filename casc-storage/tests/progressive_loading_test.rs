@@ -9,7 +9,6 @@ async fn create_test_storage() -> (CascStorage, TempDir) {
     let temp_dir = tempfile::tempdir().expect("Failed to create temp directory");
     let data_path = temp_dir.path().to_path_buf();
 
-    // Create directory structure
     let data_subdir = data_path.join("data");
     std::fs::create_dir_all(&data_subdir).expect("Failed to create data directory");
 
@@ -25,7 +24,6 @@ async fn create_test_storage() -> (CascStorage, TempDir) {
     (storage, temp_dir)
 }
 
-/// Create sample data for testing
 fn create_sample_data(size: usize) -> Vec<u8> {
     (0..size).map(|i| (i % 256) as u8).collect()
 }
@@ -90,7 +88,6 @@ async fn test_progressive_loading_initialization() {
     // Initially, progressive loading should not be available
     assert!(!storage.has_progressive_loading());
 
-    // Initialize progressive loading
     let config = ProgressiveConfig::default();
     storage.init_progressive_loading(config);
 
@@ -201,11 +198,9 @@ async fn test_progressive_file_with_mock_data() {
 async fn test_progressive_loading_with_real_storage() {
     let (mut storage, _temp_dir) = create_test_storage().await;
 
-    // Create and store some test data
     let test_data = create_sample_data(5 * 1024 * 1024); // 5MB test file
     let test_ekey = EKey::new([42; 16]);
 
-    // Initialize progressive loading
     let config = ProgressiveConfig {
         chunk_size: 256 * 1024, // 256KB chunks
         max_prefetch_chunks: 3,

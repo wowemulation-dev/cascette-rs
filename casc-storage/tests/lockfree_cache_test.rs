@@ -13,14 +13,12 @@ use tempfile::TempDir;
 fn test_lockfree_cache_basic() {
     let cache = LockFreeCache::new(10 * 1024 * 1024); // 10MB
 
-    // Test data
     let key1 = EKey::new([
         0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef, 0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd,
         0xef,
     ]);
     let data1 = Arc::new(vec![1, 2, 3, 4, 5]);
 
-    // Test put and get
     cache.put(key1, Arc::clone(&data1));
     let retrieved = cache.get(&key1).unwrap();
 
@@ -30,7 +28,6 @@ fn test_lockfree_cache_basic() {
         "Cache should return the same Arc"
     );
 
-    // Test cache stats
     let stats = cache.stats();
     assert_eq!(stats.hits, 1);
     assert_eq!(stats.misses, 0);

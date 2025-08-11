@@ -9,7 +9,6 @@ use tempfile::TempDir;
 
 #[tokio::test]
 async fn test_cdn_resumable_download_reuses_connections() {
-    // Initialize TACT client pool for better performance
     use tact_client::{PoolConfig, init_global_pool};
 
     let pool_config = PoolConfig::new()
@@ -19,13 +18,11 @@ async fn test_cdn_resumable_download_reuses_connections() {
 
     init_global_pool(pool_config);
 
-    // Create a CDN client
     let mut client = CdnClient::new().expect("Failed to create CDN client");
 
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
 
-    // Test that multiple resumable downloads can be created efficiently
-    // (This tests that the TACT client is reused rather than recreated each time)
+    // This tests that the TACT client is reused rather than recreated each time
     let start = Instant::now();
 
     const NUM_DOWNLOADS: usize = 5;
@@ -34,7 +31,6 @@ async fn test_cdn_resumable_download_reuses_connections() {
     for i in 0..NUM_DOWNLOADS {
         let output_path = temp_dir.path().join(format!("test_file_{}.bin", i));
 
-        // Create a resumable download - this should reuse the TACT client
         let download_result = client.create_resumable_download(
             "level3.blizzard.com",                  // Example CDN host
             "tpr/wow",                              // Example path
@@ -52,7 +48,6 @@ async fn test_cdn_resumable_download_reuses_connections() {
         NUM_DOWNLOADS, creation_time
     );
 
-    // Verify all downloads were created successfully
     for (i, result) in download_results.iter().enumerate() {
         assert!(
             result.is_ok(),
@@ -69,8 +64,6 @@ async fn test_cdn_resumable_download_reuses_connections() {
         creation_time
     );
 
-    // Test that we can also resume downloads efficiently
-    // Create a mock progress file
     use tact_client::resumable::DownloadProgress;
     let target_file = temp_dir.path().join("resume_test.bin");
     let progress = DownloadProgress::new(
@@ -113,12 +106,10 @@ async fn test_cdn_resumable_download_reuses_connections() {
 
 #[tokio::test]
 async fn test_cdn_client_tact_client_sharing() {
-    // Test that the same CDN client instance reuses its TACT client
     let mut client = CdnClient::new().expect("Failed to create CDN client");
 
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
 
-    // Create multiple resumable downloads using the same client
     let file1 = temp_dir.path().join("file1.bin");
     let file2 = temp_dir.path().join("file2.bin");
 
@@ -148,7 +139,6 @@ async fn test_cdn_client_tact_client_sharing() {
 
 #[test]
 fn test_cdn_client_builder_with_pooling() {
-    // Test that the CDN client builder creates clients that support connection pooling
     let client = CdnClient::builder()
         .max_retries(5)
         .initial_backoff_ms(200)
@@ -156,8 +146,7 @@ fn test_cdn_client_builder_with_pooling() {
         .build()
         .expect("Failed to build CDN client");
 
-    // Verify the client was created successfully
-    // (The actual pooling benefit is tested in integration tests)
+    // The actual pooling benefit is tested in integration tests
     assert_eq!(format!("{:?}", client).contains("CdnClient"), true);
 
     println!("✓ CDN client builder test completed");

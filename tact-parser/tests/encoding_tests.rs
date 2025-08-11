@@ -70,7 +70,6 @@ fn create_test_encoding_file(entries: Vec<(Vec<u8>, Vec<Vec<u8>>, u64)>) -> Vec<
 
 #[test]
 fn test_encoding_file_with_entries() {
-    // Create test CKeys and EKeys
     let ckey1 = vec![1u8; 16];
     let ekey1 = vec![2u8; 16];
     let ekey2 = vec![3u8; 16];

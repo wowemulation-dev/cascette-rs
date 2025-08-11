@@ -142,7 +142,6 @@ fn test_parse_summary_with_empty_fields() {
 
 #[test]
 fn test_build_and_parse_round_trip() {
-    // Build a document
     let mut builder = BpsvBuilder::new();
     builder
         .add_field("Region", BpsvFieldType::String(0))
@@ -155,7 +154,6 @@ fn test_build_and_parse_round_trip() {
         .unwrap();
     builder.set_sequence_number(12345);
 
-    // Add rows with various data
     builder
         .add_row(vec![
             BpsvValue::String("us".to_string()),
@@ -183,14 +181,12 @@ fn test_build_and_parse_round_trip() {
     let document = builder.build().unwrap();
     let output = document.to_bpsv_string();
 
-    // Parse the output
     let parsed = BpsvDocument::parse(&output).unwrap();
 
     // Verify everything matches
     assert_eq!(parsed.sequence_number(), Some(12345));
     assert_eq!(parsed.rows().len(), 3);
 
-    // Check first row
     let row1 = &parsed.rows()[0];
     assert_eq!(
         row1.get_raw_by_name("Region", parsed.schema()).unwrap(),
@@ -201,7 +197,6 @@ fn test_build_and_parse_round_trip() {
         "999999999"
     );
 
-    // Check empty values
     let row2 = &parsed.rows()[1];
     assert_eq!(
         row2.get_raw_by_name("BuildConfig", parsed.schema())
@@ -306,10 +301,8 @@ fn test_builder_validation() {
 
 #[test]
 fn test_large_documents() {
-    // Create a large document
     let mut builder = BpsvBuilder::new();
 
-    // Add 20 fields
     for i in 0..20 {
         match i % 3 {
             0 => builder
@@ -326,7 +319,6 @@ fn test_large_documents() {
 
     builder.set_sequence_number(999999);
 
-    // Add 1000 rows
     for row_idx in 0..1000 {
         let mut values = Vec::new();
         for col_idx in 0..20 {
@@ -346,7 +338,6 @@ fn test_large_documents() {
     let document = builder.build().unwrap();
     let output = document.to_bpsv_string();
 
-    // Parse and verify
     let doc = BpsvDocument::parse(&output).unwrap();
     assert_eq!(doc.schema().fields().len(), 20);
     assert_eq!(doc.rows().len(), 1000);
@@ -450,13 +441,10 @@ fn test_edge_case_numbers() {
 
 #[test]
 fn test_from_existing_document() {
-    // Create an initial document
     let original = BpsvDocument::parse(test_data::SUMMARY_DATA).unwrap();
 
-    // Create a builder from it
     let mut builder = BpsvBuilder::from_bpsv(&original.to_bpsv_string()).unwrap();
 
-    // Add more rows
     builder
         .add_row(vec![
             BpsvValue::String("newproduct".to_string()),
@@ -473,7 +461,6 @@ fn test_from_existing_document() {
     assert_eq!(modified.sequence_number(), Some(3016579));
     assert_eq!(modified.rows().len(), 6); // Original 5 + 1 new
 
-    // Check new row
     let new_row = modified.rows().last().unwrap();
     assert_eq!(
         new_row

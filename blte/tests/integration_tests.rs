@@ -11,7 +11,6 @@ async fn test_real_blte_file() {
 
     let test_data = b"This is a test of BLTE compression with multiple modes!";
 
-    // Test ZLib compression
     use flate2::Compression;
     use flate2::write::ZlibEncoder;
     use std::io::Write;
@@ -34,17 +33,14 @@ async fn test_real_blte_file() {
 
 #[test]
 fn test_nested_blte_frame() {
-    // Test nested BLTE (Frame mode)
     let inner_data = b"Inner BLTE content";
 
-    // Create inner BLTE file
     let mut inner_blte = Vec::new();
     inner_blte.extend_from_slice(b"BLTE");
     inner_blte.extend_from_slice(&0u32.to_be_bytes()); // Single chunk
     inner_blte.push(b'N'); // No compression
     inner_blte.extend_from_slice(inner_data);
 
-    // Create outer BLTE file with Frame mode
     let mut outer_blte = Vec::new();
     outer_blte.extend_from_slice(b"BLTE");
     outer_blte.extend_from_slice(&0u32.to_be_bytes()); // Single chunk
@@ -63,7 +59,6 @@ fn test_multi_chunk_with_mixed_compression() {
     use flate2::write::ZlibEncoder;
     use std::io::Write;
 
-    // Create chunks with different compression modes
     let chunk1_data = b"First chunk: no compression";
     let chunk2_data = b"Second chunk: ZLib compressed content for better compression ratio";
     let chunk3_data = b"Third chunk: also uncompressed";
@@ -73,7 +68,6 @@ fn test_multi_chunk_with_mixed_compression() {
     encoder.write_all(chunk2_data).unwrap();
     let chunk2_compressed = encoder.finish().unwrap();
 
-    // Build chunk data
     let mut chunk1_full = Vec::new();
     chunk1_full.push(b'N'); // No compression
     chunk1_full.extend_from_slice(chunk1_data);

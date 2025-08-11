@@ -60,7 +60,6 @@ mod tests {
 
     #[test]
     fn test_path_trimming() {
-        // Test that trailing slashes are handled correctly
         let _client = CdnClient::new().unwrap();
 
         let url1 = CdnClient::build_url(
@@ -101,7 +100,6 @@ mod tests {
 
     #[test]
     fn test_general_url_building() {
-        // Test basic URL building
         let url = CdnClient::build_url(
             "blzddist1-a.akamaihd.net",
             "tpr/wow",

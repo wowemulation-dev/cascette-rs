@@ -9,7 +9,6 @@ use tokio::time::Duration;
 async fn test_basic_request_batching() {
     let client = CdnClient::new().unwrap();
 
-    // Test with small batch - should work even without real CDN
     let hashes = vec!["abcd1234".to_string(), "efgh5678".to_string()];
 
     // This will fail with network errors, but tests the API
@@ -54,7 +53,6 @@ async fn test_batch_statistics() {
 async fn test_batch_performance_characteristics() {
     let client = CdnClient::new().unwrap();
 
-    // Create a larger batch to test batching behavior
     let hashes: Vec<String> = (0..50).map(|i| format!("hash{i:04x}")).collect();
 
     let start = Instant::now();
@@ -85,19 +83,16 @@ async fn test_specialized_batch_methods() {
 
     let hashes = vec!["data123".to_string(), "data456".to_string()];
 
-    // Test data batching
     let data_results = client
         .download_data_batched("example.com", "test", &hashes)
         .await;
     assert_eq!(data_results.len(), hashes.len());
 
-    // Test config batching
     let config_results = client
         .download_config_batched("example.com", "test", &hashes)
         .await;
     assert_eq!(config_results.len(), hashes.len());
 
-    // Test patch batching
     let patch_results = client
         .download_patch_batched("example.com", "test", &hashes)
         .await;
@@ -122,14 +117,12 @@ async fn test_batch_vs_parallel_comparison() {
 
     let hashes: Vec<String> = (0..20).map(|i| format!("file{i:04x}")).collect();
 
-    // Test parallel downloads
     let start = Instant::now();
     let parallel_results = client
         .download_parallel("httpbin.org", "status/200", &hashes, Some(5))
         .await;
     let parallel_duration = start.elapsed();
 
-    // Test batched downloads
     let start = Instant::now();
     let batch_results = client
         .download_batched("httpbin.org", "status/200", &hashes)
@@ -155,7 +148,6 @@ async fn test_batch_vs_parallel_comparison() {
 async fn test_concurrent_batching() {
     let client = CdnClient::new().unwrap();
 
-    // Create multiple concurrent batch operations
     let batch1_hashes = vec!["batch1_file1".to_string(), "batch1_file2".to_string()];
     let batch2_hashes = vec!["batch2_file1".to_string(), "batch2_file2".to_string()];
     let batch3_hashes = vec!["batch3_file1".to_string(), "batch3_file2".to_string()];

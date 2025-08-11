@@ -232,7 +232,6 @@ impl CdnClient {
         if self.tact_client.is_none() {
             use tact_client::{HttpClient, ProtocolVersion, Region};
 
-            // Create TACT client with shared connection pool
             let mut tact_client = HttpClient::with_shared_pool(Region::US, ProtocolVersion::V2)
                 .with_max_retries(self.max_retries)
                 .with_initial_backoff_ms(self.initial_backoff_ms);
@@ -259,7 +258,6 @@ impl CdnClient {
         if batcher_guard.is_none() {
             use tact_client::{BatchConfig, RequestBatcher};
 
-            // Create HTTP/2 client with optimizations for CDN requests
             let client = reqwest::Client::builder()
                 // HTTP/2 is automatically negotiated when available
                 .pool_max_idle_per_host(50) // Higher connection pool for batching
@@ -299,7 +297,6 @@ impl CdnClient {
             self.initial_backoff_ms as f64 * self.backoff_multiplier.powi(attempt as i32);
         let capped_backoff = base_backoff.min(self.max_backoff_ms as f64);
 
-        // Add jitter
         let jitter_range = capped_backoff * self.jitter_factor;
         let jitter = rand::random::<f64>() * 2.0 * jitter_range - jitter_range;
         let final_backoff = (capped_backoff + jitter).max(0.0) as u64;
@@ -329,7 +326,6 @@ impl CdnClient {
                 Ok(response) => {
                     trace!("Response status: {}", response.status());
 
-                    // Check if we should retry based on status code
                     let status = response.status();
 
                     // Success - return the response
@@ -383,7 +379,6 @@ impl CdnClient {
                     return Err(Error::Http(response.error_for_status().unwrap_err()));
                 }
                 Err(e) => {
-                    // Check if error is retryable
                     let is_retryable = e.is_connect() || e.is_timeout() || e.is_request();
 
                     if is_retryable && attempt < self.max_retries {
@@ -468,10 +463,8 @@ impl CdnClient {
             hosts_to_try.push(provided_host);
         }
 
-        // Add primary hosts
         hosts_to_try.extend(self.primary_hosts.read().clone());
 
-        // Add fallback hosts
         hosts_to_try.extend(self.fallback_hosts.read().clone());
 
         if hosts_to_try.is_empty() {
@@ -657,7 +650,6 @@ impl CdnClient {
         path: &str,
         hashes: &[String],
     ) -> Vec<Result<Vec<u8>>> {
-        // Create batch requests for all hashes
         let requests = tact_client::RequestBatcher::create_cdn_requests(cdn_host, path, hashes);
 
         // Get the request batcher
@@ -1431,7 +1423,6 @@ mod tests {
             .with_backoff_multiplier(2.0)
             .with_jitter_factor(0.0); // No jitter for predictable test
 
-        // Test exponential backoff
         let backoff0 = client.calculate_backoff(0);
         assert_eq!(backoff0.as_millis(), 100); // 100ms * 2^0 = 100ms
 
@@ -1441,7 +1432,6 @@ mod tests {
         let backoff2 = client.calculate_backoff(2);
         assert_eq!(backoff2.as_millis(), 400); // 100ms * 2^2 = 400ms
 
-        // Test max backoff capping
         let backoff5 = client.calculate_backoff(5);
         assert_eq!(backoff5.as_millis(), 1000); // Would be 3200ms but capped at 1000ms
     }
@@ -1473,7 +1463,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_parallel_download_ordering() {
-        // Test that results are returned in the same order as input
         let client = CdnClient::new().unwrap();
         let cdn_host = "example.com";
         let path = "test";

@@ -7,7 +7,6 @@ use ngdp_cdn::{CdnClient, Error};
 async fn test_content_not_found_errors() {
     let client = CdnClient::new().unwrap();
 
-    // Test 1: Using request method with direct URL
     let response = client.request("http://httpbin.org/status/404").await;
     assert!(response.is_err());
 
@@ -19,7 +18,6 @@ async fn test_content_not_found_errors() {
         e => panic!("Expected ContentNotFound error, got: {e:?}"),
     }
 
-    // Test 2: Using download method with hash
     let response = client
         .download(
             "httpbin.org",

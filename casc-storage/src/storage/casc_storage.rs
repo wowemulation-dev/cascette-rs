@@ -143,27 +143,27 @@ impl CascStorage {
         let mut idx_paths = Vec::new();
 
         // Collect from data directory
-        if data_path.exists() {
-            if let Ok(entries) = tokio::fs::read_dir(&data_path).await {
-                let mut entries = entries;
-                while let Ok(Some(entry)) = entries.next_entry().await {
-                    let path = entry.path();
-                    if path.extension().and_then(|s| s.to_str()) == Some("idx") {
-                        idx_paths.push(path);
-                    }
+        if data_path.exists()
+            && let Ok(entries) = tokio::fs::read_dir(&data_path).await
+        {
+            let mut entries = entries;
+            while let Ok(Some(entry)) = entries.next_entry().await {
+                let path = entry.path();
+                if path.extension().and_then(|s| s.to_str()) == Some("idx") {
+                    idx_paths.push(path);
                 }
             }
         }
 
         // Collect from indices directory
-        if indices_path.exists() {
-            if let Ok(entries) = tokio::fs::read_dir(&indices_path).await {
-                let mut entries = entries;
-                while let Ok(Some(entry)) = entries.next_entry().await {
-                    let path = entry.path();
-                    if path.extension().and_then(|s| s.to_str()) == Some("idx") {
-                        idx_paths.push(path);
-                    }
+        if indices_path.exists()
+            && let Ok(entries) = tokio::fs::read_dir(&indices_path).await
+        {
+            let mut entries = entries;
+            while let Ok(Some(entry)) = entries.next_entry().await {
+                let path = entry.path();
+                if path.extension().and_then(|s| s.to_str()) == Some("idx") {
+                    idx_paths.push(path);
                 }
             }
         }
@@ -245,38 +245,38 @@ impl CascStorage {
         let data_path = self.config.data_path.join("data");
 
         // Load .idx files from data directory (WoW Era format)
-        if data_path.exists() {
-            if let Ok(entries) = std::fs::read_dir(&data_path) {
-                for entry in entries {
-                    let entry = entry?;
-                    let path = entry.path();
+        if data_path.exists()
+            && let Ok(entries) = std::fs::read_dir(&data_path)
+        {
+            for entry in entries {
+                let entry = entry?;
+                let path = entry.path();
 
-                    if path.extension().and_then(|s| s.to_str()) == Some("idx") {
-                        match IdxParser::parse_file(&path) {
-                            Ok(parser) => {
-                                let bucket = parser.bucket();
-                                debug!(
-                                    "Loaded .idx file for bucket {:02x}: {} entries",
-                                    bucket,
-                                    parser.len()
-                                );
+                if path.extension().and_then(|s| s.to_str()) == Some("idx") {
+                    match IdxParser::parse_file(&path) {
+                        Ok(parser) => {
+                            let bucket = parser.bucket();
+                            debug!(
+                                "Loaded .idx file for bucket {:02x}: {} entries",
+                                bucket,
+                                parser.len()
+                            );
 
-                                // Consume parser and get all entries at once
-                                let entries_map = parser.into_entries();
+                            // Consume parser and get all entries at once
+                            let entries_map = parser.into_entries();
 
-                                let mut index = IndexFile::new(crate::index::IndexVersion::V7);
+                            let mut index = IndexFile::new(crate::index::IndexVersion::V7);
 
-                                // Add all entries to the index and combined index
-                                for (ekey, location) in entries_map {
-                                    index.add_entry(ekey, location);
-                                    self.combined_index.insert(ekey, location);
-                                }
-
-                                self.indices.insert(bucket, index);
+                            // Add all entries to the index and combined index
+                            for (ekey, location) in entries_map {
+                                index.add_entry(ekey, location);
+                                self.combined_index.insert(ekey, location);
                             }
-                            Err(e) => {
-                                warn!("Failed to load index {:?}: {}", path, e);
-                            }
+
+                            self.indices.insert(bucket, index);
+                        }
+                        Err(e) => {
+                            warn!("Failed to load index {:?}: {}", path, e);
                         }
                     }
                 }
@@ -375,16 +375,16 @@ impl CascStorage {
 
             if filename.starts_with("data.") {
                 // Extract archive ID from filename (data.XXX)
-                if let Some(id_str) = filename.strip_prefix("data.") {
-                    if let Ok(id) = id_str.parse::<u16>() {
-                        match Archive::new(id, path.clone()) {
-                            Ok(archive) => {
-                                debug!("Loaded archive {}: size={}", id, archive.size);
-                                archives.insert(id, archive);
-                            }
-                            Err(e) => {
-                                warn!("Failed to load archive {:?}: {}", path, e);
-                            }
+                if let Some(id_str) = filename.strip_prefix("data.")
+                    && let Ok(id) = id_str.parse::<u16>()
+                {
+                    match Archive::new(id, path.clone()) {
+                        Ok(archive) => {
+                            debug!("Loaded archive {}: size={}", id, archive.size);
+                            archives.insert(id, archive);
+                        }
+                        Err(e) => {
+                            warn!("Failed to load archive {:?}: {}", path, e);
                         }
                     }
                 }
@@ -484,11 +484,11 @@ impl CascStorage {
 
         // Check if already exists
         let bucket = ekey.bucket_index();
-        if let Some(index) = self.indices.get(&bucket) {
-            if index.lookup(ekey).is_some() {
-                debug!("File {} already exists, skipping write", ekey);
-                return Ok(());
-            }
+        if let Some(index) = self.indices.get(&bucket)
+            && index.lookup(ekey).is_some()
+        {
+            debug!("File {} already exists, skipping write", ekey);
+            return Ok(());
         }
 
         // Compress data using BLTE
