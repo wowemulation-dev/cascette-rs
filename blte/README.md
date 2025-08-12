@@ -8,20 +8,20 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-blte = "0.3"
-ngdp-crypto = "0.3"  # Required for encrypted content
+blte = "0.4.3"
+ngdp-crypto = "0.4.3"  # Required for encrypted content
 ```
 
 ## Overview
 
-This crate provides complete support for decompressing BLTE-encoded files used in Blizzard's content distribution system. BLTE is a container format that supports multiple compression algorithms and encryption.
+This crate provides support for decompressing BLTE-encoded files used in Blizzard's content distribution system. BLTE is a container format that supports multiple compression algorithms and encryption.
 
 ## Features
 
-- All compression modes supported:
+- Compression modes supported:
   - None (N) - Uncompressed data
   - ZLib (Z) - Standard deflate compression
-  - LZ4 (4) - Fast compression
+  - LZ4 (4) - LZ4 compression
   - Frame (F) - Nested BLTE frames
   - Encrypted (E) - Salsa20/ARC4 encrypted blocks
 - Multi-chunk file handling
@@ -70,11 +70,11 @@ Standard deflate compression using the flate2 crate.
 
 ### Mode '4' (LZ4)
 
-LZ4 compression for fast decompression of large files.
+LZ4 compression for decompression of large files.
 
 ### Mode 'F' (Frame)
 
-Recursive BLTE frame - the payload is another complete BLTE file.
+Recursive BLTE frame - the payload is another BLTE file.
 
 ### Mode 'E' (Encrypted)
 
@@ -85,7 +85,7 @@ Encrypted blocks that must be decrypted before decompression. Supports:
 
 ## Multi-Chunk Files
 
-Large files are split into multiple chunks for efficient streaming and parallel processing:
+Large files are split into multiple chunks for streaming and parallel processing:
 
 ```rust
 use blte::BLTEFile;
@@ -105,4 +105,13 @@ if blte_file.is_multi_chunk() {
 
 ## License
 
-MIT OR Apache-2.0
+This crate is dual-licensed under either:
+
+- MIT license ([LICENSE-MIT](../LICENSE-MIT) or <http://opensource.org/licenses/MIT>)
+- Apache License, Version 2.0 ([LICENSE-APACHE](../LICENSE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0>)
+
+at your option.
+
+### Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.

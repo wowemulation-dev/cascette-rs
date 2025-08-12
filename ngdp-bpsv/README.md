@@ -19,7 +19,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-ngdp-bpsv = "0.3"
+ngdp-bpsv = "0.4.3"
 ```
 
 ## Quick Start
@@ -134,12 +134,12 @@ println!("{}", builder.build()?);
 
 ## Features
 
-- 🚀 Fast parsing with minimal allocations
-- 🔍 Type validation and error reporting
-- 🏗️ Builder pattern for document creation
-- 📝 Round-trip compatibility (parse → build → parse)
-- 🔧 Case-insensitive field type parsing
-- 📭 Empty value support for all field types
+- Parsing with minimal allocations
+- Type validation and error reporting
+- Builder pattern for document creation
+- Round-trip compatibility (parse → build → parse)
+- Case-insensitive field type parsing
+- Empty value support for all field types
 
 ## Error Handling
 
@@ -165,23 +165,23 @@ match BpsvDocument::parse(data) {
 The parser is optimized for the typical BPSV use cases:
 
 - Small to medium documents (< 10,000 rows)
-- Fast field lookups via schema indexing
+- Field lookups via schema indexing
 - Lazy type parsing (on-demand conversion)
 
 See the benchmarks for detailed performance metrics.
 
-## 📄 License
+## License
 
-This project is dual-licensed under either:
+This crate is dual-licensed under either:
 
-- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
-- MIT license ([LICENSE-MIT](LICENSE-MIT))
+- MIT license ([LICENSE-MIT](../LICENSE-MIT) or <http://opensource.org/licenses/MIT>)
+- Apache License, Version 2.0 ([LICENSE-APACHE](../LICENSE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0>)
 
 at your option.
 
-Unless you explicitly state otherwise, any contribution intentionally submitted
-for inclusion in this project by you, as defined in the Apache-2.0 license, shall
-be dual licensed as above, without any additional terms or conditions.
+### Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
 
 ## 🫶 Acknowledgments
 

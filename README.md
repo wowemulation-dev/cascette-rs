@@ -1,7 +1,7 @@
 # cascette-rs
 
-Open-source Rust implementation of Blizzard's NGDP (Next Generation Distribution
-Pipeline) for World of Warcraft emulation.
+Rust implementation of Blizzard's NGDP (Next Generation Distribution Pipeline)
+for World of Warcraft emulation.
 
 <div align="center">
 
@@ -36,18 +36,21 @@ Pipeline) for World of Warcraft emulation.
 
 ### Implementation Progress
 
-- ✅ **Modern Version Discovery**: HTTP-first approach with HTTPS endpoints, Ribbit fallback for compatibility
-- ✅ **TACT Protocol**: Full HTTP/HTTPS clients for version and CDN queries with retry logic
-- ✅ **BPSV Format**: Complete parser and builder with zero-copy optimizations
-- ✅ **TACT Parsers**: Full support for encoding, install, download, size, build config, TVFS
-- ✅ **BLTE Decompression**: Modern compression modes (ARC4/Frame deprecated in v0.4.0)
-- ✅ **Encryption**: Modern Salsa20 cipher with key management (ARC4 deprecated)
+- ✅ **Version Discovery**: HTTP-first approach with HTTPS endpoints, Ribbit fallback
+  for compatibility
+- ✅ **TACT Protocol**: HTTP/HTTPS clients for version and CDN queries with retry
+  logic
+- ✅ **BPSV Format**: Parser and builder with zero-copy optimizations
+- ✅ **TACT Parsers**: Support for encoding, install, download, size, build config,
+  TVFS
+- ✅ **BLTE Decompression**: Compression modes (ARC4/Frame deprecated in v0.4.0)
+- ✅ **Encryption**: Salsa20 cipher with key management (ARC4 deprecated)
 - ✅ **CDN Operations**: Parallel downloads, streaming, retry logic, rate limiting
-- ✅ **Hybrid Caching**: HTTP-first caching with transparent fallbacks and TTL support
-- ✅ **Install Command**: Full client installation with .build.info generation for restoration
-- ✅ **Build Config**: Proper uncompressed handling and download order (encoding before manifests)
-- 🚧 **CASC Storage**: Local storage implementation (planned for future release)
-- 🔄 **TVFS**: Basic parser implemented, needs real-world data testing
+- ✅ **Caching**: HTTP-first caching with fallbacks and TTL support
+- ✅ **Install Command**: Client installation with .build.info generation for restoration
+- ✅ **Build Config**: Uncompressed handling and download order (encoding before manifests)
+- 🚧 **CASC Storage**: Local storage implementation (in development)
+- 🔄 **TVFS**: Parser implemented, needs real-world data testing
 
 ## 🚀 Quick Start
 
@@ -64,7 +67,7 @@ blte = "0.4.3"
 ngdp-crypto = "0.4.3"
 ```
 
-Basic example (modern HTTP-first approach):
+Basic example (HTTP-first approach):
 
 ```rust
 use ngdp_cache::hybrid_version_client::HybridVersionClient;
@@ -75,7 +78,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create a hybrid client (HTTP primary, Ribbit fallback)
     let client = HybridVersionClient::new(Region::US).await?;
 
-    // Request WoW versions with modern HTTPS endpoints
+    // Request WoW versions with HTTPS endpoints
     let versions = client.get_product_versions("wow").await?;
 
     // Print version information
@@ -92,7 +95,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## 🧪 Testing with Real WoW Data
 
-Many tests and examples can work with real WoW installation data for comprehensive testing. This is optional - all tests will skip gracefully if no data is available.
+Many tests and examples can work with real WoW installation data for comprehensive
+testing. This is optional - all tests will skip gracefully if no data is available.
 
 ### Setup Environment Variables
 
@@ -103,7 +107,7 @@ Set environment variables pointing to your WoW installation Data directories:
 export WOW_CLASSIC_ERA_DATA="$HOME/Downloads/wow/1.15.2.55140.windows-win64/Data"
 
 # Classic with expansions
-export WOW_CLASSIC_DATA="$HOME/Downloads/wow/classic/Data"  
+export WOW_CLASSIC_DATA="$HOME/Downloads/wow/classic/Data"
 
 # Retail (current)
 export WOW_RETAIL_DATA="$HOME/Downloads/wow/retail/Data"
@@ -112,10 +116,11 @@ export WOW_RETAIL_DATA="$HOME/Downloads/wow/retail/Data"
 ### Valid Data Directory Structure
 
 The Data directory should contain CASC structure:
+
 ```
 Data/
 ├── data/          # CASC archive files (required)
-├── indices/       # CASC index files  
+├── indices/       # CASC index files
 ├── config/        # CASC configuration files
 └── ...
 ```
@@ -134,6 +139,7 @@ cargo run -p casc-storage --example list_casc_files
 ```
 
 Tests and examples will automatically:
+
 - Use environment variables when available
 - Fall back to common installation paths
 - Skip gracefully with helpful setup instructions if no data found
@@ -196,7 +202,7 @@ ngdp install game wow_classic --install-type minimal --dry-run --path ./test
 ### Version and CDN Information
 
 ```bash
-# Query product versions (uses modern HTTPS endpoints)
+# Query product versions (uses HTTPS endpoints)
 ngdp query versions wow
 
 # Get CDN configuration
@@ -237,36 +243,36 @@ All commands support multiple output formats (`--format json|text|bpsv`) and the
 ### Complete
 
 - **BPSV Parser/Writer** (`ngdp-bpsv`)
-  - ✅ Complete BPSV format support with zero-copy parsing
+  - ✅ BPSV format support with zero-copy parsing
   - ✅ Type-safe field definitions (STRING, HEX, DEC)
   - ✅ Schema validation and sequence number handling
   - ✅ Builder pattern for document creation
   - ✅ Round-trip compatibility
 
 - **Ribbit Protocol Client** (`ribbit-client`)
-  - ✅ All Blizzard regions (US, EU, CN, KR, TW, SG)
+  - ✅ Blizzard regions (US, EU, CN, KR, TW, SG)
   - ✅ V1 (MIME) and V2 (raw) protocol support
   - ✅ Typed API for all endpoints
   - ✅ PKCS#7/CMS signature verification
   - ✅ Certificate and OCSP support
-  - ✅ Automatic retry with exponential backoff
+  - ✅ Retry with exponential backoff
   - ✅ DNS caching for performance
 
 - **TACT HTTP Client** (`tact-client`)
   - ✅ Version and CDN configuration queries
   - ✅ Support for V1 (port 1119) and V2 (HTTPS) protocols
   - ✅ Typed response parsing
-  - ✅ Automatic retry handling
-  - ✅ All Blizzard regions supported
+  - ✅ Retry handling
+  - ✅ Blizzard regions supported
 
 - **CDN Content Delivery** (`ngdp-cdn`)
   - ✅ Parallel downloads with progress tracking
   - ✅ Streaming operations for large files
-  - ✅ Automatic retry with rate limit handling
+  - ✅ Retry with rate limit handling
   - ✅ Content verification
   - ✅ Configurable connection pooling
-  - ✅ Automatic fallback to backup CDN servers
-  - ✅ Built-in support for community mirrors (arctium.tools, reliquaryhq.com)
+  - ✅ Fallback to backup CDN servers
+  - ✅ Support for community mirrors (arctium.tools, reliquaryhq.com)
 
 - **Caching Layer** (`ngdp-cache`)
   - ✅ Transparent caching for all NGDP operations
@@ -285,16 +291,16 @@ All commands support multiple output formats (`--format json|text|bpsv`) and the
   - ✅ 40-bit integer and varint support
 
 - **BLTE Decompression** (`blte`)
-  - ✅ All compression modes (None, ZLib, LZ4, Frame, Encrypted)
+  - ✅ Compression modes (None, ZLib, LZ4, Frame, Encrypted)
   - ✅ Multi-chunk file support
   - ✅ Checksum verification
   - ✅ Integration with ngdp-crypto for encrypted blocks
-  - ✅ Memory-efficient processing
+  - ✅ Memory processing
 
 - **Encryption Support** (`ngdp-crypto`)
-  - ✅ Salsa20 stream cipher (modern WoW encryption)
+  - ✅ Salsa20 stream cipher (WoW encryption)
   - ✅ ARC4/RC4 cipher (legacy content)
-  - ✅ Key management and automatic loading
+  - ✅ Key management and loading
   - ✅ Multiple key file formats (CSV, TXT, TSV)
   - ✅ TACTKeys repository integration
 
@@ -303,9 +309,9 @@ All commands support multiple output formats (`--format json|text|bpsv`) and the
   - ✅ Certificate operations
   - ✅ BPSV inspection and build config analysis
   - ✅ Encryption key management commands
-  - ✅ Enhanced inspect commands with BLTE support
+  - ✅ Inspect commands with BLTE support
   - ✅ Multiple output formats (text, JSON, BPSV)
-  - ✅ Beautiful terminal formatting
+  - ✅ Terminal formatting
 
 ## 🤝 Contributing
 
@@ -318,14 +324,16 @@ Special thanks to the WoW emulation community and the documentation efforts at
 
 This project is dual-licensed under either:
 
-- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
-- MIT license ([LICENSE-MIT](LICENSE-MIT))
+- MIT license ([LICENSE-MIT](LICENSE-MIT) or <http://opensource.org/licenses/MIT>)
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0>)
 
 at your option.
 
+### Contribution
+
 Unless you explicitly state otherwise, any contribution intentionally submitted
-for inclusion in this project by you, as defined in the Apache-2.0 license, shall
-be dual licensed as above, without any additional terms or conditions.
+for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
+dual licensed as above, without any additional terms or conditions.
 
 ---
 

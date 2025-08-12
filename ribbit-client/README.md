@@ -9,14 +9,14 @@ CDN configurations, and other metadata for Blizzard games.
 
 ## Features
 
-- 🚀 **Async/await support** - Built on Tokio for efficient async I/O
-- 🌍 **Multi-region support** - US, EU, CN, KR, TW, SG regions
-- 📝 **Protocol versions** - Both V1 (MIME) and V2 (raw PSV) protocols
-- ✅ **Checksum validation** - SHA-256 integrity verification for V1 responses
-- 🔐 **Signature parsing** - ASN.1/PKCS#7 signature extraction and validation
-- 🛡️ **Type-safe** - Strongly typed endpoints and responses
-- 📊 **Comprehensive testing** - Unit, integration, and benchmark tests
-- 🎯 **Production ready** - Following Rust best practices with pedantic lints
+- **Async/await support** - Built on Tokio for async I/O
+- **Multi-region support** - US, EU, CN, KR, TW, SG regions
+- **Protocol versions** - Both V1 (MIME) and V2 (raw PSV) protocols
+- **Checksum validation** - SHA-256 integrity verification for V1 responses
+- **Signature parsing** - ASN.1/PKCS#7 signature extraction and validation
+- **Type-safe** - Strongly typed endpoints and responses
+- **Testing** - Unit, integration, and benchmark tests
+- **Production ready** - Following Rust best practices with pedantic lints
 
 ## Quick Start
 
@@ -24,7 +24,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-ribbit-client = "0.3"
+ribbit-client = "0.4.3"
 tokio = { version = "1", features = ["full"] }
 ```
 
@@ -77,7 +77,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ### V2 Protocol (Raw PSV) - Default
 
 - Direct PSV (Pipe-Separated Values) format
-- Lower overhead, faster parsing
+- Lower overhead, parsing
 - No MIME wrapper or checksums
 - **This is the default protocol**
 
@@ -279,7 +279,7 @@ tracing_subscriber::fmt()
 The client is optimized for performance with:
 
 - Reusable TCP connections per request
-- Efficient MIME parsing with streaming support
+- MIME parsing with streaming support
 - Zero-copy parsing where possible
 - Async I/O for concurrent requests
 
@@ -323,18 +323,18 @@ Contributions are welcome! Please ensure:
 - Documentation is updated
 - Examples demonstrate new features
 
-## 📄 License
+## License
 
-This project is dual-licensed under either:
+This crate is dual-licensed under either:
 
-- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
-- MIT license ([LICENSE-MIT](LICENSE-MIT))
+- MIT license ([LICENSE-MIT](../LICENSE-MIT) or <http://opensource.org/licenses/MIT>)
+- Apache License, Version 2.0 ([LICENSE-APACHE](../LICENSE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0>)
 
 at your option.
 
-Unless you explicitly state otherwise, any contribution intentionally submitted
-for inclusion in this project by you, as defined in the Apache-2.0 license, shall
-be dual licensed as above, without any additional terms or conditions.
+### Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
 
 ## 🫶 Acknowledgments
 

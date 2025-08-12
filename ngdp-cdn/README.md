@@ -5,14 +5,14 @@ Blizzard's CDN servers.
 
 ## Features
 
-- 🚀 **Async/await** - Built on Tokio for high-performance async I/O
-- 🔄 **Automatic retry** - Configurable exponential backoff with jitter
-- 🏊 **Connection pooling** - Efficient reuse of connections for multiple downloads
-- 🗜️ **Compression support** - Automatic gzip/deflate decompression
-- ⚡ **Concurrent downloads** - Download multiple files in parallel
-- 🛡️ **Error handling** - Comprehensive error types for CDN operations
-- ⏱️ **Configurable timeouts** - Separate connection and request timeouts
-- 🔀 **Automatic fallback** - Built-in backup CDN support with configurable hosts
+- **Async/await** - Built on Tokio for async I/O
+- **Retry logic** - Configurable exponential backoff with jitter
+- **Connection pooling** - Reuse of connections for multiple downloads
+- **Compression support** - Automatic gzip/deflate decompression
+- **Concurrent downloads** - Download multiple files in parallel
+- **Error handling** - Error types for CDN operations
+- **Configurable timeouts** - Separate connection and request timeouts
+- **Fallback support** - Built-in backup CDN support with configurable hosts
 
 ## Usage
 
@@ -20,7 +20,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-ngdp-cdn = "0.3"
+ngdp-cdn = "0.4.3"
 ```
 
 ### Basic Example
@@ -64,9 +64,9 @@ let client = CdnClient::builder()
 
 ### CDN Fallback Support
 
-The crate provides `CdnClientWithFallback` which automatically tries multiple CDN hosts
+The crate provides `CdnClientWithFallback` which tries multiple CDN hosts
 when downloads fail. It prioritizes Blizzard's official CDN servers first, then falls
-back to community mirrors only if all primary servers fail.
+back to community mirrors if all primary servers fail.
 
 ```rust
 use ngdp_cdn::CdnClientWithFallback;
@@ -199,21 +199,21 @@ let content = cdn_client.download(&cdns[0].path, &content_hash).await?;
 - **Connection pooling**: The client maintains a pool of connections to each host
 - **Concurrent downloads**: Use multiple client instances or clone the client for
   parallel downloads
-- **Retry strategy**: Configure retry parameters based on your network conditions
+- **Retry strategy**: Configure retry parameters based on network conditions
 - **Timeouts**: Adjust timeouts based on file sizes and network speed
 
-## 📄 License
+## License
 
-This project is dual-licensed under either:
+This crate is dual-licensed under either:
 
-- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
-- MIT license ([LICENSE-MIT](LICENSE-MIT))
+- MIT license ([LICENSE-MIT](../LICENSE-MIT) or <http://opensource.org/licenses/MIT>)
+- Apache License, Version 2.0 ([LICENSE-APACHE](../LICENSE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0>)
 
 at your option.
 
-Unless you explicitly state otherwise, any contribution intentionally submitted
-for inclusion in this project by you, as defined in the Apache-2.0 license, shall
-be dual licensed as above, without any additional terms or conditions.
+### Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
 
 ## 🫶 Acknowledgments
 

@@ -8,7 +8,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-tact-client = "0.3"
+tact-client = "0.4.3"
 tokio = { version = "1", features = ["full"] }
 ```
 
@@ -139,7 +139,7 @@ The TACT client supports two protocol versions:
 ### V2 Protocol - Default
 
 - HTTPS-based REST API (`https://{region}.version.battle.net/v2/products`)
-- Modern, secure protocol
+- Secure protocol
 - **This is the default protocol**
 
 ```rust
@@ -174,18 +174,18 @@ Tested and working products:
 3. The actual file content is downloaded from CDN hosts listed in the CDN configuration
 4. File paths on CDN use hash-based directory structure: `/{hash[0:2]}/{hash[2:4]}/{hash}`
 
-## 📄 License
+## License
 
-This project is dual-licensed under either:
+This crate is dual-licensed under either:
 
-- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
-- MIT license ([LICENSE-MIT](LICENSE-MIT))
+- MIT license ([LICENSE-MIT](../LICENSE-MIT) or <http://opensource.org/licenses/MIT>)
+- Apache License, Version 2.0 ([LICENSE-APACHE](../LICENSE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0>)
 
 at your option.
 
-Unless you explicitly state otherwise, any contribution intentionally submitted
-for inclusion in this project by you, as defined in the Apache-2.0 license, shall
-be dual licensed as above, without any additional terms or conditions.
+### Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
 
 ## 🫶 Acknowledgments
 

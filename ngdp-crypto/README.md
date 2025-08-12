@@ -8,7 +8,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-ngdp-crypto = "0.3"
+ngdp-crypto = "0.4.3"
 ```
 
 ## Overview
@@ -17,9 +17,9 @@ This crate provides cryptographic functionality for handling encrypted content i
 
 ## Features
 
-- **Salsa20 Stream Cipher**: Modern encryption used in recent WoW versions
+- **Salsa20 Stream Cipher**: Encryption used in recent WoW versions
 - **ARC4 (RC4) Cipher**: Legacy encryption for older content
-- **Key Management**: Automatic loading and management of encryption keys
+- **Key Management**: Loading and management of encryption keys
 - **Multiple Key Sources**: File-based, environment variables, and hardcoded keys
 - **Format Support**: CSV, TXT, and TSV key file formats
 
@@ -44,7 +44,7 @@ if let Some(key) = key_service.get_key(key_name) {
 
 ### Key File Management
 
-The KeyService automatically searches for key files in:
+The KeyService searches for key files in:
 
 - `~/.config/cascette/`
 - `~/.tactkeys/`
@@ -124,9 +124,18 @@ let decrypted = decrypt_arc4(
 ## Performance
 
 - Zero-copy operations where possible
-- Efficient key lookups using HashMap
+- Key lookups using HashMap
 - Minimal allocations during decryption
 
 ## License
 
-MIT OR Apache-2.0
+This crate is dual-licensed under either:
+
+- MIT license ([LICENSE-MIT](../LICENSE-MIT) or <http://opensource.org/licenses/MIT>)
+- Apache License, Version 2.0 ([LICENSE-APACHE](../LICENSE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0>)
+
+at your option.
+
+### Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.

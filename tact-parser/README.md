@@ -8,7 +8,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-tact-parser = "0.4"
+tact-parser = "0.4.3"
 ```
 
 ## Overview
@@ -71,10 +71,10 @@ This crate provides parsers for various TACT file formats used by Blizzard's con
 
 ### Utility Features
 
-- **Enhanced 40-bit Integer Support** - Complete big/little-endian implementation
+- **40-bit Integer Support** - Big/little-endian implementation
   - Standard 40-bit integers and TACT encoding format (1 byte + 4-byte BE u32)
   - Support for file sizes up to 1TB with proper endianness handling
-- **Variable-length Integer Parsing** - Efficient varint implementation
+- **Variable-length Integer Parsing** - Varint implementation
 - **Jenkins Hash** - TACT's hash algorithm implementation
 - **Compression Support** - Integration with BLTE decompression
 
@@ -144,7 +144,7 @@ if let Some(version) = config.get("version") {
 The parsers are optimized for:
 
 - Memory efficiency with streaming where possible
-- Fast lookups using appropriate data structures
+- Lookups using appropriate data structures
 - Minimal allocations during parsing
 - Support for large files (GB+ encoding tables)
 
@@ -159,9 +159,13 @@ This crate integrates with other cascette-rs components:
 
 ## License
 
-This project is dual-licensed under either:
+This crate is dual-licensed under either:
 
-- Apache License, Version 2.0 ([LICENSE-APACHE](../LICENSE-APACHE))
-- MIT license ([LICENSE-MIT](../LICENSE-MIT))
+- MIT license ([LICENSE-MIT](../LICENSE-MIT) or <http://opensource.org/licenses/MIT>)
+- Apache License, Version 2.0 ([LICENSE-APACHE](../LICENSE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0>)
 
 at your option.
+
+### Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.

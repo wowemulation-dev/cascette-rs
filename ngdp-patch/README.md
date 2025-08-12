@@ -8,7 +8,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-ngdp-patch = "0.4"
+ngdp-patch = "0.4.3"
 ```
 
 ## Overview
@@ -17,11 +17,11 @@ This crate provides functionality for creating and applying binary patches in Bl
 
 ## Features
 
-- 🔧 **Patch Generation**: Create binary diff patches between file versions
-- 📦 **Patch Application**: Apply patches to transform old files to new versions
-- 🗜️ **Compression**: BLTE-compressed patch storage
-- 🔐 **Verification**: Checksum validation for patch integrity
-- ⚡ **Optimized**: Efficient algorithms for large game files
+- **Patch Generation**: Create binary diff patches between file versions
+- **Patch Application**: Apply patches to transform old files to new versions
+- **Compression**: BLTE-compressed patch storage
+- **Verification**: Checksum validation for patch integrity
+- **Algorithms**: Algorithms for large game files
 
 ## Usage
 
@@ -33,16 +33,16 @@ use ngdp_patch::PatchBuilder;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let old_file = std::fs::read("game_v1.dat")?;
     let new_file = std::fs::read("game_v2.dat")?;
-    
+
     // Create a patch
     let patch = PatchBuilder::new()
         .source(&old_file)
         .target(&new_file)
         .build()?;
-    
+
     // Save the patch
     std::fs::write("update.patch", patch)?;
-    
+
     Ok(())
 }
 ```
@@ -55,14 +55,14 @@ use ngdp_patch::PatchApplier;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let old_file = std::fs::read("game_v1.dat")?;
     let patch_data = std::fs::read("update.patch")?;
-    
+
     // Apply the patch
     let applier = PatchApplier::new(patch_data)?;
     let new_file = applier.apply(&old_file)?;
-    
+
     // Save the updated file
     std::fs::write("game_v2.dat", new_file)?;
-    
+
     Ok(())
 }
 ```
@@ -79,6 +79,7 @@ NGDP patches use a custom binary diff format optimized for game content:
 ## Performance
 
 The patch system is optimized for:
+
 - Large files (multi-GB game assets)
 - Minimal memory usage during application
 - Parallel processing where possible
@@ -90,4 +91,13 @@ The patch system is optimized for:
 
 ## License
 
-Licensed under either of Apache License, Version 2.0 or MIT license at your option.
+This crate is dual-licensed under either:
+
+- MIT license ([LICENSE-MIT](../LICENSE-MIT) or <http://opensource.org/licenses/MIT>)
+- Apache License, Version 2.0 ([LICENSE-APACHE](../LICENSE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0>)
+
+at your option.
+
+### Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
