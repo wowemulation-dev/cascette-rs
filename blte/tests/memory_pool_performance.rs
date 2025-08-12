@@ -38,6 +38,8 @@ fn test_memory_pool_performance() {
         max_large_buffers: 2,
         small_buffer_threshold: 16 * 1024,
         medium_buffer_threshold: 256 * 1024,
+        cache_line_size: 64,
+        enable_cache_alignment: true,
     };
     let pool = BLTEMemoryPool::with_config(pool_config);
 

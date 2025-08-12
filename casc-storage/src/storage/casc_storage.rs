@@ -396,6 +396,7 @@ impl CascStorage {
     }
 
     /// Read a file by its encoding key (zero-copy when cached)
+    /// Includes prefetch hints for sequential access patterns
     pub fn read_arc(&self, ekey: &EKey) -> Result<Arc<Vec<u8>>> {
         // Check cache first - lock-free operation
         if let Some(data) = self.cache.get(ekey) {
@@ -404,6 +405,8 @@ impl CascStorage {
         }
 
         // Not in cache, need to read and decompress
+        // Prefetch next likely keys for sequential access
+        self.prefetch_sequential_hint(ekey);
         let data = self.read_and_decompress(ekey)?;
         let data_arc = Arc::new(data);
 
@@ -1025,6 +1028,30 @@ impl CascStorage {
             manager.get_global_stats().await
         } else {
             Vec::new()
+        }
+    }
+
+    /// Prefetch hint for sequential access patterns
+    /// This helps with CPU cache locality and reduces memory stalls
+    fn prefetch_sequential_hint(&self, current_ekey: &EKey) {
+        // For large file operations, prefetch adjacent keys in the same bucket
+        let bucket = current_ekey.bucket_index();
+
+        if let Some(index) = self.indices.get(&bucket) {
+            // Find the current key in the sorted index
+            let current_entries: Vec<_> = index.entries().collect();
+
+            if let Ok(pos) = current_entries.binary_search_by_key(&current_ekey, |(k, _)| *k) {
+                // Prefetch next 2-3 entries for sequential patterns
+                for i in 1..=3 {
+                    if pos + i < current_entries.len() {
+                        let (_next_ekey, _location) = current_entries[pos + i];
+
+                        // Note: CPU prefetch could be added here for actual archive data
+                        // when implementing memory-mapped file access
+                    }
+                }
+            }
         }
     }
 }

@@ -68,6 +68,10 @@ pub struct BLTEMemoryPool {
 /// Configuration for the memory pool
 #[derive(Debug, Clone)]
 pub struct PoolConfig {
+    /// Enable CPU cache line alignment for better performance
+    pub enable_cache_alignment: bool,
+    /// CPU cache line size (typically 64 bytes)
+    pub cache_line_size: usize,
     /// Maximum number of small buffers to pool
     pub max_small_buffers: usize,
     /// Maximum number of medium buffers to pool
@@ -88,6 +92,8 @@ impl Default for PoolConfig {
             max_large_buffers: 5,
             small_buffer_threshold: 64 * 1024,    // 64KB
             medium_buffer_threshold: 1024 * 1024, // 1MB
+            enable_cache_alignment: true,
+            cache_line_size: 64, // Standard x86-64 cache line size
         }
     }
 }
