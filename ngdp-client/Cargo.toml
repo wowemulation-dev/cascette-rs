@@ -69,7 +69,3 @@ pkg-fmt = "zip"
 
 [package.metadata.binstall.overrides.aarch64-pc-windows-msvc]
 pkg-fmt = "zip"
-
-[package.metadata.binstall.signing]
-algorithm = "minisign"
-pubkey_source = "file:minisign.pub"
