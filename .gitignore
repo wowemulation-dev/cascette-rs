@@ -17,3 +17,22 @@ Thumbs.db
 
 # Added by cargo
 /target/
+**/*.rs.bk
+*.pdb
+
+# Private reference documentation
+/docs-internal/
+
+# Mirror test outputs
+/mirror/
+/test-*/
+
+# Agent service artifacts
+*.db
+*.db-shm
+*.db-wal
+*.log
+*.log.*
+agent.toml
+.env
+.env.*
