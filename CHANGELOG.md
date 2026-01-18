@@ -12,6 +12,10 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Rust 2024 workspace with MSRV 1.86.0
+- cascette-crypto crate: MD5, Jenkins96, Salsa20, ARC4 implementations
+- TACT key management with keyring integration
+- Workspace-level clippy lints for code quality
 - Documentation framework using mdBook with Mermaid diagram support
 - Project introduction explaining wowemulation-dev goals and modern client focus
 - Glossary of NGDP/CASC terminology with MPQ equivalents for newcomers

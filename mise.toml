@@ -1,0 +1,3 @@
+[tools]
+mdbook = "latest"
+rust = { version = "1.86.0", profile = "default" }
