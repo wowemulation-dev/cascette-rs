@@ -132,6 +132,20 @@ jobs:
       - name: Clippy
         run: cargo clippy --workspace --all-targets
 
+  # Dependency security and license checks
+  deny:
+    name: Cargo Deny
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check dependencies
+        uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check
+          arguments: --all-features
+
   # Main test suite with optimized matrix
   test:
     name: Test (${{ matrix.rust }} on ${{ matrix.os }})
@@ -227,7 +241,9 @@ jobs:
           cache-all-crates: true
 
       - name: Check WASM compilation
-        run: cargo check --target wasm32-unknown-unknown -p cascette-crypto
+        run: |
+          cargo check --target wasm32-unknown-unknown -p cascette-crypto
+          cargo check --target wasm32-unknown-unknown -p cascette-formats
 
   # Documentation build - runs in parallel
   docs:
@@ -298,7 +314,7 @@ jobs:
   ci-success:
     name: CI Success
     if: always()
-    needs: [quick-checks, test, docs, wasm, changed-files]
+    needs: [quick-checks, deny, test, docs, wasm, changed-files]
     runs-on: ubuntu-latest
     steps:
       - name: Check all jobs
@@ -306,8 +322,8 @@ jobs:
           # Skip test job check if no crates changed
           if [[ "${{ needs.changed-files.outputs.any_crate_changed }}" == "false" ]]; then
             echo "No crate changes detected, skipping test job check"
-            if [[ "${{ needs.quick-checks.result }}" == "failure" || "${{ needs.docs.result }}" == "failure" || "${{ needs.wasm.result }}" == "failure" ]]; then
-              echo "Quick checks, docs, or WASM check failed"
+            if [[ "${{ needs.quick-checks.result }}" == "failure" || "${{ needs.deny.result }}" == "failure" || "${{ needs.docs.result }}" == "failure" || "${{ needs.wasm.result }}" == "failure" ]]; then
+              echo "Quick checks, deny, docs, or WASM check failed"
               exit 1
             fi
           else
