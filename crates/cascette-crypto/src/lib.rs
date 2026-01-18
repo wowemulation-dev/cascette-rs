@@ -88,7 +88,7 @@ pub use error::CryptoError;
 
 // Re-export commonly used types
 pub use arc4::Arc4Cipher;
-pub use jenkins::{hashlittle, hashlittle2, Jenkins96};
+pub use jenkins::{Jenkins96, hashlittle, hashlittle2};
 pub use keys::{TactKey, TactKeyStore};
 pub use md5::{ContentKey, EncodingKey, FileDataId};
 pub use salsa20::Salsa20Cipher;

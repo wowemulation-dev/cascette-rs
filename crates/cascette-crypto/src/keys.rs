@@ -250,6 +250,7 @@ fn parse_key_id(s: &str) -> Result<u64, CryptoError> {
 // TactKeyProvider implementation is in store_trait.rs to avoid circular dependency
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
 

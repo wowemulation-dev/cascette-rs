@@ -185,6 +185,7 @@ impl TactKeyProvider for TactKeyStore {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
     use std::collections::HashMap;

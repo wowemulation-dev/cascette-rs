@@ -422,6 +422,7 @@ fn hashlittle2_impl(key: &[u8], pc: &mut u32, pb: &mut u32) {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
 

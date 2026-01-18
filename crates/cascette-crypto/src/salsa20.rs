@@ -174,6 +174,7 @@ pub fn encrypt_salsa20(
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
 

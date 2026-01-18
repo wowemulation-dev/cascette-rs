@@ -14,9 +14,11 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Rust 2024 workspace with MSRV 1.86.0
 - cascette-crypto crate: MD5, Jenkins96, Salsa20, ARC4 implementations
-- TACT key management with keyring integration
+- TACT key management with TactKeyProvider trait for custom backends
 - Workspace-level clippy lints for code quality
 - Documentation framework using mdBook with Mermaid diagram support
+- CI workflow with quality checks (fmt, clippy, test, doc, WASM)
+- WASM compilation support for cascette-crypto (wasm32-unknown-unknown)
 - Project introduction explaining wowemulation-dev goals and modern client focus
 - Glossary of NGDP/CASC terminology with MPQ equivalents for newcomers
 - Format documentation: encoding, root, install, download, archives, archive
@@ -29,5 +31,9 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Community CDN mirrors list (Arctium, Wago, wow.tools)
 
 ### Changed
+
+- Updated dependencies: tempfile 3.21→3.24, proptest 1.7→1.9, criterion 0.7→0.8
+- Removed keyring and file-store features from cascette-crypto for WASM compatibility
+- Key loading functions now accept string content instead of file paths
 
 ### Fixed

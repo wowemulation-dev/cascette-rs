@@ -24,9 +24,9 @@ hex = "0.4"
 
 # Testing
 pretty_assertions = "1.4"
-tempfile = "3.21"
-proptest = "1.7"
-criterion = { version = "0.7", features = ["html_reports"] }
+tempfile = "3.24"
+proptest = "1.9"
+criterion = { version = "0.8", features = ["html_reports"] }
 
 [profile.release]
 lto = true

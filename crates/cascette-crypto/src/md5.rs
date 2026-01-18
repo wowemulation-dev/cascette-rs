@@ -135,6 +135,7 @@ impl From<FileDataId> for u32 {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
 
