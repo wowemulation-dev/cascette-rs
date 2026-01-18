@@ -2,13 +2,10 @@
 
 use binrw::{BinRead, BinWrite};
 use md5::{Digest, Md5};
-#[cfg(feature = "file-store")]
-use serde::{Deserialize, Serialize};
 use std::fmt;
 
 /// Content key (MD5 hash) used to identify content
 #[derive(BinRead, BinWrite, Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "file-store", derive(Serialize, Deserialize))]
 pub struct ContentKey([u8; 16]);
 
 impl ContentKey {

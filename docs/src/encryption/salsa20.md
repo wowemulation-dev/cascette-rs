@@ -452,7 +452,7 @@ cipher.apply_keystream(&mut data);
 ### TACT Key Management
 
 ```rust
-use cascette_crypto::keys::{TactKeyStore, TactKey};
+use cascette_crypto::{TactKeyStore, TactKey};
 
 // Create store with hardcoded WoW keys
 let store = TactKeyStore::new();
@@ -478,6 +478,31 @@ store.load_from_csv(csv_content);
 
 let txt_content = "FA505078126ACB3E BDC51862ABED79B2DE48C8E7E66C6200";
 store.load_from_txt(txt_content);
+```
+
+### Custom Storage Backends
+
+The `TactKeyProvider` trait allows implementing custom key storage:
+
+```rust
+use cascette_crypto::{TactKeyProvider, TactKey, CryptoError};
+
+// Implement for keyring, database, encrypted files, etc.
+struct MyKeyStore { /* ... */ }
+
+impl TactKeyProvider for MyKeyStore {
+    fn get_key(&self, id: u64) -> Result<Option<[u8; 16]>, CryptoError> {
+        // Look up key from your storage backend
+        todo!()
+    }
+
+    fn add_key(&mut self, key: TactKey) -> Result<(), CryptoError> {
+        // Store key in your backend
+        todo!()
+    }
+
+    // ... other trait methods
+}
 ```
 
 ### ARC4 (Legacy)
