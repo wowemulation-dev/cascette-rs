@@ -8,6 +8,7 @@ Rust implementation of Blizzard's NGDP content distribution system.
 [![Sponsor](https://img.shields.io/github/sponsors/wowemulation-dev?logo=github&style=flat-square)](https://github.com/sponsors/wowemulation-dev)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE-APACHE)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE-MIT)
+[![WASM](https://img.shields.io/badge/WASM-compatible-blueviolet.svg)](https://webassembly.org/)
 
 </div>
 
@@ -59,6 +60,10 @@ Rust crates for building your own tools:
 - CDN client with automatic failover
 - Encryption key management
 - Multi-layer caching
+
+**WASM Compatible**: Core libraries compile to WebAssembly (`wasm32-unknown-unknown`),
+enabling browser-based tools and web applications. All cryptographic and format
+parsing code uses pure Rust implementations with no C dependencies.
 
 ## Project Status
 
