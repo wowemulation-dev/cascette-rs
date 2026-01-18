@@ -1,0 +1,20 @@
+[book]
+title = "cascette-rs"
+authors = ["Daniel S. Reichenbach"]
+description = "Documentation for cascette-rs, a Rust implementation of Blizzard's NGDP system"
+language = "en"
+src = "src"
+
+[build]
+build-dir = "book"
+create-missing = false
+
+[output.html]
+default-theme = "rust"
+preferred-dark-theme = "ayu"
+git-repository-url = "https://github.com/wowemulation-dev/cascette-rs"
+edit-url-template = "https://github.com/wowemulation-dev/cascette-rs/edit/main/docs/{path}"
+
+[output.html.fold]
+enable = true
+level = 1

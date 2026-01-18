@@ -23,6 +23,9 @@ Thumbs.db
 # Private reference documentation
 /docs-internal/
 
+# mdBook build output
+/docs/book/
+
 # Mirror test outputs
 /mirror/
 /test-*/
