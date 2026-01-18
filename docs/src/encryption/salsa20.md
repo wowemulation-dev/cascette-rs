@@ -415,26 +415,132 @@ mod tests {
 }
 ```
 
-## Implementation Status
+## cascette-crypto API
 
-### Rust Implementation (cascette-crypto)
+The `cascette-crypto` crate provides CASC-specific Salsa20 implementation.
 
-Complete Salsa20 implementation with CASC-specific features:
+### Basic Decryption
 
-- **Core Salsa20** - Standard 20-round cipher implementation (complete)
+```rust
+use cascette_crypto::salsa20::{decrypt_salsa20, Salsa20Cipher};
 
-- **CASC key handling** - 16-byte key duplication to 32-byte (complete)
+// CASC uses 16-byte keys and 4-byte IVs
+let key: [u8; 16] = [0x01; 16];
+let iv: [u8; 4] = [0x02, 0x03, 0x04, 0x05];
+let block_index = 0; // First block in BLTE file
 
-- **IV extension** - 4-byte IV expanded to 8-byte with frame index XOR
-(complete)
+let ciphertext = &[/* encrypted data */];
+let plaintext = decrypt_salsa20(ciphertext, &key, &iv, block_index)
+    .expect("decryption failed");
+```
 
-- **Tau constants** - Correct "expand 16-byte k" constants for CASC (complete)
+### In-Place Processing
 
-- **Zero-copy processing** - Efficient keystream application (complete)
+```rust
+use cascette_crypto::Salsa20Cipher;
 
-- **Multi-chunk support** - Frame index modification for BLTE chunks (complete)
+let key: [u8; 16] = [0x42; 16];
+let iv: [u8; 4] = [0x11, 0x22, 0x33, 0x44];
 
-**Validation Status:**
+let mut cipher = Salsa20Cipher::new(&key, &iv, 0)
+    .expect("cipher creation failed");
+
+let mut data = vec![0u8; 1024];
+cipher.apply_keystream(&mut data);
+```
+
+### TACT Key Management
+
+```rust
+use cascette_crypto::keys::{TactKeyStore, TactKey};
+
+// Create store with hardcoded WoW keys
+let store = TactKeyStore::new();
+
+// Look up key by ID
+let key_id = 0xFA505078126ACB3E_u64;
+if let Some(key) = store.get(key_id) {
+    // Use key for decryption
+    println!("Found key: {:02X?}", key);
+}
+
+// Add custom key
+let mut store = TactKeyStore::empty();
+let key = TactKey::from_hex(
+    0x1234567890ABCDEF,
+    "0123456789ABCDEF0123456789ABCDEF"
+).expect("invalid key hex");
+store.add(key);
+
+// Load keys from file
+store.load_csv_file(Path::new("keys.csv"))?;
+store.load_txt_file(Path::new("keys.txt"))?;
+```
+
+### ARC4 (Legacy)
+
+```rust
+use cascette_crypto::Arc4Cipher;
+
+// ARC4 used in older BLTE encrypted blocks
+let key = b"encryption_key";
+let mut cipher = Arc4Cipher::new(key)
+    .expect("cipher creation failed");
+
+let encrypted = cipher.encrypt(b"plaintext");
+
+// Decrypt requires fresh cipher instance
+let mut cipher = Arc4Cipher::new(key)
+    .expect("cipher creation failed");
+let decrypted = cipher.decrypt(&encrypted);
+```
+
+## Implementation Details
+
+### CASC-Specific Differences
+
+The CASC Salsa20 variant differs from standard Salsa20:
+
+| Aspect | Standard Salsa20 | CASC Salsa20 |
+|--------|------------------|--------------|
+| Key size | 32 bytes | 16 bytes (duplicated internally) |
+| IV/Nonce size | 8 bytes | 4 bytes (extended internally) |
+| Constants | "expand 32-byte k" | "expand 16-byte k" |
+| Block index | Counter-based | XORed with IV |
+
+### Key Duplication
+
+CASC uses 16-byte keys with the "expand 16-byte k" (tau) constants:
+
+```rust
+// Tau constants for 16-byte keys
+state[0]  = 0x61707865; // "expa"
+state[5]  = 0x3120646e; // "nd 1"
+state[10] = 0x79622d36; // "6-by"
+state[15] = 0x6b206574; // "te k"
+
+// Key bytes 0-15 placed at positions 1-4
+// Key bytes 0-15 repeated at positions 11-14
+```
+
+### IV Extension
+
+The 4-byte IV is extended to 8 bytes and XORed with the block index:
+
+```rust
+// Extend 4-byte IV to 8 bytes by duplication
+let mut extended_iv = [0u8; 8];
+extended_iv[..4].copy_from_slice(&iv);
+extended_iv[4..].copy_from_slice(&iv);
+
+// XOR block index with first 4 bytes
+let block_bytes = (block_index as u32).to_le_bytes();
+for i in 0..4 {
+    extended_iv[i] ^= block_bytes[i];
+}
+```
+
+## Validation Status
 
 - CASC compatibility verified against CascLib behavior
 
@@ -444,14 +550,13 @@ Complete Salsa20 implementation with CASC-specific features:
 
 - Zero-allocation keystream generation for performance
 
-### TACT Key Management
+### TACT Key Coverage
 
 The cascette-crypto crate includes hardcoded TACT keys for major WoW expansions:
 
 - Battle for Azeroth, Shadowlands, The War Within, Classic Era
 
-Keys are stored securely with redacted debug output to prevent accidental
-logging.
+Keys are stored with redacted debug output to prevent accidental logging.
 
 ## References
 

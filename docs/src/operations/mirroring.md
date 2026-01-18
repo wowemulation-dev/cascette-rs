@@ -5,6 +5,10 @@
 This document outlines strategies for mirroring Blizzard's CDN content for WoW
 using NGDP/CASC.
 
+> **Note**: Python code examples in this document are conceptual pseudocode
+> illustrating mirroring workflows. For working code, see the `cascette mirror`
+> CLI command or reference implementations in [References](references.md).
+
 ## Rationale for Mirroring
 
 ### Historical Preservation

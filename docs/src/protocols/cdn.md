@@ -6,6 +6,9 @@ NGDP uses a Content Delivery Network (CDN) architecture for distributing game
 content. The system provides geographical distribution of content through
 HTTP/HTTPS endpoints, with automatic failover and load balancing capabilities.
 
+> **Note**: Code examples in this document illustrate concepts. For working
+> implementations, see the `cascette` CLI or the cascette-protocol crate.
+
 ## Discovery and Access Flow
 
 ### Product Discovery
