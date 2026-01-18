@@ -1,10 +1,10 @@
 # Summary
 
 [Introduction](README.md)
+[Glossary](glossary.md)
 
 # Formats
 
-- [BLTE Container](formats/blte.md)
 - [Encoding File](formats/encoding.md)
 - [Root File](formats/root.md)
 - [Install Manifest](formats/install.md)
@@ -15,18 +15,28 @@
 - [Config Formats](formats/config-formats.md)
 - [Patches](formats/patches.md)
 - [BPSV](formats/bpsv.md)
-- [ESpec](formats/espec.md)
 - [Format Transitions](formats/format-transitions.md)
+
+# Compression
+
+- [BLTE Container](compression/blte.md)
+- [ESpec](compression/espec.md)
+
+# Encryption
+
+- [Salsa20](encryption/salsa20.md)
 
 # Protocols
 
 - [CDN Architecture](protocols/cdn.md)
 - [Ribbit Protocol](protocols/ribbit.md)
 
-# Encryption
+# Client
 
-- [Salsa20](encryption/salsa20.md)
+- [Battle.net Agent](client/agent.md)
+- [Local Storage](client/local-storage.md)
 
 # Operations
 
 - [Mirroring](operations/mirroring.md)
+- [References](operations/references.md)

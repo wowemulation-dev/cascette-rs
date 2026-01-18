@@ -1,22 +1,77 @@
-# NGDP Documentation
+# cascette-rs Documentation
 
-## Introduction to NGDP
+## About This Project
 
-NGDP (Next Generation Distribution Pipeline) is Blizzard Entertainment's
-content distribution system. It provides an API for product information and
-updates, with data delivered through regionalized CDNs. NGDP replaced the
-MPQ/P2P/Torrent-based distribution system with the release of
+cascette-rs is part of the [wowemulation-dev](https://github.com/wowemulation-dev)
+initiative to build open source tooling for World of Warcraft emulation. The
+project focuses on modern WoW Classic clients (1.13+, 2.5+, 3.4+) which use
+Blizzard's NGDP content distribution system.
+
+### Why Modern Clients?
+
+The WoW emulation and modding community has historically focused on the 3.3.5a
+client from 2008. While functional, this approach has limitations:
+
+- **Outdated technology**: MPQ archives, no content addressing, manual patching
+- **Fragmented tooling**: Many tools exist only as abandoned Windows binaries
+- **Limited modding**: Technical constraints restrict what can be modified
+
+Modern Classic clients offer significant advantages:
+
+- **Active development**: Blizzard continues updating these clients
+- **Better architecture**: NGDP/CASC enables content addressing and streaming
+- **Cross-platform**: Same content format works on Windows, macOS, and Linux
+- **Preservation**: Community CDN mirrors ensure historical builds remain available
+
+cascette-rs provides the foundation for working with these modern clients.
+
+## What You Can Do with cascette-rs
+
+### For Emulator Developers
+
+- Download specific WoW Classic builds for server development
+- Extract game data files (DBCs, maps, models) for server-side use
+- Verify client installations match expected versions
+- Serve game content to clients via the Agent API
+
+### For Archivists
+
+- Mirror complete WoW builds from Blizzard's CDN
+- Preserve historical game versions before they disappear
+- Access builds from community CDN mirrors when Blizzard removes them
+- Track version history across all WoW products
+
+### For Modders
+
+- Extract assets from any WoW build for modification
+- Understand file relationships through encoding and root manifests
+- Work with modern file formats instead of legacy MPQ tools
+- Build custom content distribution for modified clients
+
+### For Tool Developers
+
+- Parse all NGDP/CASC binary formats with the cascette-formats library
+- Build applications on top of cascette's CDN and protocol layers
+- Integrate CASC reading into existing toolchains
+- Create cross-platform tools that work on Linux, macOS, and Windows
+
+## What is NGDP?
+
+NGDP (Next Generation Distribution Pipeline) is Blizzard's content distribution
+system. It replaced MPQ/P2P/Torrent distribution with
 [World of Warcraft 6.0](https://warcraft.wiki.gg/wiki/Patch_6.0) in 2014.
 
 For technical details, see [NGDP on wowdev.wiki](https://wowdev.wiki/NGDP).
 
 ## System Overview
 
-NGDP consists of two components:
+NGDP consists of three components:
 
 1. **Ribbit API**: Provides product versions, CDN endpoints, and configuration
 data
 2. **CDN Distribution**: Delivers game content through HTTP/HTTPS
+3. **Agent**: Local HTTP service (port 1120) that manages downloads and
+installations
 
 ## Key Differences from MPQ
 
@@ -139,64 +194,59 @@ Formats used in both CDN and local contexts.
 Service discovery components handle version information, CDN endpoint discovery,
 and product configuration metadata:
 
-- [Ribbit Protocol](ribbit.md) - TCP-based discovery and version information API
+- [Ribbit Protocol](protocols/ribbit.md) - TCP-based discovery and version information API
 
-- [BPSV Format](bpsv.md) - Blizzard Pipe-Separated Values format for API
+- [BPSV Format](formats/bpsv.md) - Blizzard Pipe-Separated Values format for API
 responses
 
 ### CDN Formats
 
 #### Configuration Files (Text)
 
-- [Build Config](config-formats.md#build-configuration) - Build-specific
-
+- [Build Config](formats/config-formats.md#build-configuration) - Build-specific
   settings (`/config/{hash}`)
 
-- [CDN Config](config-formats.md#cdn-configuration) - CDN server and archive
+- [CDN Config](formats/config-formats.md#cdn-configuration) - CDN server and
+  archive lists (`/config/{hash}`)
 
-  lists (`/config/{hash}`)
+- [Product Config](formats/config-formats.md#product-configuration) - Product
+  settings and versions (`/config/{hash}`)
 
-- [Product Config](config-formats.md#product-configuration) - Product settings
-
-  and versions (`/config/{hash}`)
-
-- [Patch Config](config-formats.md#patch-configuration) - Differential patch
-
-  information (`/config/{hash}`)
+- [Patch Config](formats/config-formats.md#patch-configuration) - Differential
+  patch information (`/config/{hash}`)
 
 #### Content Files (Binary)
 
 Immutable, content-addressed files served from CDN:
 
-- [CDN Archives](archives.md) - BLTE containers with game content
-
+- [CDN Archives](formats/archives.md) - BLTE containers with game content
   (`/data/{prefix}/{hash}.archive`)
 
 - **CDN Indices** - Maps keys to archive locations
-(`/data/{prefix}/{hash}.index`)
+  (`/data/{prefix}/{hash}.index`)
 
-- [Encoding File](encoding.md) - Maps content to encoding keys
-(`/data/{prefix}/{hash}`)
-
-- [Root File](root.md) - Maps files to content keys (`/data/{prefix}/{hash}`)
-
-- [Install Manifest](install.md) - Installation requirements
-(`/data/{prefix}/{hash}`)
-
-- [Download Manifest](download.md) - Download priorities
-
+- [Encoding File](formats/encoding.md) - Maps content to encoding keys
   (`/data/{prefix}/{hash}`)
 
-- [Patch Archives](patches.md) - Delta patches
-(`/patch/{prefix}/{hash}.archive`)
+- [Root File](formats/root.md) - Maps files to content keys
+  (`/data/{prefix}/{hash}`)
 
-- [Patch Indices](patches.md) - Patch archive index
-(`/patch/{prefix}/{hash}.index`)
+- [Install Manifest](formats/install.md) - Installation requirements
+  (`/data/{prefix}/{hash}`)
+
+- [Download Manifest](formats/download.md) - Download priorities
+  (`/data/{prefix}/{hash}`)
+
+- [Patch Archives](formats/patches.md) - Delta patches
+  (`/patch/{prefix}/{hash}.archive`)
+
+- [Patch Indices](formats/patches.md) - Patch archive index
+  (`/patch/{prefix}/{hash}.index`)
 
 #### Modern Additions (WoW 8.2+)
 
-- [TVFS](tvfs.md) - Virtual file system manifest (via `vfs-*` fields in
-BuildConfig)
+- [TVFS](formats/tvfs.md) - Virtual file system manifest (via `vfs-*` fields in
+  BuildConfig)
 
 ### CASC Local Formats
 
@@ -218,7 +268,7 @@ Client-side storage structures created and managed by Battle.net:
 
 #### Local Configuration
 
-- **.build.info** - Local build configuration (root directory)
+- **.build.info** - Local build configuration (root directory), BPSV-formatted
 
 - **DBCache** - Hotfix database cache (`Cache/ADB/*.bin`)
 
@@ -226,23 +276,23 @@ Client-side storage structures created and managed by Battle.net:
 
 #### Container Formats
 
-- [BLTE Format](blte.md) - Block compression/encryption (all content storage)
+- [BLTE Format](compression/blte.md) - Block compression/encryption (all content storage)
 
-- [ESpec Format](espec.md) - Encoding specifications (compression definitions)
+- [ESpec Format](compression/espec.md) - Encoding specifications (compression definitions)
 
 #### Cryptographic
 
 - **MD5 Keys** - Content addressing (all key references)
 
-- [Salsa20 Encryption](salsa20.md) - Stream cipher (content protection)
+- [Salsa20 Encryption](encryption/salsa20.md) - Stream cipher (content protection)
 
 - **TACT Keys** - Key management (decryption keys)
 
 #### Supporting Systems
 
-- [CDN Architecture](cdn.md) - Content distribution network structure
+- [CDN Architecture](protocols/cdn.md) - Content distribution network structure
 
-- [CDN Mirroring](mirroring.md) - Historical preservation strategies
+- [CDN Mirroring](operations/mirroring.md) - Historical preservation strategies
 
 - **FileDataId** - Persistent file identification across builds
 
@@ -250,34 +300,59 @@ Client-side storage structures created and managed by Battle.net:
 
 ### CDN Download Flow
 
-```text
-Ribbit (BPSV) → Product Config → CDN Config → Build Config
-                                      ↓
-                              CDN Archives + Indices
-                                      ↓
-                              Encoding File → Root File
-                                      ↓
-                              Install/Download Manifests
+```mermaid
+flowchart TB
+    subgraph Discovery
+        Ribbit["Ribbit (BPSV)"]
+        ProductConfig["Product Config"]
+        CDNConfig["CDN Config"]
+        BuildConfig["Build Config"]
+    end
+
+    subgraph Content
+        Archives["CDN Archives + Indices"]
+        Encoding["Encoding File"]
+        Root["Root File"]
+        Manifests["Install/Download Manifests"]
+    end
+
+    Ribbit --> ProductConfig --> CDNConfig --> BuildConfig
+    BuildConfig --> Archives
+    Archives --> Encoding --> Root
+    Root --> Manifests
 ```
 
 ### Content Resolution
 
-```text
-Filename/FileDataId → Root File → Content Key
-Content Key → Encoding File → Encoding Key + ESpec
-Encoding Key → CDN Index → Archive Location
-Archive Location → CDN Archive → BLTE Data
-BLTE Data → Decompression → Raw Content
+```mermaid
+flowchart LR
+    subgraph Input
+        File["Filename/FileDataId"]
+    end
+
+    subgraph Lookup
+        Root["Root File"]
+        CKey["Content Key"]
+        Encoding["Encoding File"]
+        EKey["Encoding Key + ESpec"]
+    end
+
+    subgraph Retrieval
+        Index["CDN Index"]
+        Location["Archive Location"]
+        Archive["CDN Archive"]
+        BLTE["BLTE Data"]
+    end
+
+    subgraph Output
+        Decompress["Decompression"]
+        Raw["Raw Content"]
+    end
+
+    File --> Root --> CKey
+    CKey --> Encoding --> EKey
+    EKey --> Index --> Location
+    Location --> Archive --> BLTE
+    BLTE --> Decompress --> Raw
 ```
 
-## Implementation Notes
-
-### Key Format Discoveries
-
-1. **CDN Index Format**: Uses 20-byte footer with MD5 hashing, not 32-byte with
-Jenkins96
-2. **Entry Count**: Little-endian in CDN indices (exception to CASC big-endian
-convention)
-3. **Archive Groups**: Client-side optimization, not provided by CDN
-4. **Page Alignment**: CDN indices use 4KB pages for efficient memory management
-5. **Key Truncation**: Some formats use partial keys for space efficiency
