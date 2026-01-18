@@ -472,9 +472,12 @@ let key = TactKey::from_hex(
 ).expect("invalid key hex");
 store.add(key);
 
-// Load keys from file
-store.load_csv_file(Path::new("keys.csv"))?;
-store.load_txt_file(Path::new("keys.txt"))?;
+// Load keys from string content (file I/O is caller's responsibility)
+let csv_content = "FA505078126ACB3E,BDC51862ABED79B2DE48C8E7E66C6200";
+store.load_from_csv(csv_content);
+
+let txt_content = "FA505078126ACB3E BDC51862ABED79B2DE48C8E7E66C6200";
+store.load_from_txt(txt_content);
 ```
 
 ### ARC4 (Legacy)

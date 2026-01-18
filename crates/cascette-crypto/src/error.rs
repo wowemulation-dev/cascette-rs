@@ -31,10 +31,6 @@ pub enum CryptoError {
     #[error("Invalid key format: {0}")]
     InvalidKeyFormat(String),
 
-    /// IO error
-    #[error("IO error: {0}")]
-    Io(#[from] std::io::Error),
-
     /// Keyring service unavailable (when keyring feature is enabled)
     #[cfg(feature = "keyring")]
     #[error("Keyring service unavailable: {reason}")]

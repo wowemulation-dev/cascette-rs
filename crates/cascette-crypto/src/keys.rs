@@ -5,8 +5,6 @@
 
 use std::collections::HashMap;
 use std::fmt;
-use std::fs;
-use std::path::Path;
 
 use crate::error::CryptoError;
 
@@ -128,9 +126,27 @@ impl TactKeyStore {
         self.keys.is_empty()
     }
 
-    /// Load keys from a CSV file (format: `key_id,key_hex`)
-    pub fn load_csv_file(&mut self, path: &Path) -> Result<usize, CryptoError> {
-        let content = fs::read_to_string(path)?;
+    /// Load keys from CSV-formatted string content (format: `key_id,key_hex`)
+    ///
+    /// Lines starting with `#` are treated as comments.
+    /// Returns the number of keys successfully loaded.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use cascette_crypto::keys::TactKeyStore;
+    ///
+    /// let csv_content = r#"
+    /// # Comment line
+    /// FA505078126ACB3E,BDC51862ABED79B2DE48C8E7E66C6200
+    /// 0xFF813F7D062AC0BC,AA0B5C77F088CCC2D39049BD267F066D
+    /// "#;
+    ///
+    /// let mut store = TactKeyStore::empty();
+    /// let count = store.load_from_csv(csv_content);
+    /// assert_eq!(count, 2);
+    /// ```
+    pub fn load_from_csv(&mut self, content: &str) -> usize {
         let mut count = 0;
 
         for line in content.lines() {
@@ -153,12 +169,30 @@ impl TactKeyStore {
             }
         }
 
-        Ok(count)
+        count
     }
 
-    /// Load keys from a text file (format: `key_id key_hex` per line)
-    pub fn load_txt_file(&mut self, path: &Path) -> Result<usize, CryptoError> {
-        let content = fs::read_to_string(path)?;
+    /// Load keys from text content (format: `key_id key_hex` per line)
+    ///
+    /// Lines starting with `#` or `//` are treated as comments.
+    /// Returns the number of keys successfully loaded.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use cascette_crypto::keys::TactKeyStore;
+    ///
+    /// let txt_content = r#"
+    /// # Comment line
+    /// FA505078126ACB3E BDC51862ABED79B2DE48C8E7E66C6200
+    /// 0xFF813F7D062AC0BC AA0B5C77F088CCC2D39049BD267F066D
+    /// "#;
+    ///
+    /// let mut store = TactKeyStore::empty();
+    /// let count = store.load_from_txt(txt_content);
+    /// assert_eq!(count, 2);
+    /// ```
+    pub fn load_from_txt(&mut self, content: &str) -> usize {
         let mut count = 0;
 
         for line in content.lines() {
@@ -181,7 +215,7 @@ impl TactKeyStore {
             }
         }
 
-        Ok(count)
+        count
     }
 
     /// Iterate over all keys
