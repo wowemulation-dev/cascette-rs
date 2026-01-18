@@ -14,6 +14,19 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Rust 2024 workspace with MSRV 1.86.0
 - cascette-crypto crate: MD5, Jenkins96, Salsa20, ARC4 implementations
+- cascette-formats crate: Binary format parsers and builders for NGDP/CASC
+  - BLTE: Block Table Encoded format with compression (ZLib, LZ4) and encryption
+  - BPSV: Blizzard Pipe-Separated Values for version and config data
+  - Archive: Archive index and data file operations for CDN content storage
+  - Encoding: Content key to encoding key mappings
+  - Root: Root file format mapping paths/FileDataIDs to content keys (V1-V4)
+  - Install: Install manifest format for file tagging and selective installation
+  - Download: Download manifest format for priority-based streaming (v1/v2/v3)
+  - Config: Build and CDN configuration file formats
+  - ESpec: Encoding specification format
+  - TVFS: TACT Virtual File System manifest format
+  - Patch Archive: Differential patch manifest format
+  - ZBSDIFF1: Zlib-compressed binary differential patches
 - TACT key management with TactKeyProvider trait for custom backends
 - Workspace-level clippy lints for code quality
 - Documentation framework using mdBook with Mermaid diagram support
@@ -35,5 +48,6 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Updated dependencies: tempfile 3.21→3.24, proptest 1.7→1.9, criterion 0.7→0.8
 - Removed keyring and file-store features from cascette-crypto for WASM compatibility
 - Key loading functions now accept string content instead of file paths
+- cascette-formats uses lz4_flex (pure Rust) instead of lz4 (C wrapper) for WASM compatibility
 
 ### Fixed
