@@ -14,6 +14,17 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Rust 2024 workspace with MSRV 1.86.0
 - cascette-crypto crate: MD5, Jenkins96, Salsa20, ARC4 implementations
+- cascette-cache crate: Multi-layer caching for NGDP/CDN content
+  - Memory cache with LRU eviction and size-based limits
+  - Disk cache with fsync durability and atomic writes
+  - Multi-layer cache combining L1 memory and L2 disk
+  - NGDP-specific caches: resolution, content-addressed, BLTE block, archive range
+  - Validation hooks for MD5, Jenkins96, and TACT key verification
+  - Zero-copy data structures with reference counting
+  - Streaming interfaces for large file handling
+  - SIMD-optimized hash operations (SSE2, SSE4.1, AVX2, AVX-512)
+  - Memory pooling optimized for NGDP file size classes
+  - CDN integration with retry logic and range requests
 - cascette-formats crate: Binary format parsers and builders for NGDP/CASC
   - BLTE: Block Table Encoded format with compression (ZLib, LZ4) and encryption
   - BPSV: Blizzard Pipe-Separated Values for version and config data
@@ -46,6 +57,7 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 
 - Updated dependencies: tempfile 3.21→3.24, proptest 1.7→1.9, criterion 0.7→0.8
+- Added workspace dependencies: bytes, dashmap, async-trait, futures, prometheus, tracing
 - Removed keyring and file-store features from cascette-crypto for WASM compatibility
 - Key loading functions now accept string content instead of file paths
 - cascette-formats uses lz4_flex (pure Rust) instead of lz4 (C wrapper) for WASM compatibility

@@ -1,6 +1,10 @@
 [workspace]
 resolver = "2"
-members = ["crates/cascette-crypto", "crates/cascette-formats"]
+members = [
+    "crates/cascette-cache",
+    "crates/cascette-crypto",
+    "crates/cascette-formats",
+]
 
 [workspace.package]
 version = "0.1.0"
@@ -23,16 +27,24 @@ binrw = "0.15"
 hex = "0.4"
 md5 = "0.7"
 rand = "0.9"
+bytes = "1.10"
+dashmap = "6.1"
 
 # Compression
 flate2 = "1.1"
 
 # Async runtime
 tokio = { version = "1.47", features = ["full"] }
+async-trait = "0.1"
+futures = "0.3"
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+
+# Observability (optional)
+prometheus = "0.13"
+tracing = "0.1"
 
 # Testing
 pretty_assertions = "1.4"

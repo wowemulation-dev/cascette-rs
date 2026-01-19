@@ -1,0 +1,61 @@
+[package]
+name = "cascette-cache"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "High-performance multi-layer caching for NGDP/CDN content distribution"
+readme = "README.md"
+keywords = ["cache", "casc", "ngdp", "blizzard", "wow"]
+categories = ["caching", "games", "network-programming"]
+
+[dependencies]
+# Error handling
+thiserror = { workspace = true }
+
+# Async runtime and traits
+tokio = { workspace = true, features = ["time", "sync", "io-util"] }
+async-trait = { workspace = true }
+futures = { workspace = true }
+
+# Utilities
+hex = { workspace = true }
+bytes = { workspace = true }
+dashmap = { workspace = true }
+md5 = { workspace = true }
+
+# Metrics and monitoring
+prometheus = { workspace = true, optional = true }
+tracing = { workspace = true, optional = true }
+
+# Serialization
+serde = { workspace = true, features = ["derive"] }
+
+# Time and duration utilities
+rand = { workspace = true }
+
+# Unix-specific dependencies (for fsync)
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+# Internal dependencies
+cascette-crypto = { path = "../cascette-crypto" }
+cascette-formats = { path = "../cascette-formats" }
+
+[features]
+default = []
+metrics = ["dep:prometheus"]
+tracing = ["dep:tracing"]
+
+[package.metadata.cargo-machete]
+# Prometheus is an optional dependency used with the metrics feature
+ignored = ["prometheus"]
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+tempfile = { workspace = true }

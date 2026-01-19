@@ -35,8 +35,15 @@
 
 - [Battle.net Agent](client/agent.md)
 - [Local Storage](client/local-storage.md)
+- [CDN Caching](client/caching.md)
 
 # Operations
 
 - [Mirroring](operations/mirroring.md)
 - [References](operations/references.md)
+
+# Development
+
+- [Project Setup](development/setup.md)
+- [Testing Guidelines](development/testing.md)
+- [Coding Standards](development/coding-standards.md)
