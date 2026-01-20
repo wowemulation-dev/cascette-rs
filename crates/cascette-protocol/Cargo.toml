@@ -1,0 +1,60 @@
+[package]
+name = "cascette-protocol"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "NGDP/CASC protocol implementation with Ribbit/TACT service discovery and CDN content delivery"
+readme = "README.md"
+keywords = ["blizzard", "ngdp", "casc", "ribbit", "tact"]
+categories = ["network-programming", "game-development", "parsing"]
+
+[dependencies]
+# Workspace dependencies
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+reqwest = { workspace = true }
+hex = { workspace = true }
+
+# Internal dependencies
+cascette-formats = { version = "0.2.0", path = "../cascette-formats" }
+cascette-cache = { version = "0.2.0", path = "../cascette-cache" }
+cascette-crypto = { version = "0.2.0", path = "../cascette-crypto" }
+
+# Additional dependencies
+async-trait = { workspace = true }
+bytes = { workspace = true }
+futures = { workspace = true }
+tracing = { workspace = true }
+url = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+rand = { workspace = true }
+md5 = { workspace = true }
+prometheus = { workspace = true }
+dashmap = { workspace = true }
+
+# V1 MIME support
+mail-parser = { workspace = true }
+cms = { workspace = true }
+der = { workspace = true }
+asn1 = { workspace = true }
+x509-cert = { workspace = true }
+rsa = { workspace = true }
+sha2 = { workspace = true }
+digest = { workspace = true }
+base64 = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+wiremock = { workspace = true }
+
+[package.metadata.cargo-machete]
+# These dependencies are used for V1 MIME format support and other features
+ignored = ["asn1", "async-trait", "cascette-crypto", "digest", "url"]
+
+[lints]
+workspace = true

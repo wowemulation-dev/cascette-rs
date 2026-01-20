@@ -8,7 +8,27 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-<!-- Changes pending the next release go here -->
+### Added
+
+- cascette-protocol crate: NGDP/CASC protocol implementation
+  - Unified `RibbitTactClient` with automatic fallback (TACT HTTPS -> HTTP -> Ribbit TCP)
+  - TACT client for HTTPS/HTTP queries to `us.version.battle.net`
+  - Ribbit TCP client for direct protocol connections on port 1119
+  - CDN client for content downloads with range requests and progress tracking
+  - CDN streaming with BLTE decompression and concurrent chunk downloads
+  - Protocol response caching with configurable TTLs
+  - V1 MIME format support with PKCS#7 signature verification
+  - Connection pooling and HTTP/2 support via reqwest with rustls
+  - Retry policies with exponential backoff and jitter
+  - Thread-local buffers and string interning for performance
+
+### Changed
+
+- Updated wiremock dependency from 0.5 to 0.6 (removes unmaintained `instant` crate)
+- Added workspace dependencies: reqwest, url, sha2, digest, rsa, base64, mail-parser,
+  cms, der, asn1, x509-cert, wiremock
+- Updated deny.toml to allow ISC, BSD-3-Clause, and CDLA-Permissive-2.0 licenses
+  (used by ring, subtle, and webpki-roots respectively)
 
 ## [0.2.0] - 2025-01-20
 

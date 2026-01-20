@@ -19,7 +19,13 @@ feature-depth = 1
 # Security advisories from RustSec
 # https://embarkstudios.github.io/cargo-deny/checks/advisories/cfg.html
 [advisories]
-ignore = []
+ignore = [
+    # RUSTSEC-2023-0071: RSA timing sidechannel (Marvin Attack)
+    # Used only for V1 MIME signature verification during protocol parsing.
+    # This is a read-only verification operation, not key generation.
+    # Timing attacks require network observability which is not a concern here.
+    "RUSTSEC-2023-0071",
+]
 
 # License compliance
 # https://embarkstudios.github.io/cargo-deny/checks/licenses/cfg.html
@@ -28,10 +34,13 @@ ignore = []
 allow = [
     "MIT",
     "Apache-2.0",
+    "BSD-3-Clause",           # Used by subtle, cryptographic crates
     "Zlib",
     "0BSD",
     "Unicode-3.0",
     "Unlicense",
+    "ISC",                    # Used by ring, untrusted (security crates)
+    "CDLA-Permissive-2.0",    # Used by webpki-roots (CA certificate data)
 ]
 confidence-threshold = 0.8
 
