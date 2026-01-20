@@ -33,7 +33,7 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - Updated README with platform support documentation
 - cascette-protocol: Added partial WASM support infrastructure
   - TCP Ribbit protocol conditionally compiled out on WASM (no raw sockets in browsers)
-  - Cache module provides no-op implementation on WASM (no persistent storage)
+  - Cache module uses localStorage on WASM for persistent protocol response caching
   - Platform-specific tokio and reqwest configurations
   - Added `UnsupportedOnWasm` error variant for TCP-only endpoints
 - Added `.cargo/config.toml` WASM target configuration for getrandom
