@@ -74,6 +74,16 @@ js-sys = "0.3"
 [dev-dependencies]
 tempfile = { workspace = true }
 wiremock = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Example binaries
+[[example]]
+name = "wow_classic_native"
+path = "examples/wow_classic_native.rs"
+
+[[example]]
+name = "wow_classic_wasm"
+path = "examples/wow_classic_wasm.rs"
 
 [package.metadata.cargo-machete]
 # These dependencies are used for V1 MIME format support and other features

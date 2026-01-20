@@ -72,6 +72,36 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+## Examples
+
+The crate includes comprehensive examples demonstrating real-world usage:
+
+### Native Example
+
+Query WoW Classic product info and download core configuration files:
+
+```bash
+cargo run --example wow_classic_native
+```
+
+Features demonstrated:
+- Protocol client with automatic fallback (TACT HTTPS -> HTTP -> Ribbit TCP)
+- Version and CDN endpoint queries
+- Build config and CDN config downloads
+- Encoding file download with progress tracking
+- Cache statistics
+
+### WASM-Compatible Example
+
+Same workflow using only WASM-compatible features:
+
+```bash
+cargo run --example wow_classic_wasm
+```
+
+This example can be tested on native and adapted for browser deployment.
+It demonstrates the subset of features available in WASM environments.
+
 ## Platform Support
 
 ### Native (Full Support)
