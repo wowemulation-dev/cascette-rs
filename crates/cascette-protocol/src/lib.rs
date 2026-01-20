@@ -320,9 +320,9 @@
 //!
 //! This crate is designed to work seamlessly with other cascette-rs crates:
 //!
-//! - [`cascette-formats`]: Parse BPSV responses and CASC data formats
-//! - [`cascette-cache`]: Advanced caching with persistent storage
-//! - [`cascette-crypto`]: Cryptographic operations for CASC content
+//! - `cascette-formats`: Parse BPSV responses and CASC data formats
+//! - `cascette-cache`: Advanced caching with persistent storage
+//! - `cascette-crypto`: Cryptographic operations for CASC content
 //!
 //! For complete examples and integration patterns, see the crate documentation.
 //!
