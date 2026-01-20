@@ -383,7 +383,9 @@ pub use retry::RetryPolicy;
 pub use transport::{HttpClient, HttpConfig};
 
 // Re-export internal client types for advanced usage
-pub use client::{RibbitClient, TactClient};
+#[cfg(not(target_arch = "wasm32"))]
+pub use client::RibbitClient;
+pub use client::TactClient;
 
 // Re-export optimization utilities for power users
 pub use optimized::{PooledBuffer, format_cache_key, get_buffer, intern_string, return_buffer};

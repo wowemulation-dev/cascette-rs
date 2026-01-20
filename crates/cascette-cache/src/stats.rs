@@ -9,8 +9,27 @@
 
 use std::{
     sync::atomic::{AtomicU64, AtomicUsize, Ordering},
-    time::{Duration, Instant},
+    time::Duration,
 };
+
+// Platform-specific time utilities
+#[cfg(not(target_arch = "wasm32"))]
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
+
+/// Get current time in milliseconds since Unix epoch (native)
+#[cfg(not(target_arch = "wasm32"))]
+fn current_time_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+/// Get current time in milliseconds since Unix epoch (WASM)
+#[cfg(target_arch = "wasm32")]
+fn current_time_ms() -> u64 {
+    js_sys::Date::now() as u64
+}
 
 // Use cache-aligned atomics to reduce false sharing
 #[repr(align(64))] // Cache line alignment
@@ -85,9 +104,14 @@ impl CacheAlignedAtomicUsize {
     }
 }
 
+// ============================================================================
+// CacheStats - Unified version using timestamps (works on all platforms)
+// ============================================================================
+
 /// Cache statistics snapshot
 ///
 /// Contains point-in-time statistics about cache performance and usage.
+/// Uses millisecond timestamps for cross-platform compatibility.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[allow(clippy::struct_field_names)] // Fields like memory_usage_bytes follow common naming convention
 pub struct CacheStats {
@@ -111,10 +135,10 @@ pub struct CacheStats {
     pub memory_usage_bytes: usize,
     /// Maximum memory usage observed
     pub max_memory_usage_bytes: usize,
-    /// Cache creation time
-    pub created_at: Instant,
-    /// Time of last statistics update
-    pub updated_at: Instant,
+    /// Cache creation time (milliseconds since Unix epoch)
+    pub created_at_ms: u64,
+    /// Time of last statistics update (milliseconds since Unix epoch)
+    pub updated_at_ms: u64,
     /// Average response time for get operations
     pub avg_get_time: Duration,
     /// Average response time for put operations
@@ -124,7 +148,7 @@ pub struct CacheStats {
 impl CacheStats {
     /// Create new empty cache statistics
     pub fn new() -> Self {
-        let now = Instant::now();
+        let now_ms = current_time_ms();
         Self {
             get_count: 0,
             hit_count: 0,
@@ -136,8 +160,8 @@ impl CacheStats {
             entry_count: 0,
             memory_usage_bytes: 0,
             max_memory_usage_bytes: 0,
-            created_at: now,
-            updated_at: now,
+            created_at_ms: now_ms,
+            updated_at_ms: now_ms,
             avg_get_time: Duration::ZERO,
             avg_put_time: Duration::ZERO,
         }
@@ -186,7 +210,8 @@ impl CacheStats {
     /// Get cache age (time since creation)
     #[inline]
     pub fn age(&self) -> Duration {
-        Instant::now() - self.created_at
+        let now_ms = current_time_ms();
+        Duration::from_millis(now_ms.saturating_sub(self.created_at_ms))
     }
 
     /// Merge statistics from another cache (for multi-layer stats)
@@ -208,7 +233,7 @@ impl CacheStats {
         self.max_memory_usage_bytes = self
             .max_memory_usage_bytes
             .max(other.max_memory_usage_bytes);
-        self.updated_at = Instant::now();
+        self.updated_at_ms = current_time_ms();
 
         // Weighted average for response times - avoid overflow
         if self.get_count > 0 {
@@ -237,11 +262,19 @@ impl Default for CacheStats {
     }
 }
 
+// ============================================================================
+// AtomicCacheMetrics - Native only (uses Instant for high-precision timing)
+// ============================================================================
+
 /// High-performance atomic cache metrics for thread-safe statistics collection
 ///
 /// Used internally by cache implementations to track metrics efficiently
 /// across multiple threads. Optimized for NGDP workloads with cache-aligned
 /// atomics to reduce false sharing and improve performance.
+///
+/// Note: This type is only available on native platforms due to its use of
+/// `std::time::Instant` for high-precision timing.
+#[cfg(not(target_arch = "wasm32"))]
 #[derive(Debug)]
 pub struct AtomicCacheMetrics {
     // Group frequently updated counters together in separate cache lines
@@ -264,9 +297,14 @@ pub struct AtomicCacheMetrics {
     total_put_time_nanos: CacheAlignedAtomicU64,
 
     // Creation time (immutable after construction)
+    // Kept for potential future use in elapsed time measurements
+    #[allow(dead_code)]
     created_at: Instant,
+    // Creation time as timestamp for CacheStats
+    created_at_ms: u64,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl AtomicCacheMetrics {
     /// Create new atomic cache metrics
     pub fn new() -> Self {
@@ -284,6 +322,7 @@ impl AtomicCacheMetrics {
             total_get_time_nanos: CacheAlignedAtomicU64::new(0),
             total_put_time_nanos: CacheAlignedAtomicU64::new(0),
             created_at: Instant::now(),
+            created_at_ms: current_time_ms(),
         }
     }
 
@@ -431,8 +470,8 @@ impl AtomicCacheMetrics {
             entry_count,
             memory_usage_bytes,
             max_memory_usage_bytes,
-            created_at: self.created_at,
-            updated_at: Instant::now(),
+            created_at_ms: self.created_at_ms,
+            updated_at_ms: current_time_ms(),
             avg_get_time,
             avg_put_time,
         }
@@ -491,6 +530,7 @@ impl AtomicCacheMetrics {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl Default for AtomicCacheMetrics {
     fn default() -> Self {
         Self::new()
@@ -529,9 +569,14 @@ impl FastCacheMetrics {
     }
 }
 
+// ============================================================================
+// Multi-layer statistics - Native only
+// ============================================================================
+
 /// Multi-layer cache statistics
 ///
 /// Aggregates statistics from multiple cache layers for hierarchical caches.
+#[cfg(not(target_arch = "wasm32"))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MultiLayerStats {
     /// Statistics for each layer (L1, L2, L3, etc.)
@@ -542,6 +587,7 @@ pub struct MultiLayerStats {
     pub promotion_stats: PromotionStats,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl MultiLayerStats {
     /// Create new multi-layer statistics
     pub fn new(layers: usize) -> Self {
@@ -581,6 +627,7 @@ impl MultiLayerStats {
 }
 
 /// Statistics for promotions between cache layers
+#[cfg(not(target_arch = "wasm32"))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PromotionStats {
     /// Total number of promotions
@@ -589,6 +636,7 @@ pub struct PromotionStats {
     pub layer_promotions: std::collections::HashMap<(usize, usize), u64>,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl PromotionStats {
     /// Create new promotion statistics
     pub fn new() -> Self {
@@ -620,6 +668,7 @@ impl PromotionStats {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl Default for PromotionStats {
     fn default() -> Self {
         Self::new()
@@ -629,6 +678,7 @@ impl Default for PromotionStats {
 /// Performance metrics for cache operations
 ///
 /// Tracks detailed performance metrics for different types of cache operations.
+#[cfg(not(target_arch = "wasm32"))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PerformanceMetrics {
     /// Get operation metrics
@@ -641,6 +691,7 @@ pub struct PerformanceMetrics {
     pub eviction_metrics: OperationMetrics,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl PerformanceMetrics {
     /// Create new performance metrics
     pub fn new() -> Self {
@@ -653,6 +704,7 @@ impl PerformanceMetrics {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl Default for PerformanceMetrics {
     fn default() -> Self {
         Self::new()
@@ -660,6 +712,7 @@ impl Default for PerformanceMetrics {
 }
 
 /// Metrics for a specific type of cache operation
+#[cfg(not(target_arch = "wasm32"))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OperationMetrics {
     /// Operation name
@@ -678,6 +731,7 @@ pub struct OperationMetrics {
     pub p99_duration: Duration,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl OperationMetrics {
     /// Create new operation metrics
     pub fn new(operation_name: impl Into<String>) -> Self {
@@ -725,6 +779,7 @@ impl OperationMetrics {
 }
 
 #[cfg(test)]
+#[cfg(not(target_arch = "wasm32"))]
 #[allow(clippy::panic)]
 #[allow(clippy::expect_used)]
 #[allow(clippy::unwrap_used)]
@@ -861,6 +916,4 @@ mod tests {
         assert_eq!(atomic_u64.load(Ordering::Relaxed), 50);
         assert_eq!(atomic_usize.load(Ordering::Relaxed), 2000);
     }
-
-    // ... rest of tests remain the same
 }

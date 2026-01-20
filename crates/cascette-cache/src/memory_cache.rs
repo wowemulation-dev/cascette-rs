@@ -342,7 +342,10 @@ impl<K: CacheKey + 'static> MemoryCache<K> {
         let snapshot = self.metrics.fast_snapshot();
         let current_entries = self.entry_count.load(Ordering::Relaxed);
         let current_memory = self.memory_usage.load(Ordering::Relaxed);
-        let now = Instant::now();
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0);
 
         crate::stats::CacheStats {
             get_count: snapshot.get_count,
@@ -355,8 +358,8 @@ impl<K: CacheKey + 'static> MemoryCache<K> {
             entry_count: current_entries,
             memory_usage_bytes: current_memory as usize,
             max_memory_usage_bytes: current_memory as usize, // Placeholder
-            created_at: now,                                 // Placeholder
-            updated_at: now,
+            created_at_ms: now_ms,                           // Placeholder
+            updated_at_ms: now_ms,
             avg_get_time: Duration::ZERO, // Would need separate tracking
             avg_put_time: Duration::ZERO, // Would need separate tracking
         }

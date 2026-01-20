@@ -6,6 +6,9 @@
 //! - Reference-counted data with atomic cleanup
 //! - Streaming operations on cached data
 #![allow(clippy::cast_precision_loss)] // Statistics/metrics calculations intentionally accept precision loss
+#![allow(unused_imports)] // Some imports used conditionally or in future features
+#![allow(dead_code)] // Reference counting fields maintained for future use
+#![allow(missing_docs)] // Internal module with implementation in progress
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use std::{
@@ -369,12 +372,12 @@ impl ZeroCopyCache {
     pub fn get_slice(&mut self, key: u64, range: Range<usize>) -> Option<ZeroCopySlice> {
         self.stats.gets += 1;
 
-        if let Some(entry) = self.entries.get(&key) {
-            if let Some(slice) = entry.slice(range) {
-                self.stats.hits += 1;
-                self.stats.zero_copy_ops += 1;
-                return Some(slice);
-            }
+        if let Some(entry) = self.entries.get(&key)
+            && let Some(slice) = entry.slice(range)
+        {
+            self.stats.hits += 1;
+            self.stats.zero_copy_ops += 1;
+            return Some(slice);
         }
 
         None
@@ -522,15 +525,15 @@ impl ZeroCopyBufferPool {
         // Round size to nearest power of 2 for better pooling
         let pool_size = size.next_power_of_two();
 
-        if let Some(pool) = self.pools.get_mut(&pool_size) {
-            if let Some(mut buffer) = pool.pop() {
-                buffer.clear();
-                if buffer.capacity() < size {
-                    buffer.reserve(size - buffer.capacity());
-                }
-                self.stats.hits += 1;
-                return buffer;
+        if let Some(pool) = self.pools.get_mut(&pool_size)
+            && let Some(mut buffer) = pool.pop()
+        {
+            buffer.clear();
+            if buffer.capacity() < size {
+                buffer.reserve(size - buffer.capacity());
             }
+            self.stats.hits += 1;
+            return buffer;
         }
 
         // Pool miss - allocate new buffer
@@ -540,23 +543,21 @@ impl ZeroCopyBufferPool {
 
     /// Return buffer to pool for reuse
     pub fn return_buffer(&mut self, buffer: BytesMut) {
+        const MAX_POOL_SIZE: usize = 32;
+
         let capacity = buffer.capacity();
         let pool_size = capacity.next_power_of_two();
 
         // Only keep buffers in reasonable size range
-        if capacity >= 1024 && capacity <= 64 * 1024 * 1024 {
-            self.pools
-                .entry(pool_size)
-                .or_insert_with(Vec::new)
-                .push(buffer);
+        if (1024..=64 * 1024 * 1024).contains(&capacity) {
+            self.pools.entry(pool_size).or_default().push(buffer);
         }
 
         // Limit pool size to prevent excessive memory use
-        const MAX_POOL_SIZE: usize = 32;
-        if let Some(pool) = self.pools.get_mut(&pool_size) {
-            if pool.len() > MAX_POOL_SIZE {
-                pool.truncate(MAX_POOL_SIZE);
-            }
+        if let Some(pool) = self.pools.get_mut(&pool_size)
+            && pool.len() > MAX_POOL_SIZE
+        {
+            pool.truncate(MAX_POOL_SIZE);
         }
     }
 
@@ -620,18 +621,18 @@ mod tests {
 
     #[test]
     fn test_zero_copy_reader_sync() {
+        use std::io::Read;
+
         let data = Bytes::from("Hello, NGDP!");
         let entry = ZeroCopyEntry::new(data);
         let mut reader = entry.reader();
 
         let mut buf = [0u8; 5];
-        let n = reader
-            .read(&mut buf)
-            .expect("Test operation should succeed");
+        let n = Read::read(&mut reader, &mut buf).expect("Test operation should succeed");
         assert_eq!(n, 5);
         assert_eq!(&buf, b"Hello");
 
-        assert_eq!(reader.remaining(), 8);
+        assert_eq!(reader.remaining(), 7); // "Hello, NGDP!" = 12 chars, 12 - 5 = 7
         assert_eq!(reader.position(), 5);
 
         let remaining = reader.read_remaining();
@@ -640,16 +641,16 @@ mod tests {
 
     #[tokio::test]
     async fn test_zero_copy_reader_async() {
+        use tokio::io::AsyncReadExt;
+
         let data = Bytes::from("Hello, NGDP!");
         let entry = ZeroCopyEntry::new(data);
         let mut reader = entry.reader();
 
-        let mut buf = [0u8; 13];
-        let n = reader
-            .read_exact(&mut buf)
+        let mut buf = [0u8; 12];
+        AsyncReadExt::read_exact(&mut reader, &mut buf)
             .await
             .expect("Test operation should succeed");
-        assert_eq!(n, 13);
         assert_eq!(&buf, b"Hello, NGDP!");
     }
 
@@ -661,7 +662,7 @@ mod tests {
         let data2 = Bytes::from("Test data 2");
 
         cache.put(1, data1.clone());
-        cache.put(2, data2.clone());
+        cache.put(2, data2);
 
         assert_eq!(cache.len(), 2);
 
@@ -688,7 +689,7 @@ mod tests {
         pool.return_buffer(buffer1);
 
         // Get buffer again (should reuse)
-        let buffer2 = pool.get_buffer(1024);
+        let _buffer2 = pool.get_buffer(1024);
 
         assert!(pool.hit_rate() > 0.0);
     }
@@ -718,7 +719,9 @@ mod tests {
         assert!(!entry.is_expired(std::time::Duration::from_secs(60)));
 
         // Simulate old entry by modifying created_at
-        entry.created_at = std::time::Instant::now() - std::time::Duration::from_secs(120);
+        entry.created_at = std::time::Instant::now()
+            .checked_sub(std::time::Duration::from_secs(120))
+            .expect("Test operation should succeed");
         assert!(entry.is_expired(std::time::Duration::from_secs(60)));
     }
 }

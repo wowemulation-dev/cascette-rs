@@ -25,6 +25,18 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 
 - Updated wiremock dependency from 0.5 to 0.6 (removes unmaintained `instant` crate)
+- cascette-cache: Added WASM support with browser storage backends
+  - `LocalStorageCache` for small protocol data (~5-10MB browser limit)
+  - `IndexedDbCache` for larger content (~50MB+ with user permission)
+  - Cross-platform `CacheStats` using millisecond timestamps instead of `Instant`
+  - Platform-specific conditional compilation for native-only features
+  - Updated README with platform support documentation
+- cascette-protocol: Added partial WASM support infrastructure
+  - TCP Ribbit protocol conditionally compiled out on WASM (no raw sockets in browsers)
+  - Cache module provides no-op implementation on WASM (no persistent storage)
+  - Platform-specific tokio and reqwest configurations
+  - Added `UnsupportedOnWasm` error variant for TCP-only endpoints
+- Added `.cargo/config.toml` WASM target configuration for getrandom
 - Added workspace dependencies: reqwest, url, sha2, digest, rsa, base64, mail-parser,
   cms, der, asn1, x509-cert, wiremock
 - Updated deny.toml to allow ISC, BSD-3-Clause, and CDLA-Permissive-2.0 licenses

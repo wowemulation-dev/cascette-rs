@@ -46,3 +46,9 @@ build-release = "build --workspace --release"
 [env]
 # Enable backtraces for better error messages during development
 RUST_BACKTRACE = "1"
+
+# WASM target configuration
+[target.wasm32-unknown-unknown]
+# getrandom 0.3.x requires cfg flag for WASM support
+# https://docs.rs/getrandom/latest/getrandom/#webassembly-support
+rustflags = ['--cfg', 'getrandom_backend="wasm_js"']

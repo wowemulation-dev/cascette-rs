@@ -3,17 +3,34 @@
 //! This module defines the fundamental traits that all cache implementations
 //! must implement, providing a consistent interface across different cache
 //! backends and strategies.
+//!
+//! # Platform Support
+//!
+//! On native platforms, cache implementations must be `Send + Sync` for
+//! concurrent access across threads.
+//!
+//! On WASM, caches are single-threaded and use browser storage APIs that
+//! are not `Send`. The trait uses `#[async_trait(?Send)]` on WASM.
 
 use crate::{error::CacheResult, key::CacheKey, stats::CacheStats};
 use async_trait::async_trait;
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
-use std::time::{Duration, Instant};
+use std::time::Duration;
+
+// Instant is not available on WASM
+#[cfg(not(target_arch = "wasm32"))]
+use std::time::Instant;
+
+// ============================================================================
+// Native platform AsyncCache trait (requires Send + Sync)
+// ============================================================================
 
 /// Core async cache trait
 ///
 /// Provides the fundamental operations for all cache implementations.
 /// Implementations should be thread-safe and support concurrent access.
+#[cfg(not(target_arch = "wasm32"))]
 #[async_trait]
 pub trait AsyncCache<K: CacheKey>: Send + Sync {
     /// Get a value from the cache
@@ -56,9 +73,66 @@ pub trait AsyncCache<K: CacheKey>: Send + Sync {
     }
 }
 
+// ============================================================================
+// WASM platform AsyncCache trait (single-threaded, no Send required)
+// ============================================================================
+
+/// Core async cache trait for WASM
+///
+/// Provides the fundamental operations for browser-based cache implementations.
+/// WASM caches are single-threaded and don't require Send/Sync bounds.
+#[cfg(target_arch = "wasm32")]
+#[async_trait(?Send)]
+pub trait AsyncCache<K: CacheKey> {
+    /// Get a value from the cache
+    ///
+    /// Returns `None` if the key doesn't exist or has expired.
+    async fn get(&self, key: &K) -> CacheResult<Option<Bytes>>;
+
+    /// Put a value into the cache
+    ///
+    /// The value will be stored with the default TTL configured for the cache.
+    async fn put(&self, key: K, value: Bytes) -> CacheResult<()>;
+
+    /// Put a value into the cache with a specific TTL
+    ///
+    /// The value will expire after the specified duration.
+    async fn put_with_ttl(&self, key: K, value: Bytes, ttl: Duration) -> CacheResult<()>;
+
+    /// Check if a key exists in the cache
+    ///
+    /// Returns `true` if the key exists and has not expired.
+    async fn contains(&self, key: &K) -> CacheResult<bool>;
+
+    /// Remove a key from the cache
+    ///
+    /// Returns `true` if the key was present and removed.
+    async fn remove(&self, key: &K) -> CacheResult<bool>;
+
+    /// Clear all entries from the cache
+    async fn clear(&self) -> CacheResult<()>;
+
+    /// Get cache statistics
+    async fn stats(&self) -> CacheResult<CacheStats>;
+
+    /// Get the current size of the cache (number of entries)
+    async fn size(&self) -> CacheResult<usize>;
+
+    /// Check if the cache is empty
+    async fn is_empty(&self) -> CacheResult<bool> {
+        Ok(self.size().await? == 0)
+    }
+}
+
+// ============================================================================
+// CacheEntry - Native only (uses std::time::Instant)
+// ============================================================================
+
 /// Cache entry metadata
 ///
 /// Contains information about when an entry was created and when it expires.
+/// Only available on native platforms (uses std::time::Instant).
+#[cfg(not(target_arch = "wasm32"))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CacheEntry<V> {
     /// The cached value
@@ -71,6 +145,7 @@ pub struct CacheEntry<V> {
     pub size_bytes: usize,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl<V> CacheEntry<V> {
     /// Create a new cache entry
     pub fn new(value: V, size_bytes: usize) -> Self {
@@ -113,6 +188,10 @@ impl<V> CacheEntry<V> {
     }
 }
 
+// ============================================================================
+// InvalidationStrategy - Available on all platforms
+// ============================================================================
+
 /// Invalidation strategy for cache entries
 ///
 /// Defines when and how cache entries should be invalidated.
@@ -142,6 +221,8 @@ pub enum InvalidationStrategy {
 
 impl InvalidationStrategy {
     /// Check if an entry should be invalidated based on this strategy
+    /// Only available on native platforms (requires CacheEntry with Instant).
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn should_invalidate<V>(
         &self,
         entry: &CacheEntry<V>,
@@ -193,9 +274,15 @@ pub enum EvictionPolicy {
     Ttl,
 }
 
+// ============================================================================
+// Advanced cache traits - Native only (require Send + Sync)
+// ============================================================================
+
 /// Cache warming trait
 ///
 /// Allows caches to be pre-populated with data to improve initial performance.
+/// Only available on native platforms.
+#[cfg(not(target_arch = "wasm32"))]
 #[async_trait]
 pub trait CacheWarming<K: CacheKey> {
     /// Warm the cache with a set of keys
@@ -213,6 +300,8 @@ pub trait CacheWarming<K: CacheKey> {
 /// Cache persistence trait
 ///
 /// Allows caches to persist data to disk for durability across restarts.
+/// Only available on native platforms.
+#[cfg(not(target_arch = "wasm32"))]
 #[async_trait]
 pub trait CachePersistence {
     /// Save cache state to persistent storage
@@ -228,6 +317,8 @@ pub trait CachePersistence {
 /// Multi-layer cache trait
 ///
 /// Supports hierarchical caching with multiple layers (L1, L2, etc.).
+/// Only available on native platforms.
+#[cfg(not(target_arch = "wasm32"))]
 #[async_trait]
 pub trait MultiLayerCache<K: CacheKey>: AsyncCache<K> {
     /// Get the number of cache layers
@@ -249,6 +340,8 @@ pub trait MultiLayerCache<K: CacheKey>: AsyncCache<K> {
 /// Cache listener trait
 ///
 /// Allows external code to be notified of cache events.
+/// Only available on native platforms.
+#[cfg(not(target_arch = "wasm32"))]
 #[async_trait]
 pub trait CacheListener<K: CacheKey> {
     /// Called when an entry is added to the cache
@@ -270,6 +363,8 @@ pub trait CacheListener<K: CacheKey> {
 /// Cache metrics trait
 ///
 /// Provides detailed metrics for monitoring and debugging.
+/// Only available on native platforms.
+#[cfg(not(target_arch = "wasm32"))]
 #[async_trait]
 pub trait CacheMetrics {
     /// Get hit rate (hits / total requests)

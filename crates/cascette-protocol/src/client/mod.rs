@@ -97,9 +97,12 @@
 //! }
 //! ```
 
+// Ribbit TCP is not available on WASM (no raw TCP sockets)
+#[cfg(not(target_arch = "wasm32"))]
 mod ribbit;
 mod tact;
 
+#[cfg(not(target_arch = "wasm32"))]
 pub use ribbit::RibbitClient;
 pub use tact::TactClient;
 
@@ -276,6 +279,7 @@ use crate::error::{ProtocolError, Result};
 pub struct RibbitTactClient {
     tact_https: Option<TactClient>,
     tact_http: Option<TactClient>,
+    #[cfg(not(target_arch = "wasm32"))]
     ribbit_tcp: RibbitClient,
     cache: Arc<crate::cache::ProtocolCache>,
     config: ClientConfig,
@@ -379,12 +383,14 @@ impl RibbitTactClient {
             Some(TactClient::new(config.tact_http_url.clone(), false)?)
         };
 
-        // Initialize Ribbit TCP client
+        // Initialize Ribbit TCP client (not available on WASM)
+        #[cfg(not(target_arch = "wasm32"))]
         let ribbit_tcp = RibbitClient::new(config.ribbit_url.clone())?;
 
         Ok(Self {
             tact_https,
             tact_http,
+            #[cfg(not(target_arch = "wasm32"))]
             ribbit_tcp,
             cache,
             config,
@@ -579,12 +585,14 @@ impl RibbitTactClient {
             return Ok(response);
         }
 
-        // Check if this is a TCP-only endpoint
+        // Check if this is a TCP-only endpoint (not available on WASM)
+        #[cfg(not(target_arch = "wasm32"))]
         let is_tcp_only = endpoint.starts_with("v1/summary")
             || endpoint.starts_with("v1/certs/")
             || endpoint.starts_with("v1/ocsp/");
 
         // Try protocols in order
+        #[cfg(not(target_arch = "wasm32"))]
         let response = if is_tcp_only {
             // Skip TACT protocols for TCP-only endpoints
             tracing::debug!(
@@ -593,6 +601,20 @@ impl RibbitTactClient {
             );
             self.ribbit_tcp.query(endpoint).await?
         } else {
+            self.query_with_fallback(endpoint).await?
+        };
+
+        // On WASM, TCP-only endpoints are not supported
+        #[cfg(target_arch = "wasm32")]
+        let response = {
+            let is_tcp_only = endpoint.starts_with("v1/summary")
+                || endpoint.starts_with("v1/certs/")
+                || endpoint.starts_with("v1/ocsp/");
+            if is_tcp_only {
+                return Err(ProtocolError::UnsupportedOnWasm(format!(
+                    "TCP-only endpoint '{endpoint}' is not available on WASM"
+                )));
+            }
             self.query_with_fallback(endpoint).await?
         };
 
@@ -777,14 +799,24 @@ impl RibbitTactClient {
             }
         }
 
-        // Try Ribbit TCP (final fallback)
-        tracing::debug!("Trying Ribbit TCP for {}", endpoint);
-        match self.ribbit_tcp.query(endpoint).await {
-            Ok(response) => Ok(response),
-            Err(e) => {
-                tracing::error!("All protocols failed for {}: {}", endpoint, e);
-                Err(last_error.unwrap_or(e))
+        // Try Ribbit TCP (final fallback) - not available on WASM
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            tracing::debug!("Trying Ribbit TCP for {}", endpoint);
+            match self.ribbit_tcp.query(endpoint).await {
+                Ok(response) => Ok(response),
+                Err(e) => {
+                    tracing::error!("All protocols failed for {}: {}", endpoint, e);
+                    Err(last_error.unwrap_or(e))
+                }
             }
+        }
+
+        // On WASM, no TCP fallback is available
+        #[cfg(target_arch = "wasm32")]
+        {
+            tracing::error!("All HTTP protocols failed for {}", endpoint);
+            Err(last_error.unwrap_or_else(|| ProtocolError::AllHostsFailed))
         }
     }
 

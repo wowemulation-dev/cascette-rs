@@ -13,18 +13,9 @@ keywords = ["blizzard", "ngdp", "casc", "ribbit", "tact"]
 categories = ["network-programming", "game-development", "parsing"]
 
 [dependencies]
-# Workspace dependencies
+# Workspace dependencies (available on all platforms)
 thiserror = { workspace = true }
-tokio = { workspace = true, features = ["full"] }
-reqwest = { workspace = true }
 hex = { workspace = true }
-
-# Internal dependencies
-cascette-formats = { version = "0.2.0", path = "../cascette-formats" }
-cascette-cache = { version = "0.2.0", path = "../cascette-cache" }
-cascette-crypto = { version = "0.2.0", path = "../cascette-crypto" }
-
-# Additional dependencies
 async-trait = { workspace = true }
 bytes = { workspace = true }
 futures = { workspace = true }
@@ -47,6 +38,33 @@ rsa = { workspace = true }
 sha2 = { workspace = true }
 digest = { workspace = true }
 base64 = { workspace = true }
+
+# Native platform dependencies (tokio with full features, reqwest, internal crates)
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { workspace = true, features = ["full"] }
+reqwest = { workspace = true }
+cascette-formats = { version = "0.2.0", path = "../cascette-formats" }
+cascette-cache = { version = "0.2.0", path = "../cascette-cache" }
+cascette-crypto = { version = "0.2.0", path = "../cascette-crypto" }
+
+# WASM platform dependencies
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+# WASM-compatible tokio - only sync primitives, no runtime (use wasm-bindgen-futures instead)
+# Cannot use workspace = true when overriding default-features
+tokio = { version = "1.47", default-features = false, features = ["sync", "macros"] }
+# WASM-compatible reqwest (uses web-sys/fetch API instead of native sockets)
+reqwest = { version = "0.12", default-features = false, features = ["gzip", "brotli", "deflate", "charset"] }
+# getrandom 0.2.x needs "js" feature to use browser crypto API on WASM
+getrandom_02 = { package = "getrandom", version = "0.2", features = ["js"] }
+# getrandom 0.3.x needs "wasm_js" feature for WASM
+getrandom = { version = "0.3", features = ["wasm_js"] }
+# wasm-bindgen-futures provides async runtime for WASM
+wasm-bindgen-futures = "0.4"
+# web-sys for browser APIs
+web-sys = { version = "0.3", features = ["console"] }
+# WASM-compatible internal dependencies (cascette-crypto and cascette-formats support WASM)
+cascette-crypto = { version = "0.2.0", path = "../cascette-crypto" }
+cascette-formats = { version = "0.2.0", path = "../cascette-formats" }
 
 [dev-dependencies]
 tempfile = { workspace = true }

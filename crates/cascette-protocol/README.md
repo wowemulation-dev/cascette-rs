@@ -72,6 +72,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+## Platform Support
+
+### Native (Full Support)
+- Linux, macOS, Windows
+- All features available including TCP Ribbit protocol and full caching
+
+### WASM (Partial Support - In Progress)
+- TCP Ribbit protocol disabled (browsers cannot use raw TCP sockets)
+- Caching disabled (no persistent storage in browser environment)
+- TACT HTTPS/HTTP protocol supported via Fetch API
+- Requires additional work for full production use
+
 ## Dependencies
 
 - `tokio` - Async runtime

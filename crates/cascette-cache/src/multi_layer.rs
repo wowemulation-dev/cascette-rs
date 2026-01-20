@@ -938,7 +938,10 @@ impl<K: CacheKey + 'static> AsyncCache<K> for MultiLayerCacheImpl<K> {
             0.0
         };
 
-        let now = Instant::now();
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0);
 
         Ok(crate::stats::CacheStats {
             get_count: total_hits + total_misses,
@@ -951,8 +954,8 @@ impl<K: CacheKey + 'static> AsyncCache<K> for MultiLayerCacheImpl<K> {
             entry_count: total_entries,
             memory_usage_bytes: total_memory,
             max_memory_usage_bytes: total_memory, // Placeholder
-            created_at: now,                      // Placeholder
-            updated_at: now,
+            created_at_ms: now_ms,                // Placeholder
+            updated_at_ms: now_ms,
             avg_get_time: Duration::ZERO, // Would need to aggregate from layers
             avg_put_time: Duration::ZERO, // Would need to aggregate from layers
         })

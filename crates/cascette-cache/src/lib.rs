@@ -246,101 +246,160 @@
 #![allow(clippy::redundant_closure_for_method_calls)] // Sometimes clearer
 #![allow(clippy::manual_instant_elapsed)] // Direct subtraction can be clearer
 
-pub mod cdn;
+// ============================================================================
+// Platform-independent modules (available on all platforms)
+// ============================================================================
 pub mod config;
-pub mod disk_cache;
 pub mod error;
 pub mod game_optimized;
-pub mod integration;
 pub mod key;
-pub mod memory;
-pub mod memory_cache;
-pub mod multi_layer;
-pub mod ngdp;
 pub mod pool;
 pub mod simd;
 pub mod stats;
-pub mod streaming;
 pub mod traits;
-pub mod validation;
 
-// Re-export commonly used types
+// ============================================================================
+// Native-only modules (require tokio::time, filesystem, or other native features)
+// ============================================================================
+#[cfg(not(target_arch = "wasm32"))]
+pub mod cdn;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod disk_cache;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod integration;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod memory;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod memory_cache;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod multi_layer;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod ngdp;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod streaming;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod validation;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod zerocopy;
+
+// ============================================================================
+// WASM-only modules (browser storage backends)
+// ============================================================================
+#[cfg(target_arch = "wasm32")]
+pub mod indexed_db_cache;
+#[cfg(target_arch = "wasm32")]
+pub mod local_storage_cache;
+
+// ============================================================================
+// Platform-independent re-exports (available on all platforms)
+// ============================================================================
 pub use error::{CacheError, CacheResult, NgdpCacheError, NgdpCacheResult, to_ngdp_result};
 pub use game_optimized::{AccessPatternStats, AnalyzerConfig, CacheAccessAnalyzer};
-pub use memory::{AccessPattern, ContentTypeHint, MemoryPool, MemoryPoolStats, SizedMemoryPool};
 pub use pool::{NgdpMemoryPool, NgdpSizeClass};
-pub use stats::{
-    AtomicCacheMetrics, CacheStats, FastCacheMetrics, MultiLayerStats, PerformanceMetrics,
+pub use simd::{
+    CpuFeatures, SimdHashOperations, SimdStats, detect_cpu_features, global_simd_stats,
 };
+pub use stats::{CacheStats, FastCacheMetrics};
+// Native-only stats exports
+#[cfg(not(target_arch = "wasm32"))]
+pub use stats::{AtomicCacheMetrics, MultiLayerStats, PerformanceMetrics};
+// Platform-independent trait exports
+pub use traits::{AsyncCache, EvictionPolicy, InvalidationStrategy};
+
+// Native-only trait exports
+#[cfg(not(target_arch = "wasm32"))]
+pub use traits::{
+    CacheEntry, CacheListener, CacheMetrics, CachePersistence, CacheWarming, MultiLayerCache,
+};
+
+// ============================================================================
+// Native-only re-exports
+// ============================================================================
+#[cfg(not(target_arch = "wasm32"))]
+pub use memory::{AccessPattern, ContentTypeHint, MemoryPool, MemoryPoolStats, SizedMemoryPool};
+#[cfg(not(target_arch = "wasm32"))]
 pub use streaming::{
     ContentStream, StreamingCache, StreamingConfig, StreamingProcessor, StreamingStats,
 };
-pub use traits::{
-    AsyncCache, CacheEntry, CacheListener, CacheMetrics, CachePersistence, EvictionPolicy,
-    InvalidationStrategy, MultiLayerCache,
-};
+#[cfg(not(target_arch = "wasm32"))]
 pub use validation::{
     Md5ValidationHooks, NgdpBytes, NgdpValidationHooks, NoOpValidationHooks, ValidationHooks,
     ValidationMetrics, ValidationResult,
 };
 
-// Re-export cache implementations
+// Re-export native cache implementations
+#[cfg(not(target_arch = "wasm32"))]
 pub use disk_cache::DiskCache;
+#[cfg(not(target_arch = "wasm32"))]
 pub use integration::{ArchiveOps, BlteBlockOps, EncodingFileOps, FormatConfig, RootFileOps};
+#[cfg(not(target_arch = "wasm32"))]
 pub use memory_cache::MemoryCache;
+#[cfg(not(target_arch = "wasm32"))]
 pub use multi_layer::{LayerStats, MultiLayerCacheImpl, MultiLayerStats as MultiLayerStatsV2};
 
-// Re-export NGDP-specific cache implementations
+// Re-export NGDP-specific cache implementations (native only)
+#[cfg(not(target_arch = "wasm32"))]
 pub use ngdp::{
     ArchiveCache, ArchiveMetadata, BlockMetadata, BlteBlockCache, ContentAddressedCache,
     ContentValidationMetrics, NgdpResolutionCache, NgdpResolutionConfig, ResolutionMetrics,
 };
 
-// Re-export CDN integration components
+// Re-export CDN integration components (native only)
+#[cfg(not(target_arch = "wasm32"))]
 pub use cdn::{
     CdnArchiveCache, CdnBackedCache, CdnCacheBuilder, CdnCacheStack, CdnClient, CdnConfig,
     CdnContentCache, CdnMetrics, CdnNgdpResolutionCache,
 };
 
-// Re-export SIMD components
-pub use simd::{
-    CpuFeatures, SimdHashOperations, SimdStats, detect_cpu_features, global_simd_stats,
-};
+// ============================================================================
+// WASM-only re-exports
+// ============================================================================
+#[cfg(target_arch = "wasm32")]
+pub use indexed_db_cache::{IndexedDbCache, IndexedDbCacheConfig};
+#[cfg(target_arch = "wasm32")]
+pub use local_storage_cache::{LocalStorageCache, LocalStorageCacheConfig};
 
+// ============================================================================
+// Prelude module
+// ============================================================================
 pub mod prelude {
     //! Convenient re-exports of commonly used types and traits
 
+    // Platform-independent exports
     pub use crate::{
-        // Access pattern analysis
-        AccessPatternStats,
-        AnalyzerConfig,
-        // NGDP-specific caches
-        ArchiveCache,
-        BlteBlockCache,
-        CacheAccessAnalyzer,
-        ContentAddressedCache,
-        // Cache implementations
-        DiskCache,
-        MemoryCache,
-        MultiLayerCacheImpl,
-        NgdpResolutionCache,
-        config::{CacheConfig, DiskCacheConfig, MemoryCacheConfig, MultiLayerCacheConfig},
+        AccessPatternStats, AnalyzerConfig, CacheAccessAnalyzer,
+        config::CacheConfig,
         error::{CacheError, CacheResult, NgdpCacheError, NgdpCacheResult, to_ngdp_result},
-        integration::{ArchiveOps, BlteBlockOps, EncodingFileOps, FormatConfig, RootFileOps},
         key::{
             ArchiveIndexKey, ArchiveRangeKey, BlteBlockKey, BlteKey, CacheKey, ConfigKey,
             ContentCacheKey, EncodingFileKey, FastHash, ManifestKey, RibbitKey, RootFileKey,
         },
-        memory::{AccessPattern, ContentTypeHint, MemoryPool, MemoryPoolStats, SizedMemoryPool},
         pool::{NgdpMemoryPool, NgdpSizeClass, allocate_thread_local, deallocate_thread_local},
-        stats::{CacheStats, FastCacheMetrics, MultiLayerStats},
+        stats::{CacheStats, FastCacheMetrics},
+        traits::{AsyncCache, EvictionPolicy, InvalidationStrategy},
+    };
+
+    // Native-only exports
+    #[cfg(not(target_arch = "wasm32"))]
+    pub use crate::{
+        ArchiveCache, BlteBlockCache, CacheEntry, ContentAddressedCache, DiskCache, MemoryCache,
+        MultiLayerCacheImpl, NgdpResolutionCache,
+        config::{DiskCacheConfig, MemoryCacheConfig, MultiLayerCacheConfig},
+        integration::{ArchiveOps, BlteBlockOps, EncodingFileOps, FormatConfig, RootFileOps},
+        memory::{AccessPattern, ContentTypeHint, MemoryPool, MemoryPoolStats, SizedMemoryPool},
         streaming::{
             ContentStream, StreamingCache, StreamingConfig, StreamingProcessor, StreamingStats,
         },
-        traits::{AsyncCache, CacheEntry, InvalidationStrategy, MultiLayerCache},
+        traits::MultiLayerCache,
         validation::{
             Md5ValidationHooks, NgdpBytes, NgdpValidationHooks, NoOpValidationHooks,
             ValidationHooks, ValidationMetrics, ValidationResult,
         },
+    };
+
+    // WASM-only exports
+    #[cfg(target_arch = "wasm32")]
+    pub use crate::{
+        IndexedDbCache, IndexedDbCacheConfig, LocalStorageCache, LocalStorageCacheConfig,
     };
 }

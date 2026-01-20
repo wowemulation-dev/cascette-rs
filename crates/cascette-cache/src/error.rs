@@ -61,6 +61,14 @@ pub enum CacheError {
     /// Invalid content key format
     #[error("Invalid content key format: {0}")]
     InvalidContentKey(String),
+
+    /// Storage configuration error (e.g., unavailable storage backend)
+    #[error("Configuration error: {0}")]
+    Config(String),
+
+    /// Storage quota exceeded (e.g., browser localStorage limit)
+    #[error("Storage quota exceeded")]
+    StorageQuotaExceeded,
 }
 
 impl From<hex::FromHexError> for CacheError {
@@ -236,6 +244,13 @@ mod tests {
                 assert!(error_str.contains("Invalid content key format"));
                 assert!(error_str.contains(msg));
             }
+            CacheError::Config(msg) => {
+                assert!(error_str.contains("Configuration error"));
+                assert!(error_str.contains(msg));
+            }
+            CacheError::StorageQuotaExceeded => {
+                assert!(error_str.contains("Storage quota exceeded"));
+            }
         }
     }
 
@@ -356,6 +371,8 @@ mod tests {
             CacheError::ContentValidationFailed(String::new()),
             CacheError::ContentParsingFailed(String::new()),
             CacheError::InvalidContentKey(String::new()),
+            CacheError::Config(String::new()),
+            CacheError::StorageQuotaExceeded,
         ];
     }
 
@@ -375,6 +392,7 @@ mod tests {
             CacheError::ContentValidationFailed(String::new()),
             CacheError::ContentParsingFailed(String::new()),
             CacheError::InvalidContentKey(String::new()),
+            CacheError::Config(String::new()),
         ];
 
         for error in errors {

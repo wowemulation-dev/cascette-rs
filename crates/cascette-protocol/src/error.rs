@@ -49,6 +49,9 @@ pub enum ProtocolError {
 
     #[error("UTF-8 error")]
     Utf8(#[from] std::string::FromUtf8Error),
+
+    #[error("Unsupported on WASM: {0}")]
+    UnsupportedOnWasm(String),
 }
 
 impl ProtocolError {
