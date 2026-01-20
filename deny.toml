@@ -46,6 +46,7 @@ ignore = true
 [bans]
 multiple-versions = "warn"
 wildcards = "deny"
+allow-wildcard-paths = true  # Allow workspace path dependencies without version constraints
 highlight = "all"
 workspace-default-features = "allow"
 external-default-features = "allow"
