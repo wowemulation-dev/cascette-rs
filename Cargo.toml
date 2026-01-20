@@ -43,7 +43,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
 # Observability (optional)
-prometheus = "0.13"
+prometheus = { version = "0.13", default-features = false }  # Disable push gateway to avoid protobuf vulnerability
 tracing = "0.1"
 
 # Testing
