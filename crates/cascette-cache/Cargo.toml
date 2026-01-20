@@ -42,8 +42,8 @@ rand = { workspace = true }
 libc = "0.2"
 
 # Internal dependencies
-cascette-crypto = { path = "../cascette-crypto" }
-cascette-formats = { path = "../cascette-formats" }
+cascette-crypto = { version = "0.2.0", path = "../cascette-crypto" }
+cascette-formats = { version = "0.2.0", path = "../cascette-formats" }
 
 [features]
 default = []
