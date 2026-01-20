@@ -230,9 +230,9 @@ impl SimdMemoryOps for CpuFeatures {
 
     fn simd_memset(&self, dest: &mut [u8], value: u8) {
         if self.avx2 && dest.len() >= 32 {
-            unsafe { simd_memset_avx2(dest, value) };
+            simd_memset_avx2(dest, value);
         } else if self.sse2 && dest.len() >= 16 {
-            unsafe { simd_memset_sse2(dest, value) };
+            simd_memset_sse2(dest, value);
         } else {
             global_simd_stats().record_fallback();
             for byte in dest {
@@ -244,9 +244,9 @@ impl SimdMemoryOps for CpuFeatures {
     fn simd_memcpy(&self, dest: &mut [u8], src: &[u8]) {
         let len = dest.len().min(src.len());
         if self.avx2 && len >= 32 {
-            unsafe { simd_memcpy_avx2(&mut dest[..len], &src[..len]) };
+            simd_memcpy_avx2(&mut dest[..len], &src[..len]);
         } else if self.sse2 && len >= 16 {
-            unsafe { simd_memcpy_sse2(&mut dest[..len], &src[..len]) };
+            simd_memcpy_sse2(&mut dest[..len], &src[..len]);
         } else {
             global_simd_stats().record_fallback();
             dest[..len].copy_from_slice(&src[..len]);
@@ -259,11 +259,11 @@ impl SimdHashOperations for CpuFeatures {
         let start = std::time::Instant::now();
 
         let result = if self.avx2 {
-            unsafe { batch_content_keys_avx2(data) }
+            batch_content_keys_avx2(data)
         } else if self.sse4_1 {
-            unsafe { batch_content_keys_sse41(data) }
+            batch_content_keys_sse41(data)
         } else if self.sse2 {
-            unsafe { batch_content_keys_sse2(data) }
+            batch_content_keys_sse2(data)
         } else {
             // Fallback to scalar implementation
             GLOBAL_SIMD_STATS.record_fallback();
@@ -284,9 +284,9 @@ impl SimdHashOperations for CpuFeatures {
         let start = std::time::Instant::now();
 
         let result = if self.avx2 {
-            unsafe { batch_jenkins96_avx2(paths) }
+            batch_jenkins96_avx2(paths)
         } else if self.sse4_1 {
-            unsafe { batch_jenkins96_sse41(paths) }
+            batch_jenkins96_sse41(paths)
         } else {
             // Fallback to scalar implementation
             GLOBAL_SIMD_STATS.record_fallback();
@@ -310,9 +310,9 @@ impl SimdHashOperations for CpuFeatures {
         let start = std::time::Instant::now();
 
         let result = if self.avx2 {
-            unsafe { batch_jenkins96_data_avx2(data) }
+            batch_jenkins96_data_avx2(data)
         } else if self.sse4_1 {
-            unsafe { batch_jenkins96_data_sse41(data) }
+            batch_jenkins96_data_sse41(data)
         } else {
             // Fallback to scalar implementation
             GLOBAL_SIMD_STATS.record_fallback();
@@ -335,9 +335,9 @@ impl SimdHashOperations for CpuFeatures {
         }
 
         if self.avx2 {
-            unsafe { simd_memcmp_avx2(a, b) }
+            simd_memcmp_avx2(a, b)
         } else if self.sse2 {
-            unsafe { simd_memcmp_sse2(a, b) }
+            simd_memcmp_sse2(a, b)
         } else {
             GLOBAL_SIMD_STATS.record_fallback();
             a.cmp(b)
@@ -353,9 +353,9 @@ impl SimdHashOperations for CpuFeatures {
         }
 
         if self.avx2 && needle.len() >= 4 {
-            unsafe { simd_memmem_avx2(haystack, needle) }
+            simd_memmem_avx2(haystack, needle)
         } else if self.sse2 && needle.len() >= 4 {
-            unsafe { simd_memmem_sse2(haystack, needle) }
+            simd_memmem_sse2(haystack, needle)
         } else {
             GLOBAL_SIMD_STATS.record_fallback();
             // Simple scalar fallback
@@ -367,9 +367,9 @@ impl SimdHashOperations for CpuFeatures {
 
     fn batch_mem_equal(&self, pairs: &[(&[u8], &[u8])]) -> Vec<bool> {
         if self.avx2 {
-            unsafe { batch_mem_equal_avx2(pairs) }
+            batch_mem_equal_avx2(pairs)
         } else if self.sse2 {
-            unsafe { batch_mem_equal_sse2(pairs) }
+            batch_mem_equal_sse2(pairs)
         } else {
             GLOBAL_SIMD_STATS.record_fallback();
             pairs.iter().map(|(a, b)| a == b).collect()
