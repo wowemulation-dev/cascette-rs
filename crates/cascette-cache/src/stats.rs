@@ -7,14 +7,14 @@
 #![allow(missing_docs)]
 #![allow(clippy::cast_precision_loss)] // Statistics calculations intentionally accept precision loss
 
+use std::time::Duration;
+
+// Platform-specific imports
+#[cfg(not(target_arch = "wasm32"))]
 use std::{
     sync::atomic::{AtomicU64, AtomicUsize, Ordering},
-    time::Duration,
+    time::{Instant, SystemTime, UNIX_EPOCH},
 };
-
-// Platform-specific time utilities
-#[cfg(not(target_arch = "wasm32"))]
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 /// Get current time in milliseconds since Unix epoch (native)
 #[cfg(not(target_arch = "wasm32"))]
@@ -32,14 +32,19 @@ fn current_time_ms() -> u64 {
 }
 
 // Use cache-aligned atomics to reduce false sharing
+// Cache-aligned atomic types for native platforms only
+// Used by AtomicCacheMetrics to reduce false sharing between threads
+#[cfg(not(target_arch = "wasm32"))]
 #[repr(align(64))] // Cache line alignment
 #[derive(Debug)]
 struct CacheAlignedAtomicU64(AtomicU64);
 
+#[cfg(not(target_arch = "wasm32"))]
 #[repr(align(64))] // Cache line alignment
 #[derive(Debug)]
 struct CacheAlignedAtomicUsize(AtomicUsize);
 
+#[cfg(not(target_arch = "wasm32"))]
 impl CacheAlignedAtomicU64 {
     fn new(value: u64) -> Self {
         Self(AtomicU64::new(value))
@@ -73,6 +78,7 @@ impl CacheAlignedAtomicU64 {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl CacheAlignedAtomicUsize {
     fn new(value: usize) -> Self {
         Self(AtomicUsize::new(value))

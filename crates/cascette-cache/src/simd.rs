@@ -445,7 +445,8 @@ unsafe fn batch_jenkins96_avx2(paths: &[&str]) -> Vec<Jenkins96> {
     results
 }
 
-// Chunk size constant for SIMD operations
+// Chunk size constant for SIMD operations (x86_64 only)
+#[cfg(target_arch = "x86_64")]
 const SIMD_CHUNK_SIZE: usize = 8;
 
 #[cfg(target_arch = "x86_64")]
