@@ -8,7 +8,26 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-<!-- Changes pending the 1.0.0 release go here -->
+<!-- Changes pending the next release go here -->
+
+## [0.2.0] - 2025-01-20
+
+### Breaking Changes
+
+- **MSRV increased from 1.86.0 to 1.92.0** - Required for new language features and
+  clippy lints
+
+### Changed
+
+- Adopted Rust 1.92.0 language features:
+  - Let-chains for cleaner conditional logic
+  - `std::io::Error::other()` for error construction
+  - `.is_multiple_of()` for divisibility checks
+  - `usize::midpoint()` for overflow-safe averaging
+  - `#[default]` attribute on enum variants
+- Updated code to satisfy new clippy lints in Rust 1.92.0
+
+## [0.1.0] - 2025-01-15
 
 ### Added
 

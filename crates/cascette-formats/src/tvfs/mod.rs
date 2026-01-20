@@ -210,16 +210,14 @@ impl<'a> Iterator for TvfsIterator<'a> {
             }
 
             // Return file entry if this is a file
-            if let Some(file_id) = node.file_id {
-                if let Some(vfs_entry) = self.tvfs.vfs_table.get_entry(file_id) {
-                    if let Some(container_entry) = self
-                        .tvfs
-                        .container_table
-                        .get_entry(vfs_entry.container_index)
-                    {
-                        return Some((path, container_entry));
-                    }
-                }
+            if let Some(file_id) = node.file_id
+                && let Some(vfs_entry) = self.tvfs.vfs_table.get_entry(file_id)
+                && let Some(container_entry) = self
+                    .tvfs
+                    .container_table
+                    .get_entry(vfs_entry.container_index)
+            {
+                return Some((path, container_entry));
             }
         }
 

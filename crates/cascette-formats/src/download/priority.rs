@@ -340,42 +340,36 @@ impl PriorityAnalysis {
 
         report.push_str("Download Manifest Priority Analysis\n");
         report.push_str("=====================================");
-        writeln!(&mut report, "Total Files: {}", self.total_files)
-            .expect("Operation should succeed");
-        writeln!(
+        let _ = writeln!(&mut report, "Total Files: {}", self.total_files);
+        let _ = writeln!(
             &mut report,
             "Total Size: {}",
             crate::download::entry::FileSize40::new(self.total_size).map_or_else(
                 |_| format!("{} bytes", self.total_size),
                 super::entry::FileSize40::to_human_readable
             )
-        )
-        .expect("Operation should succeed");
-        writeln!(
+        );
+        let _ = writeln!(
             &mut report,
             "Priority Range: {} to {}",
             self.priority_range.0, self.priority_range.1
-        )
-        .expect("Operation should succeed");
-        writeln!(
+        );
+        let _ = writeln!(
             &mut report,
             "Base Priority Adjustment: {}",
             self.base_priority_adjustment
-        )
-        .expect("Operation should succeed");
-        writeln!(
+        );
+        let _ = writeln!(
             &mut report,
             "Essential Content: {:.1}%",
             self.essential_percentage()
-        )
-        .expect("Operation should succeed");
-        writeln!(
+        );
+        let _ = writeln!(
             &mut report,
             "Streamable Content: {:.1}%",
             self.streamable_percentage()
-        )
-        .expect("Operation should succeed");
-        writeln!(
+        );
+        let _ = writeln!(
             &mut report,
             "Good Streaming Potential: {}",
             if self.has_good_streaming_potential() {
@@ -383,24 +377,22 @@ impl PriorityAnalysis {
             } else {
                 "No"
             }
-        )
-        .expect("Operation should succeed");
+        );
 
         report.push_str("\nCategory Breakdown:\n");
         for category in PriorityCategory::all_ordered() {
-            if let Some(stats) = self.categories.get(&category) {
-                if stats.file_count > 0 {
-                    writeln!(
-                        &mut report,
-                        "  {}: {} files ({:.1}%), {} ({:.1}%)",
-                        category,
-                        stats.file_count,
-                        stats.percentage_of_files,
-                        stats.total_size_human_readable(),
-                        stats.percentage_of_size
-                    )
-                    .expect("Operation should succeed");
-                }
+            if let Some(stats) = self.categories.get(&category)
+                && stats.file_count > 0
+            {
+                let _ = writeln!(
+                    &mut report,
+                    "  {}: {} files ({:.1}%), {} ({:.1}%)",
+                    category,
+                    stats.file_count,
+                    stats.percentage_of_files,
+                    stats.total_size_human_readable(),
+                    stats.percentage_of_size
+                );
             }
         }
 
@@ -458,17 +450,17 @@ impl DownloadPlan {
             let category = entry.priority_category(header);
 
             // Apply priority filter
-            if let Some(max_pri) = max_priority {
-                if effective_priority > max_pri {
-                    continue;
-                }
+            if let Some(max_pri) = max_priority
+                && effective_priority > max_pri
+            {
+                continue;
             }
 
             // Apply category filter
-            if let Some(required_cats) = required_categories {
-                if !required_cats.contains(&category) {
-                    continue;
-                }
+            if let Some(required_cats) = required_categories
+                && !required_cats.contains(&category)
+            {
+                continue;
             }
 
             let file_size = entry.file_size.as_u64();

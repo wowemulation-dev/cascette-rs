@@ -225,11 +225,11 @@ impl NgdpResolutionCache {
         for page in &encoding_file.ckey_pages {
             for entry in &page.entries {
                 // Check if this entry's content key matches
-                if entry.content_key == content_key {
+                if entry.content_key == content_key
+                    && let Some(ekey) = entry.encoding_keys.first()
+                {
                     // Found it! Return the first encoding key
-                    if let Some(ekey) = entry.encoding_keys.first() {
-                        return Ok(Some(*ekey));
-                    }
+                    return Ok(Some(*ekey));
                 }
             }
         }
@@ -479,12 +479,11 @@ where
                 .block_metadata
                 .read()
                 .map_err(|_| NgdpCacheError::StreamProcessingError("Lock poisoned".to_string()))?;
-            if let Some(meta) = metadata.get(&content_key) {
-                if meta.cached_blocks.len() >= self.max_blocks_per_content as usize
-                    && !meta.cached_blocks.contains(&block_index)
-                {
-                    return Err(NgdpCacheError::CacheFull);
-                }
+            if let Some(meta) = metadata.get(&content_key)
+                && meta.cached_blocks.len() >= self.max_blocks_per_content as usize
+                && !meta.cached_blocks.contains(&block_index)
+            {
+                return Err(NgdpCacheError::CacheFull);
             }
         }
 
@@ -621,12 +620,11 @@ where
                 .archive_metadata
                 .read()
                 .map_err(|_| NgdpCacheError::StreamProcessingError("Lock poisoned".to_string()))?;
-            if let Some(meta) = metadata.get(archive_id) {
-                if meta.cached_ranges.len() >= self.max_ranges_per_archive
-                    && !meta.cached_ranges.contains(&(offset, length))
-                {
-                    return Err(NgdpCacheError::CacheFull);
-                }
+            if let Some(meta) = metadata.get(archive_id)
+                && meta.cached_ranges.len() >= self.max_ranges_per_archive
+                && !meta.cached_ranges.contains(&(offset, length))
+            {
+                return Err(NgdpCacheError::CacheFull);
             }
         }
 

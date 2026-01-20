@@ -77,8 +77,7 @@ impl CdnConfig {
 
         for key in &order {
             if let Some(values) = self.entries.get(*key) {
-                writeln!(output, "{} = {}", key, values.join(" "))
-                    .expect("Test operation should succeed");
+                let _ = writeln!(output, "{} = {}", key, values.join(" "));
             }
         }
 
@@ -92,8 +91,7 @@ impl CdnConfig {
 
         for key in remaining {
             let values = &self.entries[key];
-            writeln!(output, "{} = {}", key, values.join(" "))
-                .expect("Test operation should succeed");
+            let _ = writeln!(output, "{} = {}", key, values.join(" "));
         }
 
         output
@@ -260,13 +258,13 @@ impl CdnConfig {
         let sizes = self.entries.get("archives-index-size");
 
         // If sizes present, must match archive count
-        if let Some(sizes) = sizes {
-            if archives.len() != sizes.len() {
-                return Err(ValidationError::SizeMismatch {
-                    archives: archives.len(),
-                    sizes: sizes.len(),
-                });
-            }
+        if let Some(sizes) = sizes
+            && archives.len() != sizes.len()
+        {
+            return Err(ValidationError::SizeMismatch {
+                archives: archives.len(),
+                sizes: sizes.len(),
+            });
         }
 
         // Validate hash formats
@@ -280,13 +278,13 @@ impl CdnConfig {
         if let Some(patch_archives) = self.entries.get("patch-archives") {
             let patch_sizes = self.entries.get("patch-archives-index-size");
 
-            if let Some(sizes) = patch_sizes {
-                if patch_archives.len() != sizes.len() {
-                    return Err(ValidationError::PatchSizeMismatch {
-                        archives: patch_archives.len(),
-                        sizes: sizes.len(),
-                    });
-                }
+            if let Some(sizes) = patch_sizes
+                && patch_archives.len() != sizes.len()
+            {
+                return Err(ValidationError::PatchSizeMismatch {
+                    archives: patch_archives.len(),
+                    sizes: sizes.len(),
+                });
             }
 
             for hash in patch_archives {

@@ -255,11 +255,8 @@ mod tests {
         }
 
         let recoverable_errors = vec![
-            ZbsdiffError::CompressionError(std::io::Error::new(std::io::ErrorKind::Other, "test")),
-            ZbsdiffError::DecompressionError(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "test",
-            )),
+            ZbsdiffError::CompressionError(std::io::Error::other("test")),
+            ZbsdiffError::DecompressionError(std::io::Error::other("test")),
         ];
 
         for error in &recoverable_errors {

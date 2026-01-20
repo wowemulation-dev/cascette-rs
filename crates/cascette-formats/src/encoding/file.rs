@@ -78,10 +78,9 @@ impl EncodingFile {
                         page_cursor.set_position(pos_before);
                         if let Ok(next_byte) =
                             u8::read_options(&mut page_cursor, binrw::Endian::Big, ())
+                            && next_byte == 0x00
                         {
-                            if next_byte == 0x00 {
-                                break; // Hit padding
-                            }
+                            break; // Hit padding
                         }
                         // Reset and break on any other error
                         page_cursor.set_position(pos_before);
@@ -177,12 +176,12 @@ impl EncodingFile {
         // Read header
         let header =
             EncodingHeader::read_options(&mut cursor, binrw::Endian::Big, ()).map_err(|e| {
-                if let binrw::Error::AssertFail { message, .. } = &e {
-                    if message.contains("Invalid encoding magic") {
-                        // Extract the actual magic bytes for better error
-                        let magic = [data[0], data[1]];
-                        return EncodingError::InvalidMagic(magic);
-                    }
+                if let binrw::Error::AssertFail { message, .. } = &e
+                    && message.contains("Invalid encoding magic")
+                {
+                    // Extract the actual magic bytes for better error
+                    let magic = [data[0], data[1]];
+                    return EncodingError::InvalidMagic(magic);
                 }
                 EncodingError::BinRw(e)
             })?;

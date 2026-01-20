@@ -779,12 +779,12 @@ pub fn decrypt_chunk_with_keys(
     };
 
     // Check if decrypted data has a compression mode marker
-    if !decrypted_data.is_empty() {
-        if let Some(inner_mode) = CompressionMode::from_byte(decrypted_data[0]) {
-            // Recursively decompress the decrypted data if it's compressed
-            if inner_mode != CompressionMode::Encrypted {
-                return decompress_chunk(&decrypted_data[1..], inner_mode);
-            }
+    if !decrypted_data.is_empty()
+        && let Some(inner_mode) = CompressionMode::from_byte(decrypted_data[0])
+    {
+        // Recursively decompress the decrypted data if it's compressed
+        if inner_mode != CompressionMode::Encrypted {
+            return decompress_chunk(&decrypted_data[1..], inner_mode);
         }
     }
 

@@ -225,14 +225,14 @@ impl RootFile {
     /// Validate file structure and data integrity
     pub fn validate(&self) -> Result<()> {
         // Check version consistency
-        if let Some(header) = &self.header {
-            if header.version() != self.version {
-                return Err(RootError::CorruptedBlockHeader(format!(
-                    "Version mismatch: header says {:?}, detected {:?}",
-                    header.version(),
-                    self.version
-                )));
-            }
+        if let Some(header) = &self.header
+            && header.version() != self.version
+        {
+            return Err(RootError::CorruptedBlockHeader(format!(
+                "Version mismatch: header says {:?}, detected {:?}",
+                header.version(),
+                self.version
+            )));
         }
 
         // Validate block structure
@@ -255,10 +255,10 @@ impl RootFile {
             let mut prev_id: Option<u32> = None;
             for record in &block.records {
                 let current_id = record.file_data_id.get();
-                if let Some(prev) = prev_id {
-                    if current_id < prev {
-                        return Err(RootError::InvalidDelta);
-                    }
+                if let Some(prev) = prev_id
+                    && current_id < prev
+                {
+                    return Err(RootError::InvalidDelta);
                 }
                 prev_id = Some(current_id);
             }

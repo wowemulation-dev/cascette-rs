@@ -159,11 +159,9 @@ impl TvfsBuilder {
                 _current_node_index = existing_index;
 
                 // If it's a file, set the file ID
-                if is_file {
-                    if let Some(node) = nodes.get_mut(existing_index as usize) {
-                        node.file_id = Some(*next_file_id);
-                        *next_file_id += 1;
-                    }
+                if is_file && let Some(node) = nodes.get_mut(existing_index as usize) {
+                    node.file_id = Some(*next_file_id);
+                    *next_file_id += 1;
                 }
             } else {
                 // Create new node
@@ -180,10 +178,10 @@ impl TvfsBuilder {
                 node_index_map.insert(current_path.clone(), new_index);
 
                 // Add child reference to parent
-                if let Some(parent_index) = node_index_map.get(&parent_path) {
-                    if let Some(parent_node) = nodes.get_mut(*parent_index as usize) {
-                        parent_node.add_child(new_index);
-                    }
+                if let Some(parent_index) = node_index_map.get(&parent_path)
+                    && let Some(parent_node) = nodes.get_mut(*parent_index as usize)
+                {
+                    parent_node.add_child(new_index);
                 }
 
                 _current_node_index = new_index;

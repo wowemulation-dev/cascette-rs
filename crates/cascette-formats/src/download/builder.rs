@@ -369,10 +369,10 @@ impl DownloadManifestBuilder {
             if self.flag_size == 0 && entry.flags.is_some() {
                 return Err(DownloadError::FlagsNotEnabled);
             }
-            if let Some(ref flags) = entry.flags {
-                if flags.len() != self.flag_size as usize {
-                    return Err(DownloadError::InvalidFlagSize(flags.len(), self.flag_size));
-                }
+            if let Some(ref flags) = entry.flags
+                && flags.len() != self.flag_size as usize
+            {
+                return Err(DownloadError::InvalidFlagSize(flags.len(), self.flag_size));
             }
         }
 

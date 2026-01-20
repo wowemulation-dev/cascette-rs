@@ -77,7 +77,8 @@ impl ArchiveEntry {
     pub fn encoding_key_hex(&self) -> String {
         use std::fmt::Write;
         self.encoding_key.iter().fold(String::new(), |mut acc, b| {
-            write!(acc, "{b:02x}").expect("Writing to String should not fail");
+            // Writing to String cannot fail, so we discard the result
+            let _ = write!(acc, "{b:02x}");
             acc
         })
     }

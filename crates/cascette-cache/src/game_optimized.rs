@@ -105,7 +105,7 @@ impl CacheAccessAnalyzer {
                 pattern.hit_rate * (1.0 - alpha) + (if was_hit { 1.0 } else { 0.0 }) * alpha;
 
             // Update average size
-            pattern.avg_size = (pattern.avg_size + size) / 2;
+            pattern.avg_size = usize::midpoint(pattern.avg_size, size);
         }
 
         // Record in recent access history

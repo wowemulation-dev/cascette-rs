@@ -145,25 +145,25 @@ impl SizeClassPool {
         let buffer_size = self.size_class.buffer_size();
 
         // Try to reuse from pool first
-        if let Ok(mut buffers) = self.buffers.try_lock() {
-            if let Some(mut buffer) = buffers.pop_front() {
-                self.current_size.fetch_sub(1, Ordering::Relaxed);
+        if let Ok(mut buffers) = self.buffers.try_lock()
+            && let Some(mut buffer) = buffers.pop_front()
+        {
+            self.current_size.fetch_sub(1, Ordering::Relaxed);
 
-                // Reset buffer for reuse
-                buffer.clear();
-                buffer.reserve(size.max(buffer_size));
+            // Reset buffer for reuse
+            buffer.clear();
+            buffer.reserve(size.max(buffer_size));
 
-                // Update stats
-                if let Ok(mut stats) = self.stats.try_write() {
-                    stats.allocations += 1;
-                    stats.bytes_allocated += size as u64;
-                    stats.reuses += 1;
-                    stats.avg_allocation_size =
-                        (stats.bytes_allocated / stats.allocations.max(1)) as usize;
-                }
-
-                return buffer;
+            // Update stats
+            if let Ok(mut stats) = self.stats.try_write() {
+                stats.allocations += 1;
+                stats.bytes_allocated += size as u64;
+                stats.reuses += 1;
+                stats.avg_allocation_size =
+                    (stats.bytes_allocated / stats.allocations.max(1)) as usize;
             }
+
+            return buffer;
         }
 
         // Pool miss - allocate new buffer
@@ -185,18 +185,17 @@ impl SizeClassPool {
         let current_size = self.current_size.load(Ordering::Relaxed);
 
         // Only keep buffer if pool isn't full
-        if current_size < self.max_size {
-            if let Ok(mut buffers) = self.buffers.try_lock() {
-                if buffers.len() < self.max_size {
-                    buffers.push_back(buffer);
-                    let new_size = self.current_size.fetch_add(1, Ordering::Relaxed) + 1;
+        if current_size < self.max_size
+            && let Ok(mut buffers) = self.buffers.try_lock()
+            && buffers.len() < self.max_size
+        {
+            buffers.push_back(buffer);
+            let new_size = self.current_size.fetch_add(1, Ordering::Relaxed) + 1;
 
-                    // Update max pool size stats
-                    if let Ok(mut stats) = self.stats.try_write() {
-                        stats.pool_size = new_size;
-                        stats.max_pool_size = stats.max_pool_size.max(new_size);
-                    }
-                }
+            // Update max pool size stats
+            if let Ok(mut stats) = self.stats.try_write() {
+                stats.pool_size = new_size;
+                stats.max_pool_size = stats.max_pool_size.max(new_size);
             }
         }
         // If pool is full or lock contention, buffer is dropped
@@ -436,6 +435,7 @@ impl Default for NgdpPoolStats {
 ///
 /// Uses thread-local storage to provide lock-free allocations for
 /// high-frequency NGDP operations.
+#[allow(clippy::struct_field_names)] // Field names describe their purpose clearly
 pub struct ThreadLocalPool {
     /// Small buffer pool (local to thread)
     small_buffers: VecDeque<BytesMut>,

@@ -440,22 +440,26 @@ impl ProductConfig {
         }
 
         // Validate launcher install info if present
-        if let Some(ref launcher_info) = self.all.config.launcher_install_info {
-            if launcher_info.bootstrapper_branch.is_empty() {
-                return Err(ProductConfigError::InvalidField(
-                    "bootstrapper_branch cannot be empty".to_string(),
-                ));
-            }
-            if launcher_info.bootstrapper_product.is_empty() {
-                return Err(ProductConfigError::InvalidField(
-                    "bootstrapper_product cannot be empty".to_string(),
-                ));
-            }
-            if launcher_info.product_tag.is_empty() {
-                return Err(ProductConfigError::InvalidField(
-                    "product_tag cannot be empty".to_string(),
-                ));
-            }
+        if let Some(ref launcher_info) = self.all.config.launcher_install_info
+            && launcher_info.bootstrapper_branch.is_empty()
+        {
+            return Err(ProductConfigError::InvalidField(
+                "bootstrapper_branch cannot be empty".to_string(),
+            ));
+        }
+        if let Some(ref launcher_info) = self.all.config.launcher_install_info
+            && launcher_info.bootstrapper_product.is_empty()
+        {
+            return Err(ProductConfigError::InvalidField(
+                "bootstrapper_product cannot be empty".to_string(),
+            ));
+        }
+        if let Some(ref launcher_info) = self.all.config.launcher_install_info
+            && launcher_info.product_tag.is_empty()
+        {
+            return Err(ProductConfigError::InvalidField(
+                "product_tag cannot be empty".to_string(),
+            ));
         }
 
         Ok(())

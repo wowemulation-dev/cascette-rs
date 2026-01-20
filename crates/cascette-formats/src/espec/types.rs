@@ -219,11 +219,11 @@ impl fmt::Display for ESpec {
 impl fmt::Display for BlockSizeSpec {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Use M suffix for megabytes
-        if self.size % (1024 * 1024) == 0 {
+        if self.size.is_multiple_of(1024 * 1024) {
             write!(f, "{}M", self.size / (1024 * 1024))?;
         }
         // Use K suffix for kilobytes
-        else if self.size % 1024 == 0 {
+        else if self.size.is_multiple_of(1024) {
             write!(f, "{}K", self.size / 1024)?;
         }
         // Raw bytes

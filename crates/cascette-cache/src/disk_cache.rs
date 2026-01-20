@@ -238,8 +238,9 @@ impl<K: CacheKey + 'static> DiskCache<K> {
                             // Delete file
                             if let Err(e) = fs::remove_file(&entry.file_path) {
                                 eprintln!(
-                                    "Failed to delete cache file {:?}: {}",
-                                    entry.file_path, e
+                                    "Failed to delete cache file {}: {}",
+                                    entry.file_path.display(),
+                                    e
                                 );
                             } else {
                                 removed_count += 1;
@@ -305,7 +306,7 @@ impl<K: CacheKey + 'static> DiskCache<K> {
 
             // Ensure directory exists
             if let Err(e) = fs::create_dir_all(&path) {
-                eprintln!("Failed to create cache directory {path:?}: {e}");
+                eprintln!("Failed to create cache directory {}: {e}", path.display());
             }
 
             path.push(key_str);
@@ -422,7 +423,7 @@ impl<K: CacheKey + 'static> DiskCache<K> {
     }
 
     /// Recursively clear all files and subdirectories in the cache directory
-    #[allow(clippy::only_used_in_recursion)]
+    #[allow(clippy::self_only_used_in_recursion)]
     fn clear_directory_recursive(&self, dir: &std::path::Path) -> CacheResult<()> {
         if !dir.exists() {
             return Ok(());
@@ -446,7 +447,7 @@ impl<K: CacheKey + 'static> DiskCache<K> {
     }
 
     /// Count cache files recursively (helper for size method)
-    #[allow(clippy::only_used_in_recursion)]
+    #[allow(clippy::self_only_used_in_recursion)]
     fn count_cache_files(&self, dir: &std::path::Path, count: &mut usize) -> CacheResult<()> {
         if !dir.exists() {
             return Ok(());
@@ -458,15 +459,13 @@ impl<K: CacheKey + 'static> DiskCache<K> {
 
             if path.is_dir() {
                 self.count_cache_files(&path, count)?;
-            } else if path.is_file() {
-                if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
-                    if !std::path::Path::new(file_name)
-                        .extension()
-                        .is_some_and(|ext| ext.eq_ignore_ascii_case("tmp"))
-                    {
-                        *count += 1;
-                    }
-                }
+            } else if path.is_file()
+                && let Some(file_name) = path.file_name().and_then(|n| n.to_str())
+                && !std::path::Path::new(file_name)
+                    .extension()
+                    .is_some_and(|ext| ext.eq_ignore_ascii_case("tmp"))
+            {
+                *count += 1;
             }
         }
 
@@ -509,10 +508,10 @@ impl<K: CacheKey + 'static> AsyncCache<K> for DiskCache<K> {
             match self.read_file(&entry.file_path).await {
                 Ok(data) => {
                     // Update access time
-                    if let Ok(mut index) = self.index.write() {
-                        if let Some(entry) = index.get_mut(key) {
-                            entry.update_access();
-                        }
+                    if let Ok(mut index) = self.index.write()
+                        && let Some(entry) = index.get_mut(key)
+                    {
+                        entry.update_access();
                     }
 
                     self.metrics.record_get(true, start_time.elapsed());

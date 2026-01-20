@@ -79,10 +79,10 @@ impl MemoryCacheConfig {
             return Err("max_entries must be greater than 0".to_string());
         }
 
-        if let Some(max_bytes) = self.max_memory_bytes {
-            if max_bytes == 0 {
-                return Err("max_memory_bytes must be greater than 0".to_string());
-            }
+        if let Some(max_bytes) = self.max_memory_bytes
+            && max_bytes == 0
+        {
+            return Err("max_memory_bytes must be greater than 0".to_string());
         }
 
         if self.cleanup_interval.is_zero() {
@@ -180,10 +180,10 @@ impl DiskCacheConfig {
             return Err("max_files must be greater than 0".to_string());
         }
 
-        if let Some(max_bytes) = self.max_disk_bytes {
-            if max_bytes == 0 {
-                return Err("max_disk_bytes must be greater than 0".to_string());
-            }
+        if let Some(max_bytes) = self.max_disk_bytes
+            && max_bytes == 0
+        {
+            return Err("max_disk_bytes must be greater than 0".to_string());
         }
 
         if self.cleanup_interval.is_zero() {
@@ -301,9 +301,10 @@ impl LayerConfig {
 }
 
 /// Promotion strategy for multi-layer caches
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub enum PromotionStrategy {
     /// Promote on any cache hit
+    #[default]
     OnHit,
     /// Promote after N hits
     AfterNHits(u32),
@@ -332,12 +333,6 @@ impl PartialEq for PromotionStrategy {
             (Self::AgeBased { min_age: a }, Self::AgeBased { min_age: b }) => a == b,
             _ => false,
         }
-    }
-}
-
-impl Default for PromotionStrategy {
-    fn default() -> Self {
-        Self::OnHit
     }
 }
 

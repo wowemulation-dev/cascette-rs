@@ -86,13 +86,12 @@ impl BuildConfig {
         ];
 
         // Write header comment
-        writeln!(output, "# Build Configuration").expect("Test operation should succeed");
-        writeln!(output).expect("Test operation should succeed");
+        let _ = writeln!(output, "# Build Configuration");
+        let _ = writeln!(output);
 
         for key in &order {
             if let Some(values) = self.entries.get(*key) {
-                writeln!(output, "{} = {}", key, values.join(" "))
-                    .expect("Test operation should succeed");
+                let _ = writeln!(output, "{} = {}", key, values.join(" "));
             }
         }
 
@@ -106,13 +105,12 @@ impl BuildConfig {
 
         for key in remaining {
             let values = &self.entries[key];
-            writeln!(output, "{} = {}", key, values.join(" "))
-                .expect("Test operation should succeed");
+            let _ = writeln!(output, "{} = {}", key, values.join(" "));
         }
 
         // Add trailing newlines to match common format
-        writeln!(output).expect("Test operation should succeed");
-        writeln!(output).expect("Test operation should succeed");
+        let _ = writeln!(output);
+        let _ = writeln!(output);
 
         output
     }

@@ -150,7 +150,7 @@ impl PatchConfig {
         let mut output = Vec::new();
 
         // Write header comment
-        writeln!(output, "# Patch Configuration").expect("Test operation should succeed");
+        let _ = writeln!(output, "# Patch Configuration");
 
         // Write properties in sorted order for consistency
         let property_order = ["patch", "patch-size"];
@@ -158,7 +158,7 @@ impl PatchConfig {
         // Write ordered properties first
         for key in &property_order {
             if let Some(value) = self.properties.get(*key) {
-                writeln!(output, "{key} = {value}").expect("Test operation should succeed");
+                let _ = writeln!(output, "{key} = {value}");
             }
         }
 
@@ -172,12 +172,12 @@ impl PatchConfig {
 
         for key in remaining {
             let value = &self.properties[key];
-            writeln!(output, "{key} = {value}").expect("Test operation should succeed");
+            let _ = writeln!(output, "{key} = {value}");
         }
 
         // Write patch entries
         for entry in &self.entries {
-            writeln!(
+            let _ = writeln!(
                 output,
                 "patch-entry = {} {} {} {} {}",
                 entry.entry_type,
@@ -185,8 +185,7 @@ impl PatchConfig {
                 entry.content_size,
                 entry.encoding_key,
                 entry.encoded_size
-            )
-            .expect("Test operation should succeed");
+            );
         }
 
         output

@@ -89,6 +89,7 @@ impl CacheAlignedAtomicUsize {
 ///
 /// Contains point-in-time statistics about cache performance and usage.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(clippy::struct_field_names)] // Fields like memory_usage_bytes follow common naming convention
 pub struct CacheStats {
     /// Total number of get operations
     pub get_count: u64,

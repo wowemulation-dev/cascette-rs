@@ -178,9 +178,10 @@ impl Default for InvalidationStrategy {
 /// Cache eviction policy
 ///
 /// Determines which entries to remove when the cache needs space.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum EvictionPolicy {
     /// Least Recently Used
+    #[default]
     Lru,
     /// Least Frequently Used
     Lfu,
@@ -190,12 +191,6 @@ pub enum EvictionPolicy {
     Random,
     /// Time-based (oldest first)
     Ttl,
-}
-
-impl Default for EvictionPolicy {
-    fn default() -> Self {
-        Self::Lru
-    }
 }
 
 /// Cache warming trait
@@ -416,8 +411,9 @@ mod tests {
                     let _is_expired = entry_clone.is_expired();
                     let _age = entry_clone.age();
                     let _ttl = entry_clone.time_to_live();
-                    let _value = &entry_clone.value;
-                    let _size = entry_clone.size_bytes;
+                    // Access value and size to ensure they're readable under concurrent access
+                    assert!(!entry_clone.value.is_empty());
+                    assert!(entry_clone.size_bytes > 0);
 
                     // Small delay to increase chance of race conditions
                     tokio::task::yield_now().await;

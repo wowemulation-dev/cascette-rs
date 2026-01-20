@@ -1248,7 +1248,12 @@ impl crate::CascFormat for ArchiveIndex {
 }
 
 #[cfg(test)]
-#[allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
+#[allow(
+    clippy::expect_used,
+    clippy::unwrap_used,
+    clippy::panic,
+    clippy::single_match
+)]
 mod tests {
     use super::*;
     use crate::archive::constants::FOOTER_SIZE;

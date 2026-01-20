@@ -1252,10 +1252,10 @@ impl BackgroundMemoryManager {
             };
 
             // Update usage pattern
-            if let Ok(mut patterns) = usage_patterns.write() {
-                if let Some(pattern) = patterns.get_mut(&content_type) {
-                    pattern.update_allocation(*avg_size, was_reused);
-                }
+            if let Ok(mut patterns) = usage_patterns.write()
+                && let Some(pattern) = patterns.get_mut(&content_type)
+            {
+                pattern.update_allocation(*avg_size, was_reused);
             }
         }
     }
@@ -1269,23 +1269,22 @@ impl BackgroundMemoryManager {
         _max_adjustment: f32,
     ) {
         // Get usage pattern and current pool stats
-        if let Ok(patterns) = usage_patterns.read() {
-            if let Some(pattern) = patterns.get(&content_type) {
-                if pattern.needs_tuning() {
-                    // In a full implementation, this would adjust the pool size
-                    // For now, we just log the recommendation
-                    #[allow(unused_variables)]
-                    let recommended_size = pattern.recommended_pool_size();
+        if let Ok(patterns) = usage_patterns.read()
+            && let Some(pattern) = patterns.get(&content_type)
+            && pattern.needs_tuning()
+        {
+            // In a full implementation, this would adjust the pool size
+            // For now, we just log the recommendation
+            #[allow(unused_variables)]
+            let recommended_size = pattern.recommended_pool_size();
 
-                    #[cfg(feature = "tracing")]
-                    tracing::info!(
-                        "Pool tuning recommendation for {:?}: {} buffers (confidence: {:.2})",
-                        content_type,
-                        recommended_size,
-                        pattern.confidence
-                    );
-                }
-            }
+            #[cfg(feature = "tracing")]
+            tracing::info!(
+                "Pool tuning recommendation for {:?}: {} buffers (confidence: {:.2})",
+                content_type,
+                recommended_size,
+                pattern.confidence
+            );
         }
     }
 
@@ -1982,9 +1981,8 @@ mod tests {
 
         // All variants should be creatable
         for response in responses {
-            match response {
-                PressureResponse::ReducePools(pct) => assert!(pct <= 100),
-                _ => {} // Other variants are simple
+            if let PressureResponse::ReducePools(pct) = response {
+                assert!(pct <= 100);
             }
         }
     }

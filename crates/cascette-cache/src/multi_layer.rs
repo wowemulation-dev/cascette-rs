@@ -268,10 +268,10 @@ impl<K: CacheKey + 'static> MultiLayerCacheImpl<K> {
             self.layers[to_layer].put(key.clone(), value).await?;
 
             // Update promotion tracking
-            if let Ok(mut tracker) = self.promotion_tracker.write() {
-                if let Some(entry_tracker) = tracker.get_mut(&key) {
-                    entry_tracker.current_layer = to_layer;
-                }
+            if let Ok(mut tracker) = self.promotion_tracker.write()
+                && let Some(entry_tracker) = tracker.get_mut(&key)
+            {
+                entry_tracker.current_layer = to_layer;
             }
 
             self.promotion_count.fetch_add(1, Ordering::Relaxed);
@@ -834,10 +834,10 @@ impl<K: CacheKey + 'static> AsyncCache<K> for MultiLayerCacheImpl<K> {
         let result = self.layers[0].put(key.clone(), value).await;
 
         // Initialize promotion tracking
-        if result.is_ok() {
-            if let Ok(mut tracker) = self.promotion_tracker.write() {
-                tracker.insert(key, PromotionTracker::new(0));
-            }
+        if result.is_ok()
+            && let Ok(mut tracker) = self.promotion_tracker.write()
+        {
+            tracker.insert(key, PromotionTracker::new(0));
         }
 
         self.metrics.record_put(0, start_time.elapsed()); // Size not easily available here
@@ -852,10 +852,10 @@ impl<K: CacheKey + 'static> AsyncCache<K> for MultiLayerCacheImpl<K> {
         let result = self.layers[0].put_with_ttl(key.clone(), value, ttl).await;
 
         // Initialize promotion tracking
-        if result.is_ok() {
-            if let Ok(mut tracker) = self.promotion_tracker.write() {
-                tracker.insert(key, PromotionTracker::new(0));
-            }
+        if result.is_ok()
+            && let Ok(mut tracker) = self.promotion_tracker.write()
+        {
+            tracker.insert(key, PromotionTracker::new(0));
         }
 
         self.metrics.record_put(size_bytes, start_time.elapsed());

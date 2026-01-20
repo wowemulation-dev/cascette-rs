@@ -7,10 +7,10 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Daniel S. Reichenbach <daniel@kogito.network>"]
 edition = "2024"
-rust-version = "1.86.0"
+rust-version = "1.92.0"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/wowemulation-dev/cascette-rs"
 homepage = "https://github.com/wowemulation-dev/cascette-rs"

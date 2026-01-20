@@ -114,7 +114,7 @@ impl BpsvValue {
             BpsvType::String(_) => Ok(Self::String(raw.to_string())),
             BpsvType::Hex(_) => {
                 // Validate hex string
-                if raw.len() % 2 != 0 {
+                if !raw.len().is_multiple_of(2) {
                     return Err(BpsvError::InvalidHexLength(raw.to_string()));
                 }
 

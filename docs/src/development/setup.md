@@ -6,14 +6,14 @@ This page covers the requirements and setup for developing cascette-rs.
 
 ### Rust Toolchain
 
-- **Minimum Supported Rust Version (MSRV)**: 1.86.0
+- **Minimum Supported Rust Version (MSRV)**: 1.92.0
 - **Edition**: Rust 2024
 
 Install the required toolchain:
 
 ```bash
-rustup install 1.86.0
-rustup default 1.86.0
+rustup install 1.92.0
+rustup default 1.92.0
 ```
 
 Required components:
@@ -73,7 +73,7 @@ cascette-rs/
 2. Verify the toolchain:
 
    ```bash
-   rustc --version  # Should be 1.86.0 or later
+   rustc --version  # Should be 1.92.0 or later
    cargo --version
    ```
 

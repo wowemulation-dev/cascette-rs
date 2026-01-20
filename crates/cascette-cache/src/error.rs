@@ -348,7 +348,7 @@ mod tests {
             CacheError::InvalidConfiguration(String::new()),
             CacheError::Serialization(String::new()),
             CacheError::Deserialization(String::new()),
-            CacheError::Io(IoError::new(ErrorKind::Other, "test")),
+            CacheError::Io(IoError::other("test")),
             CacheError::Backend(String::new()),
             CacheError::Invalidation(String::new()),
             CacheError::LockTimeout(String::new()),
