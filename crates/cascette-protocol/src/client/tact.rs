@@ -11,11 +11,15 @@ use crate::error::{ProtocolError, Result};
 pub struct TactClient {
     client: Client,
     base_url: String,
+    // On WASM, timeout is stored for API compatibility but not enforced
+    // (browser manages timeouts via Fetch API)
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     timeout: Duration,
 }
 
 impl TactClient {
     /// Create a new TACT client
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn new(base_url: String, _use_https: bool) -> Result<Self> {
         let client = Client::builder()
             .pool_idle_timeout(Duration::from_secs(90))
@@ -30,7 +34,23 @@ impl TactClient {
         })
     }
 
+    /// Create a new TACT client (WASM version)
+    ///
+    /// On WASM, connection pooling and timeout settings are not supported
+    /// as the browser manages these via the Fetch API.
+    #[cfg(target_arch = "wasm32")]
+    pub fn new(base_url: String, _use_https: bool) -> Result<Self> {
+        let client = Client::builder().build()?;
+
+        Ok(Self {
+            client,
+            base_url,
+            timeout: Duration::from_secs(30), // Stored for API compatibility but not enforced
+        })
+    }
+
     /// Query TACT endpoint
+    #[cfg(not(target_arch = "wasm32"))]
     pub async fn query(&self, endpoint: &str) -> Result<BpsvDocument> {
         // Transform TCP Ribbit endpoint format to TACT format
         // TCP: v1/products/{product}/versions -> TACT: /{product}/versions
@@ -64,9 +84,50 @@ impl TactClient {
             status => Err(ProtocolError::HttpStatus(status)),
         }
     }
+
+    /// Query TACT endpoint (WASM version)
+    ///
+    /// On WASM, timeout is not supported on the request builder, so we
+    /// rely on the browser's default timeout behavior.
+    #[cfg(target_arch = "wasm32")]
+    pub async fn query(&self, endpoint: &str) -> Result<BpsvDocument> {
+        // Transform TCP Ribbit endpoint format to TACT format
+        // TCP: v1/products/{product}/versions -> TACT: /{product}/versions
+        let tact_endpoint = if endpoint.starts_with("v1/products/") {
+            endpoint.strip_prefix("v1/products").unwrap_or(endpoint)
+        } else {
+            endpoint
+        };
+
+        // Ensure proper URL construction with slash
+        let url = if tact_endpoint.starts_with('/') {
+            format!("{}{}", self.base_url, tact_endpoint)
+        } else {
+            format!("{}/{}", self.base_url, tact_endpoint)
+        };
+
+        tracing::debug!("TACT request URL: {}", url);
+
+        // On WASM, timeout() is not available on the request builder
+        let response = self.client.get(&url).send().await?;
+
+        // Check status
+        match response.status() {
+            StatusCode::OK => {
+                let body = response.bytes().await?;
+                <BpsvDocument as CascFormat>::parse(&body)
+                    .map_err(|e| ProtocolError::Parse(format!("BPSV parse error: {e}")))
+            }
+            StatusCode::TOO_MANY_REQUESTS => Err(ProtocolError::RateLimited),
+            StatusCode::SERVICE_UNAVAILABLE => Err(ProtocolError::ServiceUnavailable),
+            status if status.is_server_error() => Err(ProtocolError::ServerError(status)),
+            status => Err(ProtocolError::HttpStatus(status)),
+        }
+    }
 }
 
 #[cfg(test)]
+#[cfg(not(target_arch = "wasm32"))]
 #[allow(clippy::expect_used)]
 mod tests {
     use super::*;

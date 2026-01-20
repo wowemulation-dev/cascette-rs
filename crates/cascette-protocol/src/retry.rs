@@ -7,6 +7,20 @@ use std::time::Duration;
 
 use crate::error::Result;
 
+/// Cross-platform async sleep function
+///
+/// On native platforms, uses tokio::time::sleep.
+/// On WASM, uses gloo_timers::future::TimeoutFuture.
+#[cfg(not(target_arch = "wasm32"))]
+async fn sleep(duration: Duration) {
+    tokio::time::sleep(duration).await;
+}
+
+#[cfg(target_arch = "wasm32")]
+async fn sleep(duration: Duration) {
+    gloo_timers::future::TimeoutFuture::new(duration.as_millis() as u32).await;
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RetryPolicy {
     /// Maximum retry attempts
@@ -39,6 +53,10 @@ impl Default for RetryPolicy {
 
 impl RetryPolicy {
     /// Create retry policy from environment variables
+    ///
+    /// Note: On WASM, environment variables are not available, so this
+    /// will always return default values.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn from_env() -> Result<Self> {
         Ok(Self {
             max_attempts: std::env::var("CASCETTE_MAX_RETRIES")
@@ -66,6 +84,15 @@ impl RetryPolicy {
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(true),
         })
+    }
+
+    /// Create retry policy from environment variables (WASM version)
+    ///
+    /// On WASM, environment variables are not available, so this
+    /// always returns default values.
+    #[cfg(target_arch = "wasm32")]
+    pub fn from_env() -> Result<Self> {
+        Ok(Self::default())
     }
 
     /// Execute a function with retry logic
@@ -97,7 +124,7 @@ impl RetryPolicy {
                         delay += Duration::from_millis(jitter_ms);
                     }
 
-                    tokio::time::sleep(delay).await;
+                    sleep(delay).await;
 
                     // Increase backoff
                     backoff = Duration::from_secs_f64(
@@ -111,6 +138,7 @@ impl RetryPolicy {
 }
 
 #[cfg(test)]
+#[cfg(not(target_arch = "wasm32"))]
 #[allow(
     unsafe_code,
     clippy::expect_used,

@@ -2,21 +2,41 @@
 //!
 //! This module provides functionality to fetch and manage certificates
 //! used in PKCS#7 signature verification for V1 MIME protocol responses.
+//!
+//! **Note**: Certificate fetching requires the Ribbit TCP client, which is
+//! only available on native platforms. On WASM, only the certificate parsing
+//! and validation functions are available.
 
+// Certificate fetching requires RibbitClient which uses TCP sockets (native only)
+#[cfg(not(target_arch = "wasm32"))]
 use crate::client::RibbitClient;
+#[cfg(not(target_arch = "wasm32"))]
 use crate::error::{ProtocolError, Result};
-use crate::v1_mime::types::{CertificateInfo, PublicKeyInfo};
+use crate::v1_mime::types::CertificateInfo;
+#[cfg(not(target_arch = "wasm32"))]
+use crate::v1_mime::types::PublicKeyInfo;
+#[cfg(not(target_arch = "wasm32"))]
 use base64::Engine;
+#[cfg(not(target_arch = "wasm32"))]
 use der::{Decode, Encode};
-use tracing::{debug, info, warn};
+#[cfg(not(target_arch = "wasm32"))]
+use tracing::info;
+use tracing::{debug, warn};
+#[cfg(not(target_arch = "wasm32"))]
 use x509_cert::certificate::Certificate;
+#[cfg(not(target_arch = "wasm32"))]
 use x509_cert::spki::SubjectPublicKeyInfoRef;
 
 /// Certificate fetcher for retrieving certificates by various identifiers
+///
+/// **Note**: This is only available on native platforms as it requires
+/// TCP socket access via the Ribbit protocol.
+#[cfg(not(target_arch = "wasm32"))]
 pub struct CertificateFetcher<'a> {
     client: &'a RibbitClient,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl<'a> CertificateFetcher<'a> {
     /// Create a new certificate fetcher
     pub fn new(client: &'a RibbitClient) -> Self {
@@ -247,12 +267,16 @@ impl<'a> CertificateFetcher<'a> {
 ///
 /// This is a convenience function for fetching multiple certificates concurrently.
 ///
+/// **Note**: This is only available on native platforms as it requires
+/// TCP socket access via the Ribbit protocol.
+///
 /// # Arguments
 /// * `client` - The Ribbit client to use
 /// * `skis` - List of Subject Key Identifiers
 ///
 /// # Returns
 /// Returns a vector of certificate information, with None for failed fetches
+#[cfg(not(target_arch = "wasm32"))]
 pub async fn fetch_certificates_by_skis(
     client: &RibbitClient,
     skis: &[String],

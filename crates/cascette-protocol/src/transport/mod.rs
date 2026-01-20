@@ -37,6 +37,7 @@ impl HttpClient {
     }
 
     /// Create optimized client with NGDP-specific settings
+    #[cfg(not(target_arch = "wasm32"))]
     fn create_optimized_client() -> Result<Client> {
         ClientBuilder::new()
             // Connection pooling optimized for NGDP traffic patterns
@@ -65,7 +66,27 @@ impl HttpClient {
             .map_err(Into::into)
     }
 
+    /// Create optimized client for WASM (browser environment)
+    ///
+    /// WASM uses the browser's Fetch API which doesn't support:
+    /// - TCP-level options (tcp_nodelay, tcp_keepalive)
+    /// - Connection pooling settings (pool_idle_timeout)
+    /// - HTTP/2 specific settings (http2_adaptive_window, http2_prior_knowledge)
+    /// - Custom redirect policies (handled by browser)
+    /// - Timeout (handled differently in browsers)
+    /// - https_only (browser manages this)
+    /// - Compression settings (handled by browser)
+    #[cfg(target_arch = "wasm32")]
+    fn create_optimized_client() -> Result<Client> {
+        ClientBuilder::new()
+            // User agent for NGDP traffic
+            .user_agent("cascette-protocol/0.1.0")
+            .build()
+            .map_err(Into::into)
+    }
+
     /// Create a new HTTP client with custom configuration
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn with_config(config: &HttpConfig) -> Result<Self> {
         let mut builder = ClientBuilder::new()
             .pool_idle_timeout(config.pool_idle_timeout)
@@ -90,6 +111,21 @@ impl HttpClient {
             builder = builder.gzip(true).brotli(true).deflate(true);
         }
 
+        let client = builder.build()?;
+        Ok(Self {
+            client: Arc::new(client),
+        })
+    }
+
+    /// Create a new HTTP client with custom configuration for WASM
+    ///
+    /// Most HttpConfig options are ignored on WASM as they're not supported
+    /// by the browser's Fetch API. The browser manages compression, connection
+    /// pooling, and other network optimizations automatically.
+    #[cfg(target_arch = "wasm32")]
+    #[allow(unused_variables)] // config fields are not used on WASM
+    pub fn with_config(config: &HttpConfig) -> Result<Self> {
+        let builder = ClientBuilder::new();
         let client = builder.build()?;
         Ok(Self {
             client: Arc::new(client),
@@ -124,30 +160,42 @@ impl Default for HttpClient {
 }
 
 /// HTTP client configuration with performance tuning options
+///
+/// Note: On WASM, many of these options are ignored as they're not supported
+/// by the browser's Fetch API. The configuration is kept consistent across
+/// platforms for API compatibility.
 #[derive(Debug, Clone)]
 pub struct HttpConfig {
     /// Connection pool idle timeout
+    /// (ignored on WASM - browser manages connections)
     pub pool_idle_timeout: Duration,
 
     /// Maximum idle connections per host
+    /// (ignored on WASM - browser manages connections)
     pub pool_max_idle_per_host: usize,
 
     /// Request timeout
+    /// (ignored on WASM - use AbortController in application code)
     pub timeout: Duration,
 
     /// Connection timeout
+    /// (ignored on WASM - browser manages connections)
     pub connect_timeout: Duration,
 
     /// Enable `TCP_NODELAY` (disable Nagle's algorithm)
+    /// (ignored on WASM - no TCP access)
     pub tcp_nodelay: bool,
 
     /// TCP keep-alive duration
+    /// (ignored on WASM - no TCP access)
     pub tcp_keepalive: Option<Duration>,
 
     /// Use HTTP/2 prior knowledge (faster but less compatible)
+    /// (ignored on WASM - browser negotiates protocol)
     pub http2_prior_knowledge: bool,
 
     /// Enable compression (gzip, brotli, deflate)
+    /// (supported on WASM)
     pub enable_compression: bool,
 }
 

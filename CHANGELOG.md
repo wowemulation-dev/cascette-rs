@@ -31,10 +31,17 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - Cross-platform `CacheStats` using millisecond timestamps instead of `Instant`
   - Platform-specific conditional compilation for native-only features
   - Updated README with platform support documentation
-- cascette-protocol: Added partial WASM support infrastructure
+- cascette-protocol: Full WASM support for browser-based applications
   - TCP Ribbit protocol conditionally compiled out on WASM (no raw sockets in browsers)
+  - TACT HTTP/HTTPS client fully functional on WASM using browser Fetch API
+  - CDN client with downloads and progress tracking (non-streaming on WASM)
+  - Range request downloader with retry logic using gloo-timers for WASM sleep
   - Cache module uses localStorage on WASM for persistent protocol response caching
   - Platform-specific tokio and reqwest configurations
+  - Transport module with WASM-compatible client builder (no pool/timeout settings)
+  - Retry module with cross-platform sleep (tokio native, gloo-timers WASM)
+  - Error handling adapted for reqwest WASM limitations (no is_connect check)
+  - Certificate fetching native-only (requires TCP for Ribbit protocol)
   - Added `UnsupportedOnWasm` error variant for TCP-only endpoints
 - Added `.cargo/config.toml` WASM target configuration for getrandom
 - Added workspace dependencies: reqwest, url, sha2, digest, rsa, base64, mail-parser,

@@ -56,6 +56,7 @@ pub enum ProtocolError {
 
 impl ProtocolError {
     /// Check if error is retryable
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn should_retry(&self) -> bool {
         match self {
             // Transient errors that should be retried
@@ -65,6 +66,35 @@ impl ProtocolError {
             | Self::ServiceUnavailable
             | Self::Timeout => true,
             Self::Http(e) => e.is_timeout() || e.is_connect(),
+            Self::HttpStatus(status) => {
+                matches!(
+                    status,
+                    &StatusCode::TOO_MANY_REQUESTS
+                        | &StatusCode::INTERNAL_SERVER_ERROR
+                        | &StatusCode::BAD_GATEWAY
+                        | &StatusCode::SERVICE_UNAVAILABLE
+                        | &StatusCode::GATEWAY_TIMEOUT
+                )
+            }
+            _ => false,
+        }
+    }
+
+    /// Check if error is retryable (WASM version)
+    ///
+    /// On WASM, reqwest doesn't expose `is_connect()` method since the browser
+    /// handles connection management. We check only for timeout errors.
+    #[cfg(target_arch = "wasm32")]
+    pub fn should_retry(&self) -> bool {
+        match self {
+            // Transient errors that should be retried
+            Self::Network(_)
+            | Self::ServerError(_)
+            | Self::RateLimited
+            | Self::ServiceUnavailable
+            | Self::Timeout => true,
+            // On WASM, is_connect() is not available, only check timeout
+            Self::Http(e) => e.is_timeout(),
             Self::HttpStatus(status) => {
                 matches!(
                     status,

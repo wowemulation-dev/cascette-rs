@@ -2,6 +2,7 @@
 
 pub mod range;
 
+#[cfg(not(target_arch = "wasm32"))]
 use futures::StreamExt;
 use std::fmt;
 use std::sync::Arc;
@@ -225,6 +226,10 @@ impl CdnClient {
     }
 
     /// Download with progress callback
+    ///
+    /// On native platforms, this uses streaming to report progress incrementally.
+    /// On WASM, streaming is not available, so progress is reported only at completion.
+    #[cfg(not(target_arch = "wasm32"))]
     pub async fn download_with_progress<F>(
         &self,
         endpoint: &CdnEndpoint,
@@ -255,6 +260,38 @@ impl CdnClient {
             if self.config.enable_progress {
                 progress(downloaded, total_size);
             }
+        }
+
+        Ok(data)
+    }
+
+    /// Download with progress callback (WASM version)
+    ///
+    /// On WASM, streaming is not available (`bytes_stream()` not supported by reqwest-wasm).
+    /// This version downloads the entire content first, then reports progress at 100%.
+    #[cfg(target_arch = "wasm32")]
+    pub async fn download_with_progress<F>(
+        &self,
+        endpoint: &CdnEndpoint,
+        content_type: ContentType,
+        key: &[u8],
+        mut progress: F,
+    ) -> Result<Vec<u8>>
+    where
+        F: FnMut(u64, u64) + Send,
+    {
+        let url = Self::build_url(endpoint, content_type, key);
+
+        let response = self.http_client.inner().get(&url).send().await?;
+        let total_size = response.content_length().unwrap_or(0);
+
+        // On WASM, we can't stream - download all at once
+        let data = response.bytes().await?.to_vec();
+
+        // Report progress at 100% completion
+        if self.config.enable_progress {
+            let downloaded = data.len() as u64;
+            progress(downloaded, total_size.max(downloaded));
         }
 
         Ok(data)

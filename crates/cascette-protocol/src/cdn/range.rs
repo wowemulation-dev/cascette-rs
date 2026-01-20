@@ -7,6 +7,20 @@ use thiserror::Error;
 
 use super::CdnEndpoint;
 
+/// Cross-platform async sleep function
+///
+/// On native platforms, uses tokio::time::sleep.
+/// On WASM, uses gloo_timers::future::TimeoutFuture.
+#[cfg(not(target_arch = "wasm32"))]
+async fn sleep(duration: Duration) {
+    tokio::time::sleep(duration).await;
+}
+
+#[cfg(target_arch = "wasm32")]
+async fn sleep(duration: Duration) {
+    gloo_timers::future::TimeoutFuture::new(duration.as_millis() as u32).await;
+}
+
 /// Range request downloader for efficient partial archive downloads
 pub struct RangeDownloader {
     client: Arc<reqwest::Client>,
@@ -45,6 +59,7 @@ pub enum RangeError {
 
 impl RangeDownloader {
     /// Create a new range downloader with default configuration
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn new() -> Result<Self, RangeError> {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(180))
@@ -57,13 +72,48 @@ impl RangeDownloader {
         })
     }
 
+    /// Create a new range downloader with default configuration (WASM version)
+    ///
+    /// On WASM, timeout is not supported by reqwest as the browser manages
+    /// request timeouts via the Fetch API.
+    #[cfg(target_arch = "wasm32")]
+    pub fn new() -> Result<Self, RangeError> {
+        let client = reqwest::Client::builder().build()?;
+
+        Ok(Self {
+            client: Arc::new(client),
+            max_retries: 3,
+            chunk_size: 1024 * 1024, // 1MB default chunk size
+        })
+    }
+
     /// Create a new range downloader with custom configuration
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn with_config(
         max_retries: u32,
         chunk_size: usize,
         timeout: Duration,
     ) -> Result<Self, RangeError> {
         let client = reqwest::Client::builder().timeout(timeout).build()?;
+
+        Ok(Self {
+            client: Arc::new(client),
+            max_retries,
+            chunk_size, // Reserved for future chunked download implementation
+        })
+    }
+
+    /// Create a new range downloader with custom configuration (WASM version)
+    ///
+    /// On WASM, the timeout parameter is ignored as the browser manages
+    /// request timeouts via the Fetch API.
+    #[cfg(target_arch = "wasm32")]
+    pub fn with_config(
+        max_retries: u32,
+        chunk_size: usize,
+        _timeout: Duration, // Ignored on WASM
+    ) -> Result<Self, RangeError> {
+        let client = reqwest::Client::builder().build()?;
 
         Ok(Self {
             client: Arc::new(client),
@@ -103,7 +153,7 @@ impl RangeDownloader {
             if response.status() != reqwest::StatusCode::PARTIAL_CONTENT {
                 if attempt < self.max_retries - 1 {
                     // Exponential backoff
-                    tokio::time::sleep(Duration::from_secs(1_u64 << attempt)).await;
+                    sleep(Duration::from_secs(1_u64 << attempt)).await;
                     continue;
                 }
                 return Err(RangeError::InvalidResponse(response.status()));
@@ -123,7 +173,7 @@ impl RangeDownloader {
             if data.len() != length as usize {
                 if attempt < self.max_retries - 1 {
                     // Retry on incomplete data
-                    tokio::time::sleep(Duration::from_secs(1_u64 << attempt)).await;
+                    sleep(Duration::from_secs(1_u64 << attempt)).await;
                     continue;
                 }
                 return Err(RangeError::IncompleteData {
@@ -239,6 +289,7 @@ fn validate_content_range(range_str: &str, expected_start: u64, expected_length:
 }
 
 #[cfg(test)]
+#[cfg(not(target_arch = "wasm32"))]
 #[allow(clippy::expect_used)]
 mod tests {
     use super::*;
