@@ -22,11 +22,11 @@ Working implementation with protocol clients, CDN downloading, and caching.
 ## Modules
 
 - `client` - Unified `RibbitTactClient` with fallback between protocols
-  - `ribbit` - Ribbit TCP protocol client
+  - `ribbit` - Ribbit TCP protocol client *(native only)*
   - `tact` - TACT HTTPS/HTTP client
 - `cdn` - CDN content delivery client
   - `range` - Range request support for partial downloads
-- `cdn_streaming` - Streaming CDN downloads with BLTE decompression
+- `cdn_streaming` - Streaming CDN downloads with BLTE decompression *(native only)*
   - `archive` - Archive streaming with index parsing
   - `blte` - BLTE block decompression
   - `bootstrap` - CDN bootstrap and initialization
@@ -38,15 +38,15 @@ Working implementation with protocol clients, CDN downloading, and caching.
   - `pool` - Connection pooling
   - `range` - Range request handling
   - `recovery` - Error recovery and retry
-- `cache` - Protocol response caching
+- `cache` - Protocol response caching (localStorage on WASM)
 - `config` - Client and cache configuration
 - `error` - Error types with retry classification
 - `mime_parser` - BPSV response parsing
 - `optimized` - Performance utilities (buffers, interning)
-- `retry` - Retry policies with backoff
+- `retry` - Retry policies with backoff (gloo-timers on WASM)
 - `transport` - HTTP client configuration
 - `v1_mime` - V1 MIME format with signature verification
-  - `certificate` - X.509 certificate parsing
+  - `certificate` - X.509 certificate fetching *(native only)* and validation
   - `signature` - PKCS#7/CMS signature verification
   - `types` - V1 MIME data types
 
@@ -76,18 +76,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ### Native (Full Support)
 - Linux, macOS, Windows
-- All features available including TCP Ribbit protocol and full caching
+- All features available including TCP Ribbit protocol and streaming downloads
 
-### WASM (Partial Support - In Progress)
-- TCP Ribbit protocol disabled (browsers cannot use raw TCP sockets)
-- Caching disabled (no persistent storage in browser environment)
-- TACT HTTPS/HTTP protocol supported via Fetch API
-- Requires additional work for full production use
+### WASM (Full Support)
+- TACT HTTPS/HTTP client via browser Fetch API
+- CDN content downloads with progress tracking
+- Range request downloads with retry logic
+- Protocol response caching via localStorage
+- Certificate chain validation
+
+**Native-only features** (not available in browsers):
+- Ribbit TCP protocol (browsers lack raw socket access)
+- Certificate fetching (requires Ribbit TCP)
+- Streaming downloads (WASM uses full download with progress callback)
+- Connection pool tuning (browser manages connections)
 
 ## Dependencies
 
-- `tokio` - Async runtime
-- `reqwest` - HTTP client with rustls
+### Core
+- `tokio` - Async runtime (full features on native, sync primitives on WASM)
+- `reqwest` - HTTP client (rustls on native, Fetch API on WASM)
 - `async-trait` - Async trait support
 - `bytes` - Zero-copy byte buffers
 - `futures` - Async utilities
@@ -98,12 +106,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 - `cascette-crypto` - Hash functions
 
 ### V1 MIME Support
-
 - `mail-parser` - MIME message parsing
 - `cms` - PKCS#7/CMS signature parsing
 - `x509-cert` - X.509 certificate parsing
 - `rsa` - RSA signature verification
 - `sha2` - SHA-2 hash functions
+
+### WASM-specific
+- `gloo-timers` - Async sleep for retry backoff
+- `wasm-bindgen-futures` - Async runtime bridge
+- `web-sys` - Browser API access (localStorage)
+- `js-sys` - JavaScript interop
 
 ## License
 
