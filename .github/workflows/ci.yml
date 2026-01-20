@@ -145,6 +145,7 @@ jobs:
         with:
           command: check
           arguments: --all-features
+          rust-version: "1.92.0"
 
   # Main test suite with optimized matrix
   test:

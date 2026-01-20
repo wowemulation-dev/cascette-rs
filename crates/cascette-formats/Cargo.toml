@@ -27,7 +27,7 @@ flate2 = { workspace = true }
 lz4_flex = "0.11"
 
 # Internal dependencies
-cascette-crypto = { version = "0.1.0", path = "../cascette-crypto" }
+cascette-crypto = { version = "0.2.0", path = "../cascette-crypto" }
 
 # JSON parsing for product configs
 serde = { workspace = true, features = ["derive"] }
