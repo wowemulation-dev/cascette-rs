@@ -246,18 +246,18 @@ fn test_parse_with_invalid_data_returns_checksum_error() {
 
 ```bash
 # Run all tests
-cargo nextest run --workspace
+cargo test --workspace
 
 # Run tests for a specific crate
-cargo nextest run -p cascette-formats
+cargo test -p cascette-formats
 
 # Run tests matching a pattern
-cargo nextest run edge_          # All edge case tests
-cargo nextest run error_         # All error tests
-cargo nextest run round_trip     # All round-trip tests
+cargo test edge_          # All edge case tests
+cargo test error_         # All error tests
+cargo test round_trip     # All round-trip tests
 
 # Run a specific test
-cargo nextest run test_parse_header_with_valid_data
+cargo test test_parse_header_with_valid_data
 ```
 
 ### Feature Combinations
@@ -266,13 +266,13 @@ Test with different feature combinations:
 
 ```bash
 # Default features
-cargo nextest run --workspace
+cargo test --workspace
 
 # No default features (minimal build)
-cargo nextest run --workspace --no-default-features
+cargo test --workspace --no-default-features
 
 # All features
-cargo nextest run --workspace --all-features
+cargo test --workspace --all-features
 ```
 
 ### Code Coverage
@@ -343,8 +343,8 @@ fn valid_entry_strategy() -> impl Strategy<Value = IndexEntry> {
 
 Tests run automatically on every pull request. The CI workflow:
 
-1. Runs `cargo nextest run --workspace` with default features
-2. Runs `cargo nextest run --workspace --no-default-features`
+1. Runs `cargo test --workspace` with default features
+2. Runs `cargo test --workspace --no-default-features`
 3. Tests each changed crate individually on stable Rust
 4. Collects code coverage and uploads to Codecov
 

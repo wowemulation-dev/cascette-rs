@@ -178,11 +178,6 @@ jobs:
           cache-all-crates: true
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
-      - name: Install cargo-nextest
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-nextest
-
       # Determine test scope based on changed crates
       - name: Determine test scope
         id: test-scope
@@ -203,11 +198,11 @@ jobs:
 
       # Test with default features
       - name: Test default features (changed crates)
-        run: cargo nextest run ${{ steps.test-scope.outputs.test_args }}
+        run: cargo test ${{ steps.test-scope.outputs.test_args }}
 
       # Test with no default features
       - name: Test no default features (changed crates)
-        run: cargo nextest run --no-default-features ${{ steps.test-scope.outputs.test_args }}
+        run: cargo test --no-default-features ${{ steps.test-scope.outputs.test_args }}
 
       # Test each changed crate individually (only on stable Linux)
       - name: Test individual changed crates
@@ -217,7 +212,7 @@ jobs:
         run: |
           for crate in $CRATES_CHANGED; do
             echo "Testing $crate individually..."
-            cargo nextest run -p "$crate"
+            cargo test -p "$crate"
           done
 
   # WASM compilation check

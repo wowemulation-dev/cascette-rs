@@ -32,7 +32,6 @@ rustup target add wasm32-unknown-unknown
 
 | Tool | Purpose | Installation |
 |------|---------|--------------|
-| `cargo-nextest` | Test runner | `cargo install cargo-nextest` |
 | `cargo-deny` | Dependency auditing | `cargo install cargo-deny` |
 | `cargo-llvm-cov` | Code coverage | `cargo install cargo-llvm-cov` |
 | `mdbook` | Documentation | `cargo install mdbook` |
@@ -86,7 +85,7 @@ cascette-rs/
 4. Run tests:
 
    ```bash
-   cargo nextest run --workspace
+   cargo test --workspace
    ```
 
 5. Verify lints pass:
