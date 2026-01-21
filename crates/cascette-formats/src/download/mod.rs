@@ -20,9 +20,9 @@
 //! - **Tag Section**: Tags with names, types, and bit masks
 //!
 //! ## Version 2+:
-//! - **Header** (11-15 bytes): Magic "DL", version, key length, entry/tag counts, reserved byte, optional fields
-//! - **Tag Section**: Tags with names, types, and bit masks
+//! - **Header** (12-16 bytes): Magic "DL", version, key length, entry/tag counts, flag_size, optional base_priority/reserved
 //! - **File Entries Section**: EncodingKeys, 40-bit file sizes, priorities, optional checksums/flags
+//! - **Tag Section**: Tags with names, types, and bit masks
 //!
 //! # Key Features
 //!
@@ -31,7 +31,7 @@
 //! - **40-Bit File Sizes**: Supports files larger than 4GB using 5-byte size fields
 //! - **EncodingKey Usage**: Uses encoding keys instead of content keys
 //! - **Base Priority Adjustment**: Version 3+ adjusts all priorities by base_priority offset
-//! - **Version-Specific Layout**: V1 has entries-then-tags, V2+ has tags-then-entries
+//! - **Consistent Binary Layout**: All versions use entries-then-tags order
 //!
 //! # Basic Usage
 //!
@@ -751,7 +751,7 @@ mod tests {
         assert_eq!(parsed_v1.tags.len(), 1);
         assert!(parsed_v1.tags[0].has_file(0));
 
-        // Version 2: Header + Tags + Entries
+        // Version 2: Header + Entries + Tags (same as V1)
         let manifest_v2 = DownloadManifestBuilder::new(2)
             .expect("Operation should succeed")
             .add_file(ekey, 1024, 0)

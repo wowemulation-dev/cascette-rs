@@ -25,9 +25,8 @@ The Download manifest is BLTE-encoded and contains:
 ```text
 [BLTE Container]
   [Header]
-  [Priority Section]
-  [Tag Section]
   [File Entries]
+  [Tag Section]
 ```
 
 ## Binary Format

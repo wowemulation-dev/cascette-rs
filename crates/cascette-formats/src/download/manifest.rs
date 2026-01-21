@@ -13,9 +13,7 @@ use std::io::Cursor;
 /// Download manifests manage content streaming and prioritization during
 /// game installation and updates. Key characteristics:
 ///
-/// - **Version-Specific Layout**:
-///   - Version 1 (Battle.net Agent): Header → Entries → Tags
-///   - Version 2+: Header → Tags → Entries
+/// - **Binary Layout**: Header → Entries → Tags (all versions)
 /// - **`EncodingKey` Usage**: Uses encoding keys instead of content keys
 /// - **40-Bit File Sizes**: Supports files larger than 4GB
 /// - **Priority System**: Signed priorities with optional base adjustment (V3+)
@@ -33,9 +31,7 @@ pub struct DownloadManifest {
 impl DownloadManifest {
     /// Parse download manifest from binary data
     ///
-    /// The parsing follows version-specific layouts:
-    /// - Version 1: Header, Entries, Tags (used by Battle.net Agent)
-    /// - Version 2+: Header (with reserved byte), Tags, Entries
+    /// Binary layout for all versions: Header → Entries → Tags
     pub fn parse(data: &[u8]) -> Result<Self> {
         let mut cursor = Cursor::new(data);
 
@@ -49,46 +45,19 @@ impl DownloadManifest {
         let mut entries = Vec::with_capacity(header.entry_count() as usize);
         let mut tags = Vec::with_capacity(header.tag_count() as usize);
 
-        // Version 1 has different layout: entries then tags
-        // Version 2+ has: tags then entries
-        if header.version() == 1 {
-            // Version 1: Parse entries first
-            for _ in 0..header.entry_count() {
-                let entry =
-                    DownloadFileEntry::read_options(&mut cursor, binrw::Endian::Big, &header)
-                        .map_err(DownloadError::from)?;
-                entries.push(entry);
-            }
-
-            // Version 1: Parse tags after entries
-            for _ in 0..header.tag_count() {
-                let tag = DownloadTag::read_options(
-                    &mut cursor,
-                    binrw::Endian::Big,
-                    header.entry_count(),
-                )
+        // All versions: Parse entries first
+        for _ in 0..header.entry_count() {
+            let entry = DownloadFileEntry::read_options(&mut cursor, binrw::Endian::Big, &header)
                 .map_err(DownloadError::from)?;
-                tags.push(tag);
-            }
-        } else {
-            // Version 2+: Parse tags first
-            for _ in 0..header.tag_count() {
-                let tag = DownloadTag::read_options(
-                    &mut cursor,
-                    binrw::Endian::Big,
-                    header.entry_count(),
-                )
-                .map_err(DownloadError::from)?;
-                tags.push(tag);
-            }
+            entries.push(entry);
+        }
 
-            // Version 2+: Parse entries after tags
-            for _ in 0..header.entry_count() {
-                let entry =
-                    DownloadFileEntry::read_options(&mut cursor, binrw::Endian::Big, &header)
-                        .map_err(DownloadError::from)?;
-                entries.push(entry);
-            }
+        // All versions: Parse tags after entries
+        for _ in 0..header.tag_count() {
+            let tag =
+                DownloadTag::read_options(&mut cursor, binrw::Endian::Big, header.entry_count())
+                    .map_err(DownloadError::from)?;
+            tags.push(tag);
         }
 
         let manifest = DownloadManifest {
@@ -105,9 +74,7 @@ impl DownloadManifest {
 
     /// Build download manifest to binary data
     ///
-    /// The building follows version-specific layouts:
-    /// - Version 1: Header, Entries, Tags
-    /// - Version 2+: Header (with reserved byte), Tags, Entries
+    /// Binary layout for all versions: Header → Entries → Tags
     pub fn build(&self) -> Result<Vec<u8>> {
         // Pre-validate before building
         self.validate()?;
@@ -120,33 +87,17 @@ impl DownloadManifest {
             .write_options(&mut cursor, binrw::Endian::Big, ())
             .map_err(DownloadError::from)?;
 
-        // Version-specific layout
-        if self.header.version() == 1 {
-            // Version 1: Write entries first
-            for entry in &self.entries {
-                entry
-                    .write_options(&mut cursor, binrw::Endian::Big, &self.header)
-                    .map_err(DownloadError::from)?;
-            }
+        // All versions: Write entries first
+        for entry in &self.entries {
+            entry
+                .write_options(&mut cursor, binrw::Endian::Big, &self.header)
+                .map_err(DownloadError::from)?;
+        }
 
-            // Version 1: Write tags after entries
-            for tag in &self.tags {
-                tag.write_options(&mut cursor, binrw::Endian::Big, ())
-                    .map_err(DownloadError::from)?;
-            }
-        } else {
-            // Version 2+: Write tags first
-            for tag in &self.tags {
-                tag.write_options(&mut cursor, binrw::Endian::Big, ())
-                    .map_err(DownloadError::from)?;
-            }
-
-            // Version 2+: Write entries after tags
-            for entry in &self.entries {
-                entry
-                    .write_options(&mut cursor, binrw::Endian::Big, &self.header)
-                    .map_err(DownloadError::from)?;
-            }
+        // All versions: Write tags after entries
+        for tag in &self.tags {
+            tag.write_options(&mut cursor, binrw::Endian::Big, ())
+                .map_err(DownloadError::from)?;
         }
 
         Ok(buffer)
@@ -512,8 +463,8 @@ mod tests {
         assert_eq!(original, parsed);
 
         // Validate layout by checking specific positions in binary data
-        // After header (11 bytes for V2), entries should come first
-        let header_size = 11; // V2 header size
+        // After header (12 bytes for V2: 11 base + 1 flag_size), entries should come first
+        let header_size = 12; // V2 header size (11 + 1 byte for flag_size)
         let entry_size = 16 + 5 + 1 + 4 + 1; // ekey + size + priority + checksum + flags
         let entries_section_size = 2 * entry_size; // 2 entries
         let tags_start_offset = header_size + entries_section_size;

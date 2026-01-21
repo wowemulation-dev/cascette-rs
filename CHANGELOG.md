@@ -49,6 +49,14 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Updated deny.toml to allow ISC, BSD-3-Clause, and CDLA-Permissive-2.0 licenses
   (used by ring, subtle, and webpki-roots respectively)
 
+### Fixed
+
+- cascette-formats: Corrected download manifest binary layout documentation
+  - All versions use entries-then-tags order (not tags-then-entries for V2+)
+  - Removed incorrect version-specific layout branching in parser/builder
+  - Fixed header size calculation in tests (12 bytes for V2, not 11)
+- docs: Fixed download manifest File Structure diagram to show correct order
+
 ## [0.2.0] - 2025-01-20
 
 ### Breaking Changes
