@@ -54,12 +54,6 @@ cascette-crypto = { version = "0.2.0", path = "../cascette-crypto" }
 tokio = { version = "1.47", default-features = false, features = ["sync", "macros"] }
 # WASM-compatible reqwest (uses web-sys/fetch API instead of native sockets)
 reqwest = { version = "0.12", default-features = false, features = ["gzip", "brotli", "deflate", "charset"] }
-# getrandom 0.2.x needs "js" feature to use browser crypto API on WASM
-getrandom_02 = { package = "getrandom", version = "0.2", features = ["js"] }
-# getrandom 0.3.x needs "wasm_js" feature for WASM
-getrandom = { version = "0.3", features = ["wasm_js"] }
-# wasm-bindgen-futures provides async runtime for WASM
-wasm-bindgen-futures = "0.4"
 # gloo-timers provides WASM-compatible sleep functionality
 gloo-timers = { version = "0.3", features = ["futures"] }
 # web-sys for browser APIs (console logging, localStorage for caching)
@@ -70,6 +64,12 @@ cascette-formats = { version = "0.2.0", path = "../cascette-formats" }
 cascette-cache = { version = "0.2.0", path = "../cascette-cache" }
 # js-sys for Date.now() timestamp access
 js-sys = "0.3"
+
+# Target wasm32-unknown-unknown
+[target.'cfg(all(target_arch = "wasm32", any(target_os = "unknown")))'.dependencies]
+getrandom = { version = "0.4", features = ["wasm_js"] }
+# wasm-bindgen-futures provides async runtime for WASM
+wasm-bindgen-futures = "0.4"
 
 [dev-dependencies]
 tempfile = { workspace = true }

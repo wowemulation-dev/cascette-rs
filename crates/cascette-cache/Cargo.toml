@@ -75,16 +75,19 @@ web-sys = { version = "0.3", features = [
     "DomException",
     "DomStringList",
 ] }
+# js-sys for JavaScript types
+js-sys = "0.3"
+
+# cascette-formats for WASM
+cascette-formats = { version = "0.2.0", path = "../cascette-formats" }
+
+[target.'cfg(all(target_arch = "wasm32", any(target_os = "unknown")))'.dependencies]
+# getrandom for WASM
+getrandom = { version = "0.4", features = ["wasm_js"] }
 # wasm-bindgen for JS interop
 wasm-bindgen = "0.2"
 # wasm-bindgen-futures for async JS interop
 wasm-bindgen-futures = "0.4"
-# js-sys for JavaScript types
-js-sys = "0.3"
-# getrandom for WASM
-getrandom = { version = "0.3", features = ["wasm_js"] }
-# cascette-formats for WASM
-cascette-formats = { version = "0.2.0", path = "../cascette-formats" }
 
 [features]
 default = []
