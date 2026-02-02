@@ -285,7 +285,7 @@ pub mod zerocopy;
 // ============================================================================
 // WASM-only modules (browser storage backends)
 // ============================================================================
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
 pub mod indexed_db_cache;
 #[cfg(target_arch = "wasm32")]
 pub mod local_storage_cache;
@@ -354,7 +354,7 @@ pub use cdn::{
 // ============================================================================
 // WASM-only re-exports
 // ============================================================================
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
 pub use indexed_db_cache::{IndexedDbCache, IndexedDbCacheConfig};
 #[cfg(target_arch = "wasm32")]
 pub use local_storage_cache::{LocalStorageCache, LocalStorageCacheConfig};
@@ -398,7 +398,7 @@ pub mod prelude {
     };
 
     // WASM-only exports
-    #[cfg(target_arch = "wasm32")]
+    #[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
     pub use crate::{
         IndexedDbCache, IndexedDbCacheConfig, LocalStorageCache, LocalStorageCacheConfig,
     };

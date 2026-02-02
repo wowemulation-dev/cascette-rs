@@ -66,7 +66,7 @@ cascette-cache = { version = "0.2.0", path = "../cascette-cache" }
 js-sys = "0.3"
 
 # Target wasm32-unknown-unknown
-[target.'cfg(all(target_arch = "wasm32", any(target_os = "unknown")))'.dependencies]
+[target.'cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))'.dependencies]
 getrandom = { version = "0.4", features = ["wasm_js"] }
 # wasm-bindgen-futures provides async runtime for WASM
 wasm-bindgen-futures = "0.4"
