@@ -24,6 +24,19 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Updated workspace dependencies:
+  - reqwest 0.12 -> 0.13 (`rustls-tls` feature renamed to `rustls`, uses aws-lc-rs crypto provider)
+  - tokio 1.47 -> 1.49
+  - md5 0.7 -> 0.8
+  - bytes 1.10 -> 1.11
+  - asn1 0.22 -> 0.23
+  - prometheus 0.13 -> 0.14
+  - proptest 1.9 -> 1.10
+  - lz4_flex 0.11 -> 0.12
+- Removed unused workspace dependencies: `anyhow`, `mockall`
+- Added OpenSSL license to deny.toml for aws-lc-sys (rustls crypto provider)
+- Updated markdownlint configuration with schema references, cli2 support, and
+  relaxed rules for changelog format and table styles
 - Updated wiremock dependency from 0.5 to 0.6 (removes unmaintained `instant` crate)
 - cascette-cache: Added WASM support with browser storage backends
   - `LocalStorageCache` for small protocol data (~5-10MB browser limit)
