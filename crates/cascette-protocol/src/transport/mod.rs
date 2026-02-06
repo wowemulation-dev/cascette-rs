@@ -10,6 +10,20 @@ use reqwest::{Client, ClientBuilder};
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
+/// Ensure a rustls crypto provider is installed before creating TLS clients.
+///
+/// Uses ring as the crypto provider. If another provider was already installed
+/// (e.g. by the application), this is a no-op.
+#[cfg(not(target_arch = "wasm32"))]
+fn ensure_crypto_provider() {
+    // OnceLock ensures we only attempt installation once.
+    // install_default() returns Err if a provider is already set, which we ignore.
+    static INIT: OnceLock<()> = OnceLock::new();
+    INIT.get_or_init(|| {
+        let _ = rustls::crypto::ring::default_provider().install_default();
+    });
+}
+
 /// Global shared HTTP client for optimal performance
 /// Avoids costly client creation on every protocol operation
 static GLOBAL_HTTP_CLIENT: OnceLock<Arc<Client>> = OnceLock::new();
@@ -39,6 +53,7 @@ impl HttpClient {
     /// Create optimized client with NGDP-specific settings
     #[cfg(not(target_arch = "wasm32"))]
     fn create_optimized_client() -> Result<Client> {
+        ensure_crypto_provider();
         ClientBuilder::new()
             // Connection pooling optimized for NGDP traffic patterns
             .pool_idle_timeout(Duration::from_secs(30)) // Shorter timeout for protocol requests
@@ -88,6 +103,7 @@ impl HttpClient {
     /// Create a new HTTP client with custom configuration
     #[cfg(not(target_arch = "wasm32"))]
     pub fn with_config(config: &HttpConfig) -> Result<Self> {
+        ensure_crypto_provider();
         let mut builder = ClientBuilder::new()
             .pool_idle_timeout(config.pool_idle_timeout)
             .pool_max_idle_per_host(config.pool_max_idle_per_host)

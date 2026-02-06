@@ -25,7 +25,7 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 
 - Updated workspace dependencies:
-  - reqwest 0.12 -> 0.13 (`rustls-tls` feature renamed to `rustls`, uses aws-lc-rs crypto provider)
+  - reqwest 0.12 -> 0.13 (using `rustls-no-provider` with ring crypto provider)
   - tokio 1.47 -> 1.49
   - md5 0.7 -> 0.8
   - bytes 1.10 -> 1.11
@@ -34,7 +34,8 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - proptest 1.9 -> 1.10
   - lz4_flex 0.11 -> 0.12
 - Removed unused workspace dependencies: `anyhow`, `mockall`
-- Added OpenSSL license to deny.toml for aws-lc-sys (rustls crypto provider)
+- Switched rustls crypto provider from aws-lc-rs to ring for WASM compatibility
+  (removes aws-lc-sys C dependency from the production dependency tree)
 - Updated markdownlint configuration with schema references, cli2 support, and
   relaxed rules for changelog format and table styles
 - Updated wiremock dependency from 0.5 to 0.6 (removes unmaintained `instant` crate)
