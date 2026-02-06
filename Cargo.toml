@@ -19,27 +19,26 @@ homepage = "https://github.com/wowemulation-dev/cascette-rs"
 [workspace.dependencies]
 # Error handling
 thiserror = "2.0"
-anyhow = "1.0"
 
 # Binary format handling
 binrw = "0.15"
 
 # Utilities
 hex = "0.4"
-md5 = "0.7"
+md5 = "0.8"
 rand = "0.9"
-bytes = "1.10"
+bytes = "1.11"
 dashmap = "6.1"
 
 # Compression
 flate2 = "1.1"
 
 # HTTP client
-reqwest = { version = "0.12", default-features = false, features = ["stream", "rustls-tls", "gzip", "brotli", "deflate", "http2", "charset"] }
+reqwest = { version = "0.13", default-features = false, features = ["stream", "rustls", "gzip", "brotli", "deflate", "http2", "charset"] }
 url = "2.5"
 
 # Async runtime
-tokio = { version = "1.47", features = ["full"] }
+tokio = { version = "1.49", features = ["full"] }
 async-trait = "0.1"
 futures = "0.3"
 
@@ -57,20 +56,19 @@ base64 = "0.22"
 mail-parser = "0.11"
 cms = "0.2"
 der = "0.7"
-asn1 = "0.22"
+asn1 = "0.23"
 x509-cert = "0.2"
 
 # Observability (optional)
-prometheus = { version = "0.13", default-features = false }  # Disable push gateway to avoid protobuf vulnerability
+prometheus = { version = "0.14", default-features = false }  # Disable push gateway to avoid protobuf vulnerability
 tracing = "0.1"
 
 # Testing
 pretty_assertions = "1.4"
 tempfile = "3.24"
-proptest = "1.9"
+proptest = "1.10"
 criterion = { version = "0.8", features = ["html_reports"] }
 walkdir = "2.5"
-mockall = "0.13"
 wiremock = "0.6"
 
 [profile.release]

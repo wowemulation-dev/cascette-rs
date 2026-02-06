@@ -40,6 +40,7 @@ allow = [
     "Unicode-3.0",
     "Unlicense",
     "ISC",                    # Used by ring, untrusted (security crates)
+    "OpenSSL",                # Used by aws-lc-sys (rustls crypto provider)
     "CDLA-Permissive-2.0",    # Used by webpki-roots (CA certificate data)
 ]
 confidence-threshold = 0.8
