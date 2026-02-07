@@ -51,8 +51,8 @@ Focus on World of Warcraft products:
 | wow_classic | Classic (Wrath/Cata) | Bi-weekly |
 | wow_classic_era | Classic Era (Vanilla) | Rare updates |
 | wow_classic_ptr | Classic PTR | During test cycles |
-| wow_classic_titan | Classic Titan (China only) | Unknown |
-| wow_anniversary | Classic Anniversary | Unknown |
+| wow_classic_titan | Classic Titan (CN only, WotLK 3.80.x) | Unknown |
+| wow_anniversary | Classic Anniversary (TBC 2.5.x) | Unknown |
 
 ## Archival Urgency
 

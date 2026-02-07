@@ -121,6 +121,8 @@ Based on verified transitions, parsers must support:
 |---------|-------------------------|-----------------|-------------|-----------|
 | wow_classic_era | v3 only | TSFM | Modern | 2021+ (uses retail backend) |
 | wow_classic | v1, v3 | None, TSFM | Legacy → Modern | 2018-2025 |
+| wow_classic_titan | v3 only | TSFM | Modern | 2025+ (CN only, WotLK 3.80.x) |
+| wow_anniversary | v3 only | TSFM | Modern | 2025+ (TBC 2.5.x) |
 | wow | v1, v2, v3 | None, TSFM | Legacy → Modern | 2018-2025 |
 
 **Implementation Recommendation**: Always attempt v3 parsing first with TSFM
@@ -224,6 +226,8 @@ Based on verified format evolution across retail and Classic:
 3. **Product-Specific Logic**:
    - **wow_classic_era**: Always modern format (v3, TSFM)
    - **wow_classic**: Dual format support with clear transition point (2025)
+   - **wow_classic_titan**: Modern format only (v3, TSFM), 368 VFS entries, CN region only
+   - **wow_anniversary**: Modern format only (v3, TSFM), 325 VFS entries, all regions
    - **wow retail**: Full format evolution support (2018-2025)
 
 4. **BLTE Decoder**: All compression types (N, Z, E, F) with consistent usage
