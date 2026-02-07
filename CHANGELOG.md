@@ -36,6 +36,7 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Removed unused workspace dependencies: `anyhow`, `mockall`
 - Switched rustls crypto provider from aws-lc-rs to ring for WASM compatibility
   (removes aws-lc-sys C dependency from the production dependency tree)
+- Renamed `mise.toml` to `.mise.toml` (dotfile convention)
 - Updated markdownlint configuration with schema references, cli2 support, and
   relaxed rules for changelog format and table styles
 - Updated wiremock dependency from 0.5 to 0.6 (removes unmaintained `instant` crate)
