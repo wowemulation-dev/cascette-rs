@@ -11,7 +11,8 @@ Format transitions were identified through:
 1. **Strategic Build Analysis**: Examining key builds across WoW versions using
 `tools/examine_build.py`
 2. **Chronological Comparison**: Tracking format changes between adjacent builds
-3. **Cross-Product Validation**: Comparing wow, wow_classic, and wow_classic_era
+3. **Cross-Product Validation**: Comparing wow, wow_classic, wow_classic_era,
+wow_classic_titan, and wow_anniversary
 4. **Automated Verification**: Using Python scripts to validate format
 assumptions
 

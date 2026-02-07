@@ -507,6 +507,10 @@ Common product identifiers used with Ribbit:
 
 - `wow_classic_ptr` - Classic PTR
 
+- `wow_classic_titan` - Classic Titan (China only, WotLK with upgraded Classic/TBC raids)
+
+- `wow_anniversary` - Classic Anniversary (progression through Classic branches on a shortened timeline)
+
 - `wowt` - Public Test Realm
 
 - `wowz` - Internal/Development
