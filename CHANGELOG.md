@@ -10,6 +10,7 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- README: Added development section with mise tool version management
 - cascette-protocol crate: NGDP/CASC protocol implementation
   - Unified `RibbitTactClient` with automatic fallback (TACT HTTPS -> HTTP -> Ribbit TCP)
   - TACT client for HTTPS/HTTP queries to `us.version.battle.net`
