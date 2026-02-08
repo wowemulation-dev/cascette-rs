@@ -55,12 +55,8 @@ cascette-crypto = { version = "0.2.0", path = "../cascette-crypto" }
 tokio = { version = "1.49", default-features = false, features = ["sync", "macros"] }
 # WASM-compatible reqwest (uses web-sys/fetch API instead of native sockets)
 reqwest = { version = "0.13", default-features = false, features = ["gzip", "brotli", "deflate", "charset"] }
-# getrandom 0.2.x needs "js" feature to use browser crypto API on WASM
-getrandom_02 = { package = "getrandom", version = "0.2", features = ["js"] }
 # getrandom 0.3.x needs "wasm_js" feature for WASM
-getrandom = { version = "0.3", features = ["wasm_js"] }
-# wasm-bindgen-futures provides async runtime for WASM
-wasm-bindgen-futures = "0.4"
+getrandom = "0.4"
 # gloo-timers provides WASM-compatible sleep functionality
 gloo-timers = { version = "0.3", features = ["futures"] }
 # web-sys for browser APIs (console logging, localStorage for caching)
