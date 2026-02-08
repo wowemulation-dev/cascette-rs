@@ -97,6 +97,18 @@ goals:
 
 Python prototyping environment for NGDP/CASC format analysis and verification.
 
+## Development
+
+This project requires Rust 1.92.0 and mdbook for documentation. You can install
+and manage these dependencies automatically with [mise](https://mise.jdx.dev/):
+
+```bash
+mise install
+```
+
+This reads `.mise.toml` from the project root and installs the pinned tool
+versions.
+
 ## Contributing
 
 - [CONTRIBUTING.md](CONTRIBUTING.md) - Contribution guidelines

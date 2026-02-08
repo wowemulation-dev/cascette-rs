@@ -10,6 +10,9 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- README: Added development section with mise tool version management
+- docs: Added `wow_classic_titan` and `wow_anniversary` product codes with
+  verified format details from live TACT data
 - cascette-protocol crate: NGDP/CASC protocol implementation
   - Unified `RibbitTactClient` with automatic fallback (TACT HTTPS -> HTTP -> Ribbit TCP)
   - TACT client for HTTPS/HTTP queries to `us.version.battle.net`
@@ -24,6 +27,21 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Updated workspace dependencies:
+  - reqwest 0.12 -> 0.13 (using `rustls-no-provider` with ring crypto provider)
+  - tokio 1.47 -> 1.49
+  - md5 0.7 -> 0.8
+  - bytes 1.10 -> 1.11
+  - asn1 0.22 -> 0.23
+  - prometheus 0.13 -> 0.14
+  - proptest 1.9 -> 1.10
+  - lz4_flex 0.11 -> 0.12
+- Removed unused workspace dependencies: `anyhow`, `mockall`
+- Switched rustls crypto provider from aws-lc-rs to ring for WASM compatibility
+  (removes aws-lc-sys C dependency from the production dependency tree)
+- Renamed `mise.toml` to `.mise.toml` (dotfile convention)
+- Updated markdownlint configuration with schema references, cli2 support, and
+  relaxed rules for changelog format and table styles
 - Updated wiremock dependency from 0.5 to 0.6 (removes unmaintained `instant` crate)
 - cascette-cache: Added WASM support with browser storage backends
   - `LocalStorageCache` for small protocol data (~5-10MB browser limit)

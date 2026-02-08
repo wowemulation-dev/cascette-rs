@@ -11,7 +11,8 @@ Format transitions were identified through:
 1. **Strategic Build Analysis**: Examining key builds across WoW versions using
 `tools/examine_build.py`
 2. **Chronological Comparison**: Tracking format changes between adjacent builds
-3. **Cross-Product Validation**: Comparing wow, wow_classic, and wow_classic_era
+3. **Cross-Product Validation**: Comparing wow, wow_classic, wow_classic_era,
+wow_classic_titan, and wow_anniversary
 4. **Automated Verification**: Using Python scripts to validate format
 assumptions
 
@@ -120,6 +121,8 @@ Based on verified transitions, parsers must support:
 |---------|-------------------------|-----------------|-------------|-----------|
 | wow_classic_era | v3 only | TSFM | Modern | 2021+ (uses retail backend) |
 | wow_classic | v1, v3 | None, TSFM | Legacy → Modern | 2018-2025 |
+| wow_classic_titan | v3 only | TSFM | Modern | 2025+ (CN only, WotLK 3.80.x) |
+| wow_anniversary | v3 only | TSFM | Modern | 2025+ (TBC 2.5.x) |
 | wow | v1, v2, v3 | None, TSFM | Legacy → Modern | 2018-2025 |
 
 **Implementation Recommendation**: Always attempt v3 parsing first with TSFM
@@ -223,6 +226,8 @@ Based on verified format evolution across retail and Classic:
 3. **Product-Specific Logic**:
    - **wow_classic_era**: Always modern format (v3, TSFM)
    - **wow_classic**: Dual format support with clear transition point (2025)
+   - **wow_classic_titan**: Modern format only (v3, TSFM), 368 VFS entries, CN region only
+   - **wow_anniversary**: Modern format only (v3, TSFM), 325 VFS entries, all regions
    - **wow retail**: Full format evolution support (2018-2025)
 
 4. **BLTE Decoder**: All compression types (N, Z, E, F) with consistent usage

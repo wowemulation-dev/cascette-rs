@@ -73,8 +73,8 @@ The v2 API provides three primary endpoints:
 
 **CRITICAL**: Always extract the `Path` field from CDN responses. Never assume
 paths based on product names. For example, all WoW products (`wow`,
-`wow_classic`, `wow_classic_era`) use `tpr/wow` despite having different
-product codes.
+`wow_classic`, `wow_classic_era`, `wow_classic_titan`, `wow_anniversary`) use
+`tpr/wow` despite having different product codes.
 
 ### Content Download Workflow
 

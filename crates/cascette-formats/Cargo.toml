@@ -24,7 +24,7 @@ md5 = { workspace = true }
 
 # Compression
 flate2 = { workspace = true }
-lz4_flex = "0.11"
+lz4_flex = "0.12"
 
 # Internal dependencies
 cascette-crypto = { version = "0.2.0", path = "../cascette-crypto" }

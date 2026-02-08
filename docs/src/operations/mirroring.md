@@ -51,6 +51,8 @@ Focus on World of Warcraft products:
 | wow_classic | Classic (Wrath/Cata) | Bi-weekly |
 | wow_classic_era | Classic Era (Vanilla) | Rare updates |
 | wow_classic_ptr | Classic PTR | During test cycles |
+| wow_classic_titan | Classic Titan (CN only, WotLK 3.80.x) | Unknown |
+| wow_anniversary | Classic Anniversary (TBC 2.5.x) | Unknown |
 
 ## Archival Urgency
 
@@ -131,7 +133,7 @@ cdn_url = f"http://{host}/tpr/wow/data/{hash[:2]}/{hash[2:4]}/{hash}"
 
 All WoW products use `tpr/wow` regardless of product code:
 
-- `wow`, `wow_classic`, `wow_classic_era` all use `tpr/wow`
+- `wow`, `wow_classic`, `wow_classic_era`, `wow_classic_titan`, `wow_anniversary` all use `tpr/wow`
 
 - Never assume paths based on product names
 
