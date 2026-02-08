@@ -27,7 +27,7 @@ binrw = "0.15"
 # Utilities
 hex = "0.4"
 md5 = "0.7"
-rand = "0.9"
+rand = "0.10"
 bytes = "1.10"
 dashmap = "6.1"
 getrandom = "0.4"
