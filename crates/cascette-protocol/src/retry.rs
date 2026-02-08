@@ -1,6 +1,7 @@
 //! Retry policy implementation with exponential backoff
 
 use rand::{Rng, rng};
+use rand::RngExt;
 use serde::{Deserialize, Serialize};
 use std::future::Future;
 use std::time::Duration;
