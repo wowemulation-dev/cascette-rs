@@ -5,6 +5,7 @@ members = [
     "crates/cascette-crypto",
     "crates/cascette-formats",
     "crates/cascette-protocol",
+    "crates/cascette-ribbit",
 ]
 
 [workspace.package]
@@ -64,6 +65,19 @@ x509-cert = "0.2"
 # Observability (optional)
 prometheus = { version = "0.14", default-features = false }  # Disable push gateway to avoid protobuf vulnerability
 tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# HTTP server framework
+axum = "0.8"
+tower-http = { version = "0.6", features = ["trace", "cors", "compression-gzip"] }
+axum-server = { version = "0.7", features = ["tls-rustls-no-provider"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
+
+# CLI argument parsing
+clap = { version = "4.5", features = ["derive", "env", "color"] }
+
+# Application error handling (binary crates)
+anyhow = "1.0"
 
 # Testing
 pretty_assertions = "1.4"

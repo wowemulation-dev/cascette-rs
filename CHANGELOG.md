@@ -10,6 +10,23 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- cascette-ribbit crate: Ribbit protocol server
+  - HTTP server (axum) with `/{product}/versions`, `/{product}/cdns`,
+    `/{product}/bgdl` endpoints
+  - TCP server with Ribbit v1 (MIME-wrapped with SHA-256 checksums) and v2
+    (raw BPSV) protocol support
+  - `v1/summary` endpoint listing all available products
+  - JSON-based build database with MD5 hash validation
+  - Multi-region BPSV response generation (us, eu, cn, kr, tw, sg, xx)
+  - CDN configuration with per-region resolution
+  - CLI binary (`cascette-ribbit`) with clap argument parsing and env var support
+  - Optional TLS support behind `tls` feature flag
+  - Contract tests verifying cascette-protocol client compatibility
+  - Integration tests for HTTP, TCP v1, and TCP v2 protocols
+  - Throughput benchmarks for BPSV generation
+- docs: Added Ribbit Server documentation page (`protocols/ribbit-server.md`)
+- Workspace dependencies: axum 0.8, tower-http 0.6, axum-server 0.7,
+  tokio-rustls 0.26, clap 4.5, anyhow 1.0, tracing-subscriber 0.3
 - README: Added development section with mise tool version management
 - docs: Added `wow_classic_titan` and `wow_anniversary` product codes with
   verified format details from live TACT data
@@ -27,6 +44,14 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- axum-server uses `tls-rustls-no-provider` feature instead of `tls-rustls` to
+  avoid pulling in aws-lc-rs/aws-lc-sys native C dependencies
+- tokio-rustls uses `default-features = false` with `ring` feature to avoid
+  aws-lc-rs
+- deny.toml: Banned aws-lc-rs and aws-lc-sys crates to enforce pure-Rust
+  crypto via ring
+- deny.toml: Added advisory ignore for RUSTSEC-2025-0134 (rustls-pemfile
+  deprecation, pulled in by axum-server 0.7 until upstream updates)
 - Updated workspace dependencies:
   - reqwest 0.12 -> 0.13 (using `rustls-no-provider` with ring crypto provider)
   - tokio 1.47 -> 1.49

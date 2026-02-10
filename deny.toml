@@ -25,6 +25,10 @@ ignore = [
     # This is a read-only verification operation, not key generation.
     # Timing attacks require network observability which is not a concern here.
     "RUSTSEC-2023-0071",
+    # RUSTSEC-2025-0134: rustls-pemfile deprecated in favor of rustls-pki-types
+    # Pulled in by axum-server 0.7.x. Not a security issue, just a deprecation.
+    # Will be resolved when axum-server updates its dependency.
+    "RUSTSEC-2025-0134",
 ]
 
 # License compliance
@@ -65,6 +69,9 @@ deny = [
     # Use rustls instead of native-tls/openssl for better security and WASM compat
     { crate = "openssl", reason = "Use rustls for TLS" },
     { crate = "openssl-sys", reason = "Use rustls for TLS" },
+    # Use ring (pure Rust) instead of aws-lc-rs (requires C compiler, aws-lc-sys)
+    { crate = "aws-lc-rs", reason = "Use ring for pure-Rust crypto" },
+    { crate = "aws-lc-sys", reason = "Use ring for pure-Rust crypto, no native deps" },
 ]
 
 skip = []

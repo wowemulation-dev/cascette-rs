@@ -30,6 +30,7 @@
 
 - [CDN Architecture](protocols/cdn.md)
 - [Ribbit Protocol](protocols/ribbit.md)
+- [Ribbit Server](protocols/ribbit-server.md)
 
 # Client
 

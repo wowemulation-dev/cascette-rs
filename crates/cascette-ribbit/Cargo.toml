@@ -1,0 +1,87 @@
+[package]
+name = "cascette-ribbit"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Ribbit server implementation supporting TCP v1/v2 and HTTP/HTTPS protocols"
+readme = "README.md"
+keywords = ["casc", "ribbit", "tact", "ngdp", "server"]
+categories = ["network-programming", "game-development", "web-programming::http-server"]
+
+[lib]
+name = "cascette_ribbit"
+path = "src/lib.rs"
+
+[[bin]]
+name = "cascette-ribbit"
+path = "bin/cascette-ribbit.rs"
+
+[dependencies]
+# Error handling
+thiserror.workspace = true
+anyhow.workspace = true
+
+# Async runtime
+tokio.workspace = true
+
+# HTTP server
+axum.workspace = true
+tower-http.workspace = true
+
+# TLS support (optional)
+axum-server = { workspace = true, optional = true }
+rustls = { workspace = true, optional = true }
+tokio-rustls = { workspace = true, optional = true }
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+
+# Cryptography (SHA-256 for checksums)
+sha2.workspace = true
+
+# Logging and observability
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+# CLI and configuration
+clap.workspace = true
+
+[dev-dependencies]
+# Internal dependencies (for contract tests)
+cascette-protocol = { path = "../cascette-protocol" }
+
+# Testing utilities
+tokio.workspace = true
+pretty_assertions.workspace = true
+tempfile.workspace = true
+proptest.workspace = true
+wiremock.workspace = true
+
+# HTTP client for integration tests
+reqwest.workspace = true
+
+# Crypto provider for reqwest in tests
+rustls.workspace = true
+
+# Benchmarking
+criterion.workspace = true
+
+[features]
+default = []
+tls = ["axum-server", "rustls", "tokio-rustls"]
+
+[package.metadata.cargo-machete]
+# These are optional deps behind the 'tls' feature - cargo-machete flags them incorrectly
+ignored = ["axum-server", "rustls", "tokio-rustls"]
+
+[lints]
+workspace = true
+
+[[bench]]
+name = "throughput"
+harness = false

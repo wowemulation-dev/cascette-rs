@@ -1,0 +1,17 @@
+[
+  {
+    "id": 1,
+    "product": "test_product",
+    "version": "1.0.0.1",
+    "build": "1",
+    "build_config": "0123456789abcdef0123456789abcdef",
+    "cdn_config": "fedcba9876543210fedcba9876543210",
+    "keyring": null,
+    "product_config": null,
+    "build_time": "2024-01-01T00:00:00+00:00",
+    "encoding_ekey": "aaaabbbbccccddddeeeeffffaaaaffff",
+    "root_ekey": "bbbbccccddddeeeeffffaaaabbbbcccc",
+    "install_ekey": "ccccddddeeeeffffaaaabbbbccccdddd",
+    "download_ekey": "ddddeeeeffffaaaabbbbccccddddeeee"
+  }
+]
