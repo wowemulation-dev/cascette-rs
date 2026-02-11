@@ -179,10 +179,13 @@ The workspace uses strict linting. Key settings from `Cargo.toml`:
 all = { level = "warn", priority = -1 }
 pedantic = { level = "warn", priority = -1 }
 nursery = { level = "warn", priority = -1 }
+cargo = { level = "warn", priority = -1 }
 
 # Safety lints (higher priority)
 unwrap_used = { level = "warn", priority = 2 }
 panic = { level = "warn", priority = 2 }
+todo = { level = "warn", priority = 2 }
+unimplemented = { level = "warn", priority = 2 }
 expect_used = { level = "warn", priority = 2 }
 ```
 

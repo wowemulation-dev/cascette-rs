@@ -78,6 +78,7 @@ wasm-bindgen-futures = "0.4"
 tempfile = { workspace = true }
 wiremock = { workspace = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+mockall = "0.13"
 
 # Example binaries
 [[example]]

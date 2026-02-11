@@ -121,43 +121,35 @@ cargo bench
 
 #### Continuous Integration
 
-Our CI/CD pipeline automatically runs the following checks on all pull requests:
+The CI pipeline runs on all pull requests and pushes to main. It has 7
+functional jobs:
 
-1. **Quick Checks** (runs first, fails fast):
-   - Code formatting (`cargo fmt`)
-   - Compilation check (`cargo check`)
-   - Linting (`cargo clippy`)
+1. **Changed Files Detection**: Identifies which crates changed to scope tests
+   efficiently.
 
-2. **Test Matrix**:
-   - Runs on Linux, Windows, and macOS
-   - Tests with Rust stable, beta, and MSRV (1.92.0)
-   - Tests with all features and no default features
+2. **Quick Checks** (runs first, fails fast):
+   - Code formatting (`cargo fmt --all -- --check`)
+   - Compilation check (`cargo check --workspace --all-targets`)
+   - Linting (`cargo clippy --workspace --all-targets`)
 
-3. **Documentation**:
-   - Builds documentation with warnings as errors
-   - Checks for broken documentation links
+3. **Cargo Deny**: Dependency security advisories and license compliance via
+   `cargo-deny`. Checks 6 targets including `wasm32-unknown-unknown`.
 
-4. **Code Coverage**:
-   - Measures test coverage with cargo-llvm-cov
-   - Reports to Codecov
+4. **Tests** (ubuntu-latest, MSRV 1.92.0 + stable):
+   - `cargo test` on changed crates with default features
+   - `cargo test --no-default-features` on changed crates
+   - Individual crate tests on stable
 
-5. **Security Audits** (runs on schedule):
-   - Dependency vulnerability scanning
-   - License compliance checks
+5. **WASM Compilation**:
+   - `cargo check --target wasm32-unknown-unknown -p cascette-crypto`
+   - `cargo check --target wasm32-unknown-unknown -p cascette-formats`
 
-6. **Cross-Platform Builds**:
-   - Builds for multiple targets including ARM64 and Windows
-   - Uses cross-compilation where needed
+6. **Documentation**:
+   - `cargo doc --workspace --no-deps` with `RUSTDOCFLAGS=-D warnings`
+   - `cargo doc --workspace --no-deps --document-private-items` (broken links)
 
-7. **Benchmarks** (on PRs):
-   - Compares performance against the base branch
-   - Automatically comments results on PRs
-
-8. **Release Pipeline**:
-   - Automated releases on version tags
-   - Builds binaries for all supported platforms
-   - Publishes crates to crates.io
-   - Creates GitHub releases with artifacts
+7. **Code Coverage** (non-blocking):
+   - `cargo llvm-cov --workspace --lcov` uploaded to Codecov
 
 ### Submit a Pull Request
 
