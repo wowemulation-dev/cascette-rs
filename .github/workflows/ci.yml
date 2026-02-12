@@ -170,6 +170,11 @@ jobs:
         with:
           toolchain: ${{ matrix.rust }}
 
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+
       - name: Cache Rust dependencies for ${{ matrix.os }}
         uses: Swatinem/rust-cache@v2
         with:
@@ -198,11 +203,11 @@ jobs:
 
       # Test with default features
       - name: Test default features (changed crates)
-        run: cargo test ${{ steps.test-scope.outputs.test_args }}
+        run: cargo nextest run --profile ci ${{ steps.test-scope.outputs.test_args }}
 
       # Test with no default features
       - name: Test no default features (changed crates)
-        run: cargo test --no-default-features ${{ steps.test-scope.outputs.test_args }}
+        run: cargo nextest run --profile ci --no-default-features ${{ steps.test-scope.outputs.test_args }}
 
       # Test each changed crate individually (only on stable Linux)
       - name: Test individual changed crates
@@ -212,7 +217,7 @@ jobs:
         run: |
           for crate in $CRATES_CHANGED; do
             echo "Testing $crate individually..."
-            cargo test -p "$crate"
+            cargo nextest run --profile ci -p "$crate"
           done
 
   # WASM compilation check
@@ -296,8 +301,13 @@ jobs:
         with:
           tool: cargo-llvm-cov
 
+      - name: Install cargo-nextest for faster coverage collection
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+
       - name: Collect coverage
-        run: cargo llvm-cov --workspace --lcov --output-path lcov.info
+        run: cargo llvm-cov --workspace --lcov --output-path lcov.info --nextest --profile ci
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v5

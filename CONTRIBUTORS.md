@@ -25,14 +25,14 @@ We welcome contributions from the community! Here are some ways you can help:
 
 2. **Make your changes** following the Rust style guidelines
 3. **Add tests** for any new functionality
-4. **Ensure all tests pass** (`cargo test --all-features`)
+4. **Ensure all tests pass** (`cargo nextest run --profile ci --all-features`)
 5. **Run quality checks**:
 
    ```bash
    cargo fmt --all
    cargo check --all-features --all-targets
    cargo clippy --all-targets --all-features
-   cargo test
+   cargo nextest run --profile ci --all-features
    ```
 
 6. **Update documentation** if you're changing public APIs

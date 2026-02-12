@@ -20,6 +20,14 @@ Thumbs.db
 **/*.rs.bk
 *.pdb
 
+# Flamegraph output (subdirectory of target/ listed above)
+/target/flamegraphs/
+
+# Profiling data files
+perf.data
+perf.data.old
+perf.data.tmp
+
 # Private reference documentation
 /docs-internal/
 

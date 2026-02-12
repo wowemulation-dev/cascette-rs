@@ -99,7 +99,19 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - Removed incorrect version-specific layout branching in parser/builder
   - Fixed header size calculation in tests (12 bytes for V2, not 11)
 - docs: Fixed download manifest File Structure diagram to show correct order
+- cascette-protocol: Fixed "No provider set" error in tests by adding rustls dev-dependency
+  to provide crypto provider for reqwest with rustls feature
 
+### Changed
+
+- Added .config/nextest.toml with default, ci, and release profiles
+- Added cargo aliases for nextest workflows in .cargo/config.toml
+- Updated CI to use cargo nextest run --profile ci instead of cargo test
+- Added .github/workflows/profiling.yml for flamegraph generation
+- Fixed reqwest feature from invalid rustls-tls to rustls in Cargo.toml
+- Added flamegraph and perf data paths to .gitignore
+- Updated all documentation to use nextest instead of cargo test
+- Added performance profiling section to testing documentation
 ## [0.2.0] - 2025-01-20
 
 ### Breaking Changes

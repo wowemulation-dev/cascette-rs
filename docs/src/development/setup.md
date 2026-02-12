@@ -132,7 +132,7 @@ All changes must pass the CI workflow before merging. Run these checks locally:
 # Full CI check (run before committing)
 cargo fmt --all -- --check && \
 cargo clippy --workspace --all-targets && \
-cargo test --workspace && \
+cargo nextest run --profile ci --workspace && \
 cargo doc --workspace --no-deps
 ```
 
@@ -142,7 +142,7 @@ Individual checks:
 |---------|---------|
 | `cargo fmt --all -- --check` | Format verification |
 | `cargo clippy --workspace --all-targets` | Lint checks |
-| `cargo test --workspace` | Unit and integration tests |
+| `cargo nextest run --profile ci --workspace` | Unit and integration tests |
 | `cargo doc --workspace --no-deps` | Documentation build |
 | `cargo deny check` | Dependency audit |
 

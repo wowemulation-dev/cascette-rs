@@ -1,0 +1,171 @@
+---
+name: Profiling
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Benchmark target (bench, test, binary)'
+        required: true
+        default: 'bench'
+        type: choice
+        options:
+          - bench
+          - test
+          - binary
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  flamegraph:
+    name: Generate Flamegraph
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      contains(github.event.head_commit.message, '[perf]')
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: stable
+          components: llvm-tools
+
+      - name: Install flamegraph tools
+        run: |
+          cargo install flamegraph
+          sudo apt-get update
+          sudo apt-get install -y linux-perf
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "flamegraph-${{ hashFiles('**/Cargo.lock') }}"
+          cache-all-crates: true
+
+      - name: Generate flamegraph for benchmarks
+        if: >
+          inputs.target == 'bench' ||
+          (github.event_name != 'workflow_dispatch')
+        run: |
+          mkdir -p target/flamegraphs
+          cargo flamegraph --bench throughput --output target/flamegraphs/flamegraph.svg -- --bench
+
+      - name: Generate flamegraph for tests
+        if: inputs.target == 'test'
+        run: |
+          mkdir -p target/flamegraphs
+          cargo flamegraph --output target/flamegraphs/flamegraph.svg --test integration
+
+      - name: Generate flamegraph for binary
+        if: inputs.target == 'binary'
+        run: |
+          mkdir -p target/flamegraphs
+          cargo flamegraph --output target/flamegraphs/flamegraph.svg --bin cascette-ribbit -- --help
+
+      - name: Upload flamegraph artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: flamegraph-${{ inputs.target }}
+          path: target/flamegraphs/
+          retention-days: 30
+
+      - name: Upload flamegraph to PR comment
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const flamegraph = fs.readFileSync(
+              'target/flamegraphs/flamegraph.svg',
+              'base64'
+            );
+
+            const comment = `<!-- flamegraph-comment -->
+            <details>
+            <summary>🔥 Flamegraph</summary>
+
+            ![Flamegraph](data:image/svg+xml;base64,${flamegraph})
+
+            </details>`;
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const botComment = comments.find(comment =>
+              comment.user.type === 'Bot' &&
+              comment.body.includes('<!-- flamegraph-comment -->')
+            );
+
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: comment
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: comment
+              });
+            }
+
+  # Performance regression detection using criterion
+  benchmark:
+    name: Benchmark
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "benchmark-${{ hashFiles('**/Cargo.lock') }}"
+          cache-all-crates: true
+
+      - name: Run benchmarks
+        run: cargo bench --bench throughput -- --output-format bencher
+
+      - name: Store benchmark result
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          tool: 'cargo'
+          output-file-path: target/criterion/report/index.html
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: true
+          alert-threshold: '200%'
+          comment-on-alert: true
+          fail-on-alert: true
+          alert-comment-cc-users: '@danielsreichenbach'
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: target/criterion/
+          retention-days: 30

@@ -1,0 +1,56 @@
+# nextest configuration for cascette-rs workspace
+# https://nexte.st/book/configuration.html
+
+[profile.default]
+# Show output as tests complete
+failure-output = "immediate-final"
+# Show test output for passing tests too
+slow-timeout = { period = "60s", terminate-after = 3 }
+
+[profile.ci]
+# CI-optimized settings for faster feedback
+failure-output = "immediate-final"
+# Faster timeout for CI
+slow-timeout = { period = "30s", terminate-after = 2 }
+# Reuse test binaries between runs for performance
+retries = 2
+
+[[profile.ci.overrides]]
+# Integration tests get more time
+filter = "test(integration|contract)"
+slow-timeout = { period = "120s", terminate-after = 3 }
+
+[profile.release]
+# Release-mode testing for performance verification
+failure-output = "immediate-final"
+slow-timeout = { period = "120s", terminate-after = 3 }
+
+[store]
+# Store directory location
+# Defaults to target/nextest
+dir = "target/nextest"
+
+[[profile.default.overrides]]
+# Crypto crate tests
+filter = "package(cascette-crypto)"
+slow-timeout = { period = "30s", terminate-after = 2 }
+
+[[profile.default.overrides]]
+# Formats crate tests (binary format parsing can be intensive)
+filter = "package(cascette-formats)"
+slow-timeout = { period = "60s", terminate-after = 3 }
+
+[[profile.default.overrides]]
+# Protocol crate tests (network I/O)
+filter = "package(cascette-protocol)"
+slow-timeout = { period = "120s", terminate-after = 3 }
+
+[[profile.default.overrides]]
+# Cache crate tests
+filter = "package(cascette-cache)"
+slow-timeout = { period = "60s", terminate-after = 3 }
+
+[[profile.default.overrides]]
+# Ribbit server tests
+filter = "package(cascette-ribbit)"
+slow-timeout = { period = "90s", terminate-after = 3 }

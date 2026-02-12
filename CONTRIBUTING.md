@@ -136,8 +136,8 @@ functional jobs:
    `cargo-deny`. Checks 6 targets including `wasm32-unknown-unknown`.
 
 4. **Tests** (ubuntu-latest, MSRV 1.92.0 + stable):
-   - `cargo test` on changed crates with default features
-   - `cargo test --no-default-features` on changed crates
+   - `cargo nextest run --profile ci` on changed crates with default features
+   - `cargo nextest run --profile ci --no-default-features` on changed crates
    - Individual crate tests on stable
 
 5. **WASM Compilation**:
@@ -149,7 +149,7 @@ functional jobs:
    - `cargo doc --workspace --no-deps --document-private-items` (broken links)
 
 7. **Code Coverage** (non-blocking):
-   - `cargo llvm-cov --workspace --lcov` uploaded to Codecov
+   - `cargo llvm-cov --workspace --lcov --nextest` uploaded to Codecov
 
 ### Submit a Pull Request
 

@@ -80,6 +80,9 @@ wiremock = { workspace = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 mockall = "0.13"
 
+# Crypto provider for reqwest in tests
+rustls = { workspace = true }
+
 # Example binaries
 [[example]]
 name = "wow_classic_native"

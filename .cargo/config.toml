@@ -43,6 +43,20 @@ check-all = "check --workspace --all-targets --all-features"
 # Release build for all workspace members
 build-release = "build --workspace --release"
 
+# Nextest test runner (faster than cargo test)
+# Install with: cargo install cargo-nextest
+nextest-all = "nextest run --all-features --workspace"
+nextest-lib = "nextest run --all-features --workspace --lib"
+nextest-ci = "nextest run --profile ci --all-features --workspace"
+nextest-release = "nextest run --profile release --all-features --workspace"
+nextest-unit = "nextest run --all-features --workspace --group unit"
+nextest-integration = "nextest run --all-features --workspace --group integration"
+
+# Profiling with flamegraph (use external command directly)
+# Install with: cargo install flamegraph
+# Usage: cargo flamegraph --bench throughput -- --bench
+# Note: Use cargo flamegraph directly, not as an alias (prevents conflict)
+
 [env]
 # Enable backtraces for better error messages during development
 RUST_BACKTRACE = "1"

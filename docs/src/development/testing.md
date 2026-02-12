@@ -242,22 +242,28 @@ fn test_parse_with_invalid_data_returns_checksum_error() {
 
 ## Running Tests
 
+This project uses [cargo-nextest](https://nexte.st/) for faster, parallel test execution with better output formatting.
+
 ### Basic Commands
 
 ```bash
-# Run all tests
-cargo test --workspace
+# Run all tests with nextest (recommended)
+cargo nextest run --workspace
+
+# Run tests with CI profile (stricter timeouts, immediate output on failures)
+cargo nextest run --profile ci --workspace
 
 # Run tests for a specific crate
-cargo test -p cascette-formats
+cargo nextest run -p cascette-formats
+cargo nextest run --profile ci -p cascette-formats
 
 # Run tests matching a pattern
-cargo test edge_          # All edge case tests
-cargo test error_         # All error tests
-cargo test round_trip     # All round-trip tests
+cargo nextest run --workspace edge_          # All edge case tests
+cargo nextest run --workspace error_         # All error tests
+cargo nextest run --workspace round_trip     # All round-trip tests
 
 # Run a specific test
-cargo test test_parse_header_with_valid_data
+cargo nextest run -p cascette-formats test_parse_header_with_valid_data
 ```
 
 ### Feature Combinations
@@ -341,11 +347,102 @@ fn valid_entry_strategy() -> impl Strategy<Value = IndexEntry> {
 
 ## CI Integration
 
-Tests run automatically on every pull request. The CI workflow:
+Tests run automatically on every pull request using cargo-nextest. The CI workflow:
 
-1. Runs `cargo test --workspace` with default features
-2. Runs `cargo test --workspace --no-default-features`
+1. Runs `cargo nextest run --profile ci --workspace` with default features
+2. Runs tests with `--no-default-features` on changed crates
 3. Tests each changed crate individually on stable Rust
-4. Collects code coverage and uploads to Codecov
+4. Collects code coverage using `cargo llvm-cov --nextest` and uploads to Codecov
 
 See `.github/workflows/ci.yml` for the full configuration.
+
+### Nextest Profiles
+
+The project uses three nextest profiles configured in `.config/nextest.toml`:
+
+| Profile | Description | Use Case |
+|---------|-------------|----------|
+| `default` | Standard timeouts, final output on completion | Local development |
+| `ci` | Stricter timeouts, immediate output on failures | CI, PR checks |
+| `release` | Release build with optimizations | Performance testing |
+
+### Cargo Aliases
+
+Convenient cargo aliases are defined in `.cargo/config.toml`:
+
+```bash
+cargo nextest-all          # All tests with default profile
+cargo nextest-lib          # Library tests only
+cargo nextest-ci           # All tests with CI profile
+cargo nextest-release      # All tests with release profile
+cargo nextest-unit        # Unit tests only
+cargo nextest-integration  # Integration tests only
+```
+
+## Performance Profiling
+
+### Flamegraphs
+
+The project supports flamegraph generation using [cargo-flamegraph](https://github.com/flamegraph-rs/flamegraph). Flamegraphs help visualize CPU time spent in different functions during execution.
+
+#### Generating Flamegraphs Locally
+
+```bash
+# Generate flamegraph for benchmarks
+cargo flamegraph --bench throughput -- --bench
+
+# Generate flamegraph for a binary
+cargo flamegraph --bin cascette-ribbit -- --help
+
+# Generate flamegraph for tests
+cargo flamegraph --test integration
+
+# Specify output location (flamegraph.svg is created in working directory by default)
+cargo flamegraph --output target/flamegraphs/flamegraph.svg --bench throughput -- --bench
+```
+
+Flamegraph outputs are stored in `target/flamegraphs/` and ignored by git.
+
+#### CI Flamegraph Generation
+
+The `.github/workflows/profiling.yml` workflow generates flamegraphs automatically:
+
+- Trigger: Manual via `workflow_dispatch` or commits with `[perf]` in the message
+- Targets: `bench` (default), `test`, `binary`
+- Output: Uploaded as artifacts and posted to PR comments
+
+To trigger a flamegraph run:
+
+```bash
+git commit -m "Add performance optimization [perf]"
+git push
+```
+
+Or manually trigger via GitHub Actions UI with a target selector.
+
+### Benchmarking
+
+The project uses [criterion](https://boringcrypto.github.io/criterion.rs/book/) for benchmarking.
+
+```bash
+# Run all benchmarks
+cargo bench
+
+# Run specific benchmark
+cargo bench --bench throughput
+
+# Generate HTML report
+cargo bench --bench throughput -- --output-format html
+open target/criterion/report/index.html
+```
+
+#### Benchmark Regression Detection
+
+The profiling workflow automatically detects performance regressions:
+
+- Runs on main branch pushes
+- Uses `benchmark-action/github-action-benchmark` to store results
+- Alerts when performance degrades by >200%
+- Posts comments to commits with regression alerts
+
+Benchmark data is stored in GitHub Actions cache for historical comparison.
