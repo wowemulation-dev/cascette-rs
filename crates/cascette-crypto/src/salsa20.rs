@@ -2,7 +2,7 @@
 //!
 //! This implements the specific Salsa20 variant used by CASC:
 //! - Uses 16-byte keys with "expand 16-byte k" constant
-//! - 4-byte IV extended to 8 bytes by duplication
+//! - 4-byte IV extended to 8 bytes by zero-padding
 //! - Block index `XORed` with first 4 bytes of IV
 
 use crate::error::CryptoError;
@@ -54,7 +54,6 @@ impl Salsa20Cipher {
         // IV with block index XOR
         let mut extended_iv = [0u8; 8];
         extended_iv[..4].copy_from_slice(iv);
-        extended_iv[4..].copy_from_slice(iv);
 
         // XOR block index with first 4 bytes
         #[allow(clippy::cast_possible_truncation)]

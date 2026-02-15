@@ -44,7 +44,6 @@ allow = [
     "Unlicense",
     "ISC",                    # Used by ring, untrusted (security crates)
     "CDLA-Permissive-2.0",    # Used by webpki-roots (CA certificate data)
-    "OpenSSL",                # Required by aws-lc-sys (pulled in by quinn via reqwest)
 ]
 confidence-threshold = 0.8
 
@@ -69,15 +68,12 @@ deny = [
     # Use rustls instead of native-tls/openssl for better security and WASM compat
     { crate = "openssl", reason = "Use rustls for TLS" },
     { crate = "openssl-sys", reason = "Use rustls for TLS" },
+    # Use ring (pure Rust) instead of aws-lc-rs (requires C compiler, aws-lc-sys)
+    { crate = "aws-lc-rs", reason = "Use ring for pure-Rust crypto, no native dependencies" },
+    { crate = "aws-lc-sys", reason = "Use ring for pure-Rust crypto, no native dependencies" },
 ]
 
-skip = [
-    # quinn (used by reqwest) depends on aws-lc-rs for crypto
-    # We prefer ring but quinn's default configuration uses aws-lc-rs
-    # See: https://github.com/quinn-rs/quinn/issues/1527
-    { crate = "aws-lc-rs", reason = "Pulled in by quinn via reqwest" },
-    { crate = "aws-lc-sys", reason = "Pulled in by quinn via reqwest" },
-]
+skip = []
 skip-tree = []
 
 # Source restrictions

@@ -36,9 +36,12 @@ getrandom = "0.4"
 flate2 = "1.1"
 
 # HTTP client
-reqwest = { version = "0.13", default-features = false, features = ["stream", "rustls", "gzip", "brotli", "deflate", "http2", "charset"] }
+reqwest = { version = "0.13", default-features = false, features = ["stream", "rustls-no-provider", "gzip", "brotli", "deflate", "http2", "charset"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 url = "2.5"
+
+# Add hyper-rustls with ring feature to ensure ring is used instead of aws-lc-rs
+hyper-rustls = { version = "0.27", default-features = false, features = ["ring", "http1", "http2", "tls12", "logging"] }
 
 # Async runtime
 tokio = { version = "1.49", features = ["full"] }
