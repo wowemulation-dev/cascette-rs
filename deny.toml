@@ -44,6 +44,7 @@ allow = [
     "Unlicense",
     "ISC",                    # Used by ring, untrusted (security crates)
     "CDLA-Permissive-2.0",    # Used by webpki-roots (CA certificate data)
+    "OpenSSL",                # Required by aws-lc-sys (pulled in by quinn via reqwest)
 ]
 confidence-threshold = 0.8
 
