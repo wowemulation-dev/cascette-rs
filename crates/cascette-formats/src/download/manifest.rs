@@ -463,8 +463,8 @@ mod tests {
         assert_eq!(original, parsed);
 
         // Validate layout by checking specific positions in binary data
-        // After header (12 bytes for V2: 11 base + 1 flag_size), entries should come first
-        let header_size = 12; // V2 header size (11 + 1 byte for flag_size)
+        // After header (12 bytes for V2), entries should come first
+        let header_size = 12; // V2 header size
         let entry_size = 16 + 5 + 1 + 4 + 1; // ekey + size + priority + checksum + flags
         let entries_section_size = 2 * entry_size; // 2 entries
         let tags_start_offset = header_size + entries_section_size;

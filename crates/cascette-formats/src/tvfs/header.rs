@@ -10,10 +10,10 @@ pub const TVFS_FLAG_INCLUDE_CKEY: u32 = 0x01;
 pub const TVFS_FLAG_WRITE_SUPPORT: u32 = 0x02;
 /// Patch support enabled
 pub const TVFS_FLAG_PATCH_SUPPORT: u32 = 0x04;
-/// Encoding specification table present (combined write and patch support)
-pub const TVFS_FLAG_ENCODING_SPEC: u32 = TVFS_FLAG_WRITE_SUPPORT | TVFS_FLAG_PATCH_SUPPORT;
+/// Encoding specification table present (write support flag only)
+pub const TVFS_FLAG_ENCODING_SPEC: u32 = TVFS_FLAG_WRITE_SUPPORT;
 
-/// TVFS file header (46 bytes for modern builds)
+/// TVFS file header (38 bytes base, 46 bytes with encoding spec table)
 #[derive(Debug, Clone, BinRead, BinWrite)]
 #[br(big)] // Big-endian
 #[bw(big)]
@@ -25,7 +25,7 @@ pub struct TvfsHeader {
     /// Format version (always 1)
     pub format_version: u8,
 
-    /// Header size (always 46)
+    /// Header size (38 without EST, 46 with EST)
     pub header_size: u8,
 
     /// EKey size (always 9)
@@ -76,9 +76,9 @@ impl TvfsHeader {
             magic: *b"TVFS",
             format_version: 1,
             header_size: if flags & TVFS_FLAG_ENCODING_SPEC != 0 {
-                54
-            } else {
                 46
+            } else {
+                38
             },
             ekey_size: 9,
             pkey_size: 9,
@@ -110,9 +110,9 @@ impl TvfsHeader {
         }
 
         let expected_header_size = if self.flags & TVFS_FLAG_ENCODING_SPEC != 0 {
-            54
-        } else {
             46
+        } else {
+            38
         };
         if self.header_size != expected_header_size {
             return Err(TvfsError::InvalidHeaderSize(self.header_size));

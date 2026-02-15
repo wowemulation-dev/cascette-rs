@@ -78,10 +78,10 @@ Based on analysis of 5 TVFS samples from WoW builds 11.0.2.56313 through
 ### TVFS Header
 
 ```c
-struct TvfsHeader {  // 46 or 54 bytes based on flags
+struct TvfsHeader {  // 38 bytes minimum, 46 with EST table
     uint8_t  magic[4];           // "TVFS" (0x54564653)
-    uint8_t  format_version;     // Format version (always 1)
-    uint8_t  header_size;        // Header size: 46 or 54 bytes
+    uint8_t  format_version;     // Format version (1; agent accepts <= 1)
+    uint8_t  header_size;        // Header size (not read by agent parser)
     uint8_t  ekey_size;          // EKey size (always 9)
     uint8_t  pkey_size;          // PKey size (always 9)
     uint32_t flags;              // Format flags (big-endian)
@@ -104,7 +104,7 @@ struct TvfsHeader {  // 46 or 54 bytes based on flags
 
 - Format version: Always 1 across all samples
 
-- Header size: 46 bytes for modern WoW builds
+- Header size: 38 bytes minimum, 46 with EST table
 
 - EKey size: 9 bytes (TACT standard)
 
@@ -117,17 +117,18 @@ struct TvfsHeader {  // 46 or 54 bytes based on flags
 ```rust
 // TVFS format flags
 const TVFS_FLAG_INCLUDE_CKEY: u32 = 0x01;      // Include content keys
-const TVFS_FLAG_WRITE_SUPPORT: u32 = 0x02;     // Write support enabled
+const TVFS_FLAG_WRITE_SUPPORT: u32 = 0x02;     // Write support / EST present
 const TVFS_FLAG_PATCH_SUPPORT: u32 = 0x04;     // Patch support enabled
-const TVFS_FLAG_ENCODING_SPEC: u32 = 0x06;     // Write + patch (EST table)
 ```
 
 - **Value 7 (0x7)**: Include C-key + Write support + Patch support (all
 features)
 
-- **EST Table Present**: When write + patch support flags are set
+- **EST Table Present**: When bit 1 (0x02) is set. The agent checks `flags &
+  2` for encoding specifier presence.
 
-- **Header Size**: 46 bytes without EST, 54 bytes with EST table fields
+- **Header Size**: 38 bytes minimum (without EST), 46 bytes with EST table
+  fields
 
 **Sample Analysis Results:**
 
@@ -178,11 +179,16 @@ features)
 - **Effective Size Calculation**: Handles cases where compressed size may be
 absent
 
+- **Variable-Width Size Encoding**: Size fields use 1-4 bytes based on the
+  maximum value in the table. The agent determines width as: > 0xFFFFFF = 4
+  bytes, > 0xFFFF = 3 bytes, > 0xFF = 2 bytes, else 1 byte. This applies to
+  both EST table size fields and container file table size fields.
+
 **Encoding Specifier Table** (Optional, if write support enabled):
 
 - Contains encoding specifications for file creation
 
-- Only present if TVFS_FLAG_WRITE_SUPPORT is set
+- Only present if flag bit 1 (0x02) is set
 
 - Required for writing files to underlying storage
 
@@ -530,3 +536,35 @@ struct ExtendedMetadata {
 - See [Encoding Documentation](encoding.md) for content resolution
 
 - See [Archives](archives.md) for storage details
+
+## Binary Verification (Agent.exe, TACT 3.13.3)
+
+Verified against Agent.exe (WoW Classic Era) using Binary Ninja on
+2026-02-15. TVFS parser source:
+`d:\package_cache\tact\3.13.3\src\file_manifest\file_manifest_reader.cpp`.
+
+### Confirmed Correct
+
+| Claim | Agent Evidence |
+|-------|---------------|
+| Magic: "TVFS" (0x54564653) | Confirmed at `sub_6cea7f` (0x6ceac6: cmp 0x53465654 LE) |
+| Format version at offset 4 | Confirmed; must be non-zero and <= 1 |
+| EKey size at offset 6 | Confirmed |
+| PKey size at offset 7 | Confirmed |
+| All multi-byte fields big-endian | Confirmed; 7 fields parsed via `sub_6a2976` (BE32 reader) |
+| Max depth as 16-bit at offset 36-37 | Confirmed |
+
+### Changes Applied
+
+1. Fixed minimum header size from 46 to 38 bytes (EST adds 8 more)
+2. Removed misleading TVFS_FLAG_ENCODING_SPEC (0x06) composite; EST
+   presence is determined by bit 1 (0x02) alone
+3. Added variable-width size encoding documentation (1-4 bytes based on
+   max value)
+4. Fixed EST table presence condition to reference bit 1 (0x02)
+5. Noted header_size field at offset 5 is not read by agent parser
+
+### Source File
+
+Agent source path:
+`d:\package_cache\tact\3.13.3\src\file_manifest\file_manifest_reader.cpp`

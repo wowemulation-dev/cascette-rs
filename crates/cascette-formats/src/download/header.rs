@@ -68,8 +68,7 @@ pub struct DownloadHeaderV3 {
     pub flag_size: u8,
     /// Base priority adjustment (signed byte)
     pub base_priority: i8,
-    /// Reserved bytes (must be zero)
-    #[br(assert(reserved == [0, 0, 0], "Reserved field must be zero, got: {:?}", reserved))]
+    /// Reserved bytes (not validated)
     pub reserved: [u8; 3],
 }
 
@@ -155,9 +154,9 @@ impl DownloadHeader {
     /// Calculate total header size in bytes
     pub fn header_size(&self) -> usize {
         match self {
-            Self::V1(_) => 10, // magic(2) + version(1) + ekey_length(1) + has_checksum(1) + entry_count(4) + tag_count(2)
-            Self::V2(_) => 11, // V1 + flag_size(1)
-            Self::V3(_) => 15, // V2 + base_priority(1) + reserved(3)
+            Self::V1(_) => 11, // magic(2) + version(1) + ekey_length(1) + has_checksum(1) + entry_count(4) + tag_count(2)
+            Self::V2(_) => 12, // V1 + flag_size(1)
+            Self::V3(_) => 16, // V2 + base_priority(1) + reserved(3)
         }
     }
 
@@ -183,19 +182,6 @@ impl DownloadHeader {
         let ekey_length = self.ekey_length();
         if ekey_length != 16 {
             return Err(DownloadError::InvalidEncodingKeyLength(ekey_length));
-        }
-
-        // Version-specific validation
-        match self {
-            Self::V1(_) | Self::V2(_) => {
-                // V1/V2 have no additional fields to validate
-            }
-            Self::V3(h) => {
-                // V3 validation - reserved field should be zero
-                if h.reserved != [0, 0, 0] {
-                    return Err(DownloadError::ReservedFieldNotZero(h.reserved));
-                }
-            }
         }
 
         Ok(())
@@ -282,14 +268,6 @@ impl BinRead for DownloadHeader {
                 let mut reserved = [0u8; 3];
                 reader.read_exact(&mut reserved)?;
 
-                // Validate reserved field
-                if reserved != [0, 0, 0] {
-                    return Err(binrw::Error::Custom {
-                        pos: reader.stream_position().unwrap_or(0),
-                        err: Box::new(DownloadError::ReservedFieldNotZero(reserved)),
-                    });
-                }
-
                 Ok(Self::V3(DownloadHeaderV3 {
                     magic: base.magic,
                     version: base.version,
@@ -343,7 +321,7 @@ mod tests {
         assert!(header.has_checksum());
         assert_eq!(header.flag_size(), 0);
         assert_eq!(header.base_priority(), 0);
-        assert_eq!(header.header_size(), 10);
+        assert_eq!(header.header_size(), 11);
     }
 
     #[test]
@@ -356,7 +334,7 @@ mod tests {
         assert!(!header.has_checksum());
         assert_eq!(header.flag_size(), 2);
         assert_eq!(header.base_priority(), 0);
-        assert_eq!(header.header_size(), 11);
+        assert_eq!(header.header_size(), 12);
     }
 
     #[test]
@@ -369,7 +347,7 @@ mod tests {
         assert!(header.has_checksum());
         assert_eq!(header.flag_size(), 1);
         assert_eq!(header.base_priority(), -5);
-        assert_eq!(header.header_size(), 15);
+        assert_eq!(header.header_size(), 16);
     }
 
     #[test]
@@ -540,7 +518,7 @@ mod tests {
     }
 
     #[test]
-    fn test_invalid_reserved_field() {
+    fn test_nonzero_reserved_field_accepted() {
         let data = [
             b'D', b'L', // Magic
             3,    // Version
@@ -550,11 +528,15 @@ mod tests {
             0, 5, // Tag count
             0, // Flag size
             0, // Base priority
-            1, 2, 3, // Invalid reserved field (should be 0, 0, 0)
+            1, 2, 3, // Non-zero reserved field (accepted per Agent behavior)
         ];
 
-        let result = DownloadHeader::read_options(&mut Cursor::new(&data), binrw::Endian::Big, ());
+        let header = DownloadHeader::read_options(&mut Cursor::new(&data), binrw::Endian::Big, ())
+            .expect("Non-zero reserved bytes should be accepted");
 
-        assert!(result.is_err());
+        assert_eq!(header.version(), 3);
+        assert_eq!(header.entry_count(), 10);
+        // validate() also should not reject non-zero reserved
+        assert!(header.validate().is_ok());
     }
 }

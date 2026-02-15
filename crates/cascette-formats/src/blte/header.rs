@@ -164,8 +164,9 @@ impl BlteHeader {
             chunk_infos,
         };
 
-        // Calculate header size: 4 (flags + chunk_count) + (chunk_count * chunk_info_size)
-        let header_size = 4 + (chunks.len() * extended.flags.chunk_info_size());
+        // Calculate header size: 8 (magic + header_size field) + 4 (flags + chunk_count) + entries
+        // The on-disk header_size includes the 8-byte BLTE preamble
+        let header_size = 12 + (chunks.len() * extended.flags.chunk_info_size());
 
         Ok(Self {
             magic: BLTE_MAGIC,
@@ -193,8 +194,8 @@ impl BlteHeader {
         if self.is_single_chunk() {
             8 // Just magic + header_size
         } else {
-            // Standard format: data starts after header
-            8 + self.header_size as usize
+            // header_size already includes the 8-byte preamble
+            self.header_size as usize
         }
     }
 
@@ -203,7 +204,8 @@ impl BlteHeader {
         if self.is_single_chunk() {
             8 // magic (4) + header_size (4)
         } else {
-            8 + self.header_size as usize // magic (4) + header_size (4) + extended header
+            // header_size already includes the 8-byte preamble
+            self.header_size as usize
         }
     }
 }
@@ -435,8 +437,8 @@ mod tests {
         }
 
         // Calculate expected header size for extended format
-        // 4 (flags + chunk_count) + 2 chunks * 40 bytes per chunk
-        let expected_header_size: u32 = 4 + (2 * 40);
+        // 8 (magic + header_size) + 4 (flags + chunk_count) + 2 chunks * 40 bytes per chunk
+        let expected_header_size: u32 = 12 + (2 * 40);
         assert_eq!(header.header_size, expected_header_size);
     }
 

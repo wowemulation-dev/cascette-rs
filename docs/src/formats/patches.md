@@ -56,29 +56,42 @@ Patch manifests use the PA (Patch Archive) format with **mixed endianness**:
 ```c
 struct PatchArchiveHeader {  // 10 bytes, big-endian
     uint8_t  magic[2];         // "PA" (0x5041)
-    uint8_t  version;          // Format version (typically 2)
-    uint8_t  file_key_size;    // File content key size (16 for MD5)
-    uint8_t  old_key_size;     // Old content key size (16 for MD5)
-    uint8_t  patch_key_size;   // Patch encoding key size (16 for MD5)
-    uint8_t  block_size_bits;  // Block size as power of 2 (16 = 64KB blocks)
-    uint16_t block_count;      // Number of patch entries (big-endian)
-    uint8_t  flags;            // Format flags (typically 0)
+    uint8_t  version;          // Format version (non-zero, <= 2)
+    uint8_t  file_key_size;    // Target file C-Key size (1-16)
+    uint8_t  old_key_size;     // Base file E-Key size (1-16, encoding key)
+    uint8_t  patch_key_size;   // P-Key size (1-16)
+    uint8_t  block_size_bits;  // Block size as power of 2 (range [12, 24])
+    uint16_t block_count;      // Number of block entries (big-endian, non-zero)
+    uint8_t  flags;            // Format flags (see below)
 };
 ```
 
-### Patch Entries (Mixed Endianness)
+**Header Validation**:
 
-**CRITICAL**: Header is big-endian but entries use **little-endian** format:
+- Total header size must not exceed 64KB (0x10000)
+- A 16-byte header hash follows the header and is verified on parse
+- Block table must be sorted by target C-Key
+
+**Flags**:
+
+- **Bit 0**: Plain data mode (informational)
+- **Bit 1**: Extended header present (adds target C-Key + base E-Key
+  hash data before the block table)
+
+### Block Table Entries
+
+Each block entry has a fixed size of `file_key_size + 20` bytes:
 
 ```c
-struct PatchEntry {  // Variable size, little-endian data
-    uint8_t  old_content_key[16];     // MD5 of original content
-    uint8_t  new_content_key[16];     // MD5 of patched content
-    uint8_t  patch_encoding_key[16];  // MD5 of patch data
-    char     compression_info[];      // Null-terminated compression spec
-    // Additional variable-length patch data may follow
+struct BlockEntry {  // file_key_size + 20 bytes per entry
+    uint8_t  target_ckey[file_key_size];  // Target file C-Key
+    uint8_t  hash_data[16];               // 16 bytes of hash/key data
+    uint32_t value;                       // Big-endian 32-bit value
 };
 ```
+
+The block table is sorted by target C-Key. The agent validates sort order
+on parse.
 
 ## Compression Info Format
 
@@ -349,3 +362,68 @@ impl ZbsdiffHeader {
 - Version 2 is the current patch format version
 
 - Patches enable efficient updates without re-downloading entire files
+
+## Binary Verification (Agent.exe, TACT 3.13.3)
+
+Verified against Agent.exe (WoW Classic Era) using Binary Ninja on
+2026-02-15.
+
+### Patch Manifest (PA Format)
+
+Source: `d:\package_cache\tact\3.13.3\src\patch\patch_manifest_binary_reader.cpp`.
+
+#### Confirmed Correct
+
+| Claim | Agent Evidence |
+|-------|---------------|
+| Magic: "PA" | Confirmed at `sub_6a6487` (memcmp with "PA") |
+| Version at offset 2 | Confirmed; must be non-zero and <= 2 |
+| Header size 10 bytes | Confirmed (minimum size check >= 0xa) |
+| file_key_size at offset 3 | Confirmed; called "Target file C-Key size" (1-16) |
+| patch_key_size at offset 5 | Confirmed; called "P-Key size" (1-16) |
+| block_count as BE16 at offset 7-8 | Confirmed (shift+OR at 0x6a65a8) |
+| flags at offset 9 | Confirmed |
+
+#### Changes Applied
+
+1. Fixed old_key_size to "Base file E-Key size" (encoding key, not content)
+2. Updated block_size_bits range from 16-only to [12, 24]
+3. Added block_count non-zero validation
+4. Added flags bit definitions (plain data, extended header)
+5. Replaced PatchEntry struct with BlockEntry (file_key_size + 20 bytes)
+6. Added sorted block table requirement
+7. Added header hash verification
+8. Added maximum header size limit (64KB)
+
+### Patch Index
+
+Source: `d:\package_cache\tact\3.13.3\src\patch\patch_index_binary_reader.cpp`.
+
+#### Notes
+
+The patch index is a block-based binary format with minimum size 14 bytes.
+It contains numbered blocks (IDs 2-10) processed by type-specific handlers.
+Block ID 4 is unknown/unsupported by the agent. Further documentation of
+individual block types requires additional reverse engineering.
+
+### ZBSDIFF1 Format
+
+Source: `d:\package_cache\tact\3.13.3\src\patch\bs_patch_apply.cpp` and
+`d:\package_cache\tact\3.13.3\src\async_state\async_file_bsdiff_patch_state.cpp`.
+
+#### Confirmed Correct
+
+| Claim | Agent Evidence |
+|-------|---------------|
+| Magic: "ZBSDIFF1" (8 bytes) | Confirmed at `sub_6fbd1c` (two 32-bit comparisons: 0x4453425a + 0x31464649) |
+| Header size: 32 bytes | Confirmed (minimum size check >= 0x20) |
+| Three 64-bit fields after magic | Confirmed; read via `sub_6fbc81` at offsets 8, 16, 24 |
+| Fields: control_size, diff_size, output_size | Confirmed by offset calculations in header parser |
+
+### Source Files
+
+- Patch manifest: `d:\package_cache\tact\3.13.3\src\patch\patch_manifest_binary_reader.cpp`
+- Patch index: `d:\package_cache\tact\3.13.3\src\patch\patch_index_binary_reader.cpp`
+- BSDIFF patcher: `d:\package_cache\tact\3.13.3\src\patch\bsdiff_patcher.cpp`
+- Async patch state: `d:\package_cache\tact\3.13.3\src\async_state\async_file_bsdiff_patch_state.cpp`
+- Patch apply: `d:\package_cache\tact\3.13.3\src\patch\bs_patch_apply.cpp`

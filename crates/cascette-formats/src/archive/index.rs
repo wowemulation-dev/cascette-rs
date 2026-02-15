@@ -302,7 +302,7 @@ impl IndexFooter {
 
     /// Validate footer format parameters for CASC
     pub fn validate_format(&self) -> ArchiveResult<()> {
-        if self.version != 1 {
+        if self.version > 1 {
             return Err(ArchiveError::UnsupportedVersion(self.version));
         }
 
@@ -1323,11 +1323,15 @@ mod tests {
         // Valid format
         assert!(footer.validate_format().is_ok());
 
-        // Invalid version
-        footer.version = 0x08;
+        // Version 0 is accepted
+        footer.version = 0;
+        assert!(footer.validate_format().is_ok());
+
+        // Version > 1 is rejected
+        footer.version = 2;
         assert!(matches!(
             footer.validate_format(),
-            Err(ArchiveError::UnsupportedVersion(0x08))
+            Err(ArchiveError::UnsupportedVersion(2))
         ));
 
         // Reset and test invalid ekey length (outside valid range 9-16)
@@ -2397,7 +2401,7 @@ mod tests {
             /// Test that invalid version numbers are rejected
             fn invalid_version_rejected(
                 mut footer in index_footer(),
-                invalid_version in prop::num::u8::ANY.prop_filter("Not version 1", |&v| v != 1)
+                invalid_version in prop::num::u8::ANY.prop_filter("Not version 0 or 1", |&v| v > 1)
             ) {
                 footer.version = invalid_version;
                 prop_assert!(footer.validate_format().is_err());

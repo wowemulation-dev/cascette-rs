@@ -42,12 +42,12 @@ struct DownloadHeader {
     uint32_t entry_count;        // Number of entries (big-endian)
     uint16_t tag_count;          // Number of tags (big-endian)
 
-    // Version 2+ fields
-    uint8_t  flag_size;          // Number of flag bytes per entry
+    // Version 2+ fields (header grows to 12 bytes)
+    uint8_t  flag_size;          // Number of flag bytes per entry (max 4)
 
-    // Version 3+ fields
+    // Version 3+ fields (header grows to 16 bytes)
     int8_t   base_priority;      // Base priority offset
-    uint8_t  _reserved[3];       // Must be zero
+    uint8_t  _reserved[3];       // Reserved (agent does not validate these)
 };
 ```
 
@@ -445,24 +445,23 @@ The Download manifest format has evolved through 3 versions:
 
 ### Version 1 (Initial)
 
-- **Header Size**: 10 bytes
+- **Header Size**: 11 bytes
 - **Features**: Basic download prioritization with encoding keys, file sizes, optional checksums
 - **Fields**: magic, version, ekey_size, has_checksum, entry_count, tag_count
 
 ### Version 2 (Flag Support)
 
-- **Header Size**: 11 bytes
+- **Header Size**: 12 bytes
 - **Added Features**: Entry-level flags for additional metadata
-- **New Fields**: flag_size (number of flag bytes per entry)
+- **New Fields**: flag_size (number of flag bytes per entry, max 4)
 - **Use Cases**: Platform-specific flags, content type markers
 
 ### Version 3 (Priority System)
 
-- **Header Size**: 15 bytes
+- **Header Size**: 16 bytes
 - **Added Features**: Base priority adjustment for dynamic prioritization
-- **New Fields**: base_priority (signed adjustment), reserved (3 bytes, must be zero)
+- **New Fields**: base_priority (signed adjustment), reserved (3 bytes)
 - **Priority Calculation**: `final_priority = entry.priority - header.base_priority`
-- **Validation**: Reserved field must be [0, 0, 0]
 
 ### Version Detection
 
@@ -483,3 +482,33 @@ the same "DL" magic bytes and big-endian encoding.
 - See [CDN Architecture](cdn.md) for download sources
 
 - See [Format Transitions](format-transitions.md) for version evolution timeline
+
+## Binary Verification (Agent.exe, TACT 3.13.3)
+
+Verified against Agent.exe (WoW Classic Era) using Binary Ninja on
+2026-02-15. Download manifest parser source:
+`d:\package_cache\tact\3.13.3\src\download_manifest\download_manifest_binary_reader.cpp`.
+
+### Confirmed Correct
+
+| Claim | Agent Evidence |
+|-------|---------------|
+| Magic: "DL" (0x44, 0x4C) | Confirmed at `sub_6cf7bc` (0x6cf7ef: cmp 0x4c44 LE) |
+| Version at offset 2 | Confirmed; must be non-zero and <= 3 |
+| Versions 1, 2, and 3 supported | Confirmed with version-specific parsing paths |
+| Version 2 adds flag_size | Confirmed at 0x6cf86a (version >= 2 check) |
+| Version 3 adds base_priority | Confirmed at 0x6cf8a0 (version >= 3 check) |
+| Tag count as big-endian 16-bit | Confirmed (shift+OR pattern at 0x6cf858) |
+| Entry count as big-endian 32-bit | Confirmed via `sub_6a2976` call |
+
+### Changes Applied
+
+1. Fixed header sizes: v1=11, v2=12, v3=16 bytes (were off by 1)
+2. Minimum header size is 11 bytes (v1 base)
+3. Added flag_size maximum of 4
+4. Removed "Must be zero" from reserved bytes (agent does not validate)
+
+### Source File
+
+Agent source path:
+`d:\package_cache\tact\3.13.3\src\download_manifest\download_manifest_binary_reader.cpp`

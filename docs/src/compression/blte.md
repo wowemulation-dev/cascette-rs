@@ -49,7 +49,7 @@ BLTE File Layout:
 // Primary BLTE header (always 8 bytes)
 struct BlteHeader {
     magic: [u8; 4],        // "BLTE" (0x424C5445 in big-endian)
-    header_size: u32,      // Big-endian, size of extended header area
+    header_size: u32,      // Big-endian, total header size including these 8 bytes
 }
 ```
 
@@ -111,19 +111,20 @@ header_size = 12 + (chunk_count * 24)
 For extended chunks (flags = 0x10):
 
 ```text
-header_size = 4 + (chunk_count * 40)
+header_size = 12 + (chunk_count * 40)
 ```
 
 Where:
 
-- 4 = 1 (flags) + 3 (chunk count)
+- 12 = 8 (BLTE header) + 1 (flags) + 3 (chunk count)
 
 - 24 = size of standard ChunkInfo entry
 
 - 40 = size of extended ChunkInfo entry
 
-Note: The header_size field only counts the extended header size, not the
-8-byte BLTE header.
+The header_size field includes the 8-byte BLTE header ("BLTE" magic +
+header_size u32). Data starts at offset header_size from the beginning of the
+file.
 
 ## Encoding Types
 
@@ -190,11 +191,20 @@ Fields:
 
 - `iv`: Initialization vector
 
-- `type`: 0x53 ('S') for Salsa20, 0x41 ('A') for ARC4
+- `type`: 0x53 ('S') for Salsa20, 0x41 ('A') for ARC4 (legacy, not used in
+  TACT 3.13.3+)
 
-### IV Modification for Chunks
+### IV Extension and Modification for Chunks
 
-For multi-chunk files, the IV is XORed with the chunk index:
+The IV (typically 4 bytes) is zero-padded to 8 bytes for the Salsa20 nonce:
+
+```rust
+let mut nonce = [0u8; 8];  // zero-initialized
+nonce[..iv_size].copy_from_slice(&iv);
+// Remaining bytes stay zero (NOT duplicated)
+```
+
+For multi-chunk files, the IV is XORed with the chunk index before extension:
 
 ```rust
 fn modify_iv(iv: &mut [u8], chunk_index: usize) {
@@ -227,15 +237,8 @@ if header_size == 0 {
 }
 ```
 
-**Important**: Data offset calculation for multi-chunk files has multiple
-formats:
-
-- **Standard BLTE**: `data_offset = 8 + header_size`
-
-- **CDN Archive format**: `data_offset = header_size` (header_size includes
-  the 8)
-
-- Detection heuristic: Compare `header_size` with expected chunk table size
+The data offset for multi-chunk files is always `header_size` from the start
+of the file. The header_size field includes the 8-byte BLTE header.
 
 ### Step 3: Read Extended Header (if present)
 
@@ -516,6 +519,53 @@ Analysis and decompression tool supports:
 
 See <https://github.com/wowemulation-dev/cascette-py> for the Python
 implementation.
+
+## Binary Verification (Agent.exe, TACT 3.13.3)
+
+Verified against Agent.exe (WoW Classic Era) using Binary Ninja on
+2026-02-15.
+
+### Confirmed Correct
+
+| Claim | Agent Evidence |
+|-------|---------------|
+| BLTE magic "BLTE" (0x424C5445) | `sub_6f6d3f` checks `*arg == 0x45544c42` |
+| header_size: big-endian u32 at offset 4 | `sub_6bc2d0` reads BE u32 from bytes 4-7 |
+| Flags: 0x0F (standard) and 0x10 (extended) | `sub_6bc2d0` at 0x6bc368 checks `edx == 0xf \|\| edx == 0x10` |
+| Chunk count: 24-bit big-endian (bytes 9-11) | `sub_6bc2d0` at 0x6bc3ae reads 3 bytes BE |
+| Standard entry: 24 bytes (comp_size, decomp_size, MD5) | `sub_6bc96a` uses `chunk_count * 0x18` |
+| Extended entry: 40 bytes (standard + decomp checksum) | `sub_6bc96a` uses `chunk_count * 0x28` |
+| Encoding type 0x45 ('E') for encrypted blocks | `sub_6f5c45` checks `*arg1 == 0x45` |
+| IV XOR with block index (LE u32 into first 4 IV bytes) | `sub_6f5946` confirmed |
+
+### Changes Applied
+
+1. Fixed extended header_size formula from `4 +` to `12 +`
+2. Corrected header_size documentation to note it includes the 8-byte
+   BLTE header
+3. Simplified data_offset to always be `header_size` (no detection
+   heuristic needed)
+4. Noted ARC4 is legacy, not used in TACT 3.13.3+
+5. Added IV zero-padding description for Salsa20 nonce extension
+
+### Not Verifiable
+
+- **LZ4 size prefix format**: LZ4HC codec is compiled out in this agent
+  build (all functions return "Attempted to use lz4hc encoding without
+  enabling"). Cannot verify the 8-byte LE size prefix claim.
+
+- **ZLib header handling**: ZLib codec functions exist but detailed
+  header skipping behavior was not decompiled.
+
+### Source Files
+
+Agent source paths from PDB info:
+- `d:\package_cache\tact\3.13.3\src\codec\encoding_header.cpp`
+- `d:\package_cache\tact\3.13.3\src\codec\codec_encryption.cpp`
+- `d:\package_cache\tact\3.13.3\src\codec\codec_zlib.cpp`
+- `d:\package_cache\tact\3.13.3\src\codec\codec_lz4hc.cpp`
+- `d:\package_cache\tact\3.13.3\src\codec\decoding.cpp`
+- `d:\package_cache\tact\3.13.3\src\codec\codec_file.cpp`
 
 ## References
 
