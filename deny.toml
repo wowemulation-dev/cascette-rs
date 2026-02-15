@@ -68,9 +68,6 @@ deny = [
     # Use rustls instead of native-tls/openssl for better security and WASM compat
     { crate = "openssl", reason = "Use rustls for TLS" },
     { crate = "openssl-sys", reason = "Use rustls for TLS" },
-    # Use ring (pure Rust) instead of aws-lc-rs (requires C compiler, aws-lc-sys)
-    { crate = "aws-lc-rs", reason = "Use ring for pure-Rust crypto" },
-    { crate = "aws-lc-sys", reason = "Use ring for pure-Rust crypto, no native deps" },
 ]
 
 skip = [
