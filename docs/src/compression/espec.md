@@ -167,11 +167,13 @@ This specifies:
 
 ### Level Specification
 
-Zlib compression supports level specification:
+Zlib compression supports level, variant, and window bits parameters:
 
 ```text
 z:{level}
+z:{level,window_bits}
 z:{level,variant}
+z:{level,variant,window_bits}
 ```
 
 ### Standard Levels
