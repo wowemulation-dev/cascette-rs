@@ -49,9 +49,9 @@ Block counts can be:
 
 - **Variable**: Asterisk (`*`) for variable block count
 
-- **Dynamic sizing**: Block count of zero with an average block size. The
-  agent determines block boundaries dynamically based on content. Distinct
-  from variable (`*`) block count.
+- **Dynamic sizing**: Block count of zero with an average block size. Block
+  boundaries are determined dynamically based on content. Distinct from
+  variable (`*`) block count.
 
 ### Block Format
 
@@ -167,11 +167,13 @@ This specifies:
 
 ### Level Specification
 
-Zlib compression supports level specification:
+Zlib compression supports level, variant, and window bits parameters:
 
 ```text
 z:{level}
+z:{level,window_bits}
 z:{level,variant}
+z:{level,variant,window_bits}
 ```
 
 ### Standard Levels
@@ -184,7 +186,7 @@ Valid levels are 1-9:
 
 - **9**: Maximum compression
 
-Level 0 is not accepted by the agent.
+Level 0 is not accepted.
 
 ### Variant Specifications
 
@@ -624,28 +626,20 @@ fn parse_zlib(input: &str) -> IResult<&str, ESpec> {
 
 ### Rust Implementation (cascette-formats)
 
-Complete ESpec parser with full specification support:
+ESpec parser with full specification support:
 
-- **Plain (n)** - Uncompressed content (complete)
-
-- **ZLib compression (z)** - With level and variant support (complete)
-
-- **Encryption (e)** - Key, IV, and content encoding (complete)
-
-- **Block-based (b)** - Variable and fixed block specifications (complete)
-
-- **BCPack (c)** - Proprietary compression support (complete)
-
-- **GDeflate (g)** - Google Deflate implementation (complete)
+- **Plain (n)** - Uncompressed content
+- **ZLib compression (z)** - Level [1,9], variant (mpq/zlib/lz4hc), window bits [8,15]; all optional, 3-param syntax supported
+- **Encryption (e)** - Key, IV, and nested content encoding
+- **Block-based (b)** - Variable and fixed block specifications
+- **BCPack (c)** - Optional BCn version [1,7]; bare `c` accepted
+- **GDeflate (g)** - Optional level [1,12]; bare `g` accepted
 
 **Parser Features:**
 
 - Safe integer casting with `try_from` to prevent truncation
-
 - Display trait implementation for round-trip string conversion
-
-- Comprehensive test suite with 6 production ESpec patterns
-
+- Test suite covering production ESpec patterns and edge cases
 - Integration with BLTE and Encoding file processing
 
 ### Analysis and Validation
@@ -653,31 +647,3 @@ Complete ESpec parser with full specification support:
 ESpec patterns are validated across all CASC formats to ensure correct
 parsing and processing of compression and encryption specifications.
 
-## Binary Verification (Agent.exe, TACT 3.13.3)
-
-Verified against Agent.exe (WoW Classic Era) using Binary Ninja on
-2026-02-15. ESpec parser source: `d:\package_cache\tact\3.13.3\src\codec\e_spec.cpp`.
-
-### Confirmed Correct
-
-| Claim | Agent Evidence |
-|-------|---------------|
-| Encoding identifiers: n, z, e, b, c, g | All confirmed in `e_spec.cpp` parser |
-| Block size units: K, M | Confirmed in block parser |
-| Block count: exact number or `*` (variable) | Confirmed; dynamic sizing also supported |
-| Encryption: key ID, IV, nested eSpec | Error string at 0x9aece0 confirms three required args |
-| Multiple variable blocks rejected | Error at 0x9af018: "multiple variable blocks detected" |
-
-### Changes Applied
-
-1. Added BCPack BCn parameter [1, 7] to grammar and usage section
-2. Added GDeflate compression level [1, 12] to grammar and usage section
-3. Removed zlib level 0 (agent rejects it, valid range is [1, 9])
-4. Added zlib window bits [8, 15] to grammar and usage section
-5. Added "zlib" and "lz4hc" variants alongside "mpq"
-6. Added dynamic block sizing to count specifications
-7. Corrected GDeflate description (GPU-accelerated, not Google)
-
-### Source File
-
-Agent source path: `d:\package_cache\tact\3.13.3\src\codec\e_spec.cpp`

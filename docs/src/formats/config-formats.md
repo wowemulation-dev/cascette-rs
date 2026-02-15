@@ -67,7 +67,7 @@ Key-value pairs, one per line, with `=` delimiter.
 | `encoding` | Encoding file: content key + **encoding key** (use 2nd for CDN) | `b07b881f4527bda7cf8a1a2f99e8622e bbf06e7476382cfaa396cff0049d356b` |
 | `encoding-size` | Sizes for encoding file versions | `14004322 14003043` |
 | `download` | Download manifest: content key + encoding key | `42a7bb33cd1e9a7b72bef6ee14719b58 53ba96f0965adc306d2d0cf3b457949c` |
-| `size` | Size file: content key + encoding key | `d1d9e612a645cc7a7e4b42628bde21ce 0d5704735f4985e555907a7e7647099a` |
+| `size` | [Size manifest](size-manifest.md): content key + encoding key | `d1d9e612a645cc7a7e4b42628bde21ce 0d5704735f4985e555907a7e7647099a` |
 | `patch` | Patch file content key | `658506593cf1f98a1d9300c418ee5355` |
 | `patch-config` | Patch configuration hash (fetch separately) | `17f5bbcb7eae2fc8fb3ea545c65f74d4` |
 | `patch-index` | Patch index files | `3806f4c7b1f179ce976d7685f9354025 eb5758bd78805f0aabac15cf44ea767c` |
@@ -649,64 +649,3 @@ These are referenced in Ribbit responses and are accessible via CDN.
 - Use HTTPS when available
 
 - Validate file sizes before download
-
-## Binary Verification (Agent.exe, TACT 3.13.3)
-
-Verified against Agent.exe (WoW Classic Era) using Binary Ninja on
-2026-02-15.
-
-### Build Config Fields Confirmed in Agent
-
-All fields below are referenced as string literals in the agent binary's
-build config parser:
-
-| Field | Address | Notes |
-|-------|---------|-------|
-| `encoding` | 0x943f88 | With `-size` suffix at 0x9b4234 |
-| `install` | 0x8fc9e0 | With `-size` at 0x9b4290 |
-| `download` | (in parser) | With `-size` at 0x9b4224 |
-| `size` | (in parser) | With `-size` at 0x9b4308 (`size-size`) |
-| `patch` | (in parser) | With `-size` at 0x9b42cc |
-| `patch-config` | 0x9b42d8 | |
-| `patch-index` | 0x9b42e8 | With `-size` at 0x9b42f4 |
-| `vfs-root` | 0x9b438c | With `-size` at 0x9b4398, `-espec` at 0x9b43a8 |
-| `build-uid` | 0x90f7ec | |
-| `build-partial-priority` | 0x9b4424 | |
-| `build-file-db` | 0x9b443c | With `-size` at 0x9b444c |
-| `install-high-ver` | (inferred) | With `-size` at 0x9b42b4 |
-| `key-layout-index-bits` | 0x9b4314 | Static key layout system |
-
-### CDN Config Fields Confirmed in Agent
-
-| Field | Address |
-|-------|---------|
-| `archives` | 0x9b4b04 |
-| `archives-index-size` | 0x9b4b10 |
-| `archive-group` | 0x9b4b24 |
-| `archive-group-index-size` | 0x9b4b34 |
-| `file-index` | 0x9b4b50 |
-| `file-index-size` | 0x9b4b5c |
-| `patch-archives` | 0x9b4b6c |
-| `patch-archives-index-size` | 0x9b4b7c |
-| `patch-archive-group` | 0x9b4b98 |
-| `patch-archive-group-index-size` | 0x9b4bac |
-| `patch-file-index` | 0x9b4bcc |
-| `patch-file-index-size` | 0x9b4be0 |
-
-### Changes Applied
-
-1. Added missing build config fields: build-file-db, vfs-root-espec,
-   install-high-ver, key-layout-index-bits, build-num, build-attributes
-2. Added missing CDN config -index-size fields
-3. Added Static Key Layouts section with sub-fields
-4. Added Chunk System section
-5. Added Hard Link Entries section
-6. Added Manifest Validation section
-7. Added patch-entry ESpec validation note
-
-### Source Files
-
-Agent source paths from PDB info:
-- Build config parser in TACT library
-- CDN config parser in TACT library
-- Error strings clustered at 0x9b4190-0x9b5200

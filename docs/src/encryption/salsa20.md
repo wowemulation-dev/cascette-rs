@@ -543,8 +543,6 @@ nonce[..iv.len()].copy_from_slice(&iv);
 
 ## Validation Status
 
-- Verified against Agent.exe (TACT 3.13.3) binary behavior
-
 - Integration tests with real WoW encryption keys
 
 - Test suite validates against known BLTE 'E' mode samples
@@ -552,8 +550,7 @@ nonce[..iv.len()].copy_from_slice(&iv);
 - Zero-allocation keystream generation for performance
 
 Note: CascLib duplicates the IV (same bug as was in cascette-rs before the
-fix). The Agent.exe binary is the authoritative reference and confirms
-zero-padding.
+fix). The correct behavior is zero-padding.
 
 ### TACT Key Coverage
 
@@ -562,44 +559,6 @@ The cascette-crypto crate includes hardcoded TACT keys for major WoW expansions:
 - Battle for Azeroth, Shadowlands, The War Within, Classic Era
 
 Keys are stored with redacted debug output to prevent accidental logging.
-
-## Binary Verification (Agent.exe, TACT 3.13.3)
-
-Verified against Agent.exe (WoW Classic Era) using Binary Ninja on
-2026-02-15.
-
-### Confirmed Correct
-
-| Claim | Agent Evidence |
-|-------|---------------|
-| 16-byte keys with tau constants | `sub_6fe3ff` uses tau ("expand 16-byte k") at 0x9b8e10 |
-| Key duplication: bytes 0-15 at state[1-4] and state[11-14] | `sub_6fe3ff` confirmed |
-| IV XOR with block_index (LE u32 into first 4 bytes) | `sub_6f5946` confirmed |
-| Counter at state[8-9], starting at 0 | `sub_6fe3ff` confirmed |
-| Nonce at state[6-7] | `sub_6fe3ff` confirmed |
-| 20 rounds (10 double-rounds) | `sub_6fe3ff` uses SSE intrinsics for Salsa20 core |
-| Agent only uses Salsa20 (0x53) for BLTE encryption | `sub_6f5c45` at 0x6f5d78 |
-
-### Changes Applied
-
-1. Fixed IV extension from duplication to zero-padding (confirmed bug
-   in cascette-crypto, now fixed)
-2. Fixed key size in overview to 128 bits (16 bytes) for CASC
-3. Replaced sigma constants with tau in state initialization code
-4. Replaced SHA-256 key derivation with key store lookup
-5. Removed ChaCha20 variant section (no evidence in agent binary)
-6. Noted ARC4 as legacy, not used in TACT 3.13.3+
-7. Updated IV size from fixed "32-bit" to 1-8 bytes
-8. Updated validation claim to reference Agent.exe instead of CascLib
-
-### Source Files
-
-Agent source paths from PDB info:
-- `d:\package_cache\tact\3.13.3\src\codec\codec_encryption.cpp`
-- Key expansion function: `sub_6fe3ff`
-- Wrapper (always 128-bit): `sub_6fe3dc`
-- Salsa20 constants at: 0x9b8e10
-
 ## References
 
 - [Salsa20 Specification](https://cr.yp.to/snuffle/spec.pdf)
