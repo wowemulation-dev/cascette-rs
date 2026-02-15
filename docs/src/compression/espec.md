@@ -49,6 +49,10 @@ Block counts can be:
 
 - **Variable**: Asterisk (`*`) for variable block count
 
+- **Dynamic sizing**: Block count of zero with an average block size. The
+  agent determines block boundaries dynamically based on content. Distinct
+  from variable (`*`) block count.
+
 ### Block Format
 
 ```text
@@ -69,7 +73,7 @@ Components:
 
 ```text
 plain := "n"
-zlib := "z" [ ":" "{" level "}" ]
+zlib := "z" [ ":" "{" level [ "," variant ] [ "," window_bits ] "}" ]
 encryption := "e" ":" "{" key "," iv "," content_encoding "}"
 ```
 
@@ -87,8 +91,8 @@ count := number | "*"
 
 ```text
 encoding := plain | zlib | encryption | block | bcpack | gdeflate
-bcpack := "c"
-gdeflate := "g"
+bcpack := "c" [ ":" "{" bcn "}" ]
+gdeflate := "g" [ ":" "{" level "}" ]
 ```
 
 ## Examples
@@ -172,7 +176,7 @@ z:{level,variant}
 
 ### Standard Levels
 
-- **0**: No compression (store only)
+Valid levels are 1-9:
 
 - **1**: Fastest compression
 
@@ -180,18 +184,28 @@ z:{level,variant}
 
 - **9**: Maximum compression
 
+Level 0 is not accepted by the agent.
+
 ### Variant Specifications
 
 - **mpq**: MPQ-compatible compression settings
 
-- **default**: Standard zlib settings
+- **zlib**: Standard zlib settings
+
+- **lz4hc**: LZ4HC-compatible compression settings
+
+### Window Bits
+
+Zlib window bit count can be specified in range [8, 15]. Two values can be
+provided (must match). Default is 15.
 
 ### Compression Examples
 
 ```text
-z:{1}        # Fast compression
-z:{9}        # Maximum compression
-z:{6,mpq}    # MPQ-compatible level 6
+z:{1}           # Fast compression
+z:{9}           # Maximum compression
+z:{6,mpq}       # MPQ-compatible level 6
+z:{6,zlib,15}   # Zlib variant with explicit window bits
 ```
 
 ## Encryption Specification
@@ -240,15 +254,22 @@ This specifies:
 
 ```text
 c
+c:{3}
 ```
 
-BCPack compression uses proprietary algorithm optimized for specific content
-types.
+BCPack compression uses a proprietary algorithm optimized for specific content
+types. An optional BCn (block compression number) parameter selects the mode,
+in range [1, 7]:
+
+```text
+bcpack := "c" [ ":" "{" bcn "}" ]
+```
 
 ### Block-Based BCPack
 
 ```text
 b:{64K*=c}
+b:{64K*=c:{5}}
 ```
 
 Variable 64KB blocks using BCPack compression.
@@ -259,14 +280,21 @@ Variable 64KB blocks using BCPack compression.
 
 ```text
 g
+g:{6}
 ```
 
-GDeflate is Google's Deflate implementation with optimizations.
+GDeflate is a GPU-accelerated deflate variant designed for DirectStorage. An
+optional compression level parameter can be specified in range [1, 12]:
+
+```text
+gdeflate := "g" [ ":" "{" level "}" ]
+```
 
 ### Block-Based GDeflate
 
 ```text
 b:{32K*=g}
+b:{32K*=g:{8}}
 ```
 
 Variable 32KB blocks using GDeflate compression.
@@ -625,6 +653,31 @@ Complete ESpec parser with full specification support:
 ESpec patterns are validated across all CASC formats to ensure correct
 parsing and processing of compression and encryption specifications.
 
-This ESpec documentation covers the encoding specification language used
-throughout the NGDP system, enabling developers to parse, validate, and
-implement ESpec-based content processing.
+## Binary Verification (Agent.exe, TACT 3.13.3)
+
+Verified against Agent.exe (WoW Classic Era) using Binary Ninja on
+2026-02-15. ESpec parser source: `d:\package_cache\tact\3.13.3\src\codec\e_spec.cpp`.
+
+### Confirmed Correct
+
+| Claim | Agent Evidence |
+|-------|---------------|
+| Encoding identifiers: n, z, e, b, c, g | All confirmed in `e_spec.cpp` parser |
+| Block size units: K, M | Confirmed in block parser |
+| Block count: exact number or `*` (variable) | Confirmed; dynamic sizing also supported |
+| Encryption: key ID, IV, nested eSpec | Error string at 0x9aece0 confirms three required args |
+| Multiple variable blocks rejected | Error at 0x9af018: "multiple variable blocks detected" |
+
+### Changes Applied
+
+1. Added BCPack BCn parameter [1, 7] to grammar and usage section
+2. Added GDeflate compression level [1, 12] to grammar and usage section
+3. Removed zlib level 0 (agent rejects it, valid range is [1, 9])
+4. Added zlib window bits [8, 15] to grammar and usage section
+5. Added "zlib" and "lz4hc" variants alongside "mpq"
+6. Added dynamic block sizing to count specifications
+7. Corrected GDeflate description (GPU-accelerated, not Google)
+
+### Source File
+
+Agent source path: `d:\package_cache\tact\3.13.3\src\codec\e_spec.cpp`

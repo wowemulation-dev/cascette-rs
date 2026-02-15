@@ -153,7 +153,7 @@ Archive Index files use a 28-byte footer at the end of the file:
 ```c
 struct ArchiveIndexFooter {  // 28 bytes total
     uint8_t  toc_hash[8];     // First 8 bytes of MD5 hash of table of contents
-    uint8_t  version;         // Must be 1
+    uint8_t  version;         // Must be <= 1 (0 or 1)
     uint8_t  reserved[2];     // Must be [0, 0]
     uint8_t  page_size_kb;    // Must be 4 (4KB pages)
     uint8_t  offset_bytes;    // Archive offset field size (4 for archives)
@@ -182,6 +182,15 @@ struct ArchiveIndexFooter {  // 28 bytes total
   multi-byte fields are big-endian
 
 - TOC hash validates the table of contents integrity separately from footer hash
+
+**Implementation Notes**:
+
+- **Extended Block Offsets**: The agent logs "Archive w/ Extended Block
+  Offset Found" for archive index entries that use larger-than-4-byte offsets
+  (for archives exceeding 4GB)
+
+- **Archive Count Limit**: The agent has a `casc_supports_1023_archives`
+  configuration flag, indicating a maximum of 1023 archives per CASC storage
 
 ### Sample Analysis Results
 
@@ -599,6 +608,40 @@ validates version equals 7 and warns on unexpected versions.
 | Entry Size | Variable (24 typical) | Fixed 18 bytes |
 | Location | CDN download | Client Data/ directory |
 | Crate | cascette-formats | cascette-client-storage |
+
+## Binary Verification (Agent.exe, TACT 3.13.3)
+
+Verified against Agent.exe (WoW Classic Era) using Binary Ninja on
+2026-02-15.
+
+### Confirmed Correct
+
+| Claim | Agent Evidence |
+|-------|---------------|
+| CDN index footer: 28 bytes | `tact::CdnIndexFooterValidator` at 0x6b815d reads last 0x14 bytes + 8-byte toc_hash |
+| Footer version must be <= 1 | `sub_6b8302` validates `version <= 1` |
+| ekey_length must be <= 0x10 (16) | Footer validator checks hash size limit |
+| page_size_kb typical 4 | Footer field confirmed |
+| offset_bytes and size_bytes: 4 each | Footer field confirmed |
+| Footer hash: MD5 first 8 bytes | Footer validator uses MD5 |
+| element_count: little-endian | Footer validator confirmed |
+| Config fields: archives, archive-group | Strings at 0x9b4b04, 0x9b4b24 |
+| Config fields: patch-archives, patch-archive-group | Strings at 0x9b4b6c, 0x9b4b98 |
+| Index size fields: archives-index-size, archive-group-index-size | Strings at 0x9b4b10, 0x9b4b34 |
+| Index naming: "archive_%u.index" | String at 0x9adb40 |
+
+### Changes Applied
+
+1. Fixed footer version from "Must be 1" to "Must be <= 1" (allows 0)
+2. Added extended block offset note for archives > 4GB
+3. Added 1023 archive count limit
+
+### Source Files
+
+Agent source paths from PDB info:
+- `tact::CdnIndexFooterValidator` at 0x6b815d
+- CDN index reader at `sub_6b8302`
+- Local storage CASC functions in `sub_512c0c`
 
 ## References
 

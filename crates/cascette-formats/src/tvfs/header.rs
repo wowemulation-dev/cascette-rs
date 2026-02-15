@@ -25,7 +25,7 @@ pub struct TvfsHeader {
     /// Format version (always 1)
     pub format_version: u8,
 
-    /// Header size (always 46)
+    /// Header size (38 without EST, 46 with EST)
     pub header_size: u8,
 
     /// EKey size (always 9)

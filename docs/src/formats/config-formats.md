@@ -77,6 +77,15 @@ Key-value pairs, one per line, with `=` delimiter.
 | `build-product` | Product identifier | `WoW` |
 | `build-playbuild-installer` | Installer build number | `ngdp:wow_classic_era:55646` |
 | `build-partial-priority` | Partial download priorities | Space-separated list |
+| `build-num` | Build number | `61582` |
+| `build-num-retail` | Retail build number | `61582` |
+| `build-attributes` | Build attribute metadata | Attribute string |
+| `build-file-db` | File database for containerless builds | Hash value |
+| `build-file-db-size` | Size of file database | Size in bytes |
+| `vfs-root-espec` | ESpec for VFS root manifest | ESpec string |
+| `install-high-ver` | High-version install manifest hash | Hash value |
+| `install-high-ver-size` | Size of high-version install | Size in bytes |
+| `key-layout-index-bits` | Static key layout index bits | Numeric value |
 
 ### VFS (Virtual File System) Keys
 
@@ -161,6 +170,37 @@ directly
 
 - Build-partial-priority lists files for streaming installation
 
+### Static Key Layouts
+
+Build configs can contain `key-layout-<number>` entries that define static
+data layout schemes. Each key layout has sub-fields:
+
+- `Chunk Bits`: Number of bits for chunk addressing
+- `Archive Bits`: Number of bits for archive addressing
+- `Offset Bits`: Number of bits for offset addressing
+- `Alignment`: Data alignment requirement
+
+The `key-layout-index-bits` field in the build config specifies the number
+of index bits for the static key layout system.
+
+### Chunk System
+
+Build configs can reference `chunk-<number>` entries. Chunks are associated
+with archives and use a bits-based addressing system. The agent validates
+that chunk identifiers follow the `chunk-<number>` naming pattern.
+
+### Hard Link Entries
+
+Build configs can contain hard link entries. The agent validates the format
+of these entries and uses them for storage optimization on file systems that
+support hard links.
+
+### Manifest Validation
+
+The agent validates that each manifest type (download, install, size,
+encoding) has matching C-Key/C-Size and E-Key/E-Size pairs. If a size field
+is specified, the corresponding key must also be present.
+
 ## CDN Configuration
 
 CDN configurations list available CDN servers and archive files.
@@ -181,6 +221,10 @@ Key-value pairs with special handling for multi-value keys.
 | `file-index-size` | Size of file index | Integer |
 | `patch-file-index` | Patch file index hash | Single hash |
 | `patch-file-index-size` | Size of patch file index | Integer |
+| `archives-index-size` | Sizes of archive index files | Space-separated integers |
+| `archive-group-index-size` | Size of archive group index | Integer |
+| `patch-archives-index-size` | Sizes of patch archive index files | Space-separated integers |
+| `patch-archive-group-index-size` | Size of patch archive group index | Integer |
 | `builds` | Reference to builds using this CDN config | Space-separated |
 
 ### CDN Configuration Example
@@ -255,6 +299,9 @@ patch-entry = <type> <content-key> <size> <encoding-key> <encoded-size>
 | `encoded-size` | Encoded file size |
 | `compression-info` | Compression blocks (e.g., `b:{11=n,4813402=n,793331=z}`) |
 | `additional-keys` | Alternative encoding keys and sizes |
+
+The agent validates `patch-entry` fields including target ESpec validation.
+Patch config parsing uses structured per-entry validation.
 
 ### Patch Configuration Example
 
@@ -602,3 +649,64 @@ These are referenced in Ribbit responses and are accessible via CDN.
 - Use HTTPS when available
 
 - Validate file sizes before download
+
+## Binary Verification (Agent.exe, TACT 3.13.3)
+
+Verified against Agent.exe (WoW Classic Era) using Binary Ninja on
+2026-02-15.
+
+### Build Config Fields Confirmed in Agent
+
+All fields below are referenced as string literals in the agent binary's
+build config parser:
+
+| Field | Address | Notes |
+|-------|---------|-------|
+| `encoding` | 0x943f88 | With `-size` suffix at 0x9b4234 |
+| `install` | 0x8fc9e0 | With `-size` at 0x9b4290 |
+| `download` | (in parser) | With `-size` at 0x9b4224 |
+| `size` | (in parser) | With `-size` at 0x9b4308 (`size-size`) |
+| `patch` | (in parser) | With `-size` at 0x9b42cc |
+| `patch-config` | 0x9b42d8 | |
+| `patch-index` | 0x9b42e8 | With `-size` at 0x9b42f4 |
+| `vfs-root` | 0x9b438c | With `-size` at 0x9b4398, `-espec` at 0x9b43a8 |
+| `build-uid` | 0x90f7ec | |
+| `build-partial-priority` | 0x9b4424 | |
+| `build-file-db` | 0x9b443c | With `-size` at 0x9b444c |
+| `install-high-ver` | (inferred) | With `-size` at 0x9b42b4 |
+| `key-layout-index-bits` | 0x9b4314 | Static key layout system |
+
+### CDN Config Fields Confirmed in Agent
+
+| Field | Address |
+|-------|---------|
+| `archives` | 0x9b4b04 |
+| `archives-index-size` | 0x9b4b10 |
+| `archive-group` | 0x9b4b24 |
+| `archive-group-index-size` | 0x9b4b34 |
+| `file-index` | 0x9b4b50 |
+| `file-index-size` | 0x9b4b5c |
+| `patch-archives` | 0x9b4b6c |
+| `patch-archives-index-size` | 0x9b4b7c |
+| `patch-archive-group` | 0x9b4b98 |
+| `patch-archive-group-index-size` | 0x9b4bac |
+| `patch-file-index` | 0x9b4bcc |
+| `patch-file-index-size` | 0x9b4be0 |
+
+### Changes Applied
+
+1. Added missing build config fields: build-file-db, vfs-root-espec,
+   install-high-ver, key-layout-index-bits, build-num, build-attributes
+2. Added missing CDN config -index-size fields
+3. Added Static Key Layouts section with sub-fields
+4. Added Chunk System section
+5. Added Hard Link Entries section
+6. Added Manifest Validation section
+7. Added patch-entry ESpec validation note
+
+### Source Files
+
+Agent source paths from PDB info:
+- Build config parser in TACT library
+- CDN config parser in TACT library
+- Error strings clustered at 0x9b4190-0x9b5200

@@ -17,7 +17,7 @@ pub struct PatchArchiveHeader {
     #[br(assert(magic == *b"PA", "Invalid PA magic"))]
     pub magic: [u8; 2],
 
-    /// Format version, typically 2
+    /// Format version (1 or 2)
     pub version: u8,
 
     /// Size of file content keys in bytes (16 for MD5)

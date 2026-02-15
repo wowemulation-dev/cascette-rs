@@ -68,7 +68,7 @@ pub struct DownloadHeaderV3 {
     pub flag_size: u8,
     /// Base priority adjustment (signed byte)
     pub base_priority: i8,
-    /// Reserved bytes (must be zero)
+    /// Reserved bytes (not validated)
     pub reserved: [u8; 3],
 }
 

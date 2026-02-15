@@ -14,7 +14,7 @@ Salsa20 in CASC provides:
 
 - Initialization vector (IV) support
 
-- ChaCha20 variant support (newer implementations)
+- 128-bit (16-byte) keys with tau constants
 
 ## Algorithm Details
 
@@ -22,7 +22,8 @@ Salsa20 in CASC provides:
 
 Salsa20 is a stream cipher designed by Daniel J. Bernstein:
 
-- **Key size**: 256 bits (32 bytes)
+- **Key size**: 128 bits (16 bytes) in CASC; 256 bits (32 bytes) in standard
+  Salsa20
 
 - **Nonce/IV size**: 64 bits (8 bytes)
 
@@ -84,34 +85,25 @@ Where:
 
 - `key_name`: 64-bit key identifier
 
-- `iv`: 32-bit initialization vector
+- `iv`: Initialization vector (1-8 bytes, typically 4)
 
-- `type`: 0x53 ('S') for Salsa20, 0x41 ('A') for ARC4
+- `type`: 0x53 ('S') for Salsa20. 0x41 ('A') for ARC4 in legacy CASC
+  versions (not used in TACT 3.13.3+)
 
-### Key Derivation
+### Key Lookup
 
-CASC uses a key name to derive the actual encryption key:
+CASC uses a 64-bit key name to look up the 16-byte encryption key from a key
+store. The agent calls a key getter callback with the key name; there is no
+key derivation in the encryption path.
 
 ```rust
 struct CASCKeyManager {
-    keys: HashMap<u64, [u8; 32]>,  // key_name -> actual_key
+    keys: HashMap<u64, [u8; 16]>,  // key_name -> 16-byte key
 }
 
 impl CASCKeyManager {
-    pub fn get_key(&self, key_name: u64) -> Option<[u8; 32]> {
+    pub fn get_key(&self, key_name: u64) -> Option<[u8; 16]> {
         self.keys.get(&key_name).copied()
-    }
-
-    pub fn derive_key(&self, key_name: u64, base_key: &[u8]) -> [u8; 32] {
-        // Key derivation function (game-specific)
-        let mut hasher = Sha256::new();
-        hasher.update(&key_name.to_le_bytes());
-        hasher.update(base_key);
-
-        let hash = hasher.finalize();
-        let mut key = [0u8; 32];
-        key.copy_from_slice(&hash);
-        key
     }
 }
 ```
@@ -144,32 +136,25 @@ struct Salsa20State {
 }
 
 impl Salsa20State {
-    pub fn new(key: &[u8; 32], nonce: &[u8; 8]) -> Self {
+    pub fn new(key: &[u8; 16], nonce: &[u8; 8]) -> Self {
         let mut state = [0u32; 16];
 
-        // Constants "expand 32-byte k"
-        state[0] = 0x61707865;
-        state[5] = 0x3320646e;
-        state[10] = 0x79622d32;
-        state[15] = 0x6b206574;
+        // Tau constants "expand 16-byte k" (CASC uses 16-byte keys)
+        state[0]  = 0x61707865; // "expa"
+        state[5]  = 0x3120646e; // "nd 1"
+        state[10] = 0x79622d36; // "6-by"
+        state[15] = 0x6b206574; // "te k"
 
-        // Key
-        for i in 0..8 {
-            state[1 + i % 4] = u32::from_le_bytes([
+        // 16-byte key placed at positions 1-4 and duplicated at 11-14
+        for i in 0..4 {
+            let word = u32::from_le_bytes([
                 key[i * 4],
                 key[i * 4 + 1],
                 key[i * 4 + 2],
                 key[i * 4 + 3],
             ]);
-
-            if i >= 4 {
-                state[11 + i % 4] = u32::from_le_bytes([
-                    key[i * 4],
-                    key[i * 4 + 1],
-                    key[i * 4 + 2],
-                    key[i * 4 + 3],
-                ]);
-            }
+            state[1 + i] = word;
+            state[11 + i] = word;  // Duplicate for 16-byte key mode
         }
 
         // Counter (initially 0)
@@ -301,19 +286,6 @@ CASC uses various encryption keys for different content:
 const CINEMATIC_KEY: u64 = 0xFAC5C7F366D20C85;
 const ACHIEVEMENT_KEY: u64 = 0x0123456789ABCDEF;
 const PVP_KEY: u64 = 0xDEADBEEFCAFEBABE;
-```
-
-## ChaCha20 Variant
-
-Newer CASC versions may use ChaCha20 (Salsa20 variant):
-
-```rust
-fn chacha20_quarter_round(a: &mut u32, b: &mut u32, c: &mut u32, d: &mut u32) {
-    *a = a.wrapping_add(*b); *d ^= *a; *d = d.rotate_left(16);
-    *c = c.wrapping_add(*d); *b ^= *c; *b = b.rotate_left(12);
-    *a = a.wrapping_add(*b); *d ^= *a; *d = d.rotate_left(8);
-    *c = c.wrapping_add(*d); *b ^= *c; *b = b.rotate_left(7);
-}
 ```
 
 ## Performance Optimization
@@ -553,30 +525,35 @@ state[15] = 0x6b206574; // "te k"
 
 ### IV Extension
 
-The 4-byte IV is extended to 8 bytes and XORed with the block index:
+The IV (1-8 bytes, typically 4) is zero-padded to 8 bytes for the Salsa20
+nonce. The block index is XORed into the first 4 bytes before extension:
 
 ```rust
-// Extend 4-byte IV to 8 bytes by duplication
-let mut extended_iv = [0u8; 8];
-extended_iv[..4].copy_from_slice(&iv);
-extended_iv[4..].copy_from_slice(&iv);
-
-// XOR block index with first 4 bytes
+// XOR block index with first 4 IV bytes (for multi-chunk BLTE)
 let block_bytes = (block_index as u32).to_le_bytes();
-for i in 0..4 {
-    extended_iv[i] ^= block_bytes[i];
+for i in 0..std::cmp::min(4, iv.len()) {
+    iv[i] ^= block_bytes[i];
 }
+
+// Zero-pad IV to 8 bytes (NOT duplicated)
+let mut nonce = [0u8; 8];
+nonce[..iv.len()].copy_from_slice(&iv);
+// Bytes iv.len()..8 remain zero
 ```
 
 ## Validation Status
 
-- CASC compatibility verified against CascLib behavior
+- Verified against Agent.exe (TACT 3.13.3) binary behavior
 
 - Integration tests with real WoW encryption keys
 
 - Test suite validates against known BLTE 'E' mode samples
 
 - Zero-allocation keystream generation for performance
+
+Note: CascLib duplicates the IV (same bug as was in cascette-rs before the
+fix). The Agent.exe binary is the authoritative reference and confirms
+zero-padding.
 
 ### TACT Key Coverage
 
@@ -585,6 +562,43 @@ The cascette-crypto crate includes hardcoded TACT keys for major WoW expansions:
 - Battle for Azeroth, Shadowlands, The War Within, Classic Era
 
 Keys are stored with redacted debug output to prevent accidental logging.
+
+## Binary Verification (Agent.exe, TACT 3.13.3)
+
+Verified against Agent.exe (WoW Classic Era) using Binary Ninja on
+2026-02-15.
+
+### Confirmed Correct
+
+| Claim | Agent Evidence |
+|-------|---------------|
+| 16-byte keys with tau constants | `sub_6fe3ff` uses tau ("expand 16-byte k") at 0x9b8e10 |
+| Key duplication: bytes 0-15 at state[1-4] and state[11-14] | `sub_6fe3ff` confirmed |
+| IV XOR with block_index (LE u32 into first 4 bytes) | `sub_6f5946` confirmed |
+| Counter at state[8-9], starting at 0 | `sub_6fe3ff` confirmed |
+| Nonce at state[6-7] | `sub_6fe3ff` confirmed |
+| 20 rounds (10 double-rounds) | `sub_6fe3ff` uses SSE intrinsics for Salsa20 core |
+| Agent only uses Salsa20 (0x53) for BLTE encryption | `sub_6f5c45` at 0x6f5d78 |
+
+### Changes Applied
+
+1. Fixed IV extension from duplication to zero-padding (confirmed bug
+   in cascette-crypto, now fixed)
+2. Fixed key size in overview to 128 bits (16 bytes) for CASC
+3. Replaced sigma constants with tau in state initialization code
+4. Replaced SHA-256 key derivation with key store lookup
+5. Removed ChaCha20 variant section (no evidence in agent binary)
+6. Noted ARC4 as legacy, not used in TACT 3.13.3+
+7. Updated IV size from fixed "32-bit" to 1-8 bytes
+8. Updated validation claim to reference Agent.exe instead of CascLib
+
+### Source Files
+
+Agent source paths from PDB info:
+- `d:\package_cache\tact\3.13.3\src\codec\codec_encryption.cpp`
+- Key expansion function: `sub_6fe3ff`
+- Wrapper (always 128-bit): `sub_6fe3dc`
+- Salsa20 constants at: 0x9b8e10
 
 ## References
 
