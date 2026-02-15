@@ -149,13 +149,13 @@ jobs:
           cache-all-crates: true
 
       - name: Run benchmarks
-        run: cargo bench --bench throughput -- --output-format bencher
+        run: cargo bench --bench throughput -- --output-format bencher | tee benchmark-results.txt
 
       - name: Store benchmark result
         uses: benchmark-action/github-action-benchmark@v1
         with:
           tool: 'cargo'
-          output-file-path: target/criterion/report/index.html
+          output-file-path: benchmark-results.txt
           github-token: ${{ secrets.GITHUB_TOKEN }}
           auto-push: true
           alert-threshold: '200%'
