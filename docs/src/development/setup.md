@@ -33,8 +33,9 @@ rustup target add wasm32-unknown-unknown
 | Tool | Purpose | Installation |
 |------|---------|--------------|
 | `cargo-deny` | Dependency auditing | `cargo install cargo-deny` |
+| `cargo-nextest` | Test runner | `cargo install cargo-nextest` |
 | `cargo-llvm-cov` | Code coverage | `cargo install cargo-llvm-cov` |
-| `mdbook` | Documentation | `cargo install mdbook` |
+| `mdbook` | Documentation | `cargo install mdbook` or via `mise install` |
 
 ### Optional Tools
 
@@ -57,7 +58,7 @@ cascette-rs/
 │   └── book.toml              # mdBook configuration
 ├── deny.toml                  # cargo-deny configuration
 ├── Cargo.toml                 # Workspace manifest
-└── CLAUDE.md                  # AI assistant guidance
+└── AGENTS.md                  # AI assistant guidance
 ```
 
 ## First-Time Setup
@@ -85,7 +86,7 @@ cascette-rs/
 4. Run tests:
 
    ```bash
-   cargo test --workspace
+   cargo nextest run --workspace
    ```
 
 5. Verify lints pass:

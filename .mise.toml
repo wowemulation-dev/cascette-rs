@@ -1,3 +1,92 @@
+# Mise configuration for cascette-rs project
+# Rust workspace implementing Blizzard's NGDP/CASC systems
+
+[_]
+project_description = "NGDP/CASC implementation in Rust - binary format parsers, cryptographic operations, caching, protocol clients, and Ribbit server"
+
+# Environment variables
+[env]
+RUST_BACKTRACE = "1"
+
+# Tool versions
 [tools]
 mdbook = "latest"
-rust = { version = "1.92.0", profile = "default" }
+rust = { version = "1.92", profile = "default" }
+
+# Task definitions
+[tasks.fmt]
+description = "Format all code"
+run = "cargo fmt --all"
+
+[tasks.fmt-check]
+description = "Check formatting without changes"
+run = "cargo fmt --all -- --check"
+
+[tasks.lint]
+description = "Run clippy on workspace with all features"
+run = "cargo clippy --workspace --all-targets --all-features"
+
+[tasks.test]
+description = "Run library unit tests only"
+run = "cargo test --lib --workspace"
+
+[tasks.test-all]
+description = "Run all tests with all features"
+run = "cargo test --workspace --all-features"
+
+[tasks.test-ci]
+description = "CI-optimized test run with nextest"
+run = "cargo nextest run --profile ci --all-features --workspace"
+
+[tasks.docs]
+description = "Build Rust API documentation"
+run = "cargo doc --workspace --no-deps"
+
+[tasks.docs-build]
+description = "Build mdBook documentation"
+run = "mdbook build docs"
+
+[tasks.docs-serve]
+description = "Serve mdBook documentation locally"
+run = "mdbook serve docs"
+
+[tasks.check]
+description = "Type checking for all targets"
+run = "cargo check --workspace --all-targets --all-features"
+
+[tasks.check-wasm]
+description = "Check WASM compatibility for crypto and formats crates"
+run = "cargo check --target wasm32-unknown-unknown -p cascette-crypto && cargo check --target wasm32-unknown-unknown -p cascette-formats"
+
+[tasks.deny]
+description = "Dependency security and license audit"
+run = "cargo deny check --all-features"
+
+[tasks.clean]
+description = "Clean build artifacts"
+run = "cargo clean"
+
+[tasks.ci]
+description = "Full CI quality gate (format, lint, test)"
+run = "cargo fmt --all -- --check && cargo clippy --workspace --all-targets && cargo nextest run --profile ci --workspace"
+
+[tasks.quality]
+description = "Full quality check (format, lint, test, docs, wasm, deny)"
+run = "cargo fmt --all -- --check && cargo clippy --workspace --all-targets && cargo nextest run --profile ci --workspace && cargo doc --workspace --no-deps && cargo check --target wasm32-unknown-unknown -p cascette-crypto && cargo check --target wasm32-unknown-unknown -p cascette-formats && cargo deny check --all-features"
+
+[tasks.run-ribbit]
+description = "Run Ribbit server"
+run = "cargo run -p cascette-ribbit"
+
+[tasks.bench-ribbit]
+description = "Run Ribbit server benchmarks"
+run = "cargo bench -p cascette-ribbit"
+
+# Shell aliases (active in this directory)
+[shell_alias]
+gs = "git status"
+ga = "git add"
+gc = "git commit"
+gp = "git push"
+gd = "git diff"
+gl = "git log --oneline -10"

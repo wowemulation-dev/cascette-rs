@@ -104,10 +104,10 @@ Before submitting your changes, make sure to run:
 cargo fmt
 
 # Check for common issues
-cargo clippy --all-targets --all-features
+cargo clippy --workspace --all-targets
 
 # Run tests
-cargo test
+cargo nextest run --workspace
 
 # Check dependencies for security issues
 cargo deny check
