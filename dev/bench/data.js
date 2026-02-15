@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1771166959096,
+  "lastUpdate": 1771171973550,
   "repoUrl": "https://github.com/wowemulation-dev/cascette-rs",
   "entries": {
     "Benchmark": [
@@ -124,6 +124,48 @@ window.BENCHMARK_DATA = {
           {
             "name": "bpsv_generation/summary/all",
             "value": 205,
+            "range": "± 1",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "daniel@kogito.network",
+            "name": "Daniel S. Reichenbach",
+            "username": "danielsreichenbach"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "33b2270f8cb583da5f545690353dbf3081ee68a9",
+          "message": "Merge pull request #30 from wowemulation-dev/feat/size-manifest\n\nfeat: Size manifest parser and ESpec parser fixes",
+          "timestamp": "2026-02-15T23:10:59+07:00",
+          "tree_id": "ea7ae21f4a83598f83d4830c663e778b6ecdc2c3",
+          "url": "https://github.com/wowemulation-dev/cascette-rs/commit/33b2270f8cb583da5f545690353dbf3081ee68a9"
+        },
+        "date": 1771171973110,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "bpsv_generation/versions/wow",
+            "value": 1836,
+            "range": "± 10",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "bpsv_generation/cdns/wow",
+            "value": 1239,
+            "range": "± 15",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "bpsv_generation/summary/all",
+            "value": 207,
             "range": "± 1",
             "unit": "ns/iter"
           }
