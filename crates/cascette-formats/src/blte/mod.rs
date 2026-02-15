@@ -378,13 +378,16 @@ mod tests {
                         let expected_size = if header.is_single_chunk() {
                             8 // magic + header_size
                         } else {
-                            4 + (chunk_count * flags.chunk_info_size()) // flags + count + chunk_infos
+                            // header_size includes 8-byte preamble + 4 (flags + count) + chunk_infos
+                            12 + (chunk_count * flags.chunk_info_size())
                         };
 
                         if !header.is_single_chunk() {
                             prop_assert_eq!(header.header_size as usize, expected_size);
                         }
-                        prop_assert_eq!(header.data_offset(), 8 + header.header_size as usize);
+                        // For single-chunk: data starts at offset 8
+                        // For multi-chunk: header_size already includes the preamble
+                        prop_assert_eq!(header.data_offset(), if header.is_single_chunk() { 8 } else { header.header_size as usize });
                     }
 
                     /// Test that checksums are deterministic
