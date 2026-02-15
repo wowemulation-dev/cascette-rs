@@ -234,6 +234,11 @@ jobs:
           toolchain: 1.92.0
           targets: wasm32-unknown-unknown
 
+      - name: Verify WASM target installation
+        run: |
+          rustup target list --installed | grep wasm32-unknown-unknown || echo "WASM target not found"
+          rustup target add wasm32-unknown-unknown
+
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
@@ -307,7 +312,7 @@ jobs:
           tool: cargo-nextest
 
       - name: Collect coverage
-        run: cargo llvm-cov nextest --workspace --lcov --output-path lcov.info -- --profile ci
+        run: cargo llvm-cov nextest --workspace --lcov --output-path lcov.info
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v5
