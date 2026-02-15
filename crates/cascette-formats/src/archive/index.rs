@@ -302,7 +302,7 @@ impl IndexFooter {
 
     /// Validate footer format parameters for CASC
     pub fn validate_format(&self) -> ArchiveResult<()> {
-        if self.version != 1 {
+        if self.version > 1 {
             return Err(ArchiveError::UnsupportedVersion(self.version));
         }
 

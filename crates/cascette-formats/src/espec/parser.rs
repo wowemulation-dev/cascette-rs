@@ -151,7 +151,7 @@ impl<'a> Parser<'a> {
         let level = if self.peek().is_some_and(|c| c.is_ascii_digit()) {
             let num = self.parse_number()?;
             let level = u8::try_from(num).map_err(|_| ESpecError::InvalidLevel(255))?;
-            if level > 9 {
+            if level == 0 || level > 9 {
                 return Err(ESpecError::InvalidLevel(level));
             }
             Some(level)
@@ -513,7 +513,13 @@ mod tests {
             Err(ESpecError::UnknownType('x'))
         ));
 
-        // Invalid compression level
+        // Invalid compression level (0 is rejected)
+        assert!(matches!(
+            ESpec::parse("z:0"),
+            Err(ESpecError::InvalidLevel(0))
+        ));
+
+        // Invalid compression level (10 is rejected)
         assert!(matches!(
             ESpec::parse("z:10"),
             Err(ESpecError::InvalidLevel(10))

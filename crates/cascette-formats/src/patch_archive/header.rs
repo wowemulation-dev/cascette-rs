@@ -65,7 +65,7 @@ impl PatchArchiveHeader {
             return Err(PatchArchiveError::InvalidMagic(self.magic));
         }
 
-        if self.version != 2 {
+        if self.version == 0 || self.version > 2 {
             return Err(PatchArchiveError::UnsupportedVersion(self.version));
         }
 
@@ -77,7 +77,7 @@ impl PatchArchiveHeader {
             });
         }
 
-        if self.block_size_bits < 10 || self.block_size_bits > 20 {
+        if self.block_size_bits < 12 || self.block_size_bits > 24 {
             return Err(PatchArchiveError::InvalidBlockSize(self.block_size_bits));
         }
 
@@ -132,7 +132,15 @@ mod tests {
     fn test_header_validation() {
         let mut header = PatchArchiveHeader::new(1);
 
-        // Test invalid version
+        // Test version 0 is invalid
+        header.version = 0;
+        assert!(header.validate().is_err());
+
+        // Test version 1 is valid
+        header.version = 1;
+        assert!(header.validate().is_ok());
+
+        // Test version 3 is invalid
         header.version = 3;
         assert!(header.validate().is_err());
 
@@ -143,10 +151,16 @@ mod tests {
 
         // Test invalid block size
         header.file_key_size = 16;
-        header.block_size_bits = 5; // Too small
+        header.block_size_bits = 11; // Too small (min is 12)
         assert!(header.validate().is_err());
 
-        header.block_size_bits = 25; // Too large
+        header.block_size_bits = 25; // Too large (max is 24)
         assert!(header.validate().is_err());
+
+        // Test boundary values are accepted
+        header.block_size_bits = 12;
+        assert!(header.validate().is_ok());
+        header.block_size_bits = 24;
+        assert!(header.validate().is_ok());
     }
 }

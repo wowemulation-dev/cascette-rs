@@ -13,7 +13,7 @@ pub enum ESpecError {
     UnknownType(char),
 
     /// Invalid compression level
-    #[error("Invalid compression level {0}, must be 0-9")]
+    #[error("Invalid compression level {0}, must be 1-9")]
     InvalidLevel(u8),
 
     /// Invalid window bits
@@ -57,7 +57,7 @@ pub enum ESpec {
 
     /// `ZLib` compression ('z')
     ZLib {
-        /// Compression level (0-9)
+        /// Compression level (1-9)
         level: Option<u8>,
         /// Window bits or special mode
         bits: Option<ZLibBits>,
