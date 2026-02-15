@@ -9,6 +9,7 @@
 - [Root File](formats/root.md)
 - [Install Manifest](formats/install.md)
 - [Download Manifest](formats/download.md)
+- [Size Manifest](formats/size-manifest.md)
 - [Archives](formats/archives.md)
 - [Archive Groups](formats/archive-groups.md)
 - [TVFS](formats/tvfs.md)

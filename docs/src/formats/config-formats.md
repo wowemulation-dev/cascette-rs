@@ -67,7 +67,7 @@ Key-value pairs, one per line, with `=` delimiter.
 | `encoding` | Encoding file: content key + **encoding key** (use 2nd for CDN) | `b07b881f4527bda7cf8a1a2f99e8622e bbf06e7476382cfaa396cff0049d356b` |
 | `encoding-size` | Sizes for encoding file versions | `14004322 14003043` |
 | `download` | Download manifest: content key + encoding key | `42a7bb33cd1e9a7b72bef6ee14719b58 53ba96f0965adc306d2d0cf3b457949c` |
-| `size` | Size file: content key + encoding key | `d1d9e612a645cc7a7e4b42628bde21ce 0d5704735f4985e555907a7e7647099a` |
+| `size` | [Size manifest](size-manifest.md): content key + encoding key | `d1d9e612a645cc7a7e4b42628bde21ce 0d5704735f4985e555907a7e7647099a` |
 | `patch` | Patch file content key | `658506593cf1f98a1d9300c418ee5355` |
 | `patch-config` | Patch configuration hash (fetch separately) | `17f5bbcb7eae2fc8fb3ea545c65f74d4` |
 | `patch-index` | Patch index files | `3806f4c7b1f179ce976d7685f9354025 eb5758bd78805f0aabac15cf44ea767c` |

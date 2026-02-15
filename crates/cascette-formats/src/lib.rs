@@ -38,6 +38,7 @@
 //! - **Encoding**: Encoding file format for content key to encoding key mappings
 //! - **Install**: Install manifest format for file tagging and selective installation
 //! - **Download**: Download manifest format for priority-based streaming installation
+//! - **Size**: Size manifest format for estimated file sizes
 //! - **Config**: Build and CDN configuration file formats
 //! - **`ESpec`**: Encoding specification format
 //! - **Archive**: Archive index and data file operations for CDN content storage
@@ -124,6 +125,14 @@ pub mod patch_archive;
 ///
 /// See the [`root`] module for detailed usage examples and error handling documentation.
 pub mod root;
+/// Size manifest format for estimated file sizes
+///
+/// This module provides parsing and building support for the Size manifest (`DS` magic)
+/// which maps encoding keys to estimated file sizes (eSize). It is used when compressed
+/// size is unavailable, enabling disk space estimation and download progress reporting.
+///
+/// See the [`size`] module for detailed usage examples.
+pub mod size;
 /// TVFS (TACT Virtual File System) format for unified content management
 ///
 /// This module provides complete parsing and building support for TVFS manifests
