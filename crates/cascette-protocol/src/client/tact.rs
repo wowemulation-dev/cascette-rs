@@ -21,6 +21,7 @@ impl TactClient {
     /// Create a new TACT client
     #[cfg(not(target_arch = "wasm32"))]
     pub fn new(base_url: String, _use_https: bool) -> Result<Self> {
+        crate::transport::ensure_crypto_provider();
         let client = Client::builder()
             .pool_idle_timeout(Duration::from_secs(90))
             .pool_max_idle_per_host(10)

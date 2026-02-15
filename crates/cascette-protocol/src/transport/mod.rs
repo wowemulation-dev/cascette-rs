@@ -15,7 +15,7 @@ use std::time::Duration;
 /// Uses ring as the crypto provider. If another provider was already installed
 /// (e.g. by the application), this is a no-op.
 #[cfg(not(target_arch = "wasm32"))]
-fn ensure_crypto_provider() {
+pub(crate) fn ensure_crypto_provider() {
     // OnceLock ensures we only attempt installation once.
     // install_default() returns Err if a provider is already set, which we ignore.
     static INIT: OnceLock<()> = OnceLock::new();
