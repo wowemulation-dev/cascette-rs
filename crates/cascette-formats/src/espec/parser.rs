@@ -1,4 +1,4 @@
-use super::types::{BlockChunk, BlockSizeSpec, ESpec, ESpecError, ZLibBits};
+use super::types::{BlockChunk, BlockSizeSpec, ESpec, ESpecError, ZLibVariant};
 
 /// Parser for `ESpec` strings
 pub struct Parser<'a> {
@@ -135,7 +135,8 @@ impl<'a> Parser<'a> {
         if self.peek() != Some(':') {
             return Ok(ESpec::ZLib {
                 level: None,
-                bits: None,
+                variant: None,
+                window_bits: None,
             });
         }
 
@@ -169,42 +170,60 @@ impl<'a> Parser<'a> {
             None
         };
 
-        // Parse bits if we have a comma (only valid inside braces)
-        let bits = if has_braces && self.peek() == Some(',') {
+        // Parse variant or window_bits if we have a comma (only valid inside braces)
+        let mut variant = None;
+        let mut window_bits = None;
+
+        if has_braces && self.peek() == Some(',') {
             self.consume(',')?;
-            Some(self.parse_zlib_bits()?)
-        } else {
-            None
-        };
+            if self.peek().is_some_and(|c| c.is_ascii_digit()) {
+                // Numeric: window bits
+                window_bits = Some(self.parse_window_bits()?);
+            } else {
+                // Identifier: variant name
+                variant = Some(self.parse_zlib_variant()?);
+
+                // Check for a third parameter (window_bits after variant)
+                if self.peek() == Some(',') {
+                    self.consume(',')?;
+                    window_bits = Some(self.parse_window_bits()?);
+                }
+            }
+        }
 
         if has_braces {
             self.consume('}')?;
         }
 
-        Ok(ESpec::ZLib { level, bits })
+        Ok(ESpec::ZLib {
+            level,
+            variant,
+            window_bits,
+        })
     }
 
-    /// Parse `ZLib` bits specification
-    fn parse_zlib_bits(&mut self) -> Result<ZLibBits, ESpecError> {
-        if self.peek().is_some_and(|c| c.is_ascii_digit()) {
-            let num = self.parse_number()?;
-            let bits = u8::try_from(num).map_err(|_| ESpecError::InvalidBits(255))?;
-            if !(9..=15).contains(&bits) {
-                return Err(ESpecError::InvalidBits(bits));
-            }
-            Ok(ZLibBits::Bits(bits))
-        } else {
-            let ident = self.parse_identifier();
-            match ident.as_str() {
-                "mpq" => Ok(ZLibBits::MPQ),
-                "zlib" => Ok(ZLibBits::ZLib),
-                "lz4hc" => Ok(ZLibBits::LZ4HC),
-                _ => Err(ESpecError::InvalidNumber {
-                    position: self.pos - ident.len(),
-                    error: format!("Unknown zlib bits type: {ident}"),
-                }),
-            }
+    /// Parse `ZLib` variant identifier
+    fn parse_zlib_variant(&mut self) -> Result<ZLibVariant, ESpecError> {
+        let ident = self.parse_identifier();
+        match ident.as_str() {
+            "mpq" => Ok(ZLibVariant::MPQ),
+            "zlib" => Ok(ZLibVariant::ZLib),
+            "lz4hc" => Ok(ZLibVariant::LZ4HC),
+            _ => Err(ESpecError::InvalidNumber {
+                position: self.pos - ident.len(),
+                error: format!("Unknown zlib variant: {ident}"),
+            }),
         }
+    }
+
+    /// Parse window bits value (8-15)
+    fn parse_window_bits(&mut self) -> Result<u8, ESpecError> {
+        let num = self.parse_number()?;
+        let bits = u8::try_from(num).map_err(|_| ESpecError::InvalidBits(255))?;
+        if !(8..=15).contains(&bits) {
+            return Err(ESpecError::InvalidBits(bits));
+        }
+        Ok(bits)
     }
 
     /// Parse encrypted `ESpec`
@@ -341,6 +360,12 @@ impl<'a> Parser<'a> {
     /// Parse `BCPack` compression
     fn parse_bcpack(&mut self) -> Result<ESpec, ESpecError> {
         self.consume('c')?;
+
+        // Check for optional parameters
+        if self.peek() != Some(':') {
+            return Ok(ESpec::BCPack { bcn: None });
+        }
+
         self.consume(':')?;
         self.consume('{')?;
         let num = self.parse_number()?;
@@ -348,22 +373,31 @@ impl<'a> Parser<'a> {
             position: self.pos,
             error: "BCPack version too large".to_string(),
         })?;
+        if bcn == 0 || bcn > 7 {
+            return Err(ESpecError::InvalidBcn(bcn));
+        }
         self.consume('}')?;
-        Ok(ESpec::BCPack { bcn })
+        Ok(ESpec::BCPack { bcn: Some(bcn) })
     }
 
     /// Parse `GDeflate` compression
     fn parse_gdeflate(&mut self) -> Result<ESpec, ESpecError> {
         self.consume('g')?;
+
+        // Check for optional parameters
+        if self.peek() != Some(':') {
+            return Ok(ESpec::GDeflate { level: None });
+        }
+
         self.consume(':')?;
         self.consume('{')?;
         let num = self.parse_number()?;
         let level = u8::try_from(num).map_err(|_| ESpecError::InvalidLevel(255))?;
-        if level > 9 {
+        if level == 0 || level > 12 {
             return Err(ESpecError::InvalidLevel(level));
         }
         self.consume('}')?;
-        Ok(ESpec::GDeflate { level })
+        Ok(ESpec::GDeflate { level: Some(level) })
     }
 }
 
@@ -387,7 +421,8 @@ mod tests {
             spec,
             ESpec::ZLib {
                 level: None,
-                bits: None
+                variant: None,
+                window_bits: None,
             }
         );
         assert_eq!(spec.to_string(), "z");
@@ -398,32 +433,71 @@ mod tests {
             spec,
             ESpec::ZLib {
                 level: Some(9),
-                bits: None
+                variant: None,
+                window_bits: None,
             }
         );
         assert_eq!(spec.to_string(), "z:9");
 
-        // With level and bits
+        // With level and window bits
         let spec = ESpec::parse("z:{9,15}").expect("Test operation should succeed");
         assert_eq!(
             spec,
             ESpec::ZLib {
                 level: Some(9),
-                bits: Some(ZLibBits::Bits(15))
+                variant: None,
+                window_bits: Some(15),
             }
         );
         assert_eq!(spec.to_string(), "z:{9,15}");
 
-        // With special modes
+        // With level and variant
         let spec = ESpec::parse("z:{9,mpq}").expect("Test operation should succeed");
         assert_eq!(
             spec,
             ESpec::ZLib {
                 level: Some(9),
-                bits: Some(ZLibBits::MPQ)
+                variant: Some(ZLibVariant::MPQ),
+                window_bits: None,
             }
         );
         assert_eq!(spec.to_string(), "z:{9,mpq}");
+
+        // Window bits 8 is now valid
+        let spec = ESpec::parse("z:{9,8}").expect("Test operation should succeed");
+        assert_eq!(
+            spec,
+            ESpec::ZLib {
+                level: Some(9),
+                variant: None,
+                window_bits: Some(8),
+            }
+        );
+        assert_eq!(spec.to_string(), "z:{9,8}");
+
+        // 3-param: level + variant + window_bits
+        let spec = ESpec::parse("z:{6,zlib,15}").expect("Test operation should succeed");
+        assert_eq!(
+            spec,
+            ESpec::ZLib {
+                level: Some(6),
+                variant: Some(ZLibVariant::ZLib),
+                window_bits: Some(15),
+            }
+        );
+        assert_eq!(spec.to_string(), "z:{6,zlib,15}");
+
+        // 3-param: level + mpq variant + window_bits
+        let spec = ESpec::parse("z:{6,mpq,12}").expect("Test operation should succeed");
+        assert_eq!(
+            spec,
+            ESpec::ZLib {
+                level: Some(6),
+                variant: Some(ZLibVariant::MPQ),
+                window_bits: Some(12),
+            }
+        );
+        assert_eq!(spec.to_string(), "z:{6,mpq,12}");
     }
 
     #[test]
@@ -469,7 +543,8 @@ mod tests {
                     chunks[1].spec,
                     ESpec::ZLib {
                         level: Some(6),
-                        bits: None,
+                        variant: None,
+                        window_bits: None,
                     }
                 );
 
@@ -479,7 +554,8 @@ mod tests {
                     chunks[2].spec,
                     ESpec::ZLib {
                         level: Some(9),
-                        bits: None,
+                        variant: None,
+                        window_bits: None,
                     }
                 );
             }
@@ -490,16 +566,62 @@ mod tests {
 
     #[test]
     fn test_parse_bcpack() {
+        // Bare bcpack
+        let spec = ESpec::parse("c").expect("Test operation should succeed");
+        assert_eq!(spec, ESpec::BCPack { bcn: None });
+        assert_eq!(spec.to_string(), "c");
+
+        // With version
         let spec = ESpec::parse("c:{4}").expect("Test operation should succeed");
-        assert_eq!(spec, ESpec::BCPack { bcn: 4 });
+        assert_eq!(spec, ESpec::BCPack { bcn: Some(4) });
         assert_eq!(spec.to_string(), "c:{4}");
+
+        // BCn range boundaries
+        let spec = ESpec::parse("c:{1}").expect("Test operation should succeed");
+        assert_eq!(spec, ESpec::BCPack { bcn: Some(1) });
+        let spec = ESpec::parse("c:{7}").expect("Test operation should succeed");
+        assert_eq!(spec, ESpec::BCPack { bcn: Some(7) });
+
+        // BCn out of range
+        assert!(matches!(
+            ESpec::parse("c:{0}"),
+            Err(ESpecError::InvalidBcn(0))
+        ));
+        assert!(matches!(
+            ESpec::parse("c:{8}"),
+            Err(ESpecError::InvalidBcn(8))
+        ));
     }
 
     #[test]
     fn test_parse_gdeflate() {
+        // Bare gdeflate
+        let spec = ESpec::parse("g").expect("Test operation should succeed");
+        assert_eq!(spec, ESpec::GDeflate { level: None });
+        assert_eq!(spec.to_string(), "g");
+
+        // With level
         let spec = ESpec::parse("g:{5}").expect("Test operation should succeed");
-        assert_eq!(spec, ESpec::GDeflate { level: 5 });
+        assert_eq!(spec, ESpec::GDeflate { level: Some(5) });
         assert_eq!(spec.to_string(), "g:{5}");
+
+        // GDeflate level 12 is valid
+        let spec = ESpec::parse("g:{12}").expect("Test operation should succeed");
+        assert_eq!(spec, ESpec::GDeflate { level: Some(12) });
+
+        // GDeflate level 6
+        let spec = ESpec::parse("g:{6}").expect("Test operation should succeed");
+        assert_eq!(spec, ESpec::GDeflate { level: Some(6) });
+
+        // GDeflate level out of range
+        assert!(matches!(
+            ESpec::parse("g:{0}"),
+            Err(ESpecError::InvalidLevel(0))
+        ));
+        assert!(matches!(
+            ESpec::parse("g:{13}"),
+            Err(ESpecError::InvalidLevel(13))
+        ));
     }
 
     #[test]
@@ -525,10 +647,16 @@ mod tests {
             Err(ESpecError::InvalidLevel(10))
         ));
 
-        // Invalid window bits
+        // Invalid window bits (7 is too low)
         assert!(matches!(
-            ESpec::parse("z:{9,8}"),
-            Err(ESpecError::InvalidBits(8))
+            ESpec::parse("z:{9,7}"),
+            Err(ESpecError::InvalidBits(7))
+        ));
+
+        // Invalid window bits (16 is too high)
+        assert!(matches!(
+            ESpec::parse("z:{9,16}"),
+            Err(ESpecError::InvalidBits(16))
         ));
 
         // Trailing characters
@@ -546,10 +674,13 @@ mod tests {
             "z:5",
             "z:{9,15}",
             "z:{9,mpq}",
+            "z:{6,zlib,15}",
             "b:n",
             "b:{1M=z:9,*=n}",
             "b:{256K=n,512K*2=z:6,*=z:9}",
+            "c",
             "c:{4}",
+            "g",
             "g:{5}",
         ];
 
@@ -568,19 +699,23 @@ mod tests {
         assert!(
             ESpec::ZLib {
                 level: None,
-                bits: None
+                variant: None,
+                window_bits: None,
             }
             .is_compressed()
         );
-        assert!(ESpec::BCPack { bcn: 1 }.is_compressed());
-        assert!(ESpec::GDeflate { level: 5 }.is_compressed());
+        assert!(ESpec::BCPack { bcn: Some(1) }.is_compressed());
+        assert!(ESpec::BCPack { bcn: None }.is_compressed());
+        assert!(ESpec::GDeflate { level: Some(5) }.is_compressed());
+        assert!(ESpec::GDeflate { level: None }.is_compressed());
 
         // Test is_encrypted
         assert!(!ESpec::None.is_encrypted());
         assert!(
             !ESpec::ZLib {
                 level: Some(9),
-                bits: None
+                variant: None,
+                window_bits: None,
             }
             .is_encrypted()
         );
@@ -590,13 +725,17 @@ mod tests {
         assert_eq!(
             ESpec::ZLib {
                 level: None,
-                bits: None
+                variant: None,
+                window_bits: None,
             }
             .compression_type(),
             "zlib"
         );
-        assert_eq!(ESpec::BCPack { bcn: 4 }.compression_type(), "bcpack");
-        assert_eq!(ESpec::GDeflate { level: 5 }.compression_type(), "gdeflate");
+        assert_eq!(ESpec::BCPack { bcn: Some(4) }.compression_type(), "bcpack");
+        assert_eq!(
+            ESpec::GDeflate { level: Some(5) }.compression_type(),
+            "gdeflate"
+        );
     }
 
     #[test]
@@ -606,9 +745,14 @@ mod tests {
         assert!(ESpec::validate("z"));
         assert!(ESpec::validate("z:5"));
         assert!(ESpec::validate("z:{9,15}"));
+        assert!(ESpec::validate("z:{9,8}"));
+        assert!(ESpec::validate("z:{6,zlib,15}"));
         assert!(ESpec::validate("b:n"));
+        assert!(ESpec::validate("c"));
         assert!(ESpec::validate("c:{1}"));
+        assert!(ESpec::validate("g"));
         assert!(ESpec::validate("g:{5}"));
+        assert!(ESpec::validate("g:{12}"));
 
         // Invalid specs
         assert!(!ESpec::validate(""));
@@ -616,6 +760,10 @@ mod tests {
         assert!(!ESpec::validate("x"));
         assert!(!ESpec::validate("z:abc"));
         assert!(!ESpec::validate("z:10"));
+        assert!(!ESpec::validate("c:{0}"));
+        assert!(!ESpec::validate("c:{8}"));
+        assert!(!ESpec::validate("g:{0}"));
+        assert!(!ESpec::validate("g:{13}"));
     }
 
     #[test]
@@ -670,7 +818,8 @@ mod tests {
                     chunks[0].spec,
                     ESpec::ZLib {
                         level: None,
-                        bits: None
+                        variant: None,
+                        window_bits: None,
                     }
                 );
                 assert_eq!(chunks[1].spec, ESpec::None);
@@ -681,7 +830,7 @@ mod tests {
 
     #[test]
     fn test_wowdev_wiki_example_encrypted() {
-        // Example 3: Encrypted blocks (note: this has an invalid key in the wiki, we'll create a valid one)
+        // Example 3: Encrypted blocks
         let valid_encrypted = "b:{256K*=e:{0123456789ABCDEF,06FC152E,z}}";
         let spec = ESpec::parse(valid_encrypted).expect("Test operation should succeed");
         match spec {
@@ -701,7 +850,8 @@ mod tests {
                             **spec,
                             ESpec::ZLib {
                                 level: None,
-                                bits: None
+                                variant: None,
+                                window_bits: None,
                             }
                         );
                     }
@@ -725,7 +875,8 @@ mod tests {
                     chunks[1].spec,
                     ESpec::ZLib {
                         level: None,
-                        bits: None
+                        variant: None,
+                        window_bits: None,
                     }
                 );
                 assert_eq!(chunks[2].spec, ESpec::None);
@@ -734,7 +885,8 @@ mod tests {
                     chunks[6].spec,
                     ESpec::ZLib {
                         level: None,
-                        bits: None
+                        variant: None,
+                        window_bits: None,
                     }
                 );
             }
@@ -760,7 +912,8 @@ mod tests {
                     chunks[0].spec,
                     ESpec::ZLib {
                         level: Some(6),
-                        bits: Some(ZLibBits::MPQ)
+                        variant: Some(ZLibVariant::MPQ),
+                        window_bits: None,
                     }
                 );
             }

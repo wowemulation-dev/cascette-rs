@@ -13,12 +13,16 @@ pub enum ESpecError {
     UnknownType(char),
 
     /// Invalid compression level
-    #[error("Invalid compression level {0}, must be 1-9")]
+    #[error("Invalid compression level {0}")]
     InvalidLevel(u8),
 
     /// Invalid window bits
-    #[error("Invalid window bits {0}, must be 9-15")]
+    #[error("Invalid window bits {0}, must be 8-15")]
     InvalidBits(u8),
+
+    /// Invalid `BCPack` version number
+    #[error("Invalid BCPack version {0}, must be 1-7")]
+    InvalidBcn(u8),
 
     /// Invalid hex string
     #[error("Invalid hex string: {0}")]
@@ -59,8 +63,10 @@ pub enum ESpec {
     ZLib {
         /// Compression level (1-9)
         level: Option<u8>,
-        /// Window bits or special mode
-        bits: Option<ZLibBits>,
+        /// Compression variant (mpq, zlib, lz4hc)
+        variant: Option<ZLibVariant>,
+        /// Window bits (8-15)
+        window_bits: Option<u8>,
     },
 
     /// Encryption ('e')
@@ -81,14 +87,14 @@ pub enum ESpec {
 
     /// `BCPack` compression ('c')
     BCPack {
-        /// `BCPack` version number
-        bcn: u8,
+        /// `BCPack` version number (1-7), None for default
+        bcn: Option<u8>,
     },
 
     /// `GDeflate` compression ('g')
     GDeflate {
-        /// Compression level
-        level: u8,
+        /// Compression level (1-12), None for default
+        level: Option<u8>,
     },
 }
 
@@ -110,11 +116,9 @@ pub struct BlockSizeSpec {
     pub count: Option<u32>,
 }
 
-/// `ZLib` compression bits specification
+/// `ZLib` compression variant
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ZLibBits {
-    /// Numeric window bits (9-15)
-    Bits(u8),
+pub enum ZLibVariant {
     /// MPQ compression mode
     MPQ,
     /// Standard `ZLib` mode
@@ -173,13 +177,21 @@ impl fmt::Display for ESpec {
         match self {
             Self::None => write!(f, "n"),
 
-            Self::ZLib { level, bits } => {
+            Self::ZLib {
+                level,
+                variant,
+                window_bits,
+            } => {
                 write!(f, "z")?;
-                match (level, bits) {
-                    (None, None) => Ok(()),
-                    (Some(l), None) => write!(f, ":{l}"),
-                    (Some(l), Some(b)) => write!(f, ":{{{l},{b}}}"),
-                    (None, Some(b)) => write!(f, ":{{{b}}}"),
+                match (level, variant, window_bits) {
+                    (None, None, None) => Ok(()),
+                    (Some(l), None, None) => write!(f, ":{l}"),
+                    (Some(l), Some(v), None) => write!(f, ":{{{l},{v}}}"),
+                    (Some(l), None, Some(wb)) => write!(f, ":{{{l},{wb}}}"),
+                    (Some(l), Some(v), Some(wb)) => write!(f, ":{{{l},{v},{wb}}}"),
+                    (None, Some(v), None) => write!(f, ":{{{v}}}"),
+                    (None, Some(v), Some(wb)) => write!(f, ":{{{v},{wb}}}"),
+                    (None, None, Some(wb)) => write!(f, ":{{{wb}}}"),
                 }
             }
 
@@ -209,9 +221,15 @@ impl fmt::Display for ESpec {
                 }
             }
 
-            Self::BCPack { bcn } => write!(f, "c:{{{bcn}}}"),
+            Self::BCPack { bcn } => match bcn {
+                Some(n) => write!(f, "c:{{{n}}}"),
+                None => write!(f, "c"),
+            },
 
-            Self::GDeflate { level } => write!(f, "g:{{{level}}}"),
+            Self::GDeflate { level } => match level {
+                Some(l) => write!(f, "g:{{{l}}}"),
+                None => write!(f, "g"),
+            },
         }
     }
 }
@@ -240,10 +258,9 @@ impl fmt::Display for BlockSizeSpec {
     }
 }
 
-impl fmt::Display for ZLibBits {
+impl fmt::Display for ZLibVariant {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Bits(n) => write!(f, "{n}"),
             Self::MPQ => write!(f, "mpq"),
             Self::ZLib => write!(f, "zlib"),
             Self::LZ4HC => write!(f, "lz4hc"),

@@ -19,7 +19,7 @@
 //! ## Basic Compression
 //!
 //! ```
-//! use cascette_formats::espec::{ESpec, ZLibBits};
+//! use cascette_formats::espec::{ESpec, ZLibVariant};
 //!
 //! // No compression
 //! let spec = ESpec::parse("n").expect("Test operation should succeed");
@@ -32,6 +32,10 @@
 //! // ZLib with specific level and window bits
 //! let spec = ESpec::parse("z:{9,15}").expect("Test operation should succeed");
 //! assert_eq!(spec.to_string(), "z:{9,15}");
+//!
+//! // ZLib with variant and window bits (3-param syntax)
+//! let spec = ESpec::parse("z:{6,zlib,15}").expect("Test operation should succeed");
+//! assert_eq!(spec.to_string(), "z:{6,zlib,15}");
 //!
 //! // MPQ compatibility mode
 //! let spec = ESpec::parse("z:{6,mpq}").expect("Test operation should succeed");
@@ -59,7 +63,7 @@
 //! ## Building Programmatically
 //!
 //! ```
-//! use cascette_formats::espec::{ESpec, ZLibBits, BlockChunk, BlockSizeSpec};
+//! use cascette_formats::espec::{ESpec, ZLibVariant, BlockChunk, BlockSizeSpec};
 //!
 //! // Build a complex block table
 //! let spec = ESpec::BlockTable {
@@ -72,12 +76,13 @@
 //!             }),
 //!             spec: ESpec::None,
 //!         },
-//!         // Remainder with maximum compression
+//!         // Remainder with maximum compression and window bits
 //!         BlockChunk {
 //!             size_spec: None,
 //!             spec: ESpec::ZLib {
 //!                 level: Some(9),
-//!                 bits: Some(ZLibBits::Bits(15)),
+//!                 variant: None,
+//!                 window_bits: Some(15),
 //!             },
 //!         },
 //!     ],
@@ -103,7 +108,7 @@ mod parser;
 mod types;
 
 pub use parser::Parser;
-pub use types::{BlockChunk, BlockSizeSpec, ESpec, ZLibBits};
+pub use types::{BlockChunk, BlockSizeSpec, ESpec, ZLibVariant};
 
 // Re-export the main parse function
 pub use types::parse;

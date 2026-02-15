@@ -624,28 +624,20 @@ fn parse_zlib(input: &str) -> IResult<&str, ESpec> {
 
 ### Rust Implementation (cascette-formats)
 
-Complete ESpec parser with full specification support:
+ESpec parser matching Agent.exe (TACT 3.13.3) behavior:
 
-- **Plain (n)** - Uncompressed content (complete)
-
-- **ZLib compression (z)** - With level and variant support (complete)
-
-- **Encryption (e)** - Key, IV, and content encoding (complete)
-
-- **Block-based (b)** - Variable and fixed block specifications (complete)
-
-- **BCPack (c)** - Proprietary compression support (complete)
-
-- **GDeflate (g)** - Google Deflate implementation (complete)
+- **Plain (n)** - Uncompressed content
+- **ZLib compression (z)** - Level [1,9], variant (mpq/zlib/lz4hc), window bits [8,15]; all optional, 3-param syntax supported
+- **Encryption (e)** - Key, IV, and nested content encoding
+- **Block-based (b)** - Variable and fixed block specifications
+- **BCPack (c)** - Optional BCn version [1,7]; bare `c` accepted
+- **GDeflate (g)** - Optional level [1,12]; bare `g` accepted
 
 **Parser Features:**
 
 - Safe integer casting with `try_from` to prevent truncation
-
 - Display trait implementation for round-trip string conversion
-
-- Comprehensive test suite with 6 production ESpec patterns
-
+- Test suite covering production ESpec patterns and agent-verified edge cases
 - Integration with BLTE and Encoding file processing
 
 ### Analysis and Validation
