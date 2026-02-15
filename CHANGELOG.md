@@ -10,6 +10,14 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- cascette-formats: Size manifest format parser and builder
+  - Version 1 and 2 support with `SizeManifest`, `SizeManifestHeader`,
+    `SizeManifestEntry` types
+  - Round-trip binary parsing and building via binrw
+  - Version 2 adds 40-bit total size field per entry
+  - Checksum verification using truncated MD5
+  - docs: Added Size manifest documentation (`formats/size-manifest.md`)
+
 - cascette-ribbit crate: Ribbit protocol server
   - HTTP server (axum) with `/{product}/versions`, `/{product}/cdns`,
     `/{product}/bgdl` endpoints
@@ -44,6 +52,12 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Breaking**: cascette-formats ESpec type model updated to match TACT behavior
+  - Renamed `ZLibBits` to `ZLibVariant`, removed `Bits(u8)` variant
+  - `ESpec::ZLib` fields changed from `bits: Option<ZLibBits>` to
+    `variant: Option<ZLibVariant>` and `window_bits: Option<u8>`
+  - `ESpec::BCPack::bcn` changed from `u8` to `Option<u8>` (bare `c` accepted)
+  - `ESpec::GDeflate::level` changed from `u8` to `Option<u8>` (bare `g` accepted)
 - axum-server uses `tls-rustls-no-provider` feature instead of `tls-rustls` to
   avoid pulling in aws-lc-rs/aws-lc-sys native C dependencies
 - tokio-rustls uses `default-features = false` with `ring` feature to avoid
@@ -94,6 +108,13 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- cascette-formats: ESpec parser gaps fixed to match TACT behavior
+  - GDeflate level range corrected from [1,9] to [1,12]
+  - Window bits minimum lowered from 9 to 8
+  - BCPack BCn range validation added ([1,7])
+  - Added `InvalidBcn(u8)` error variant
+  - ZLib 3-parameter syntax supported (`z:{level,variant,window_bits}`)
+- docs: Removed binary verification sections from 13 documentation files
 - cascette-formats: Corrected download manifest binary layout documentation
   - All versions use entries-then-tags order (not tags-then-entries for V2+)
   - Removed incorrect version-specific layout branching in parser/builder
