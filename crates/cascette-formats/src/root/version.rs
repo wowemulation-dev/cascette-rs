@@ -59,8 +59,7 @@ impl RootVersion {
             // Classic V2 header:
             // - value1 = total_files (typically thousands+)
             // - value2 = named_files
-            let looks_like_extended_header =
-                (16..100).contains(&value1) && value2 < 10 && value2 < value1;
+            let looks_like_extended_header = (16..100).contains(&value1) && matches!(value2, 2..=4);
 
             if looks_like_extended_header {
                 // Extended header structure - version_field determines parsing format
@@ -290,5 +289,42 @@ mod tests {
 
         assert_eq!(RootVersion::from_u32(0), None);
         assert_eq!(RootVersion::from_u32(5), None);
+    }
+
+    #[test]
+    fn test_detect_v2_small_file_count_not_misidentified() {
+        // A V2 root file with total_files=42 and named_files=5 should NOT be
+        // misidentified as V3+. The old heuristic (value2 < 10) would match
+        // this as an extended header.
+        let data = vec![
+            b'M', b'F', b'S', b'T', // magic
+            0x00, 0x00, 0x00, 0x2A, // total_files = 42 (big-endian)
+            0x00, 0x00, 0x00, 0x05, // named_files = 5 (big-endian)
+        ];
+
+        let mut cursor = Cursor::new(&data);
+        let version = RootVersion::detect(&mut cursor).expect("Test operation should succeed");
+        assert_eq!(
+            version,
+            RootVersion::V2,
+            "V2 file with small total_files=42 and named_files=5 should be detected as V2"
+        );
+    }
+
+    #[test]
+    fn test_detect_v3_extended_header() {
+        // V3 with header_size=20 and version=3 should be detected as V3
+        let data = vec![
+            b'M', b'F', b'S', b'T', // magic
+            0x00, 0x00, 0x00, 0x14, // header_size = 20 (big-endian)
+            0x00, 0x00, 0x00, 0x03, // version = 3 (big-endian)
+            0x00, 0x01, 0x00, 0x00, // total_files
+            0x00, 0x00, 0x80, 0x00, // named_files
+            0x00, 0x00, 0x00, 0x00, // padding
+        ];
+
+        let mut cursor = Cursor::new(&data);
+        let version = RootVersion::detect(&mut cursor).expect("Test operation should succeed");
+        assert_eq!(version, RootVersion::V3);
     }
 }

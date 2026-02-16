@@ -135,13 +135,19 @@ impl EncodingFile {
                             break; // Not enough space for another entry
                         }
                         // If we have space but still failed, it might be padding
-                        // Check if we're hitting all-zero padding
+                        // Check for both sentinel patterns:
+                        // 1. espec_index == 0xFFFFFFFF (Agent.exe sentinel)
+                        // 2. all-zero key + espec_index == 0 (zero-fill padding)
                         page_cursor.set_position(pos_before);
-                        let mut check_bytes = [0u8; 16];
-                        if page_cursor.read_exact(&mut check_bytes).is_ok()
-                            && check_bytes.iter().all(|&b| b == 0x00)
-                        {
-                            break; // Hit padding
+                        let mut check_bytes = [0u8; 20]; // 16 key + 4 espec_index
+                        if page_cursor.read_exact(&mut check_bytes).is_ok() {
+                            let espec_bytes: [u8; 4] =
+                                check_bytes[16..20].try_into().unwrap_or([0; 4]);
+                            let espec_val = u32::from_be_bytes(espec_bytes);
+                            let key_all_zero = check_bytes[..16].iter().all(|&b| b == 0x00);
+                            if espec_val == 0xFFFF_FFFF || (espec_val == 0 && key_all_zero) {
+                                break; // Hit padding
+                            }
                         }
                         // Reset and break on any other error
                         page_cursor.set_position(pos_before);

@@ -10,15 +10,17 @@ use binrw::{BinRead, BinWrite};
 use cascette_crypto::md5::{ContentKey, FileDataId};
 use std::io::{Read, Seek, Write};
 
-/// Block header containing metadata for file entries (Version 1 format - 12 bytes)
-/// Note: Blocks use little-endian encoding (unlike headers which use big-endian)
-#[derive(BinRead, BinWrite, Debug, Clone, PartialEq, Eq)]
-#[brw(little)]
+/// Block header containing metadata for file entries
+///
+/// Stores parsed header data for all root versions. The `content_flags` field
+/// is `u64` to hold V4's 40-bit content flags without truncation.
+/// V1 on-disk format is 12 bytes: `num_records(4) + content_flags(4) + locale_flags(4)`.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RootBlockHeader {
     /// Number of file records in this block
     pub num_records: u32,
-    /// Content flags for all files in this block
-    pub content_flags: u32, // Will be converted to ContentFlags
+    /// Content flags for all files in this block (up to 40 bits for V4)
+    pub content_flags: u64,
     /// Locale flags for all files in this block
     pub locale_flags: LocaleFlags,
 }
@@ -40,6 +42,43 @@ pub struct RootBlockHeaderV2 {
     pub unk3: u8,
 }
 
+impl BinRead for RootBlockHeader {
+    type Args<'a> = ();
+
+    fn read_options<R: Read + Seek>(
+        reader: &mut R,
+        _endian: binrw::Endian,
+        _args: Self::Args<'_>,
+    ) -> binrw::BinResult<Self> {
+        let num_records = u32::read_le(reader)?;
+        let content_flags = u64::from(u32::read_le(reader)?);
+        let locale_flags = LocaleFlags::read_le(reader)?;
+        Ok(Self {
+            num_records,
+            content_flags,
+            locale_flags,
+        })
+    }
+}
+
+impl BinWrite for RootBlockHeader {
+    type Args<'a> = ();
+
+    fn write_options<W: Write + Seek>(
+        &self,
+        writer: &mut W,
+        _endian: binrw::Endian,
+        _args: Self::Args<'_>,
+    ) -> binrw::BinResult<()> {
+        #[allow(clippy::cast_possible_truncation)]
+        let content_flags_u32 = (self.content_flags & 0xFFFF_FFFF) as u32;
+        self.num_records.write_le(writer)?;
+        content_flags_u32.write_le(writer)?;
+        self.locale_flags.write_le(writer)?;
+        Ok(())
+    }
+}
+
 /// Complete root block with header and file records
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RootBlock {
@@ -55,7 +94,7 @@ impl RootBlock {
         Self {
             header: RootBlockHeader {
                 num_records: 0,
-                content_flags: (content_flags.value & 0xFFFF_FFFF) as u32,
+                content_flags: content_flags.value,
                 locale_flags,
             },
             records: Vec::new(),
@@ -75,7 +114,7 @@ impl RootBlock {
 
     /// Get content flags as `ContentFlags`
     pub fn content_flags(&self) -> ContentFlags {
-        ContentFlags::new(u64::from(self.header.content_flags))
+        ContentFlags::new(self.header.content_flags)
     }
 
     /// Get locale flags
@@ -120,18 +159,15 @@ impl RootBlock {
                 let count = header.num_records as usize;
                 parse_v1_block(reader, header, count)
             }
-            // V2/V3/V4 (with MFST/TSFM header): 17-byte block header, separated format
-            // Per wowdev.wiki: Version 2 block header has locale_flags first, then content_flags,
-            // plus unk2 and unk3 fields (total 17 bytes vs 12 bytes)
-            RootVersion::V2 | RootVersion::V3 | RootVersion::V4 => {
+            // V2/V3 (with MFST/TSFM header): 17-byte block header, separated format
+            RootVersion::V2 | RootVersion::V3 => {
                 let header_v2 = RootBlockHeaderV2::read_le(reader)?;
 
                 // Sanity check - detect garbage data
                 if header_v2.num_records == 0 || header_v2.num_records > 1_000_000 {
-                    // Convert to V1 header format for storage
                     let header = RootBlockHeader {
                         num_records: header_v2.num_records,
-                        content_flags: header_v2.content_flags,
+                        content_flags: u64::from(header_v2.content_flags),
                         locale_flags: header_v2.locale_flags,
                     };
                     return Ok(Self {
@@ -143,11 +179,41 @@ impl RootBlock {
                 let count = header_v2.num_records as usize;
                 let content_flags = ContentFlags::new(u64::from(header_v2.content_flags));
 
-                // Convert V2 header to standard header format for storage
                 let header = RootBlockHeader {
                     num_records: header_v2.num_records,
-                    content_flags: header_v2.content_flags,
+                    content_flags: u64::from(header_v2.content_flags),
                     locale_flags: header_v2.locale_flags,
+                };
+
+                parse_v2_block(reader, header, count, content_flags)
+            }
+            // V4: 18-byte block header with 40-bit (5-byte) content flags
+            RootVersion::V4 => {
+                let num_records = u32::read_le(reader)?;
+                let locale_flags = LocaleFlags::read_le(reader)?;
+                let content_flags = ContentFlags::read_v4(reader)?;
+                let _unk2 = u32::read_le(reader)?;
+                let _unk3 = u8::read_le(reader)?;
+
+                // Sanity check - detect garbage data
+                if num_records == 0 || num_records > 1_000_000 {
+                    let header = RootBlockHeader {
+                        num_records,
+                        content_flags: content_flags.value,
+                        locale_flags,
+                    };
+                    return Ok(Self {
+                        header,
+                        records: Vec::new(),
+                    });
+                }
+
+                let count = num_records as usize;
+
+                let header = RootBlockHeader {
+                    num_records,
+                    content_flags: content_flags.value,
+                    locale_flags,
                 };
 
                 parse_v2_block(reader, header, count, content_flags)
@@ -170,17 +236,28 @@ impl RootBlock {
                     write_v1_block(writer, &self.records)?;
                 }
             }
-            // V2/V3/V4 (MFST header): 17-byte header + separated format
-            RootVersion::V2 | RootVersion::V3 | RootVersion::V4 => {
-                // Write V2 header format (17 bytes)
+            // V2/V3 (MFST header): 17-byte header + separated format
+            RootVersion::V2 | RootVersion::V3 => {
+                #[allow(clippy::cast_possible_truncation)]
                 let header_v2 = RootBlockHeaderV2 {
                     num_records: self.header.num_records,
                     locale_flags: self.header.locale_flags,
-                    content_flags: self.header.content_flags,
+                    content_flags: (self.header.content_flags & 0xFFFF_FFFF) as u32,
                     unk2: 0,
                     unk3: 0,
                 };
                 header_v2.write_le(writer)?;
+                if !self.records.is_empty() {
+                    write_v2_v3_block(writer, &self.records, self.content_flags())?;
+                }
+            }
+            // V4: 18-byte header with 40-bit content flags + separated format
+            RootVersion::V4 => {
+                self.header.num_records.write_le(writer)?;
+                self.header.locale_flags.write_le(writer)?;
+                ContentFlags::new(self.header.content_flags).write_v4(writer)?;
+                0u32.write_le(writer)?; // unk2
+                0u8.write_le(writer)?; // unk3
                 if !self.records.is_empty() {
                     write_v2_v3_block(writer, &self.records, self.content_flags())?;
                 }
@@ -197,10 +274,12 @@ impl RootBlock {
     /// Calculate block size in bytes for given version
     pub fn calculate_size(&self, version: RootVersion, has_named_files: bool) -> usize {
         // V1: 12-byte header (num_records + content_flags + locale_flags)
-        // V2+: 17-byte header (num_records + locale_flags + content_flags + unk2 + unk3)
+        // V2/V3: 17-byte header (num_records + locale_flags + content_flags(4) + unk2 + unk3)
+        // V4: 18-byte header (num_records + locale_flags + content_flags(5) + unk2 + unk3)
         let header_size = match version {
             RootVersion::V1 => 12,
-            RootVersion::V2 | RootVersion::V3 | RootVersion::V4 => 17,
+            RootVersion::V2 | RootVersion::V3 => 17,
+            RootVersion::V4 => 18,
         };
 
         let count = self.records.len();
@@ -591,6 +670,35 @@ mod tests {
         let restored =
             RootBlock::parse(&mut cursor, RootVersion::V4, true).expect("Operation should succeed");
 
+        assert_eq!(block, restored);
+    }
+
+    #[test]
+    fn test_v4_block_round_trip_extended_content_flags() {
+        // V4 supports 40-bit content flags -- verify bits above 31 survive round-trip
+        let flags_with_high_bits = ContentFlags::new(0xAB_0000_8004); // bit 39, 33, plus INSTALL
+        let mut block = RootBlock::new(flags_with_high_bits, LocaleFlags::new(LocaleFlags::ENUS));
+
+        for record in create_test_records() {
+            block.add_record(record);
+        }
+
+        let mut buffer = Vec::new();
+        let mut cursor = Cursor::new(&mut buffer);
+        block
+            .write(&mut cursor, RootVersion::V4, true)
+            .expect("Operation should succeed");
+
+        let mut cursor = Cursor::new(&buffer);
+        let restored =
+            RootBlock::parse(&mut cursor, RootVersion::V4, true).expect("Operation should succeed");
+
+        // The 40-bit content flags should survive the round-trip
+        assert_eq!(
+            restored.content_flags().value,
+            0xAB_0000_8004,
+            "V4 40-bit content flags should round-trip without truncation"
+        );
         assert_eq!(block, restored);
     }
 
