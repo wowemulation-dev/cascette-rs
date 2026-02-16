@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1771262284874,
+  "lastUpdate": 1771264814456,
   "repoUrl": "https://github.com/wowemulation-dev/cascette-rs",
   "entries": {
     "Benchmark": [
@@ -419,6 +419,48 @@ window.BENCHMARK_DATA = {
             "name": "bpsv_generation/summary/all",
             "value": 207,
             "range": "± 1",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "daniel@kogito.network",
+            "name": "Daniel S. Reichenbach",
+            "username": "danielsreichenbach"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "21261da64c1f4ce6d066a5a0253e9012d02487f8",
+          "message": "Merge pull request #34 from wowemulation-dev/fix/tvfs-and-root-issues\n\nfix: correct TVFS and root file format issues",
+          "timestamp": "2026-02-17T00:58:18+07:00",
+          "tree_id": "589fd7a3f355e115324e6d92e4b7a05282edf206",
+          "url": "https://github.com/wowemulation-dev/cascette-rs/commit/21261da64c1f4ce6d066a5a0253e9012d02487f8"
+        },
+        "date": 1771264813557,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "bpsv_generation/versions/wow",
+            "value": 1628,
+            "range": "± 5",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "bpsv_generation/cdns/wow",
+            "value": 1206,
+            "range": "± 31",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "bpsv_generation/summary/all",
+            "value": 203,
+            "range": "± 2",
             "unit": "ns/iter"
           }
         ]
