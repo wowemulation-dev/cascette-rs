@@ -27,6 +27,13 @@ pub struct VfsEntry {
     pub flags: u16,
 }
 
+/// On-disk size of a VFS entry: u32 + u32 + u64 + u32 + u16 = 22 bytes.
+/// This differs from `size_of::<VfsEntry>()` (24 bytes) due to alignment padding.
+const VFS_ENTRY_DISK_SIZE: usize = 22;
+
+// Compile-time sanity check: disk size must not exceed the in-memory size.
+const _: () = assert!(VFS_ENTRY_DISK_SIZE <= std::mem::size_of::<VfsEntry>());
+
 // VFS entry flags
 const VFS_FLAG_DIRECTORY: u16 = 0x8000;
 const VFS_FLAG_COMPRESSED: u16 = 0x4000;
@@ -40,7 +47,7 @@ impl BinRead for VfsTable {
         args: Self::Args<'_>,
     ) -> BinResult<Self> {
         let table_size = args.0;
-        let entry_size = std::mem::size_of::<VfsEntry>();
+        let entry_size = VFS_ENTRY_DISK_SIZE;
         let entry_count = table_size as usize / entry_size;
 
         let mut entries = Vec::with_capacity(entry_count);
@@ -94,7 +101,7 @@ impl VfsTable {
 
     /// Get total table size in bytes
     pub fn table_size(&self) -> u32 {
-        (self.entries.len() * std::mem::size_of::<VfsEntry>()) as u32
+        (self.entries.len() * VFS_ENTRY_DISK_SIZE) as u32
     }
 }
 

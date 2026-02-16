@@ -8,6 +8,7 @@ use crate::tvfs::{
     error::TvfsResult,
     header::{TVFS_FLAG_INCLUDE_CKEY, TvfsHeader},
     path_table::{PathNode, PathTable},
+    utils::varint_size,
     vfs_table::{VfsEntry, VfsTable},
 };
 
@@ -255,7 +256,7 @@ impl TvfsBuilder {
         header
     }
 
-    /// Calculate path table size (approximation)
+    /// Calculate path table size
     fn calculate_path_table_size(&self, path_table: &PathTable) -> u32 {
         let mut size = 0usize;
 
@@ -266,11 +267,15 @@ impl TvfsBuilder {
 
             if !node.children.is_empty() {
                 size += 1; // child count
-                size += node.children.len() * 5; // Approximate varint size
+                size += node
+                    .children
+                    .iter()
+                    .map(|&idx| varint_size(idx))
+                    .sum::<usize>();
             }
 
-            if node.file_id.is_some() {
-                size += 5; // Approximate varint size
+            if let Some(fid) = node.file_id {
+                size += varint_size(fid);
             }
         }
 

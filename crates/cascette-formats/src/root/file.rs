@@ -72,11 +72,11 @@ impl RootFile {
             // Try to parse next block
             match RootBlock::parse(reader, version, has_named_files) {
                 Ok(block) => {
-                    if block.num_records() == 0 {
-                        // Empty block, we've reached the end
-                        break;
+                    // Skip empty blocks -- they can appear between valid blocks.
+                    // EOF termination is handled by the position check above.
+                    if block.num_records() > 0 {
+                        blocks.push(block);
                     }
-                    blocks.push(block);
                 }
                 Err(e) => {
                     // If we haven't parsed any blocks yet, this is a real error

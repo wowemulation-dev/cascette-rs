@@ -8,11 +8,15 @@ use std::io::{Read, Seek, Write};
 pub enum RootHeader {
     /// Version 2 header with `MFST` or `TSFM` magic
     V2 {
+        /// Header magic (determines field endianness)
+        magic: RootMagic,
         /// File counts and structure info
         info: RootHeaderInfo,
     },
     /// Version 3/4 header with extended structure
     V3V4 {
+        /// Header magic (determines field endianness)
+        magic: RootMagic,
         /// Header size in bytes
         header_size: u32,
         /// Version number (3 or 4)
@@ -58,10 +62,17 @@ impl RootHeaderInfo {
         })
     }
 
-    /// Write header info with big-endian (standard MFST format)
+    /// Write header info with big-endian (MFST format)
     pub fn write_be<W: Write>(&self, writer: &mut W) -> Result<()> {
         writer.write_all(&self.total_files.to_be_bytes())?;
         writer.write_all(&self.named_files.to_be_bytes())?;
+        Ok(())
+    }
+
+    /// Write header info with little-endian (TSFM format)
+    pub fn write_le<W: Write>(&self, writer: &mut W) -> Result<()> {
+        writer.write_all(&self.total_files.to_le_bytes())?;
+        writer.write_all(&self.named_files.to_le_bytes())?;
         Ok(())
     }
 }
@@ -69,9 +80,9 @@ impl RootHeaderInfo {
 /// Magic signatures for root file headers
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RootMagic {
-    /// Standard `MFST` magic
+    /// Standard `MFST` magic (big-endian header fields)
     Mfst,
-    /// Alternative `TSFM` magic (byte-swapped `MFST`)
+    /// Alternative `TSFM` magic (little-endian header fields)
     Tsfm,
 }
 
@@ -97,12 +108,18 @@ impl RootMagic {
             _ => None,
         }
     }
+
+    /// Whether this magic indicates little-endian header fields
+    pub const fn is_little_endian(self) -> bool {
+        matches!(self, Self::Tsfm)
+    }
 }
 
 impl RootHeader {
-    /// Create V2 header
+    /// Create V2 header (defaults to MFST/big-endian)
     pub fn new_v2(total_files: u32, named_files: u32) -> Self {
         Self::V2 {
+            magic: RootMagic::Mfst,
             info: RootHeaderInfo {
                 total_files,
                 named_files,
@@ -110,9 +127,10 @@ impl RootHeader {
         }
     }
 
-    /// Create V3/V4 header
+    /// Create V3/V4 header (defaults to MFST/big-endian)
     pub fn new_v3v4(version: u32, total_files: u32, named_files: u32) -> Self {
         Self::V3V4 {
+            magic: RootMagic::Mfst,
             header_size: 20, // Standard size
             version,
             info: RootHeaderInfo {
@@ -123,17 +141,24 @@ impl RootHeader {
         }
     }
 
+    /// Get the header magic
+    pub const fn magic(&self) -> RootMagic {
+        match self {
+            Self::V2 { magic, .. } | Self::V3V4 { magic, .. } => *magic,
+        }
+    }
+
     /// Get total files count
     pub const fn total_files(&self) -> u32 {
         match self {
-            Self::V2 { info } | Self::V3V4 { info, .. } => info.total_files,
+            Self::V2 { info, .. } | Self::V3V4 { info, .. } => info.total_files,
         }
     }
 
     /// Get named files count
     pub const fn named_files(&self) -> u32 {
         match self {
-            Self::V2 { info } | Self::V3V4 { info, .. } => info.named_files,
+            Self::V2 { info, .. } | Self::V3V4 { info, .. } => info.named_files,
         }
     }
 
@@ -172,7 +197,12 @@ impl RootHeader {
         reader.read_exact(&mut magic_bytes)?;
 
         // TSFM magic means little-endian, MFST means big-endian
-        let is_little_endian = magic_bytes == RootMagic::TSFM_BYTES;
+        let magic = if magic_bytes == RootMagic::TSFM_BYTES {
+            RootMagic::Tsfm
+        } else {
+            RootMagic::Mfst
+        };
+        let is_little_endian = magic.is_little_endian();
 
         // Read first two u32 values to detect header format
         let mut buf = [0u8; 4];
@@ -212,6 +242,7 @@ impl RootHeader {
             };
 
             Ok(Self::V3V4 {
+                magic,
                 header_size,
                 version: version_field,
                 info,
@@ -220,6 +251,7 @@ impl RootHeader {
         } else {
             // Classic V2 header: value1=total_files, value2=named_files
             Ok(Self::V2 {
+                magic,
                 info: RootHeaderInfo {
                     total_files: value1,
                     named_files: value2,
@@ -228,29 +260,36 @@ impl RootHeader {
         }
     }
 
-    /// Write header to writer
+    /// Write header to writer, preserving the original magic and endianness
     pub fn write<W: Write + Seek>(&self, writer: &mut W) -> Result<()> {
         match self {
-            Self::V2 { info } => {
-                // Write magic
-                writer.write_all(&RootMagic::MFST_BYTES)?;
-                // Write header info
-                info.write_be(writer)?;
+            Self::V2 { magic, info } => {
+                writer.write_all(&magic.to_bytes())?;
+                if magic.is_little_endian() {
+                    info.write_le(writer)?;
+                } else {
+                    info.write_be(writer)?;
+                }
             }
             Self::V3V4 {
+                magic,
                 header_size,
                 version,
                 info,
                 padding,
             } => {
-                // Write magic
-                writer.write_all(&RootMagic::MFST_BYTES)?;
-                // Write extended header
-                writer.write_all(&header_size.to_be_bytes())?;
-                writer.write_all(&version.to_be_bytes())?;
-                writer.write_all(&info.total_files.to_be_bytes())?;
-                writer.write_all(&info.named_files.to_be_bytes())?;
-                writer.write_all(&padding.to_be_bytes())?;
+                writer.write_all(&magic.to_bytes())?;
+                if magic.is_little_endian() {
+                    writer.write_all(&header_size.to_le_bytes())?;
+                    writer.write_all(&version.to_le_bytes())?;
+                    info.write_le(writer)?;
+                    writer.write_all(&padding.to_le_bytes())?;
+                } else {
+                    writer.write_all(&header_size.to_be_bytes())?;
+                    writer.write_all(&version.to_be_bytes())?;
+                    info.write_be(writer)?;
+                    writer.write_all(&padding.to_be_bytes())?;
+                }
             }
         }
 
@@ -272,10 +311,13 @@ mod tests {
         assert_eq!(RootMagic::from_bytes(*b"MFST"), Some(RootMagic::Mfst));
         assert_eq!(RootMagic::from_bytes(*b"TSFM"), Some(RootMagic::Tsfm));
         assert_eq!(RootMagic::from_bytes(*b"XXXX"), None);
+
+        assert!(!RootMagic::Mfst.is_little_endian());
+        assert!(RootMagic::Tsfm.is_little_endian());
     }
 
     #[test]
-    fn test_header_info_round_trip() {
+    fn test_header_info_round_trip_be() {
         let original = RootHeaderInfo {
             total_files: 123_456,
             named_files: 78_901,
@@ -288,9 +330,28 @@ mod tests {
             .expect("Test operation should succeed");
 
         let mut cursor = Cursor::new(&buffer);
-        // Read as big-endian (is_little_endian = false)
         let restored =
             RootHeaderInfo::read(&mut cursor, false).expect("Test operation should succeed");
+
+        assert_eq!(original, restored);
+    }
+
+    #[test]
+    fn test_header_info_round_trip_le() {
+        let original = RootHeaderInfo {
+            total_files: 123_456,
+            named_files: 78_901,
+        };
+
+        let mut buffer = Vec::new();
+        let mut cursor = Cursor::new(&mut buffer);
+        original
+            .write_le(&mut cursor)
+            .expect("Test operation should succeed");
+
+        let mut cursor = Cursor::new(&buffer);
+        let restored =
+            RootHeaderInfo::read(&mut cursor, true).expect("Test operation should succeed");
 
         assert_eq!(original, restored);
     }
@@ -317,6 +378,35 @@ mod tests {
         assert_eq!(restored.total_files(), 123_456);
         assert_eq!(restored.named_files(), 78_901);
         assert_eq!(restored.version(), RootVersion::V2);
+        assert_eq!(restored.magic(), RootMagic::Mfst);
+    }
+
+    #[test]
+    fn test_v2_tsfm_round_trip() {
+        let header = RootHeader::V2 {
+            magic: RootMagic::Tsfm,
+            info: RootHeaderInfo {
+                total_files: 123_456,
+                named_files: 78_901,
+            },
+        };
+
+        let mut buffer = Vec::new();
+        let mut cursor = Cursor::new(&mut buffer);
+        header
+            .write(&mut cursor)
+            .expect("Test operation should succeed");
+
+        assert_eq!(&buffer[0..4], b"TSFM");
+
+        let mut cursor = Cursor::new(&buffer);
+        let restored =
+            RootHeader::read(&mut cursor, RootVersion::V2).expect("Test operation should succeed");
+
+        assert_eq!(header, restored);
+        assert_eq!(restored.magic(), RootMagic::Tsfm);
+        assert_eq!(restored.total_files(), 123_456);
+        assert_eq!(restored.named_files(), 78_901);
     }
 
     #[test]
@@ -341,6 +431,37 @@ mod tests {
         assert_eq!(restored.total_files(), 123_456);
         assert_eq!(restored.named_files(), 78_901);
         assert_eq!(restored.version(), RootVersion::V3);
+    }
+
+    #[test]
+    fn test_v3v4_tsfm_round_trip() {
+        let header = RootHeader::V3V4 {
+            magic: RootMagic::Tsfm,
+            header_size: 20,
+            version: 3,
+            info: RootHeaderInfo {
+                total_files: 123_456,
+                named_files: 78_901,
+            },
+            padding: 0,
+        };
+
+        let mut buffer = Vec::new();
+        let mut cursor = Cursor::new(&mut buffer);
+        header
+            .write(&mut cursor)
+            .expect("Test operation should succeed");
+
+        assert_eq!(&buffer[0..4], b"TSFM");
+
+        let mut cursor = Cursor::new(&buffer);
+        let restored =
+            RootHeader::read(&mut cursor, RootVersion::V3).expect("Test operation should succeed");
+
+        assert_eq!(header, restored);
+        assert_eq!(restored.magic(), RootMagic::Tsfm);
+        assert_eq!(restored.total_files(), 123_456);
+        assert_eq!(restored.named_files(), 78_901);
     }
 
     #[test]

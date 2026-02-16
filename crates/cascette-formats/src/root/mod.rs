@@ -1,7 +1,12 @@
 //! Root file format support for NGDP/CASC systems
 //!
-//! This module provides complete parsing and building support for CASC root files
-//! across all four format versions (V1-V4) used throughout World of Warcraft's history.
+//! This module provides parsing and building support for the World of Warcraft
+//! root file format across versions V1-V4. The root file maps `FileDataID`
+//! values and path name hashes to content keys.
+//!
+//! **Note:** This root format is WoW-specific. Other CASC-based games (e.g.
+//! Diablo IV, Overwatch) use different root file formats with distinct
+//! structures and semantics.
 //!
 //! # Root File Versions
 //!
