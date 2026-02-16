@@ -193,19 +193,12 @@ impl EncodingFile {
             })?;
 
         // Validate header
-        if header.version != 1 {
-            return Err(EncodingError::UnsupportedVersion(header.version));
-        }
+        header.validate()?;
 
         // Read ESpec table (comes right after header per CASC specification)
-        let espec_table = if header.espec_block_size > 0 {
-            let mut espec_data = vec![0u8; header.espec_block_size as usize];
-            cursor.read_exact(&mut espec_data)?;
-            ESpecTable::parse(&espec_data)?
-        } else {
-            // No ESpec table in header
-            ESpecTable::default()
-        };
+        let mut espec_data = vec![0u8; header.espec_block_size as usize];
+        cursor.read_exact(&mut espec_data)?;
+        let espec_table = ESpecTable::parse(&espec_data)?;
 
         // Read CKey index
         let mut ckey_index = Vec::with_capacity(header.ckey_page_count as usize);

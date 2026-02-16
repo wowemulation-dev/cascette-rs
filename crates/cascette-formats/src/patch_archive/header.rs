@@ -54,6 +54,16 @@ impl PatchArchiveHeader {
         }
     }
 
+    /// Check if plain data mode is enabled (flag bit 0)
+    pub fn is_plain_data(&self) -> bool {
+        self.flags & 0x01 != 0
+    }
+
+    /// Check if extended header is present (flag bit 1)
+    pub fn has_extended_header(&self) -> bool {
+        self.flags & 0x02 != 0
+    }
+
     /// Get block size in bytes
     pub fn block_size(&self) -> usize {
         1 << self.block_size_bits
@@ -79,6 +89,12 @@ impl PatchArchiveHeader {
 
         if self.block_size_bits < 12 || self.block_size_bits > 24 {
             return Err(PatchArchiveError::InvalidBlockSize(self.block_size_bits));
+        }
+
+        // Extended header (bit 1) is not supported -- reject rather than
+        // silently skip the extra data Agent.exe would read.
+        if self.has_extended_header() {
+            return Err(PatchArchiveError::UnsupportedFlags(self.flags));
         }
 
         Ok(())
@@ -162,5 +178,39 @@ mod tests {
         assert!(header.validate().is_ok());
         header.block_size_bits = 24;
         assert!(header.validate().is_ok());
+    }
+
+    #[test]
+    fn test_flag_methods() {
+        let mut header = PatchArchiveHeader::new(1);
+
+        // Default flags = 0
+        assert!(!header.is_plain_data());
+        assert!(!header.has_extended_header());
+        assert!(header.validate().is_ok());
+
+        // Plain data mode (bit 0) is accepted
+        header.flags = 0x01;
+        assert!(header.is_plain_data());
+        assert!(!header.has_extended_header());
+        assert!(header.validate().is_ok());
+
+        // Extended header (bit 1) is rejected
+        header.flags = 0x02;
+        assert!(!header.is_plain_data());
+        assert!(header.has_extended_header());
+        assert!(matches!(
+            header.validate(),
+            Err(PatchArchiveError::UnsupportedFlags(0x02))
+        ));
+
+        // Both bits set is also rejected (extended header takes precedence)
+        header.flags = 0x03;
+        assert!(header.is_plain_data());
+        assert!(header.has_extended_header());
+        assert!(matches!(
+            header.validate(),
+            Err(PatchArchiveError::UnsupportedFlags(0x03))
+        ));
     }
 }

@@ -58,7 +58,7 @@ impl InstallManifest {
             let entry = InstallFileEntry::read_options(
                 &mut cursor,
                 binrw::Endian::Big,
-                header.ckey_length,
+                (header.ckey_length, header.version),
             )?;
             entries.push(entry);
         }
@@ -593,6 +593,64 @@ mod tests {
     }
 
     #[test]
+    fn test_v2_manifest_round_trip() {
+        // Create a V2 manifest by manually constructing header + entries with file_type
+        let entries = vec![
+            InstallFileEntry::new_v2(
+                "data/file1.bin".to_string(),
+                ContentKey::from_hex("0123456789abcdef0123456789abcdef")
+                    .expect("Operation should succeed"),
+                1024,
+                0x01,
+            ),
+            InstallFileEntry::new_v2(
+                "data/file2.bin".to_string(),
+                ContentKey::from_hex("fedcba9876543210fedcba9876543210")
+                    .expect("Operation should succeed"),
+                2048,
+                0x02,
+            ),
+        ];
+
+        let header = InstallHeader {
+            magic: *b"IN",
+            version: 2,
+            ckey_length: 16,
+            tag_count: 0,
+            entry_count: 2,
+        };
+
+        let manifest = InstallManifest {
+            header,
+            tags: vec![],
+            entries,
+        };
+
+        // Build to bytes
+        let data = manifest.build().expect("Operation should succeed");
+
+        // Parse back
+        let parsed = InstallManifest::parse(&data).expect("Operation should succeed");
+        assert_eq!(parsed.header.version, 2);
+        assert_eq!(parsed.entries.len(), 2);
+        assert_eq!(parsed.entries[0].file_type, Some(0x01));
+        assert_eq!(parsed.entries[1].file_type, Some(0x02));
+        assert_eq!(parsed.entries[0].file_size, 1024);
+        assert_eq!(parsed.entries[1].file_size, 2048);
+    }
+
+    #[test]
+    fn test_v1_manifest_has_no_file_type() {
+        let manifest = create_test_manifest();
+        let data = manifest.build().expect("Operation should succeed");
+        let parsed = InstallManifest::parse(&data).expect("Operation should succeed");
+
+        for entry in &parsed.entries {
+            assert_eq!(entry.file_type, None);
+        }
+    }
+
+    #[test]
     fn test_invalid_manifest_data() {
         // Test with truncated data
         let data = [b'I', b'N', 1]; // Incomplete header
@@ -602,8 +660,12 @@ mod tests {
         let data = [b'X', b'X', 1, 16, 0, 0, 0, 0, 0, 0];
         assert!(InstallManifest::parse(&data).is_err());
 
-        // Test with version mismatch
-        let data = [b'I', b'N', 2, 16, 0, 0, 0, 0, 0, 0]; // Version 2
+        // Test with version 0 (unsupported)
+        let data = [b'I', b'N', 0, 16, 0, 0, 0, 0, 0, 0]; // Version 0
+        assert!(InstallManifest::parse(&data).is_err());
+
+        // Test with version 3 (unsupported)
+        let data = [b'I', b'N', 3, 16, 0, 0, 0, 0, 0, 0]; // Version 3
         assert!(InstallManifest::parse(&data).is_err());
     }
 }

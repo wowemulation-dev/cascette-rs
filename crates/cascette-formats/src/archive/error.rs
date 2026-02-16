@@ -100,6 +100,15 @@ pub enum ArchiveError {
     /// Invalid format parameters
     #[error("Invalid format: {0}")]
     InvalidFormat(String),
+
+    /// File size does not match expected size from footer
+    #[error("File size mismatch: expected {expected}, actual {actual}")]
+    FileSizeMismatch {
+        /// Expected file size computed from footer fields
+        expected: u64,
+        /// Actual file size
+        actual: u64,
+    },
 }
 
 impl ArchiveError {

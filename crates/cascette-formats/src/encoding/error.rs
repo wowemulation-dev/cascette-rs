@@ -38,4 +38,32 @@ pub enum EncodingError {
 
     #[error("ESpec table size doesn't match header")]
     InvalidESpecSize,
+
+    #[error("Invalid flags: unk_11 must be 0, got {0}")]
+    InvalidFlags(u8),
+
+    #[error("Invalid {field} hash size: expected 1..=16, got {value}")]
+    InvalidHashSize {
+        /// Which hash size field is invalid
+        field: &'static str,
+        /// The invalid value
+        value: u8,
+    },
+
+    #[error("Invalid {field} page count: must be > 0, got {value}")]
+    InvalidPageCount {
+        /// Which page count field is invalid
+        field: &'static str,
+        /// The invalid value
+        value: u32,
+    },
+
+    #[error("Invalid ESpec block size: must be > 0, got {0}")]
+    InvalidESpecBlockSize(u32),
+
+    #[error("Empty ESpec string found")]
+    EmptyESpec,
+
+    #[error("ESpec block not null-terminated")]
+    UnterminatedESpec,
 }

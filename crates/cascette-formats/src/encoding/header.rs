@@ -1,3 +1,4 @@
+use crate::encoding::error::EncodingError;
 use binrw::{BinRead, BinWrite};
 
 /// Encoding file header (22 bytes)
@@ -54,6 +55,51 @@ impl EncodingHeader {
         }
     }
 
+    /// Validate header fields against Agent.exe constraints
+    pub fn validate(&self) -> Result<(), EncodingError> {
+        if self.version != 1 {
+            return Err(EncodingError::UnsupportedVersion(self.version));
+        }
+
+        if self.unk_11 != 0 {
+            return Err(EncodingError::InvalidFlags(self.unk_11));
+        }
+
+        if self.ckey_hash_size == 0 || self.ckey_hash_size > 16 {
+            return Err(EncodingError::InvalidHashSize {
+                field: "ckey_hash_size",
+                value: self.ckey_hash_size,
+            });
+        }
+
+        if self.ekey_hash_size == 0 || self.ekey_hash_size > 16 {
+            return Err(EncodingError::InvalidHashSize {
+                field: "ekey_hash_size",
+                value: self.ekey_hash_size,
+            });
+        }
+
+        if self.ckey_page_count == 0 {
+            return Err(EncodingError::InvalidPageCount {
+                field: "ckey_page_count",
+                value: self.ckey_page_count,
+            });
+        }
+
+        if self.ekey_page_count == 0 {
+            return Err(EncodingError::InvalidPageCount {
+                field: "ekey_page_count",
+                value: self.ekey_page_count,
+            });
+        }
+
+        if self.espec_block_size == 0 {
+            return Err(EncodingError::InvalidESpecBlockSize(self.espec_block_size));
+        }
+
+        Ok(())
+    }
+
     /// Get content key page size in bytes
     pub fn ckey_page_size(&self) -> usize {
         self.ckey_page_size_kb as usize * 1024
@@ -76,5 +122,118 @@ impl EncodingHeader {
 impl Default for EncodingHeader {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    fn valid_header() -> EncodingHeader {
+        EncodingHeader {
+            magic: *b"EN",
+            version: 1,
+            ckey_hash_size: 16,
+            ekey_hash_size: 16,
+            ckey_page_size_kb: 4,
+            ekey_page_size_kb: 4,
+            ckey_page_count: 1,
+            ekey_page_count: 1,
+            unk_11: 0,
+            espec_block_size: 10,
+        }
+    }
+
+    #[test]
+    fn test_valid_header_passes_validation() {
+        assert!(valid_header().validate().is_ok());
+    }
+
+    #[test]
+    fn test_invalid_version_rejected() {
+        let mut h = valid_header();
+        h.version = 2;
+        assert!(matches!(
+            h.validate(),
+            Err(EncodingError::UnsupportedVersion(2))
+        ));
+    }
+
+    #[test]
+    fn test_nonzero_unk_11_rejected() {
+        let mut h = valid_header();
+        h.unk_11 = 1;
+        assert!(matches!(h.validate(), Err(EncodingError::InvalidFlags(1))));
+    }
+
+    #[test]
+    fn test_zero_ckey_hash_size_rejected() {
+        let mut h = valid_header();
+        h.ckey_hash_size = 0;
+        assert!(matches!(
+            h.validate(),
+            Err(EncodingError::InvalidHashSize {
+                field: "ckey_hash_size",
+                value: 0
+            })
+        ));
+    }
+
+    #[test]
+    fn test_large_ekey_hash_size_rejected() {
+        let mut h = valid_header();
+        h.ekey_hash_size = 17;
+        assert!(matches!(
+            h.validate(),
+            Err(EncodingError::InvalidHashSize {
+                field: "ekey_hash_size",
+                value: 17
+            })
+        ));
+    }
+
+    #[test]
+    fn test_boundary_hash_sizes_accepted() {
+        let mut h = valid_header();
+        h.ckey_hash_size = 1;
+        h.ekey_hash_size = 1;
+        assert!(h.validate().is_ok());
+    }
+
+    #[test]
+    fn test_zero_ckey_page_count_rejected() {
+        let mut h = valid_header();
+        h.ckey_page_count = 0;
+        assert!(matches!(
+            h.validate(),
+            Err(EncodingError::InvalidPageCount {
+                field: "ckey_page_count",
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn test_zero_ekey_page_count_rejected() {
+        let mut h = valid_header();
+        h.ekey_page_count = 0;
+        assert!(matches!(
+            h.validate(),
+            Err(EncodingError::InvalidPageCount {
+                field: "ekey_page_count",
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn test_zero_espec_block_size_rejected() {
+        let mut h = valid_header();
+        h.espec_block_size = 0;
+        assert!(matches!(
+            h.validate(),
+            Err(EncodingError::InvalidESpecBlockSize(0))
+        ));
     }
 }
