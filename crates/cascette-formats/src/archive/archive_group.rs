@@ -198,10 +198,18 @@ impl ArchiveGroupBuilder {
         let total_data_size = entry_count * bytes_per_entry;
         let chunk_count = total_data_size.div_ceil(0x1000); // 4KB chunks
 
-        // Write entries in chunks (archive-groups don't use TOC)
+        // Write entries in chunks, collecting first keys for TOC hash
+        let entries_per_chunk = 0x1000 / bytes_per_entry;
+        let mut toc_keys: Vec<Vec<u8>> = Vec::with_capacity(chunk_count);
+
         for chunk_idx in 0..chunk_count {
-            let start_idx = chunk_idx * (0x1000 / bytes_per_entry);
-            let end_idx = ((chunk_idx + 1) * (0x1000 / bytes_per_entry)).min(entry_count);
+            let start_idx = chunk_idx * entries_per_chunk;
+            let end_idx = ((chunk_idx + 1) * entries_per_chunk).min(entry_count);
+
+            // Record first key of each chunk for TOC hash
+            if let Some(first_entry) = entries.get(start_idx) {
+                toc_keys.push(first_entry.encoding_key.clone());
+            }
 
             // Prepare chunk data
             let mut chunk_data = Vec::with_capacity(0x1000);
@@ -223,10 +231,11 @@ impl ArchiveGroupBuilder {
             writer.write_all(&chunk_data)?;
         }
 
-        // Write footer
+        // Write footer with computed TOC hash
+        let toc_hash = super::index::calculate_toc_hash(&toc_keys);
         let footer = IndexFooter {
-            toc_hash: [0; 8], // No TOC hash for archive-groups
-            version: 1,       // Standard version
+            toc_hash,
+            version: 1, // Standard version
             reserved: [0, 0],
             page_size_kb: 4,
             offset_bytes: 6, // 6-byte offsets for archive-groups!
