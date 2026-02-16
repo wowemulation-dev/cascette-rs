@@ -59,7 +59,6 @@ pub fn write_varint(value: u32, data: &mut Vec<u8>) {
 }
 
 /// Calculate the size needed to encode a variable-length integer
-#[allow(dead_code)] // Public API function
 pub fn varint_size(value: u32) -> usize {
     if value == 0 {
         1
