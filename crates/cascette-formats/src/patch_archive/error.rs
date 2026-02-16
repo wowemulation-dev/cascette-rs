@@ -28,6 +28,10 @@ pub enum PatchArchiveError {
     #[error("invalid block size bits: {0}")]
     InvalidBlockSize(u8),
 
+    /// Unsupported flags (e.g. extended header that we cannot parse)
+    #[error("unsupported PA flags: 0x{0:02X}")]
+    UnsupportedFlags(u8),
+
     /// String too long in patch entry
     #[error("string too long in patch entry")]
     StringTooLong,

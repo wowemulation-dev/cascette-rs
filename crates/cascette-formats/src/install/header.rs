@@ -58,7 +58,7 @@ impl InstallHeader {
             return Err(InstallError::InvalidMagic(self.magic));
         }
 
-        if self.version != 1 {
+        if self.version == 0 || self.version > 2 {
             return Err(InstallError::UnsupportedVersion(self.version));
         }
 
@@ -111,12 +111,25 @@ mod tests {
             Err(InstallError::InvalidMagic(_))
         ));
 
-        // Test invalid version
+        // Test version 2 is valid
+        let mut v2_header = valid_header.clone();
+        v2_header.version = 2;
+        assert!(v2_header.validate().is_ok());
+
+        // Test version 0 is invalid
         let mut invalid_version = valid_header.clone();
-        invalid_version.version = 2;
+        invalid_version.version = 0;
         assert!(matches!(
             invalid_version.validate(),
-            Err(InstallError::UnsupportedVersion(2))
+            Err(InstallError::UnsupportedVersion(0))
+        ));
+
+        // Test version 3 is invalid
+        let mut invalid_version = valid_header.clone();
+        invalid_version.version = 3;
+        assert!(matches!(
+            invalid_version.validate(),
+            Err(InstallError::UnsupportedVersion(3))
         ));
 
         // Test invalid ckey length

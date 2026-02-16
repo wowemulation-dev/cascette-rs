@@ -281,7 +281,7 @@ mod tests {
                 let data = manifest.build()?;
                 let parsed = InstallManifest::parse(&data)?;
 
-                // Verify structure
+                // Verify structure (builder produces V1 by default)
                 prop_assert_eq!(parsed.header.version, 1);
                 prop_assert_eq!(parsed.entries.len(), entries.len());
                 prop_assert_eq!(parsed.tags.len(), tags.len());

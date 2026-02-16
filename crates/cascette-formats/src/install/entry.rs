@@ -18,15 +18,28 @@ pub struct InstallFileEntry {
     pub content_key: ContentKey,
     /// File size in bytes
     pub file_size: u32,
+    /// File type byte (V2 only, `None` for V1 manifests)
+    pub file_type: Option<u8>,
 }
 
 impl InstallFileEntry {
-    /// Create a new install file entry
+    /// Create a new install file entry (V1, no file_type)
     pub fn new(path: String, content_key: ContentKey, file_size: u32) -> Self {
         Self {
             path,
             content_key,
             file_size,
+            file_type: None,
+        }
+    }
+
+    /// Create a new V2 install file entry with file_type
+    pub fn new_v2(path: String, content_key: ContentKey, file_size: u32, file_type: u8) -> Self {
+        Self {
+            path,
+            content_key,
+            file_size,
+            file_type: Some(file_type),
         }
     }
 
@@ -80,12 +93,12 @@ impl InstallFileEntry {
 }
 
 impl BinRead for InstallFileEntry {
-    type Args<'a> = u8; // ckey_length
+    type Args<'a> = (u8, u8); // (ckey_length, version)
 
     fn read_options<R: Read + Seek>(
         reader: &mut R,
         endian: binrw::Endian,
-        ckey_length: Self::Args<'_>,
+        (ckey_length, version): Self::Args<'_>,
     ) -> BinResult<Self> {
         // Read null-terminated file path
         let mut path_bytes = Vec::new();
@@ -126,10 +139,18 @@ impl BinRead for InstallFileEntry {
         // Read file size (big-endian)
         let file_size = u32::read_options(reader, binrw::Endian::Big, ())?;
 
+        // V2: read file_type byte
+        let file_type = if version >= 2 {
+            Some(u8::read_options(reader, endian, ())?)
+        } else {
+            None
+        };
+
         Ok(Self {
             path,
             content_key,
             file_size,
+            file_type,
         })
     }
 }
@@ -153,6 +174,11 @@ impl BinWrite for InstallFileEntry {
         // Write file size (big-endian)
         self.file_size
             .write_options(writer, binrw::Endian::Big, ())?;
+
+        // V2: write file_type byte if present
+        if let Some(ft) = self.file_type {
+            writer.write_all(&[ft])?;
+        }
 
         Ok(())
     }
@@ -286,7 +312,7 @@ mod tests {
         let entry = InstallFileEntry::read_options(
             &mut Cursor::new(&data),
             binrw::Endian::Big,
-            16, // ckey_length
+            (16, 1), // (ckey_length, version)
         )
         .expect("Operation should succeed");
 
@@ -319,7 +345,7 @@ mod tests {
         let parsed = InstallFileEntry::read_options(
             &mut Cursor::new(&buffer),
             binrw::Endian::Big,
-            16, // ckey_length
+            (16, 1), // (ckey_length, version)
         )
         .expect("Operation should succeed");
 
@@ -345,7 +371,7 @@ mod tests {
         entry.write(&mut cursor).expect("Operation should succeed");
 
         let parsed =
-            InstallFileEntry::read_options(&mut Cursor::new(&buffer), binrw::Endian::Big, 16)
+            InstallFileEntry::read_options(&mut Cursor::new(&buffer), binrw::Endian::Big, (16, 1))
                 .expect("Operation should succeed");
 
         assert_eq!(entry, parsed);
@@ -371,7 +397,7 @@ mod tests {
         entry.write(&mut cursor).expect("Operation should succeed");
 
         let parsed =
-            InstallFileEntry::read_options(&mut Cursor::new(&buffer), binrw::Endian::Big, 16)
+            InstallFileEntry::read_options(&mut Cursor::new(&buffer), binrw::Endian::Big, (16, 1))
                 .expect("Operation should succeed");
 
         assert_eq!(entry, parsed);
@@ -401,9 +427,12 @@ mod tests {
             let mut cursor = Cursor::new(&mut buffer);
             entry.write(&mut cursor).expect("Operation should succeed");
 
-            let parsed =
-                InstallFileEntry::read_options(&mut Cursor::new(&buffer), binrw::Endian::Big, 16)
-                    .expect("Operation should succeed");
+            let parsed = InstallFileEntry::read_options(
+                &mut Cursor::new(&buffer),
+                binrw::Endian::Big,
+                (16, 1),
+            )
+            .expect("Operation should succeed");
 
             assert_eq!(entry, parsed);
         }
@@ -419,7 +448,7 @@ mod tests {
         let result = InstallFileEntry::read_options(
             &mut Cursor::new(&data),
             binrw::Endian::Big,
-            2, // invalid ckey_length
+            (2, 1), // (invalid ckey_length, version)
         );
 
         assert!(result.is_err());
@@ -448,7 +477,7 @@ mod tests {
 
         // Verify round-trip
         let parsed =
-            InstallFileEntry::read_options(&mut Cursor::new(&buffer), binrw::Endian::Big, 16)
+            InstallFileEntry::read_options(&mut Cursor::new(&buffer), binrw::Endian::Big, (16, 1))
                 .expect("Operation should succeed");
 
         assert_eq!(entry, parsed);

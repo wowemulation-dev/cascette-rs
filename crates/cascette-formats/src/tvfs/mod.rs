@@ -128,6 +128,7 @@ impl TvfsFile {
         // Then parse TVFS structure
         let mut cursor = Cursor::new(&decompressed);
         let tvfs = Self::read_options(&mut cursor, binrw::Endian::Big, ())?;
+        tvfs.header.validate()?;
 
         Ok(tvfs)
     }
@@ -136,6 +137,7 @@ impl TvfsFile {
     pub fn parse(data: &[u8]) -> TvfsResult<Self> {
         let mut cursor = Cursor::new(data);
         let tvfs = Self::read_options(&mut cursor, binrw::Endian::Big, ())?;
+        tvfs.header.validate()?;
         Ok(tvfs)
     }
 
@@ -275,6 +277,48 @@ mod tests {
         assert_eq!(root.children.len(), 1);
         assert_eq!(child.path_part, "test");
         assert!(!child.is_directory);
+    }
+
+    #[test]
+    fn test_tvfs_parse_rejects_invalid_format_version() {
+        // Build a valid TVFS, then corrupt the format_version
+        let mut header = TvfsHeader::new(TVFS_FLAG_INCLUDE_CKEY);
+        header.update_table_info(46, 10, 56, 20, 76, 33, 1);
+
+        let mut buffer = Vec::new();
+        let mut cursor = std::io::Cursor::new(&mut buffer);
+        header
+            .write_options(&mut cursor, binrw::Endian::Big, ())
+            .expect("Operation should succeed");
+
+        // Corrupt format_version (byte 4, after 4-byte magic)
+        buffer[4] = 2;
+
+        // Pad buffer to satisfy table offsets
+        buffer.resize(200, 0);
+
+        let result = TvfsFile::parse(&buffer);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_tvfs_parse_rejects_invalid_key_sizes() {
+        let mut header = TvfsHeader::new(TVFS_FLAG_INCLUDE_CKEY);
+        header.update_table_info(46, 10, 56, 20, 76, 33, 1);
+
+        let mut buffer = Vec::new();
+        let mut cursor = std::io::Cursor::new(&mut buffer);
+        header
+            .write_options(&mut cursor, binrw::Endian::Big, ())
+            .expect("Operation should succeed");
+
+        // Corrupt ekey_size (byte 6)
+        buffer[6] = 16;
+
+        buffer.resize(200, 0);
+
+        let result = TvfsFile::parse(&buffer);
+        assert!(result.is_err());
     }
 
     #[test]

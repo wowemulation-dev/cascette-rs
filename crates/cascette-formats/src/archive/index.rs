@@ -353,6 +353,42 @@ impl IndexFooter {
         Ok(())
     }
 
+    /// Validate that actual file size matches expected size computed from footer fields.
+    ///
+    /// The expected file size is:
+    /// `(element_count * page_size) + (toc_entries * (ekey_length + footer_hash_bytes)) + footer_size`
+    ///
+    /// Where `toc_entries` is `ceil(element_count / records_per_page)`.
+    pub fn validate_file_size(&self, actual_file_size: u64) -> ArchiveResult<()> {
+        let page_size = (self.page_size_kb as u64) * 1024;
+        let record_size =
+            self.ekey_length as u64 + self.size_bytes as u64 + self.offset_bytes as u64;
+        let records_per_page = page_size / record_size;
+
+        if records_per_page == 0 {
+            return Err(ArchiveError::InvalidFormat("Records per page is 0".into()));
+        }
+
+        let toc_entries = (self.element_count as u64).div_ceil(records_per_page);
+        let toc_entry_size = self.ekey_length as u64 + self.footer_hash_bytes as u64;
+        let footer_size = MIN_FOOTER_SIZE as u64 + self.footer_hash_bytes as u64;
+
+        // Data section: element_count entries spread across pages, but the
+        // actual on-disk size uses full pages (except possibly the last).
+        let data_size = toc_entries * page_size;
+        let toc_size = toc_entries * toc_entry_size;
+        let expected = data_size + toc_size + footer_size;
+
+        if actual_file_size != expected {
+            return Err(ArchiveError::FileSizeMismatch {
+                expected,
+                actual: actual_file_size,
+            });
+        }
+
+        Ok(())
+    }
+
     /// Check if this index is an archive-group
     pub fn is_archive_group(&self) -> bool {
         self.offset_bytes == 6
@@ -443,6 +479,12 @@ impl ArchiveIndex {
         // Validate format parameters
         footer.validate_format()?;
 
+        // Validate file size against footer fields
+        reader.seek(SeekFrom::End(0))?;
+        let file_size = reader.stream_position()?;
+        footer.validate_file_size(file_size)?;
+        reader.seek(SeekFrom::Start(0))?;
+
         let block_size = (footer.page_size_kb as usize) * 1024; // Convert KB to bytes
         let record_size =
             footer.ekey_length as usize + footer.size_bytes as usize + footer.offset_bytes as usize;
@@ -454,13 +496,7 @@ impl ArchiveIndex {
         // TOC uses max(key_bytes, 9) for compatibility
         let toc_key_size = footer.ekey_length as usize;
 
-        // Calculate file structure
-        reader.seek(SeekFrom::Start(0))?;
-        let current_pos = reader.stream_position()?;
-        reader.seek(SeekFrom::End(0))?;
-        let file_size = reader.stream_position()?;
-        reader.seek(SeekFrom::Start(current_pos))?;
-
+        // Calculate file structure (file_size already known from validation above)
         let non_footer_size = file_size - footer_size as u64;
         let toc_size = chunk_count * (toc_key_size + footer.footer_hash_bytes as usize);
         let data_size = non_footer_size - toc_size as u64;
@@ -1354,6 +1390,34 @@ mod tests {
         assert!(matches!(
             footer.validate_format(),
             Err(ArchiveError::InvalidFormat(_))
+        ));
+    }
+
+    #[test]
+    fn test_footer_file_size_matching() {
+        let toc_hash = [0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0];
+        let footer = IndexFooter::new(toc_hash, 10);
+
+        // Compute expected size
+        let page_size: u64 = 4 * 1024; // 4KB pages
+        let record_size: u64 = 16 + 4 + 4; // ekey_length + size_bytes + offset_bytes
+        let records_per_page = page_size / record_size;
+        let toc_entries = 10u64.div_ceil(records_per_page);
+        let toc_entry_size: u64 = 16 + 8; // ekey_length + footer_hash_bytes
+        let footer_size: u64 = 20 + 8; // MIN_FOOTER_SIZE + footer_hash_bytes
+        let expected = toc_entries * page_size + toc_entries * toc_entry_size + footer_size;
+
+        // Matching size accepted
+        assert!(footer.validate_file_size(expected).is_ok());
+
+        // Wrong size rejected
+        assert!(matches!(
+            footer.validate_file_size(expected + 1),
+            Err(ArchiveError::FileSizeMismatch { .. })
+        ));
+        assert!(matches!(
+            footer.validate_file_size(expected - 1),
+            Err(ArchiveError::FileSizeMismatch { .. })
         ));
     }
 
