@@ -121,10 +121,18 @@ impl BinRead for EKeyPageEntry {
         let mut ekey_bytes = [0u8; 16];
         reader.read_exact(&mut ekey_bytes)?;
 
-        // Check for padding - all zero bytes indicate padding
-        if ekey_bytes.iter().all(|&b| b == 0x00) {
+        // Read ESpec index
+        let espec_index = u32::read_options(reader, binrw::Endian::Big, ())?;
+
+        // Check for end-of-page padding. Two sentinel patterns exist:
+        // 1. Agent.exe sentinel: espec_index == 0xFFFFFFFF (with any key)
+        // 2. Zero-fill padding: all-zero key bytes AND espec_index == 0 (from
+        //    pages padded with zeros by builders/tools)
+        if espec_index == 0xFFFF_FFFF
+            || (espec_index == 0 && ekey_bytes.iter().all(|&b| b == 0x00))
+        {
             return Err(binrw::Error::Custom {
-                pos: 0, // We don't need the exact position for padding
+                pos: 0,
                 err: Box::new(std::io::Error::new(
                     std::io::ErrorKind::UnexpectedEof,
                     "Padding detected",
@@ -133,9 +141,6 @@ impl BinRead for EKeyPageEntry {
         }
 
         let encoding_key = EncodingKey::from_bytes(ekey_bytes);
-
-        // Read ESpec index
-        let espec_index = u32::read_options(reader, binrw::Endian::Big, ())?;
 
         // Read file size (40-bit)
         let file_size_high = u8::read_options(reader, binrw::Endian::Big, ())?;
@@ -191,13 +196,13 @@ mod tests {
         /// Generate arbitrary content keys
         #[allow(dead_code)]
         fn content_key() -> impl Strategy<Value = ContentKey> {
-            prop::array::uniform16(0u8..255).prop_map(ContentKey::from_bytes)
+            prop::array::uniform16(0u8..=255u8).prop_map(ContentKey::from_bytes)
         }
 
         /// Generate arbitrary encoding keys
         #[allow(dead_code)]
         fn encoding_key() -> impl Strategy<Value = EncodingKey> {
-            prop::array::uniform16(0u8..255).prop_map(EncodingKey::from_bytes)
+            prop::array::uniform16(0u8..=255u8).prop_map(EncodingKey::from_bytes)
         }
 
         /// Generate arbitrary CKey page entries
@@ -231,8 +236,8 @@ mod tests {
         fn ekey_page_entry() -> impl Strategy<Value = EKeyPageEntry> {
             (
                 encoding_key(),
-                0u32..u32::MAX,     // espec_index
-                0u64..(1u64 << 40), // file_size (40-bit limit)
+                0u32..0xFFFF_FFFEu32, // espec_index (exclude 0xFFFFFFFF padding sentinel)
+                0u64..(1u64 << 40),   // file_size (40-bit limit)
             )
                 .prop_map(|(encoding_key, espec_index, file_size)| EKeyPageEntry {
                     encoding_key,
@@ -243,6 +248,7 @@ mod tests {
 
         proptest! {
             /// Test that CKey entries round-trip correctly
+            #[test]
             fn ckey_entry_round_trip(entry in ckey_page_entry()) {
                 let mut buffer = Vec::new();
                 {
@@ -266,6 +272,7 @@ mod tests {
 
         proptest! {
             /// Test that EKey entries round-trip correctly
+            #[test]
             fn ekey_entry_round_trip(entry in ekey_page_entry()) {
                 let mut buffer = Vec::new();
                 {
@@ -284,6 +291,7 @@ mod tests {
 
         proptest! {
             /// Test that 40-bit file sizes are handled correctly
+            #[test]
             fn file_size_40_bit_handling(
                 file_size in 0u64..(1u64 << 40) // Test full 40-bit range
             ) {
@@ -316,6 +324,7 @@ mod tests {
 
         proptest! {
             /// Test that key count matches encoding keys length
+            #[test]
             fn key_count_matches_keys_length(
                 key_count in 1u8..=255u8,
                 encoding_keys in prop::collection::vec(encoding_key(), 1..=255)
@@ -363,6 +372,7 @@ mod tests {
 
         proptest! {
             /// Test that very large file sizes (beyond 40-bit) are handled
+            #[test]
             fn large_file_sizes_clamped(
                 large_size in (1u64 << 40)..u64::MAX
             ) {
@@ -392,6 +402,7 @@ mod tests {
 
         proptest! {
             /// Test that different key arrays produce different serializations
+            #[test]
             fn different_keys_different_serialization(
                 keys1 in prop::collection::vec(encoding_key(), 1..10),
                 keys2 in prop::collection::vec(encoding_key(), 1..10)
@@ -429,6 +440,7 @@ mod tests {
 
         proptest! {
             /// Test EKey entry size calculations are correct
+            #[test]
             fn ekey_entry_size_correct(entry in ekey_page_entry()) {
                 let mut buffer = Vec::new();
                 {
@@ -436,15 +448,50 @@ mod tests {
                     entry.write_options(&mut cursor, binrw::Endian::Big, ()).map_err(|e| TestCaseError::fail(e.to_string()))?;
                 }
 
-                // EKey entries should be exactly: 16 (encoding_key) + 4 (compressed_size) + 16 (size_key_spec) = 36 bytes
-                prop_assert_eq!(buffer.len(), 36);
+                // EKey entries should be exactly: 16 (encoding_key) + 4 (espec_index) + 5 (file_size) = 25 bytes
+                prop_assert_eq!(buffer.len(), 25);
 
                 // Verify we can parse it back
                 let mut cursor = Cursor::new(&buffer);
                 let _parsed = EKeyPageEntry::read_options(&mut cursor, binrw::Endian::Big, ()).map_err(|e| TestCaseError::fail(e.to_string()))?;
 
-                prop_assert_eq!(cursor.position(), 36); // Should have consumed all bytes
+                prop_assert_eq!(cursor.position(), 25); // Should have consumed all bytes
             }
+        }
+
+        /// Test that non-zero key with espec_index = 0xFFFFFFFF is detected as padding
+        #[test]
+        fn ekey_padding_detected_by_espec_index() {
+            let mut data = Vec::new();
+            // Non-zero encoding key (16 bytes)
+            data.extend_from_slice(&[0xAB; 16]);
+            // espec_index = 0xFFFFFFFF (big-endian)
+            data.extend_from_slice(&[0xFF, 0xFF, 0xFF, 0xFF]);
+            // file_size (5 bytes) - would follow if not padding
+            data.extend_from_slice(&[0x00, 0x00, 0x00, 0x01, 0x00]);
+
+            let mut cursor = Cursor::new(&data);
+            let result = EKeyPageEntry::read_options(&mut cursor, binrw::Endian::Big, ());
+            assert!(result.is_err(), "Entry with espec_index=0xFFFFFFFF should be rejected as padding");
+        }
+
+        /// Test that all-zero key with valid espec_index is parsed as valid data
+        #[test]
+        fn ekey_zero_key_valid_espec_is_accepted() {
+            let mut data = Vec::new();
+            // All-zero encoding key (16 bytes)
+            data.extend_from_slice(&[0x00; 16]);
+            // espec_index = 42 (big-endian)
+            data.extend_from_slice(&[0x00, 0x00, 0x00, 0x2A]);
+            // file_size = 1000 (40-bit big-endian: 1 byte high + 4 bytes low)
+            data.extend_from_slice(&[0x00, 0x00, 0x00, 0x03, 0xE8]);
+
+            let mut cursor = Cursor::new(&data);
+            let result = EKeyPageEntry::read_options(&mut cursor, binrw::Endian::Big, ());
+            assert!(result.is_ok(), "Entry with all-zero key but valid espec_index should be accepted");
+            let entry = result.unwrap();
+            assert_eq!(entry.espec_index, 42);
+            assert_eq!(entry.file_size, 1000);
         }
     }
 }
