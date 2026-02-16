@@ -73,6 +73,8 @@ impl CdnConfig {
             "patch-archive-group",
             "file-index",
             "file-index-size",
+            "patch-file-index",
+            "patch-file-index-size",
         ];
 
         for key in &order {
@@ -316,6 +318,50 @@ impl CdnConfig {
     pub fn has_file_indices(&self) -> bool {
         self.entries.contains_key("file-index")
     }
+
+    /// Get patch file index hash if present
+    pub fn patch_file_index(&self) -> Option<&str> {
+        self.entries
+            .get("patch-file-index")
+            .and_then(|v| v.first())
+            .map(std::string::String::as_str)
+    }
+
+    /// Get patch file index size if present
+    pub fn patch_file_index_size(&self) -> Option<u64> {
+        self.entries
+            .get("patch-file-index-size")
+            .and_then(|v| v.first())
+            .and_then(|s| s.parse().ok())
+    }
+
+    /// Get patch file index entries with sizes
+    pub fn patch_file_indices(&self) -> Vec<ArchiveInfo> {
+        let indices = self
+            .entries
+            .get("patch-file-index")
+            .cloned()
+            .unwrap_or_default();
+
+        let sizes = self
+            .entries
+            .get("patch-file-index-size")
+            .map(|v| {
+                v.iter()
+                    .filter_map(|s| s.parse::<u64>().ok())
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+
+        indices
+            .into_iter()
+            .enumerate()
+            .map(|(i, content_key)| ArchiveInfo {
+                content_key,
+                index_size: sizes.get(i).copied(),
+            })
+            .collect()
+    }
 }
 
 impl Default for CdnConfig {
@@ -391,6 +437,92 @@ mod tests {
     }
 
     // NOTE: test_validation removed after tools restructuring - external test data no longer available
+
+    #[test]
+    fn test_patch_file_index() {
+        let mut config = CdnConfig::new();
+        config.set(
+            "patch-file-index",
+            vec!["aabbccddee0011223344556677889900".to_string()],
+        );
+
+        assert_eq!(
+            config.patch_file_index(),
+            Some("aabbccddee0011223344556677889900")
+        );
+    }
+
+    #[test]
+    fn test_patch_file_index_missing() {
+        let config = CdnConfig::new();
+        assert!(config.patch_file_index().is_none());
+    }
+
+    #[test]
+    fn test_patch_file_index_size() {
+        let mut config = CdnConfig::new();
+        config.set("patch-file-index-size", vec!["54321".to_string()]);
+
+        assert_eq!(config.patch_file_index_size(), Some(54321));
+    }
+
+    #[test]
+    fn test_patch_file_index_size_missing() {
+        let config = CdnConfig::new();
+        assert!(config.patch_file_index_size().is_none());
+    }
+
+    #[test]
+    fn test_patch_file_indices() {
+        let mut config = CdnConfig::new();
+        config.set(
+            "patch-file-index",
+            vec![
+                "aabbccddee0011223344556677889900".to_string(),
+                "0099887766554433221100eeddccbbaa".to_string(),
+            ],
+        );
+        config.set(
+            "patch-file-index-size",
+            vec!["1000".to_string(), "2000".to_string()],
+        );
+
+        let indices = config.patch_file_indices();
+        assert_eq!(indices.len(), 2);
+        assert_eq!(indices[0].content_key, "aabbccddee0011223344556677889900");
+        assert_eq!(indices[0].index_size, Some(1000));
+        assert_eq!(indices[1].content_key, "0099887766554433221100eeddccbbaa");
+        assert_eq!(indices[1].index_size, Some(2000));
+    }
+
+    #[test]
+    fn test_patch_file_indices_empty() {
+        let config = CdnConfig::new();
+        assert!(config.patch_file_indices().is_empty());
+    }
+
+    #[test]
+    fn test_round_trip_with_patch_file_index() {
+        let mut config = CdnConfig::new();
+        config.set_archives(vec![ArchiveInfo {
+            content_key: "0036fbcc88e4c2e817b1bbaa89397c75".to_string(),
+            index_size: Some(12_345),
+        }]);
+        config.set(
+            "patch-file-index",
+            vec!["aabbccddee0011223344556677889900".to_string()],
+        );
+        config.set("patch-file-index-size", vec!["5000".to_string()]);
+
+        let built = config.build();
+        let reparsed = CdnConfig::parse(&built[..]).expect("reparse should succeed");
+
+        assert_eq!(
+            reparsed.patch_file_index(),
+            Some("aabbccddee0011223344556677889900")
+        );
+        assert_eq!(reparsed.patch_file_index_size(), Some(5000));
+    }
 
     #[test]
     fn test_archive_with_sizes() {
