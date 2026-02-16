@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1771261200185,
+  "lastUpdate": 1771262284874,
   "repoUrl": "https://github.com/wowemulation-dev/cascette-rs",
   "entries": {
     "Benchmark": [
@@ -377,6 +377,48 @@ window.BENCHMARK_DATA = {
             "name": "bpsv_generation/summary/all",
             "value": 203,
             "range": "± 0",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "daniel@kogito.network",
+            "name": "Daniel S. Reichenbach",
+            "username": "danielsreichenbach"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4fb9d7e4bf6359b4bd2fdb5b7d19aeb666a32cf5",
+          "message": "Merge pull request #33 from wowemulation-dev/fix/config-accessors\n\nfix: add missing typed config accessors",
+          "timestamp": "2026-02-17T00:16:13+07:00",
+          "tree_id": "4c6c2d3469f63bb7e350ed96df6115e151fc7d2f",
+          "url": "https://github.com/wowemulation-dev/cascette-rs/commit/4fb9d7e4bf6359b4bd2fdb5b7d19aeb666a32cf5"
+        },
+        "date": 1771262284442,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "bpsv_generation/versions/wow",
+            "value": 1869,
+            "range": "± 60",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "bpsv_generation/cdns/wow",
+            "value": 1169,
+            "range": "± 4",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "bpsv_generation/summary/all",
+            "value": 207,
+            "range": "± 1",
             "unit": "ns/iter"
           }
         ]
