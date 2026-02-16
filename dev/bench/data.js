@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1771209331354,
+  "lastUpdate": 1771258433893,
   "repoUrl": "https://github.com/wowemulation-dev/cascette-rs",
   "entries": {
     "Benchmark": [
@@ -209,6 +209,48 @@ window.BENCHMARK_DATA = {
             "name": "bpsv_generation/summary/all",
             "value": 206,
             "range": "± 1",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "daniel@kogito.network",
+            "name": "Daniel S. Reichenbach",
+            "username": "danielsreichenbach"
+          },
+          "committer": {
+            "email": "daniel@kogito.network",
+            "name": "Daniel S. Reichenbach",
+            "username": "danielsreichenbach"
+          },
+          "distinct": true,
+          "id": "8472bfde9a3ab580146e1378becb5b6690172487",
+          "message": "chore: simplify mise configuration\n\nRemove task definitions and shell aliases. Pin tools to latest where\nversion-specific pinning is not needed. Add cross for cross-compilation.",
+          "timestamp": "2026-02-16T23:11:53+07:00",
+          "tree_id": "ec038811e835babc350114d44b6f62bbc065bfe2",
+          "url": "https://github.com/wowemulation-dev/cascette-rs/commit/8472bfde9a3ab580146e1378becb5b6690172487"
+        },
+        "date": 1771258433430,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "bpsv_generation/versions/wow",
+            "value": 1856,
+            "range": "± 6",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "bpsv_generation/cdns/wow",
+            "value": 1198,
+            "range": "± 12",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "bpsv_generation/summary/all",
+            "value": 204,
+            "range": "± 2",
             "unit": "ns/iter"
           }
         ]
