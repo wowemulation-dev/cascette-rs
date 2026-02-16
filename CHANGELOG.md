@@ -133,6 +133,15 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     known values (2..=4) instead of `< 10`
   - EKey entry proptest size assertion corrected (36 -> 25 bytes), added
     missing `#[test]` annotations to 7 proptest macro functions
+- cascette-formats: Added format validation matching Agent.exe constraints
+  - `EncodingHeader::validate()` checks all 8 header fields (version, unk_11,
+    ckey/ekey hash sizes, page counts, espec block size)
+  - `ESpecTable::parse()` rejects empty strings and unterminated data
+  - Install manifest V2 support with per-entry `file_type` byte
+  - `IndexFooter::validate_file_size()` checks expected vs actual file size
+  - `PatchArchiveHeader` flag bit interpretation with `is_plain_data()` and
+    `has_extended_header()`; rejects unsupported extended header flag
+  - `TvfsFile::parse()` and `load_from_blte()` call `header.validate()`
 
 ### Infrastructure
 
