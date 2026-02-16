@@ -145,9 +145,7 @@ impl EncodingFile {
                                 check_bytes[16..20].try_into().unwrap_or([0; 4]);
                             let espec_val = u32::from_be_bytes(espec_bytes);
                             let key_all_zero = check_bytes[..16].iter().all(|&b| b == 0x00);
-                            if espec_val == 0xFFFF_FFFF
-                                || (espec_val == 0 && key_all_zero)
-                            {
+                            if espec_val == 0xFFFF_FFFF || (espec_val == 0 && key_all_zero) {
                                 break; // Hit padding
                             }
                         }

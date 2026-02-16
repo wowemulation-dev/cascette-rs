@@ -59,8 +59,7 @@ impl RootVersion {
             // Classic V2 header:
             // - value1 = total_files (typically thousands+)
             // - value2 = named_files
-            let looks_like_extended_header =
-                (16..100).contains(&value1) && matches!(value2, 2..=4);
+            let looks_like_extended_header = (16..100).contains(&value1) && matches!(value2, 2..=4);
 
             if looks_like_extended_header {
                 // Extended header structure - version_field determines parsing format

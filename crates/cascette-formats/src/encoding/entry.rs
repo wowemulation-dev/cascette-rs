@@ -128,8 +128,7 @@ impl BinRead for EKeyPageEntry {
         // 1. Agent.exe sentinel: espec_index == 0xFFFFFFFF (with any key)
         // 2. Zero-fill padding: all-zero key bytes AND espec_index == 0 (from
         //    pages padded with zeros by builders/tools)
-        if espec_index == 0xFFFF_FFFF
-            || (espec_index == 0 && ekey_bytes.iter().all(|&b| b == 0x00))
+        if espec_index == 0xFFFF_FFFF || (espec_index == 0 && ekey_bytes.iter().all(|&b| b == 0x00))
         {
             return Err(binrw::Error::Custom {
                 pos: 0,
@@ -472,7 +471,10 @@ mod tests {
 
             let mut cursor = Cursor::new(&data);
             let result = EKeyPageEntry::read_options(&mut cursor, binrw::Endian::Big, ());
-            assert!(result.is_err(), "Entry with espec_index=0xFFFFFFFF should be rejected as padding");
+            assert!(
+                result.is_err(),
+                "Entry with espec_index=0xFFFFFFFF should be rejected as padding"
+            );
         }
 
         /// Test that all-zero key with valid espec_index is parsed as valid data
@@ -488,7 +490,10 @@ mod tests {
 
             let mut cursor = Cursor::new(&data);
             let result = EKeyPageEntry::read_options(&mut cursor, binrw::Endian::Big, ());
-            assert!(result.is_ok(), "Entry with all-zero key but valid espec_index should be accepted");
+            assert!(
+                result.is_ok(),
+                "Entry with all-zero key but valid espec_index should be accepted"
+            );
             let entry = result.unwrap();
             assert_eq!(entry.espec_index, 42);
             assert_eq!(entry.file_size, 1000);
