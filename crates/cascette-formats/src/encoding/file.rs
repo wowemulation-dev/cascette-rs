@@ -341,38 +341,77 @@ impl EncodingFile {
     }
 
     /// Find encoding key for a content key
+    ///
+    /// Uses binary search on the page index to find the candidate page,
+    /// then linear scan within that page.
     pub fn find_encoding(&self, content_key: &ContentKey) -> Option<EncodingKey> {
-        // Binary search through pages to find the right page
-        for page in &self.ckey_pages {
-            for entry in &page.entries {
-                if entry.content_key == *content_key {
-                    return entry.encoding_keys.first().copied();
-                }
+        let key_bytes = *content_key.as_bytes();
+
+        // Binary search through the page index to find the right page.
+        // Each page's first_key is the lowest key in that page, and pages
+        // are sorted. We find the last page whose first_key <= our key.
+        let page_idx = self
+            .ckey_index
+            .partition_point(|idx| idx.first_key <= key_bytes);
+
+        // partition_point returns the first index where first_key > key,
+        // so the candidate page is at page_idx - 1
+        if page_idx == 0 {
+            return None;
+        }
+
+        let page = &self.ckey_pages[page_idx - 1];
+        for entry in &page.entries {
+            if entry.content_key == *content_key {
+                return entry.encoding_keys.first().copied();
             }
         }
         None
     }
 
     /// Find all encoding keys for a given content key
+    ///
+    /// Uses binary search on the page index to find the candidate page,
+    /// then linear scan within that page.
     pub fn find_all_encodings(&self, content_key: &ContentKey) -> Vec<EncodingKey> {
-        for page in &self.ckey_pages {
-            for entry in &page.entries {
-                if entry.content_key == *content_key {
-                    return entry.encoding_keys.clone();
-                }
+        let key_bytes = *content_key.as_bytes();
+
+        let page_idx = self
+            .ckey_index
+            .partition_point(|idx| idx.first_key <= key_bytes);
+
+        if page_idx == 0 {
+            return Vec::new();
+        }
+
+        let page = &self.ckey_pages[page_idx - 1];
+        for entry in &page.entries {
+            if entry.content_key == *content_key {
+                return entry.encoding_keys.clone();
             }
         }
         Vec::new()
     }
 
     /// Find `ESpec` for an encoding key
+    ///
+    /// Uses binary search on the page index to find the candidate page,
+    /// then linear scan within that page.
     pub fn find_espec(&self, encoding_key: &EncodingKey) -> Option<&str> {
-        // Search through EKey pages
-        for page in &self.ekey_pages {
-            for entry in &page.entries {
-                if entry.encoding_key == *encoding_key {
-                    return self.espec_table.get(entry.espec_index);
-                }
+        let key_bytes = *encoding_key.as_bytes();
+
+        let page_idx = self
+            .ekey_index
+            .partition_point(|idx| idx.first_key <= key_bytes);
+
+        if page_idx == 0 {
+            return None;
+        }
+
+        let page = &self.ekey_pages[page_idx - 1];
+        for entry in &page.entries {
+            if entry.encoding_key == *encoding_key {
+                return self.espec_table.get(entry.espec_index);
             }
         }
         None
