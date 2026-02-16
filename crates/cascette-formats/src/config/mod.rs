@@ -8,7 +8,7 @@ mod cdn_config;
 mod patch_config;
 mod product_config;
 
-pub use build_config::{BuildConfig, BuildInfo};
+pub use build_config::{BuildConfig, BuildInfo, PartialPriority};
 pub use cdn_config::{ArchiveInfo, CdnConfig};
 pub use patch_config::{PatchConfig, PatchEntry};
 pub use product_config::{
