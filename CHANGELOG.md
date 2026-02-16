@@ -123,6 +123,16 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - cascette-protocol: Fixed "No provider set" error in tests by adding rustls dev-dependency
   to provide crypto provider for reqwest with rustls feature
 - Fixed reqwest feature from invalid rustls-tls to rustls in Cargo.toml
+- cascette-formats: Fixed 4 format parser bugs found via Agent.exe comparison
+  - EKey page padding detection uses `espec_index == 0xFFFFFFFF` sentinel
+    matching Agent.exe, with zero-fill fallback for backward compatibility
+  - Root V4 content flags widened to `u64` and parsed with
+    `ContentFlags::read_v4()`/`write_v4()` for 5-byte (40-bit) flags instead
+    of truncating to `u32`
+  - Root version detection heuristic tightened to check version field against
+    known values (2..=4) instead of `< 10`
+  - EKey entry proptest size assertion corrected (36 -> 25 bytes), added
+    missing `#[test]` annotations to 7 proptest macro functions
 
 ### Infrastructure
 
