@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1771258756806,
+  "lastUpdate": 1771260807483,
   "repoUrl": "https://github.com/wowemulation-dev/cascette-rs",
   "entries": {
     "Benchmark": [
@@ -293,6 +293,48 @@ window.BENCHMARK_DATA = {
             "name": "bpsv_generation/summary/all",
             "value": 207,
             "range": "± 0",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "daniel@kogito.network",
+            "name": "Daniel S. Reichenbach",
+            "username": "danielsreichenbach"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "98041c15829bf72bf4da9a511d47c249a6f613f4",
+          "message": "Merge pull request #32 from wowemulation-dev/fix/format-validation\n\nfix: add format validation matching Agent.exe constraints",
+          "timestamp": "2026-02-16T23:51:31+07:00",
+          "tree_id": "8f32ca232f2665479dd6779f4314b07cacdd66c3",
+          "url": "https://github.com/wowemulation-dev/cascette-rs/commit/98041c15829bf72bf4da9a511d47c249a6f613f4"
+        },
+        "date": 1771260806624,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "bpsv_generation/versions/wow",
+            "value": 1817,
+            "range": "± 5",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "bpsv_generation/cdns/wow",
+            "value": 1198,
+            "range": "± 8",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "bpsv_generation/summary/all",
+            "value": 209,
+            "range": "± 1",
             "unit": "ns/iter"
           }
         ]
