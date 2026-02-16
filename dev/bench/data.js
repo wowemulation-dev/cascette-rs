@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1771264814456,
+  "lastUpdate": 1771286355954,
   "repoUrl": "https://github.com/wowemulation-dev/cascette-rs",
   "entries": {
     "Benchmark": [
@@ -461,6 +461,48 @@ window.BENCHMARK_DATA = {
             "name": "bpsv_generation/summary/all",
             "value": 203,
             "range": "± 2",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "daniel@kogito.network",
+            "name": "Daniel S. Reichenbach",
+            "username": "danielsreichenbach"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a626096debf4e45d680852559e4f77224f21b8e6",
+          "message": "Merge pull request #35 from wowemulation-dev/fix/encoding-lookup-and-toc-hash\n\nfix: encoding page lookup and archive group TOC hash",
+          "timestamp": "2026-02-17T06:57:21+07:00",
+          "tree_id": "4aaeb16dcec07687c495bab21f539e4c0492c4ea",
+          "url": "https://github.com/wowemulation-dev/cascette-rs/commit/a626096debf4e45d680852559e4f77224f21b8e6"
+        },
+        "date": 1771286355460,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "bpsv_generation/versions/wow",
+            "value": 1843,
+            "range": "± 17",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "bpsv_generation/cdns/wow",
+            "value": 1188,
+            "range": "± 10",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "bpsv_generation/summary/all",
+            "value": 204,
+            "range": "± 5",
             "unit": "ns/iter"
           }
         ]
