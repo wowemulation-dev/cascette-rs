@@ -4,30 +4,23 @@
 //! streaming archive reading, and HTTP range requests into a unified API for
 //! content resolution and extraction.
 
-#[cfg(feature = "streaming")]
 use futures::stream::{FuturesUnordered, StreamExt};
-#[cfg(feature = "streaming")]
 use std::collections::HashMap;
-#[cfg(feature = "streaming")]
 use std::io::Cursor;
-#[cfg(feature = "streaming")]
 use std::sync::Arc;
 
 /// Simple cancellation token implementation
-#[cfg(feature = "streaming")]
 #[derive(Clone)]
 pub struct CancellationToken {
     cancelled: Arc<std::sync::atomic::AtomicBool>,
 }
 
-#[cfg(feature = "streaming")]
 impl Default for CancellationToken {
     fn default() -> Self {
         Self::new()
     }
 }
 
-#[cfg(feature = "streaming")]
 impl CancellationToken {
     /// Create a new cancellation token
     pub fn new() -> Self {
@@ -56,23 +49,18 @@ impl CancellationToken {
     }
 }
 
-#[cfg(feature = "streaming")]
 use super::super::{ArchiveError, ArchiveIndex};
-#[cfg(feature = "streaming")]
 use crate::cdn::streaming::{
     HttpClient, StreamingConfig, StreamingError,
     archive::{ArchiveExtractionRequest, StreamingArchiveConfig, StreamingArchiveReader},
     error::InputValidator,
     path::{CdnUrlBuilder, ContentType},
 };
-#[cfg(feature = "streaming")]
 use cascette_crypto::TactKeyStore;
 
-#[cfg(feature = "streaming")]
 use tracing::{debug, info};
 
 /// Content resolution request
-#[cfg(feature = "streaming")]
 #[derive(Debug, Clone)]
 pub struct ContentResolutionRequest {
     /// Encoding key of the content to resolve
@@ -84,7 +72,6 @@ pub struct ContentResolutionRequest {
 }
 
 /// Result of content resolution
-#[cfg(feature = "streaming")]
 #[derive(Debug)]
 pub struct ContentResolutionResult {
     /// The resolved content
@@ -100,7 +87,6 @@ pub struct ContentResolutionResult {
 }
 
 /// CDN configuration for content resolution
-#[cfg(feature = "streaming")]
 #[derive(Debug, Clone)]
 pub struct CdnResolutionConfig {
     /// Product name (e.g., "wow", "wow_classic")
@@ -117,7 +103,6 @@ pub struct CdnResolutionConfig {
     pub prefer_https: bool,
 }
 
-#[cfg(feature = "streaming")]
 impl Default for CdnResolutionConfig {
     fn default() -> Self {
         Self {
@@ -131,7 +116,6 @@ impl Default for CdnResolutionConfig {
     }
 }
 
-#[cfg(feature = "streaming")]
 impl CdnResolutionConfig {
     /// Validate the configuration
     pub fn validate(&self) -> Result<(), StreamingError> {
@@ -210,7 +194,6 @@ impl CdnResolutionConfig {
 }
 
 /// High-level CDN streaming resolver
-#[cfg(feature = "streaming")]
 #[derive(Debug)]
 pub struct StreamingCdnResolver<H: HttpClient> {
     http_client: H,
@@ -223,7 +206,6 @@ pub struct StreamingCdnResolver<H: HttpClient> {
     cached_archive_groups: HashMap<String, Arc<ArchiveIndex>>,
 }
 
-#[cfg(feature = "streaming")]
 impl<H: HttpClient + Clone> StreamingCdnResolver<H> {
     /// Create a new CDN resolver
     pub fn new(http_client: H, config: CdnResolutionConfig) -> Self {
@@ -319,7 +301,7 @@ impl<H: HttpClient + Clone> StreamingCdnResolver<H> {
         }
 
         // Group requests by archive using archive group index
-        let archive_groups = self.group_requests_by_archive(&requests).await?;
+        let archive_groups = self.group_requests_by_archive(&requests);
 
         let mut final_results = HashMap::new();
 
@@ -411,7 +393,7 @@ impl<H: HttpClient + Clone> StreamingCdnResolver<H> {
             &self.config.cdn_host,
             &self.config.product,
             ContentType::Data, // Archives use data path
-            &format!("{}.index", archive_hash),
+            &format!("{archive_hash}.index"),
             self.config.prefer_https,
         )?;
 
@@ -429,7 +411,7 @@ impl<H: HttpClient + Clone> StreamingCdnResolver<H> {
                     StreamingError::NetworkRequest { source } => {
                         StreamingError::network_with_context(
                             source,
-                            &format!("Downloading index for archive: {}", archive_hash),
+                            &format!("Downloading index for archive: {archive_hash}"),
                         )
                     }
                     _ => e,
@@ -439,7 +421,7 @@ impl<H: HttpClient + Clone> StreamingCdnResolver<H> {
         // Parse index from bytes
         let mut cursor = Cursor::new(index_data.as_ref());
         let index = ArchiveIndex::parse(&mut cursor).map_err(|e| {
-            let context = format!("Parsing index for archive: {}", archive_hash);
+            let context = format!("Parsing index for archive: {archive_hash}");
             StreamingError::archive_format_with_context(e, &context)
         })?;
 
@@ -451,10 +433,11 @@ impl<H: HttpClient + Clone> StreamingCdnResolver<H> {
     }
 
     /// Group requests by archive using archive group index
-    async fn group_requests_by_archive(
-        &mut self,
+    #[allow(clippy::unused_self)] // Will use self when archive group index is implemented
+    fn group_requests_by_archive(
+        &self,
         requests: &[ContentResolutionRequest],
-    ) -> Result<HashMap<String, Vec<ContentResolutionRequest>>, StreamingError> {
+    ) -> HashMap<String, Vec<ContentResolutionRequest>> {
         // For now, assume all content is in a single archive
         // In a real implementation, this would use the archive group index
         // to determine which archive contains each piece of content
@@ -464,7 +447,7 @@ impl<H: HttpClient + Clone> StreamingCdnResolver<H> {
 
         groups.insert(default_archive, requests.to_vec());
 
-        Ok(groups)
+        groups
     }
 
     /// Build archive URL from hash with input validation
@@ -527,7 +510,7 @@ impl<H: HttpClient + Clone> StreamingCdnResolver<H> {
     }
 
     /// Perform resource cleanup and prepare for shutdown
-    pub async fn prepare_for_shutdown(&mut self) {
+    pub fn prepare_for_shutdown(&mut self) {
         // Clear all caches to free memory
         self.clear_caches();
 
@@ -569,13 +552,12 @@ impl<H: HttpClient + Clone> StreamingCdnResolver<H> {
 
                 tasks.push(async move {
                     // Check for cancellation
-                    if let Some(token) = &token {
-                        if token.is_cancelled() {
+                    if let Some(token) = &token
+                        && token.is_cancelled() {
                             return Err(StreamingError::Configuration {
                                 reason: "Preload cancelled".to_string(),
                             });
                         }
-                    }
 
                     Ok::<String, StreamingError>(hash_copy)
                 });
@@ -604,11 +586,10 @@ impl<H: HttpClient + Clone> StreamingCdnResolver<H> {
                 break; // Cancellation or no more tasks
             };
             // Check cancellation before processing result
-            if let Some(token) = &cancellation_token {
-                if token.is_cancelled() {
+            if let Some(token) = &cancellation_token
+                && token.is_cancelled() {
                     break;
                 }
-            }
 
             if let Ok(archive_hash) = task_result {
                 if self.get_archive_index(&archive_hash).await.is_ok() {
@@ -632,7 +613,6 @@ impl<H: HttpClient + Clone> StreamingCdnResolver<H> {
 }
 
 /// Cache statistics for monitoring
-#[cfg(feature = "streaming")]
 #[derive(Debug, Clone)]
 pub struct CacheStats {
     /// Number of cached archive indices
@@ -642,7 +622,6 @@ pub struct CacheStats {
 }
 
 /// Batch content resolver for handling large-scale operations
-#[cfg(feature = "streaming")]
 #[derive(Debug)]
 pub struct BatchContentResolver<H: HttpClient> {
     resolvers: Vec<StreamingCdnResolver<H>>,
@@ -650,7 +629,6 @@ pub struct BatchContentResolver<H: HttpClient> {
     config: CdnResolutionConfig,
 }
 
-#[cfg(feature = "streaming")]
 impl<H: HttpClient + Clone> BatchContentResolver<H> {
     /// Create batch resolver with multiple CDN resolvers
     pub fn new(http_clients: Vec<H>, config: CdnResolutionConfig) -> Self {
@@ -718,9 +696,9 @@ impl<H: HttpClient + Clone> BatchContentResolver<H> {
     }
 
     /// Prepare all resolvers for shutdown
-    pub async fn prepare_for_shutdown(&mut self) {
+    pub fn prepare_for_shutdown(&mut self) {
         for resolver in &mut self.resolvers {
-            resolver.prepare_for_shutdown().await;
+            resolver.prepare_for_shutdown();
         }
 
         info!(
@@ -730,7 +708,7 @@ impl<H: HttpClient + Clone> BatchContentResolver<H> {
     }
 }
 
-#[cfg(all(test, feature = "streaming"))]
+#[cfg(test)]
 #[allow(clippy::expect_used, clippy::unwrap_used, clippy::uninlined_format_args)]
 mod tests {
     use super::*;

@@ -8,7 +8,6 @@
 //! - Zero-copy optimizations
 //! - Compression detection and handling
 
-#[cfg(feature = "streaming")]
 use std::{
     cmp,
     collections::{BinaryHeap, VecDeque},
@@ -19,21 +18,16 @@ use std::{
     time::{Duration, Instant},
 };
 
-#[cfg(feature = "streaming")]
 use bytes::Bytes;
-#[cfg(feature = "streaming")]
 use tokio::sync::{RwLock, mpsc};
-#[cfg(feature = "streaming")]
 use tracing::{debug, info};
 
-#[cfg(feature = "streaming")]
 use super::{
     config::StreamingConfig, error::StreamingResult, http::HttpClient, metrics::StreamingMetrics,
     range::HttpRange,
 };
 
 /// Priority levels for download requests
-#[cfg(feature = "streaming")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum RequestPriority {
     /// Critical system files (highest priority)
@@ -49,7 +43,6 @@ pub enum RequestPriority {
 }
 
 /// Download request with priority and metadata
-#[cfg(feature = "streaming")]
 #[derive(Debug, Clone)]
 pub struct PrioritizedRequest {
     /// Target URL for the request
@@ -66,24 +59,20 @@ pub struct PrioritizedRequest {
     pub id: u64,
 }
 
-#[cfg(feature = "streaming")]
 impl PartialEq for PrioritizedRequest {
     fn eq(&self, other: &Self) -> bool {
         self.id == other.id
     }
 }
 
-#[cfg(feature = "streaming")]
 impl Eq for PrioritizedRequest {}
 
-#[cfg(feature = "streaming")]
 impl PartialOrd for PrioritizedRequest {
     fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
         Some(self.cmp(other))
     }
 }
 
-#[cfg(feature = "streaming")]
 impl Ord for PrioritizedRequest {
     fn cmp(&self, other: &Self) -> cmp::Ordering {
         // Reverse ordering for max heap behavior (higher priority first)
@@ -95,7 +84,6 @@ impl Ord for PrioritizedRequest {
 }
 
 /// Bandwidth monitoring for adaptive optimization
-#[cfg(feature = "streaming")]
 #[derive(Debug)]
 pub struct BandwidthMonitor {
     /// Current bandwidth estimate in bytes/second
@@ -112,7 +100,6 @@ pub struct BandwidthMonitor {
     sample_window: Duration,
 }
 
-#[cfg(feature = "streaming")]
 impl BandwidthMonitor {
     /// Create new bandwidth monitor
     pub fn new(sample_window: Duration) -> Self {
@@ -127,7 +114,7 @@ impl BandwidthMonitor {
     }
 
     /// Record bandwidth sample
-    #[allow(clippy::cast_sign_loss, clippy::suboptimal_flops)] // Performance metrics are positive, mathematical precision not critical
+    #[allow(clippy::cast_precision_loss, clippy::cast_sign_loss, clippy::suboptimal_flops)] // Performance metrics are positive, mathematical precision not critical
     pub async fn record_sample(&self, bytes: u64, duration: Duration) {
         if duration.is_zero() {
             return;
@@ -202,7 +189,7 @@ impl BandwidthMonitor {
     }
 
     /// Recommend optimal range size based on current bandwidth
-    #[allow(clippy::cast_sign_loss)] // Bandwidth calculations are always positive
+    #[allow(clippy::cast_precision_loss, clippy::cast_sign_loss)] // Bandwidth calculations are always positive
     pub async fn recommend_range_size(&self, target_duration: Duration) -> u64 {
         let bandwidth = self.moving_average_bandwidth().await;
         if bandwidth == 0 {
@@ -216,7 +203,6 @@ impl BandwidthMonitor {
 }
 
 /// Advanced range coalescing with bandwidth-aware optimization
-#[cfg(feature = "streaming")]
 #[derive(Debug)]
 pub struct AdvancedRangeCoalescer {
     /// Configuration
@@ -229,7 +215,6 @@ pub struct AdvancedRangeCoalescer {
     bytes_saved: AtomicU64,
 }
 
-#[cfg(feature = "streaming")]
 impl AdvancedRangeCoalescer {
     /// Create new advanced range coalescer
     pub fn new(config: StreamingConfig, bandwidth_monitor: Arc<BandwidthMonitor>) -> Self {
@@ -243,7 +228,7 @@ impl AdvancedRangeCoalescer {
     }
 
     /// Coalesce ranges with bandwidth-aware optimization
-    pub async fn coalesce_ranges(
+    pub fn coalesce_ranges(
         &self,
         mut ranges: Vec<HttpRange>,
     ) -> StreamingResult<Vec<HttpRange>> {
@@ -260,7 +245,7 @@ impl AdvancedRangeCoalescer {
 
         // Get current bandwidth to determine optimal coalescing threshold
         let current_bandwidth = self.bandwidth_monitor.current_bandwidth();
-        let dynamic_threshold = self.calculate_dynamic_threshold(current_bandwidth).await;
+        let dynamic_threshold = self.calculate_dynamic_threshold(current_bandwidth);
 
         debug!(
             "Coalescing {} ranges with threshold {}",
@@ -323,7 +308,8 @@ impl AdvancedRangeCoalescer {
     }
 
     /// Calculate dynamic coalescing threshold based on bandwidth
-    async fn calculate_dynamic_threshold(&self, bandwidth: u64) -> u64 {
+    #[allow(clippy::cast_precision_loss, clippy::cast_sign_loss)]
+    fn calculate_dynamic_threshold(&self, bandwidth: u64) -> u64 {
         let base_threshold = self.config.range_coalesce_threshold;
 
         if bandwidth == 0 {
@@ -355,7 +341,6 @@ impl AdvancedRangeCoalescer {
 }
 
 /// Request queue with priority handling and backpressure
-#[cfg(feature = "streaming")]
 #[derive(Debug)]
 pub struct PriorityRequestQueue<T: HttpClient> {
     /// Priority queue for pending requests
@@ -368,6 +353,7 @@ pub struct PriorityRequestQueue<T: HttpClient> {
     client: Arc<T>,
     /// Request completion channel
     completion_tx: mpsc::UnboundedSender<(u64, StreamingResult<Bytes>)>,
+    #[allow(clippy::type_complexity)]
     completion_rx: Arc<RwLock<mpsc::UnboundedReceiver<(u64, StreamingResult<Bytes>)>>>,
     /// Request ID counter
     next_request_id: AtomicU64,
@@ -379,7 +365,6 @@ pub struct PriorityRequestQueue<T: HttpClient> {
     shutdown: AtomicBool,
 }
 
-#[cfg(feature = "streaming")]
 impl<T: HttpClient> PriorityRequestQueue<T> {
     /// Create new priority request queue
     pub fn new(
@@ -414,8 +399,7 @@ impl<T: HttpClient> PriorityRequestQueue<T> {
             request_id, request.priority
         );
 
-        let mut queue = self.queue.write().await;
-        queue.push(request);
+        self.queue.write().await.push(request);
 
         // Try to process requests if we have capacity
         self.try_process_requests().await;
@@ -434,13 +418,13 @@ impl<T: HttpClient> PriorityRequestQueue<T> {
         while current_active < self.max_concurrent && !queue.is_empty() {
             if let Some(request) = queue.pop() {
                 self.active_requests.fetch_add(1, Ordering::Relaxed);
-                self.spawn_request_handler(request).await;
+                self.spawn_request_handler(request);
             }
         }
     }
 
     /// Spawn request handler task
-    async fn spawn_request_handler(&self, request: PrioritizedRequest) {
+    fn spawn_request_handler(&self, request: PrioritizedRequest) {
         let client = self.client.clone();
         let bandwidth_monitor = self.bandwidth_monitor.clone();
         let metrics = self.metrics.clone();
@@ -501,8 +485,7 @@ impl<T: HttpClient> PriorityRequestQueue<T> {
 
     /// Get queue statistics
     pub async fn statistics(&self) -> (usize, usize) {
-        let queue = self.queue.read().await;
-        let pending = queue.len();
+        let pending = self.queue.read().await.len();
         let active = self.active_requests.load(Ordering::Relaxed);
         (pending, active)
     }
@@ -514,7 +497,6 @@ impl<T: HttpClient> PriorityRequestQueue<T> {
 }
 
 /// Zero-copy buffer manager for efficient data handling
-#[cfg(feature = "streaming")]
 #[derive(Debug)]
 pub struct ZeroCopyBuffer {
     /// Buffer pool for reuse
@@ -529,7 +511,6 @@ pub struct ZeroCopyBuffer {
     buffers_returned: AtomicU64,
 }
 
-#[cfg(feature = "streaming")]
 impl ZeroCopyBuffer {
     /// Create new zero-copy buffer manager
     pub fn new(buffer_size: usize, max_pooled: usize) -> Self {
@@ -566,17 +547,18 @@ impl ZeroCopyBuffer {
         let mut pool = self.buffer_pool.write().await;
         if pool.len() < self.max_pooled_buffers {
             pool.push(buffer);
+            drop(pool);
             self.buffers_returned.fetch_add(1, Ordering::Relaxed);
             debug!("Returned buffer to pool");
         } else {
+            drop(pool);
             debug!("Pool full, dropping buffer");
         }
     }
 
     /// Get buffer pool statistics
     pub async fn statistics(&self) -> (usize, u64, u64, u64) {
-        let pool = self.buffer_pool.read().await;
-        let pooled = pool.len();
+        let pooled = self.buffer_pool.read().await.len();
         let allocated = self.buffers_allocated.load(Ordering::Relaxed);
         let reused = self.buffers_reused.load(Ordering::Relaxed);
         let returned = self.buffers_returned.load(Ordering::Relaxed);
@@ -585,7 +567,7 @@ impl ZeroCopyBuffer {
     }
 }
 
-#[cfg(all(test, feature = "streaming"))]
+#[cfg(test)]
 #[allow(clippy::expect_used, clippy::unwrap_used, clippy::uninlined_format_args)]
 mod tests {
     use super::*;
@@ -640,7 +622,6 @@ mod tests {
 
         let coalesced = coalescer
             .coalesce_ranges(ranges)
-            .await
             .expect("Operation should succeed");
 
         // Should coalesce all three ranges into one

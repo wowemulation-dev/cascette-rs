@@ -12,9 +12,14 @@ readme = "README.md"
 keywords = ["blizzard", "ngdp", "casc", "ribbit", "tact"]
 categories = ["network-programming", "game-development", "parsing"]
 
+[features]
+default = []
+streaming = ["dep:binrw"]
+
 [dependencies]
 # Workspace dependencies (available on all platforms)
 thiserror = { workspace = true }
+binrw = { workspace = true, optional = true }
 hex = { workspace = true }
 async-trait = { workspace = true }
 bytes = { workspace = true }

@@ -81,6 +81,15 @@ Pending PR (fix/formats-agent-comparison):
   of hardcoded 9. `ContainerEntry.ekey` changed to `Vec<u8>`
 - TVFS EST (Encoding Spec Table) parsed when
   `TVFS_FLAG_ENCODING_SPEC` flag is set
+- CDN server selection: `FailoverManager` uses exponential decay
+  scoring (`0.9^total_failure_weight`) with per-error-code weights
+  and weighted-random selection, matching Agent.exe. Removed
+  permanent server exclusion (`ServerHealth::Failed`)
+- Streaming `max_redirects`: configurable (default 5), applied to
+  both reqwest builder paths
+- Connection parameter limitations documented in `StreamingConfig`
+  and `HttpConfig` (low speed limit, receive buffer, DNS cache TTL,
+  total connection pool cap)
 
 ## Format Parsing Issues
 
@@ -101,37 +110,6 @@ is not implemented.
 
 ## Protocol Issues
 
-### CDN Server Selection
-
-Agent uses exponential decay scoring for server selection:
-
-```text
-weight = 0.9 ^ total_failures
-selection = randomized linear interpolation across scored servers
-```
-
-Failed servers get progressively lower weights but are never fully
-excluded. HTTP response codes carry different backoff weights:
-
-| Code | Category | Backoff Weight |
-|------|----------|---------------|
-| 200-299 | Success | 0 |
-| 429 | Rate limited | Reads Retry-After header |
-| 503 | Unavailable | 5.0 |
-| 404 | Not found | 2.5 |
-| Other 4xx/5xx | Error | 1.0 |
-
-cascette-rs has two CDN implementations:
-
-- **Non-streaming** (`cdn/mod.rs`): Single configured host, no
-  server scoring, plain exponential backoff retry.
-- **Streaming** (`cdn_streaming/`): `FailoverManager` with
-  per-server metrics (success rate, response time, bandwidth).
-  Uses fixed unavailability windows (5 min for timeout, 15 min
-  for 5xx) instead of decay scoring. Servers can be permanently
-  marked `Failed`, unlike Agent which never fully excludes
-  servers.
-
 ### Connection Parameters
 
 | Parameter | Agent | cascette-rs (non-streaming) | cascette-rs (streaming) |
@@ -139,16 +117,28 @@ cascette-rs has two CDN implementations:
 | Connect timeout | 60s | 10s (intentional) | 10s |
 | Request timeout | -- | 45s | 30s |
 | Max connections/host | 3 | 10 (intentional) | 8 |
-| Total connections | 12 | Unlimited | 100 |
-| Max redirects | 5 | 5 (configurable) | Default (10) |
-| Low speed limit | 100 bps / 60s | Not set | Not set |
-| Receive buffer | 256KB | Default | 64KB |
-| DNS cache TTL | 300s | Default | Default |
+| Total connections | 12 | Unlimited | 100 (not a hard cap) |
+| Max redirects | 5 | 5 (configurable) | 5 (configurable) |
+| Low speed limit | 100 bps / 60s | Not set (reqwest limitation) | Not set (reqwest limitation) |
+| Receive buffer | 256KB | Default (reqwest limitation) | Default (reqwest limitation) |
+| DNS cache TTL | 300s | Default (reqwest limitation) | Default (reqwest limitation) |
 | HTTP version | Forced 1.1 | 1.1 + HTTP/2 adaptive (intentional) | 1.1 + HTTP/2 |
 
 Agent forces HTTP/1.1 for CDN downloads. cascette-rs enables
 HTTP/2 by default with adaptive window sizing. `HttpConfig`
 documents all intentional differences from Agent defaults.
+
+The following Agent.exe parameters cannot be configured through
+reqwest and are documented in `StreamingConfig` and `HttpConfig`:
+
+- **Low speed limit** (100 bps / 60s): reqwest has no stall
+  detection. Application-layer throughput monitoring would be
+  needed.
+- **Receive buffer** (256KB `SO_RCVBUF`): reqwest does not
+  expose socket options.
+- **DNS cache TTL** (300s): reqwest uses the system resolver.
+- **Total connection pool cap** (12): reqwest only exposes
+  per-host idle limits, not total active connections.
 
 ## Root File Issues
 
@@ -471,5 +461,6 @@ These cascette-rs implementations match Agent.exe behavior:
 | CDN URL trailing slash | `cdnPath` trailing slash stripped | `normalize_cdn_path()` strips trailing slashes before URL construction |
 | Retry-After header | 429 response reads `Retry-After` | `RateLimited { retry_after }` variant, `parse_retry_after()` in CDN client, `RetryPolicy` uses hint |
 | CDN URL parameters | `ParseCdnServerUrl` parses `?fallback=1`, `?strict=1`, `?maxhosts=N` | `parse_cdn_server_url()` extracts params; `CdnEndpoint` and `CdnServer` store parsed fields |
-| Max redirects | 5 redirect limit | `HttpConfig::max_redirects` (default 5), `create_optimized_client()` uses 5 |
+| Max redirects | 5 redirect limit | `HttpConfig::max_redirects` (default 5), `StreamingConfig::max_redirects` (default 5), both reqwest builders use configured value |
+| CDN server scoring | `0.9^total_failures` decay, weighted-random selection | `FailoverManager` uses `total_failure_weight` with per-error-code weights (503=5.0, 404=2.5, 429=0, other=1.0), `0.9^weight` decay, cumulative-weight random selection. No permanent server exclusion |
 | China region CDN | `.com.cn` domains for CN region | `Region` enum with `CN` and `SG` variants, `tact_https_url()`, `tact_http_url()`, and `ribbit_address()` return per-region domains |

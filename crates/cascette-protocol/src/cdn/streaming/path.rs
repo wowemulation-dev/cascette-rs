@@ -5,16 +5,12 @@
 
 #![allow(clippy::panic)]
 
-#[cfg(feature = "streaming")]
 use std::collections::HashMap;
-#[cfg(feature = "streaming")]
 use std::time::{Duration, Instant};
 
-#[cfg(feature = "streaming")]
 use super::{bootstrap::CdnBootstrap, error::StreamingError};
 
 /// CDN content types
-#[cfg(feature = "streaming")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ContentType {
     /// Configuration files (BuildConfig, CDNConfig, etc.)
@@ -25,7 +21,6 @@ pub enum ContentType {
     Patch,
 }
 
-#[cfg(feature = "streaming")]
 impl ContentType {
     /// Get the string representation for URL construction
     pub fn as_str(&self) -> &'static str {
@@ -38,7 +33,6 @@ impl ContentType {
 }
 
 /// CDN path cache entry with timestamp for TTL
-#[cfg(feature = "streaming")]
 #[derive(Debug, Clone)]
 struct CachedPath {
     path: String,
@@ -46,7 +40,6 @@ struct CachedPath {
 }
 
 /// CDN path cache for product-specific paths with runtime updates
-#[cfg(feature = "streaming")]
 #[derive(Debug, Clone)]
 pub struct CdnPathCache {
     /// Cached paths by product name with timestamps
@@ -57,14 +50,12 @@ pub struct CdnPathCache {
     validate_paths: bool,
 }
 
-#[cfg(feature = "streaming")]
 impl Default for CdnPathCache {
     fn default() -> Self {
         Self::new()
     }
 }
 
-#[cfg(feature = "streaming")]
 impl CdnPathCache {
     /// Create a new empty path cache
     pub fn new() -> Self {
@@ -112,11 +103,10 @@ impl CdnPathCache {
         let cached_entry = self.cache.get(product)?;
 
         // Check TTL if configured
-        if let Some(ttl) = self.ttl {
-            if cached_entry.cached_at.elapsed() > ttl {
+        if let Some(ttl) = self.ttl
+            && cached_entry.cached_at.elapsed() > ttl {
                 return None; // Expired
             }
-        }
 
         Some(&cached_entry.path)
     }
@@ -287,7 +277,10 @@ impl CdnPathCache {
         }
 
         let now = Instant::now();
-        let ttl = self.ttl.expect("Operation should succeed");
+        // Safety: we checked `self.ttl.is_none()` above and returned early
+        let Some(ttl) = self.ttl else {
+            unreachable!("ttl is Some after early return");
+        };
 
         self.cache
             .values()
@@ -307,21 +300,18 @@ impl CdnPathCache {
 }
 
 /// CDN URL builder following the exact specification
-#[cfg(feature = "streaming")]
 #[derive(Debug, Clone)]
 pub struct CdnUrlBuilder {
     /// Path cache for discovered CDN paths
     path_cache: CdnPathCache,
 }
 
-#[cfg(feature = "streaming")]
 impl Default for CdnUrlBuilder {
     fn default() -> Self {
         Self::new()
     }
 }
 
-#[cfg(feature = "streaming")]
 impl CdnUrlBuilder {
     /// Create a new URL builder
     pub fn new() -> Self {
@@ -387,7 +377,7 @@ impl CdnUrlBuilder {
         // Verify hash contains only hex characters
         if !hash.chars().all(|c| c.is_ascii_hexdigit()) {
             return Err(StreamingError::InvalidRange {
-                reason: format!("Hash must contain only hex characters: {}", hash),
+                reason: format!("Hash must contain only hex characters: {hash}"),
             });
         }
 
@@ -441,8 +431,7 @@ impl CdnUrlBuilder {
                 .get(product)
                 .ok_or_else(|| StreamingError::Configuration {
                     reason: format!(
-                        "No cached CDN path for product '{}'. Must query CDN endpoint first.",
-                        product
+                        "No cached CDN path for product '{product}'. Must query CDN endpoint first."
                     ),
                 })?;
 
@@ -455,7 +444,7 @@ impl CdnUrlBuilder {
     pub fn hash_directories(hash: &str) -> Result<(String, String), StreamingError> {
         if hash.len() < 4 {
             return Err(StreamingError::InvalidRange {
-                reason: format!("Hash too short for directory extraction: {}", hash),
+                reason: format!("Hash too short for directory extraction: {hash}"),
             });
         }
 
@@ -508,7 +497,6 @@ impl CdnUrlBuilder {
 }
 
 /// Special handling for product configuration paths
-#[cfg(feature = "streaming")]
 impl CdnUrlBuilder {
     /// Build URL for product configuration files
     ///
@@ -534,7 +522,7 @@ impl CdnUrlBuilder {
         // Verify hash contains only hex characters
         if !hash.chars().all(|c| c.is_ascii_hexdigit()) {
             return Err(StreamingError::InvalidRange {
-                reason: format!("Hash must contain only hex characters: {}", hash),
+                reason: format!("Hash must contain only hex characters: {hash}"),
             });
         }
 
@@ -546,8 +534,7 @@ impl CdnUrlBuilder {
         // Product configs don't use content type in the path
         // because "tpr/configs/data" already includes the data segment
         let url = format!(
-            "{}://{}/tpr/configs/data/{}/{}/{}",
-            protocol, cdn_server, hash_dir1, hash_dir2, hash_lower
+            "{protocol}://{cdn_server}/tpr/configs/data/{hash_dir1}/{hash_dir2}/{hash_lower}"
         );
 
         Ok(url)
@@ -555,8 +542,7 @@ impl CdnUrlBuilder {
 }
 
 /// Cache statistics for monitoring and debugging
-#[cfg(feature = "streaming")]
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CacheStats {
     /// Total number of cached entries (including expired)
     pub total_entries: usize,
@@ -570,7 +556,7 @@ pub struct CacheStats {
     pub validation_enabled: bool,
 }
 
-#[cfg(all(test, feature = "streaming"))]
+#[cfg(test)]
 #[allow(clippy::expect_used, clippy::unwrap_used, clippy::uninlined_format_args)]
 mod tests {
     use super::*;

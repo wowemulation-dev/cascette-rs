@@ -5,7 +5,6 @@
 
 use thiserror::Error;
 
-#[cfg(feature = "streaming")]
 use tracing::debug;
 
 /// Comprehensive error type for streaming operations
@@ -13,7 +12,6 @@ use tracing::debug;
 /// Provides detailed context about streaming failures including network errors,
 /// protocol violations, and resource constraints. Each error variant includes
 /// actionable information for debugging and potential recovery strategies.
-#[cfg(feature = "streaming")]
 #[derive(Debug, Error)]
 pub enum StreamingError {
     /// Network request failed
@@ -166,7 +164,7 @@ pub enum StreamingError {
         server: String,
         /// The underlying error that caused the failure
         #[source]
-        source: Box<StreamingError>,
+        source: Box<Self>,
     },
 
     /// All CDN servers exhausted
@@ -303,15 +301,12 @@ pub enum StreamingError {
     },
 }
 
-#[cfg(feature = "streaming")]
 impl StreamingError {
     /// Create a network request error with additional context
     pub fn network_with_context(source: reqwest::Error, context: &str) -> Self {
         if let Some(status) = source.status() {
             let url = source
-                .url()
-                .map(|u| u.to_string())
-                .unwrap_or_else(|| context.to_string());
+                .url().map_or_else(|| context.to_string(), std::string::ToString::to_string);
 
             Self::HttpStatus {
                 status_code: status.as_u16(),
@@ -438,7 +433,7 @@ impl StreamingError {
                 416 => "Verify the range request is within the file bounds.".to_string(),
                 429 => "Reduce request rate and implement exponential backoff.".to_string(),
                 500..=599 => "Server error - retry with exponential backoff.".to_string(),
-                _ => format!("HTTP error {} - check server logs for details.", status_code),
+                _ => format!("HTTP error {status_code} - check server logs for details."),
             },
             Self::RangeNotSupported { .. } => {
                 "Use a CDN that supports HTTP range requests, or fall back to full file downloads.".to_string()
@@ -474,22 +469,22 @@ impl StreamingError {
                 "Check system resources and HTTP client configuration parameters.".to_string()
             }
             Self::CdnFailover { server, .. } => {
-                format!("CDN server {} is temporarily unavailable. Trying next server in failover list.", server)
+                format!("CDN server {server} is temporarily unavailable. Trying next server in failover list.")
             }
             Self::AllCdnServersFailed { .. } => {
                 "All CDN servers failed. Check network connectivity or try again later. Consider using community mirrors.".to_string()
             }
             Self::CdnPathNotCached { product } => {
-                format!("Query Ribbit API to resolve CDN path for product '{}' before accessing content.", product)
+                format!("Query Ribbit API to resolve CDN path for product '{product}' before accessing content.")
             }
             Self::CdnPathResolution { product, .. } => {
-                format!("Verify product name '{}' is correct and Ribbit API is accessible.", product)
+                format!("Verify product name '{product}' is correct and Ribbit API is accessible.")
             }
             Self::InvalidHashFormat { .. } => {
                 "Ensure content hashes are 32-character hexadecimal strings (MD5 format).".to_string()
             }
             Self::CdnRegionUnavailable { region, .. } => {
-                format!("Try a different CDN region. Region '{}' may have access restrictions.", region)
+                format!("Try a different CDN region. Region '{region}' may have access restrictions.")
             }
             Self::RateLimitExceeded { .. } => {
                 "Implement exponential backoff and reduce request rate to stay within CDN limits.".to_string()
@@ -498,16 +493,16 @@ impl StreamingError {
                 "Retry download from a different CDN server. Content may be corrupted during transfer.".to_string()
             }
             Self::MirrorSyncLag { mirror, .. } => {
-                format!("Mirror '{}' is behind. Use official Blizzard CDN or wait for synchronization.", mirror)
+                format!("Mirror '{mirror}' is behind. Use official Blizzard CDN or wait for synchronization.")
             }
             Self::BlteError { .. } => {
                 "Verify BLTE content integrity. Check if decryption keys are available. Try downloading from different CDN server.".to_string()
             }
             Self::ServerUnavailable { server, reason } => {
-                format!("Server '{}' is unavailable ({}). Wait for health check recovery or try other servers.", server, reason)
+                format!("Server '{server}' is unavailable ({reason}). Wait for health check recovery or try other servers.")
             }
             Self::ConnectionLimit { server, limit } => {
-                format!("Server '{}' has reached connection limit ({}). Wait for connections to close or try other servers.", server, limit)
+                format!("Server '{server}' has reached connection limit ({limit}). Wait for connections to close or try other servers.")
             }
         }
     }
@@ -582,12 +577,12 @@ impl StreamingError {
         match self {
             // Remove potentially sensitive information from error messages
             Self::HttpStatus { status_code, .. } => {
-                format!("HTTP error {}", status_code)
+                format!("HTTP error {status_code}")
             }
             Self::NetworkRequest { .. } => "Network request failed".to_string(),
             Self::Configuration { .. } => "Configuration error".to_string(),
             Self::Timeout { timeout_ms, .. } => {
-                format!("Request timeout after {}ms", timeout_ms)
+                format!("Request timeout after {timeout_ms}ms")
             }
             Self::ArchiveFormat { .. } => "Archive format error".to_string(),
             Self::BlteError { .. } => "Content decompression error".to_string(),
@@ -621,10 +616,8 @@ impl StreamingError {
 }
 
 /// Input validation utilities for security
-#[cfg(feature = "streaming")]
 pub struct InputValidator;
 
-#[cfg(feature = "streaming")]
 impl InputValidator {
     /// Validate content hash format to prevent injection attacks
     pub fn validate_content_hash(hash: &str) -> Result<(), StreamingError> {
@@ -718,10 +711,8 @@ impl InputValidator {
 }
 
 /// Result type for streaming operations
-#[cfg(feature = "streaming")]
 pub type StreamingResult<T> = Result<T, StreamingError>;
 
-#[cfg(feature = "streaming")]
 impl From<super::super::ArchiveError> for StreamingError {
     fn from(error: super::super::ArchiveError) -> Self {
         debug!("Converting ArchiveError to StreamingError: {:?}", error);
@@ -729,7 +720,6 @@ impl From<super::super::ArchiveError> for StreamingError {
     }
 }
 
-#[cfg(feature = "streaming")]
 impl From<std::io::Error> for StreamingError {
     fn from(error: std::io::Error) -> Self {
         debug!(
@@ -741,7 +731,6 @@ impl From<std::io::Error> for StreamingError {
     }
 }
 
-#[cfg(feature = "streaming")]
 impl From<reqwest::Error> for StreamingError {
     fn from(error: reqwest::Error) -> Self {
         debug!(
@@ -755,9 +744,7 @@ impl From<reqwest::Error> for StreamingError {
         if let Some(status) = error.status() {
             // Extract URL from the error if available
             let url = error
-                .url()
-                .map(|u| u.to_string())
-                .unwrap_or_else(|| "<unknown>".to_string());
+                .url().map_or_else(|| "<unknown>".to_string(), std::string::ToString::to_string);
 
             debug!("HTTP status error: {} for URL: {}", status.as_u16(), url);
             Self::HttpStatus {
@@ -781,7 +768,6 @@ impl From<reqwest::Error> for StreamingError {
     }
 }
 
-#[cfg(feature = "streaming")]
 impl From<crate::blte::BlteError> for StreamingError {
     fn from(error: crate::blte::BlteError) -> Self {
         debug!("Converting BlteError to StreamingError: {:?}", error);
@@ -789,7 +775,7 @@ impl From<crate::blte::BlteError> for StreamingError {
     }
 }
 
-#[cfg(all(test, feature = "streaming"))]
+#[cfg(test)]
 #[allow(clippy::expect_used, clippy::unwrap_used, clippy::uninlined_format_args)]
 mod tests {
     use super::*;

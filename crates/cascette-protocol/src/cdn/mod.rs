@@ -2,6 +2,13 @@
 
 pub mod range;
 
+#[cfg(all(not(target_arch = "wasm32"), feature = "streaming"))]
+pub mod streaming;
+
+// Re-export types needed by the streaming submodule (resolves super::super::ArchiveError paths)
+#[cfg(all(not(target_arch = "wasm32"), feature = "streaming"))]
+pub use cascette_formats::archive::{ArchiveError, ArchiveIndex};
+
 #[cfg(not(target_arch = "wasm32"))]
 use futures::StreamExt;
 use std::fmt;

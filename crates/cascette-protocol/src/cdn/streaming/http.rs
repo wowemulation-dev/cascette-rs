@@ -3,12 +3,9 @@
 //! Provides a trait-based abstraction layer for HTTP operations required by CDN streaming,
 //! with concrete implementations for production use and testing.
 
-#[cfg(feature = "streaming")]
 use async_trait::async_trait;
-#[cfg(feature = "streaming")]
 use bytes::Bytes;
 
-#[cfg(feature = "streaming")]
 use super::{
     bootstrap::CdnBootstrap,
     config::StreamingConfig,
@@ -18,7 +15,6 @@ use super::{
 };
 
 /// CDN server information for failover and load balancing
-#[cfg(feature = "streaming")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CdnServer {
     /// CDN hostname (e.g., "level3.blizzard.com")
@@ -35,7 +31,6 @@ pub struct CdnServer {
     pub max_hosts: Option<u32>,
 }
 
-#[cfg(feature = "streaming")]
 impl CdnServer {
     /// Create a new CDN server configuration
     pub fn new(host: String, supports_https: bool, priority: u32) -> Self {
@@ -65,7 +60,6 @@ impl CdnServer {
 /// This trait provides the minimum interface needed for streaming CDN operations,
 /// enabling both production implementations (using reqwest) and mock implementations
 /// for testing.
-#[cfg(feature = "streaming")]
 #[async_trait]
 pub trait HttpClient: Send + Sync + 'static {
     /// Perform an HTTP GET request with optional range header
@@ -108,7 +102,6 @@ pub trait HttpClient: Send + Sync + 'static {
 }
 
 /// Production HTTP client implementation using reqwest
-#[cfg(feature = "streaming")]
 #[derive(Clone)]
 pub struct ReqwestHttpClient {
     client: reqwest::Client,
@@ -117,7 +110,6 @@ pub struct ReqwestHttpClient {
     cdn_servers: Vec<CdnServer>,
 }
 
-#[cfg(feature = "streaming")]
 impl ReqwestHttpClient {
     /// Create a new HTTP client with the specified configuration
     ///
@@ -130,11 +122,13 @@ impl ReqwestHttpClient {
     /// # Errors
     /// Returns `StreamingError` if the underlying reqwest client cannot be created
     pub fn new(config: StreamingConfig) -> Result<Self, StreamingError> {
+        crate::transport::ensure_crypto_provider();
         let client = reqwest::Client::builder()
             .timeout(config.request_timeout)
             .connect_timeout(config.connect_timeout)
             .pool_idle_timeout(Some(config.connection_idle_timeout))
             .pool_max_idle_per_host(config.max_connections_per_host)
+            .redirect(reqwest::redirect::Policy::limited(config.max_redirects))
             .user_agent("cascette-rs/0.1.0")
             .build()
             .map_err(|source| StreamingError::HttpClientSetup { source })?;
@@ -164,6 +158,7 @@ impl ReqwestHttpClient {
             .connect_timeout(config.connect_timeout)
             .pool_idle_timeout(Some(config.connection_idle_timeout))
             .pool_max_idle_per_host(config.max_connections_per_host)
+            .redirect(reqwest::redirect::Policy::limited(config.max_redirects))
             .user_agent("cascette-rs/0.1.0")
             .build()
             .map_err(|source| StreamingError::HttpClientSetup { source })?;
@@ -349,7 +344,6 @@ impl ReqwestHttpClient {
     }
 }
 
-#[cfg(feature = "streaming")]
 #[async_trait]
 impl HttpClient for ReqwestHttpClient {
     async fn get_range(
@@ -431,7 +425,7 @@ impl HttpClient for ReqwestHttpClient {
     }
 }
 
-#[cfg(all(test, feature = "streaming"))]
+#[cfg(test)]
 #[allow(clippy::expect_used, clippy::unwrap_used, clippy::uninlined_format_args)]
 mod tests {
     use super::*;

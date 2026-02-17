@@ -3,10 +3,8 @@
 //! Provides comprehensive configuration options for tuning streaming behavior,
 //! connection management, retry policies, and buffer sizing.
 
-#[cfg(feature = "streaming")]
 use std::time::Duration;
 
-#[cfg(feature = "streaming")]
 use super::{bootstrap::CdnBootstrap, http::CdnServer};
 
 /// Configuration for streaming CDN operations
@@ -14,7 +12,21 @@ use super::{bootstrap::CdnBootstrap, http::CdnServer};
 /// Contains all settings needed to optimize streaming performance including
 /// network timeouts, buffer sizes, connection pooling, and retry behavior.
 /// Default values are tuned for typical CDN usage patterns.
-#[cfg(feature = "streaming")]
+///
+/// # Known limitations vs Agent.exe
+///
+/// The following Agent.exe connection parameters are not configurable
+/// through reqwest and are documented here for reference:
+///
+/// - **Low speed limit** (Agent: 100 bps / 60s) — reqwest does not expose
+///   a stall detection equivalent. Application-layer stall detection would
+///   need to track throughput during stream consumption.
+/// - **Receive buffer** (Agent: 256KB `SO_RCVBUF`) — reqwest does not
+///   expose socket options. The OS default applies.
+/// - **DNS cache TTL** (Agent: 300s) — reqwest uses the system resolver.
+///   A custom TTL would require a custom DNS resolver implementation.
+/// - **Total connection pool cap** (Agent: 12) — reqwest only exposes
+///   per-host idle connection limits, not a total active connection cap.
 #[derive(Debug, Clone)]
 pub struct StreamingConfig {
     /// Timeout for individual HTTP requests
@@ -67,6 +79,10 @@ pub struct StreamingConfig {
     /// Most CDNs support 5-10 ranges efficiently.
     pub max_ranges_per_request: usize,
 
+    /// Maximum number of HTTP redirects to follow.
+    /// Default: 5 (matches Agent.exe and the non-streaming client).
+    pub max_redirects: usize,
+
     /// Retry configuration
     pub retry: RetryConfig,
 
@@ -81,7 +97,6 @@ pub struct StreamingConfig {
 ///
 /// Controls how failed requests are retried, including backoff strategy
 /// and maximum retry attempts.
-#[cfg(feature = "streaming")]
 #[derive(Debug, Clone)]
 pub struct RetryConfig {
     /// Maximum number of retry attempts for failed requests
@@ -111,7 +126,6 @@ pub struct RetryConfig {
 /// Connection pool configuration
 ///
 /// Controls connection reuse and resource management for HTTP clients.
-#[cfg(feature = "streaming")]
 #[derive(Debug, Clone)]
 pub struct ConnectionPoolConfig {
     /// Maximum total connections across all hosts
@@ -145,7 +159,6 @@ pub struct ConnectionPoolConfig {
 }
 
 /// CDN configuration for server management and failover
-#[cfg(feature = "streaming")]
 #[derive(Debug, Clone)]
 pub struct CdnConfig {
     /// List of CDN servers for failover
@@ -197,7 +210,6 @@ pub struct CdnConfig {
     pub validate_paths: bool,
 }
 
-#[cfg(feature = "streaming")]
 impl Default for StreamingConfig {
     fn default() -> Self {
         Self {
@@ -209,6 +221,7 @@ impl Default for StreamingConfig {
             max_range_size: 10 * 1024 * 1024,    // 10MB
             range_coalesce_threshold: 64 * 1024, // 64KB
             max_ranges_per_request: 6,
+            max_redirects: 5,
             retry: RetryConfig::default(),
             connection_pool: ConnectionPoolConfig::default(),
             cdn: CdnConfig::default(),
@@ -216,7 +229,6 @@ impl Default for StreamingConfig {
     }
 }
 
-#[cfg(feature = "streaming")]
 impl Default for RetryConfig {
     fn default() -> Self {
         Self {
@@ -229,7 +241,6 @@ impl Default for RetryConfig {
     }
 }
 
-#[cfg(feature = "streaming")]
 impl Default for ConnectionPoolConfig {
     fn default() -> Self {
         Self {
@@ -243,7 +254,6 @@ impl Default for ConnectionPoolConfig {
     }
 }
 
-#[cfg(feature = "streaming")]
 impl Default for CdnConfig {
     fn default() -> Self {
         Self {
@@ -259,7 +269,6 @@ impl Default for CdnConfig {
     }
 }
 
-#[cfg(feature = "streaming")]
 impl CdnConfig {
     /// Get community mirror CDN servers only
     ///
@@ -438,7 +447,7 @@ impl CdnConfig {
     /// # Arguments
     /// * `bootstrap` - Bootstrap configuration from Ribbit
     /// * `base_config` - Optional base configuration to extend
-    pub fn from_bootstrap(bootstrap: &CdnBootstrap, base_config: Option<&CdnConfig>) -> Self {
+    pub fn from_bootstrap(bootstrap: &CdnBootstrap, base_config: Option<&Self>) -> Self {
         let default_config = Self::default();
         let base = base_config.unwrap_or(&default_config);
 
@@ -482,7 +491,7 @@ impl CdnConfig {
         // Validate server configurations
         for (i, server) in self.servers.iter().enumerate() {
             if server.host.is_empty() {
-                return Err(format!("Server {} has empty host", i));
+                return Err(format!("Server {i} has empty host"));
             }
         }
 
@@ -490,7 +499,6 @@ impl CdnConfig {
     }
 }
 
-#[cfg(feature = "streaming")]
 impl StreamingConfig {
     /// Create a new configuration optimized for high throughput
     ///
@@ -671,7 +679,7 @@ impl StreamingConfig {
     }
 }
 
-#[cfg(all(test, feature = "streaming"))]
+#[cfg(test)]
 #[allow(clippy::expect_used, clippy::unwrap_used, clippy::uninlined_format_args)]
 mod tests {
     use super::*;
@@ -767,14 +775,18 @@ mod tests {
     #[test]
     fn test_cdn_config_blizzard_only() {
         let config = CdnConfig::blizzard_only();
-        assert_eq!(config.servers.len(), 3);
+        assert_eq!(config.servers.len(), 4);
         assert!(config.enable_rotation);
         assert!(config.validate_paths);
         assert!(config.validate().is_ok());
 
-        // All servers should be Blizzard servers
+        // All servers should be Blizzard-operated (includes Akamai CDN)
         for server in &config.servers {
-            assert!(server.host.contains("blizzard.com"));
+            assert!(
+                server.host.contains("blizzard.com") || server.host.contains("akamaihd.net"),
+                "Unexpected server host: {}",
+                server.host
+            );
             assert!(server.supports_https);
         }
     }
@@ -791,7 +803,7 @@ mod tests {
     #[test]
     fn test_cdn_config_development() {
         let config = CdnConfig::development();
-        assert_eq!(config.servers.len(), 2);
+        assert_eq!(config.servers.len(), 3);
         assert!(!config.prefer_https); // Allow HTTP for testing
         assert!(config.enable_rotation);
         assert!(config.validate_paths); // More validation

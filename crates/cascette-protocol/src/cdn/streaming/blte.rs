@@ -4,22 +4,15 @@
 //! the entire BLTE file to be loaded into memory. It integrates with the existing
 //! BLTE decompression code while supporting streaming operations.
 
-#[cfg(feature = "streaming")]
 use binrw::BinRead;
-#[cfg(feature = "streaming")]
 use bytes::Bytes;
-#[cfg(feature = "streaming")]
 use std::io::Cursor;
 
-#[cfg(feature = "streaming")]
 use crate::blte::{BlteError, BlteHeader, ChunkData};
-#[cfg(feature = "streaming")]
 use crate::cdn::streaming::{HttpClient, HttpRange, StreamingError};
-#[cfg(feature = "streaming")]
 use cascette_crypto::TactKeyStore;
 
 /// Configuration for streaming BLTE operations
-#[cfg(feature = "streaming")]
 #[derive(Debug, Clone)]
 pub struct StreamingBlteConfig {
     /// Maximum buffer size for decompression (default: 16MB)
@@ -30,7 +23,6 @@ pub struct StreamingBlteConfig {
     pub verify_checksums: bool,
 }
 
-#[cfg(feature = "streaming")]
 impl Default for StreamingBlteConfig {
     fn default() -> Self {
         Self {
@@ -42,7 +34,6 @@ impl Default for StreamingBlteConfig {
 }
 
 /// Progressive BLTE processor that can decompress content from HTTP range responses
-#[cfg(feature = "streaming")]
 #[derive(Debug)]
 pub struct StreamingBlteProcessor<H: HttpClient> {
     http_client: H,
@@ -50,7 +41,6 @@ pub struct StreamingBlteProcessor<H: HttpClient> {
     config: StreamingBlteConfig,
 }
 
-#[cfg(feature = "streaming")]
 impl<H: HttpClient> StreamingBlteProcessor<H> {
     /// Create a new streaming BLTE processor
     pub fn new(http_client: H, config: StreamingBlteConfig) -> Self {
@@ -179,11 +169,12 @@ impl<H: HttpClient> StreamingBlteProcessor<H> {
     }
 
     /// Parse BLTE header from bytes
+    #[allow(clippy::unused_self)]
     fn parse_blte_header(&self, data: &[u8]) -> Result<BlteHeader, StreamingError> {
         let mut cursor = Cursor::new(data);
         BlteHeader::read_options(&mut cursor, binrw::Endian::Big, ()).map_err(|e| {
             StreamingError::BlteError {
-                source: BlteError::InvalidHeader(format!("Header parse error: {}", e)),
+                source: BlteError::InvalidHeader(format!("Header parse error: {e}")),
             }
         })
     }
@@ -213,7 +204,7 @@ impl<H: HttpClient> StreamingBlteProcessor<H> {
         let chunk =
             ChunkData::read_options(&mut cursor, binrw::Endian::Big, (chunk_size as usize,))
                 .map_err(|e| StreamingError::BlteError {
-                    source: BlteError::InvalidChunk(format!("Chunk parse error: {}", e)),
+                    source: BlteError::InvalidChunk(format!("Chunk parse error: {e}")),
                 })?;
 
         // Decompress with optional decryption
@@ -249,7 +240,7 @@ impl<H: HttpClient> StreamingBlteProcessor<H> {
         let mut current_offset = header.total_header_size() as u64;
 
         for (index, chunk_info) in extended.chunk_infos.iter().enumerate() {
-            let chunk_end = current_offset + chunk_info.compressed_size as u64 - 1;
+            let chunk_end = current_offset + u64::from(chunk_info.compressed_size) - 1;
 
             // Read chunk data
             let chunk_data = self
@@ -265,7 +256,7 @@ impl<H: HttpClient> StreamingBlteProcessor<H> {
                 (chunk_info.compressed_size as usize,),
             )
             .map_err(|e| StreamingError::BlteError {
-                source: BlteError::InvalidChunk(format!("Chunk {} parse error: {}", index, e)),
+                source: BlteError::InvalidChunk(format!("Chunk {index} parse error: {e}")),
             })?;
 
             // Decompress with optional decryption
@@ -279,7 +270,7 @@ impl<H: HttpClient> StreamingBlteProcessor<H> {
             };
 
             result.extend_from_slice(&decompressed);
-            current_offset += chunk_info.compressed_size as u64;
+            current_offset += u64::from(chunk_info.compressed_size);
         }
 
         Ok(result)
@@ -313,13 +304,13 @@ impl<H: HttpClient> StreamingBlteProcessor<H> {
         // Calculate starting offset
         let mut current_offset = header.total_header_size() as u64;
         for i in 0..chunk_start {
-            current_offset += extended.chunk_infos[i].compressed_size as u64;
+            current_offset += u64::from(extended.chunk_infos[i].compressed_size);
         }
 
         // Process requested chunks
         for index in chunk_start..end_chunk {
             let chunk_info = &extended.chunk_infos[index];
-            let chunk_end = current_offset + chunk_info.compressed_size as u64 - 1;
+            let chunk_end = current_offset + u64::from(chunk_info.compressed_size) - 1;
 
             // Read chunk data
             let chunk_data = self
@@ -335,7 +326,7 @@ impl<H: HttpClient> StreamingBlteProcessor<H> {
                 (chunk_info.compressed_size as usize,),
             )
             .map_err(|e| StreamingError::BlteError {
-                source: BlteError::InvalidChunk(format!("Chunk {} parse error: {}", index, e)),
+                source: BlteError::InvalidChunk(format!("Chunk {index} parse error: {e}")),
             })?;
 
             // Decompress with optional decryption
@@ -349,7 +340,7 @@ impl<H: HttpClient> StreamingBlteProcessor<H> {
             };
 
             result.extend_from_slice(&decompressed);
-            current_offset += chunk_info.compressed_size as u64;
+            current_offset += u64::from(chunk_info.compressed_size);
         }
 
         Ok(result)
@@ -366,15 +357,14 @@ impl<H: HttpClient> StreamingBlteProcessor<H> {
             header
                 .extended
                 .as_ref()
-                .map(|ext| ext.chunk_infos.len())
-                .unwrap_or(0)
+                .map_or(0, |ext| ext.chunk_infos.len())
         };
 
         let total_decompressed_size = if let Some(ref extended) = header.extended {
             extended
                 .chunk_infos
                 .iter()
-                .map(|info| info.decompressed_size as u64)
+                .map(|info| u64::from(info.decompressed_size))
                 .sum()
         } else {
             // For single chunk, we need to get content length and estimate
@@ -392,7 +382,6 @@ impl<H: HttpClient> StreamingBlteProcessor<H> {
 }
 
 /// Information about BLTE header structure
-#[cfg(feature = "streaming")]
 #[derive(Debug, Clone)]
 pub struct BlteHeaderInfo {
     /// Whether this is a single-chunk BLTE file
@@ -407,7 +396,7 @@ pub struct BlteHeaderInfo {
 
 // BLTE error integration is handled in the main streaming error module
 
-#[cfg(all(test, feature = "streaming"))]
+#[cfg(test)]
 #[allow(clippy::expect_used, clippy::unwrap_used, clippy::uninlined_format_args)]
 mod tests {
     use super::*;

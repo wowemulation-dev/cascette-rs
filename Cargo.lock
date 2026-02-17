@@ -457,6 +457,7 @@ dependencies = [
  "asn1",
  "async-trait",
  "base64",
+ "binrw",
  "bytes",
  "cascette-cache",
  "cascette-crypto",

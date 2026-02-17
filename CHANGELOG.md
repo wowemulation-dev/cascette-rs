@@ -61,7 +61,10 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - TACT client for HTTPS/HTTP queries to `us.version.battle.net`
   - Ribbit TCP client for direct protocol connections on port 1119
   - CDN client for content downloads with range requests and progress tracking
-  - CDN streaming with BLTE decompression and concurrent chunk downloads
+  - CDN streaming module behind `streaming` feature flag with BLTE
+    decompression, concurrent chunk downloads, connection pooling with health
+    checks, range request optimization, server failover with circuit breakers,
+    and Prometheus metrics
   - Protocol response caching with configurable TTLs
   - V1 MIME format support with PKCS#7 signature verification
   - Connection pooling and HTTP/2 support via reqwest with rustls
@@ -157,6 +160,16 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - cascette-protocol: Fixed "No provider set" error in tests by adding rustls dev-dependency
   to provide crypto provider for reqwest with rustls feature
 - Fixed reqwest feature from invalid rustls-tls to rustls in Cargo.toml
+- cascette-protocol: Wired up `streaming` feature gate for CDN streaming module
+  - Moved `cdn_streaming/` to `cdn/streaming/` for correct module path resolution
+  - Added `streaming` feature with optional `binrw` dependency
+  - Fixed `ArchiveIndex` API usage (`find_entry` instead of HashMap indexing,
+    `size` instead of `compressed_size`)
+  - Fixed rand 0.10 API (`RngExt` trait instead of `Rng`)
+  - Added crypto provider initialization in `ReqwestHttpClient::new()`
+  - Fixed CDN server count assertions in config tests
+  - Removed ~208 redundant per-item `#[cfg(feature = "streaming")]` annotations
+    (module-level gate is sufficient)
 - cascette-formats: Fixed 4 format parser bugs found via Agent.exe comparison
   - EKey page padding detection uses `espec_index == 0xFFFFFFFF` sentinel
     matching Agent.exe, with zero-fill fallback for backward compatibility

@@ -3,7 +3,6 @@
 //! This module provides detailed metrics collection for monitoring CDN streaming
 //! performance, connection health, and system behavior in production environments.
 
-#[cfg(feature = "streaming")]
 use std::{
     sync::{
         Arc,
@@ -12,15 +11,11 @@ use std::{
     time::{Duration, Instant},
 };
 
-#[cfg(feature = "streaming")]
 use dashmap::DashMap;
-#[cfg(feature = "streaming")]
 use prometheus::{Counter, Gauge, Histogram, HistogramOpts, IntCounter, IntGauge, Registry};
-#[cfg(feature = "streaming")]
 use tokio::sync::RwLock;
 
 /// Pool-level metrics for connection management
-#[cfg(feature = "streaming")]
 #[derive(Debug)]
 pub struct PoolMetrics {
     /// Total successful requests across all servers
@@ -41,7 +36,6 @@ pub struct PoolMetrics {
     created_at: Instant,
 }
 
-#[cfg(feature = "streaming")]
 impl PoolMetrics {
     /// Create new pool metrics
     pub fn new() -> Self {
@@ -88,12 +82,13 @@ impl PoolMetrics {
         }
 
         times.sort();
-        #[allow(clippy::cast_sign_loss)] // 0.95 factor ensures positive result
+        #[allow(clippy::cast_precision_loss, clippy::cast_sign_loss)] // 0.95 factor ensures positive result
         let index = (times.len() as f64 * 0.95).round() as usize;
         times.get(index.min(times.len() - 1)).copied()
     }
 
     /// Get success rate (0.0 to 1.0)
+    #[allow(clippy::cast_precision_loss)]
     pub fn success_rate(&self) -> f64 {
         let successes = self.total_successful_requests.load(Ordering::Relaxed);
         let failures = self.total_failed_requests.load(Ordering::Relaxed);
@@ -118,7 +113,6 @@ impl PoolMetrics {
     }
 }
 
-#[cfg(feature = "streaming")]
 impl Default for PoolMetrics {
     fn default() -> Self {
         Self::new()
@@ -126,7 +120,6 @@ impl Default for PoolMetrics {
 }
 
 /// Performance metrics for CDN streaming operations
-#[cfg(feature = "streaming")]
 #[derive(Debug)]
 pub struct StreamingMetrics {
     /// Bytes downloaded counter
@@ -152,7 +145,6 @@ pub struct StreamingMetrics {
 }
 
 /// Cache statistics
-#[cfg(feature = "streaming")]
 #[derive(Debug)]
 pub struct CacheStats {
     /// Number of cache hits
@@ -165,7 +157,6 @@ pub struct CacheStats {
     pub evictions: AtomicU64,
 }
 
-#[cfg(feature = "streaming")]
 impl Default for CacheStats {
     fn default() -> Self {
         Self {
@@ -177,7 +168,6 @@ impl Default for CacheStats {
     }
 }
 
-#[cfg(feature = "streaming")]
 impl Clone for CacheStats {
     fn clone(&self) -> Self {
         Self {
@@ -189,9 +179,9 @@ impl Clone for CacheStats {
     }
 }
 
-#[cfg(feature = "streaming")]
 impl CacheStats {
     /// Get cache hit ratio (0.0 to 1.0)
+    #[allow(clippy::cast_precision_loss)]
     pub fn hit_ratio(&self) -> f64 {
         let hits = self.hits.load(Ordering::Relaxed);
         let misses = self.misses.load(Ordering::Relaxed);
@@ -205,7 +195,6 @@ impl CacheStats {
     }
 }
 
-#[cfg(feature = "streaming")]
 impl StreamingMetrics {
     /// Create new streaming metrics
     pub fn new() -> Self {
@@ -272,6 +261,7 @@ impl StreamingMetrics {
     }
 
     /// Get bandwidth efficiency (downloaded/uploaded ratio)
+    #[allow(clippy::cast_precision_loss)]
     pub fn bandwidth_efficiency(&self) -> f64 {
         let downloaded = self.bytes_downloaded.load(Ordering::Relaxed);
         let uploaded = self.bytes_uploaded.load(Ordering::Relaxed);
@@ -284,7 +274,6 @@ impl StreamingMetrics {
     }
 }
 
-#[cfg(feature = "streaming")]
 impl Default for StreamingMetrics {
     fn default() -> Self {
         Self::new()
@@ -292,7 +281,6 @@ impl Default for StreamingMetrics {
 }
 
 /// Prometheus metrics exporter for CDN streaming
-#[cfg(feature = "streaming")]
 #[derive(Debug)]
 pub struct PrometheusExporter {
     registry: Registry,
@@ -321,7 +309,6 @@ pub struct PrometheusExporter {
     cache_evictions: IntCounter,
 }
 
-#[cfg(feature = "streaming")]
 impl PrometheusExporter {
     /// Create new Prometheus exporter
     #[allow(clippy::too_many_lines)] // Prometheus metrics initialization requires many lines
@@ -452,6 +439,7 @@ impl PrometheusExporter {
     }
 
     /// Update metrics from pool metrics
+    #[allow(clippy::cast_possible_wrap)]
     pub fn update_from_pool_metrics(&self, metrics: &PoolMetrics) {
         self.pool_active_connections
             .set(metrics.active_connections.load(Ordering::Relaxed) as i64);
@@ -467,6 +455,7 @@ impl PrometheusExporter {
     }
 
     /// Update metrics from streaming metrics
+    #[allow(clippy::cast_precision_loss)]
     pub fn update_from_streaming_metrics(&self, metrics: &StreamingMetrics) {
         self.bytes_downloaded
             .inc_by(metrics.bytes_downloaded.load(Ordering::Relaxed) as f64);
@@ -525,7 +514,6 @@ impl PrometheusExporter {
     }
 }
 
-#[cfg(feature = "streaming")]
 impl Default for PrometheusExporter {
     fn default() -> Self {
         #[allow(clippy::expect_used)]
@@ -535,8 +523,8 @@ impl Default for PrometheusExporter {
     }
 }
 
-#[cfg(all(test, feature = "streaming"))]
-#[allow(clippy::expect_used)]
+#[cfg(test)]
+#[allow(clippy::expect_used, clippy::float_cmp, clippy::cast_precision_loss)]
 mod tests {
     use super::*;
     use std::time::Duration;

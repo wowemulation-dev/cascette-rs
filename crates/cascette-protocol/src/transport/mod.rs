@@ -187,6 +187,19 @@ impl Default for HttpClient {
 /// - Agent limits to 3 connections per host; we use 10 (higher throughput)
 /// - Agent forces HTTP/1.1; we enable HTTP/2 with adaptive window sizing
 /// - Agent uses 256KB receive buffer; we use OS defaults
+///
+/// # Known limitations vs Agent.exe
+///
+/// The following Agent.exe parameters are not configurable through reqwest:
+///
+/// - **Low speed limit** (Agent: 100 bps / 60s) — reqwest has no stall
+///   detection. Would need application-layer throughput monitoring.
+/// - **Receive buffer** (Agent: 256KB `SO_RCVBUF`) — reqwest does not
+///   expose socket options. OS default applies.
+/// - **DNS cache TTL** (Agent: 300s) — reqwest uses the system resolver.
+///   Custom TTL requires a custom resolver.
+/// - **Total connection pool cap** (Agent: 12 total) — reqwest only
+///   exposes per-host idle limits, not total active connections.
 #[derive(Debug, Clone)]
 pub struct HttpConfig {
     /// Connection pool idle timeout.

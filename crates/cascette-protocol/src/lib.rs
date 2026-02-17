@@ -393,3 +393,26 @@ pub use client::TactClient;
 
 // Re-export optimization utilities for power users
 pub use optimized::{PooledBuffer, format_cache_key, get_buffer, intern_string, return_buffer};
+
+// Re-exports from cascette-formats for the streaming CDN module.
+// These bridge crate::blte::*, crate::bpsv::*, and crate::CascFormat paths
+// that streaming code expects.
+#[cfg(all(not(target_arch = "wasm32"), feature = "streaming"))]
+pub mod blte {
+    pub use cascette_formats::blte::*;
+}
+
+#[cfg(all(not(target_arch = "wasm32"), feature = "streaming"))]
+pub mod bpsv {
+    pub use cascette_formats::bpsv::*;
+}
+
+#[cfg(all(not(target_arch = "wasm32"), feature = "streaming"))]
+pub use cascette_formats::CascFormat;
+
+// Re-export main streaming types for convenience
+#[cfg(all(not(target_arch = "wasm32"), feature = "streaming"))]
+pub use cdn::streaming::{
+    CdnServer, HttpClient as StreamingHttpClient, ReqwestHttpClient, StreamingConfig,
+    StreamingError, StreamingResult,
+};
