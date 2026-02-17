@@ -230,10 +230,12 @@ frozen/thawed archive management with per-segment tracking (0x40
 bytes per segment). Archives can be frozen (read-only) or thawed
 (writable).
 
-cascette-rs now has segment header parsing, key generation, bucket
-hashing, and frozen/thawed state tracking. The `ArchiveManager`
-does not yet use segment-based storage offsets or enforce the
-segment limit (0x3FF = 1023).
+cascette-rs has segment header parsing, key generation, bucket
+hashing, frozen/thawed state tracking, and a working
+`DynamicContainer` that coordinates `IndexManager` (KMT) with
+`ArchiveManager` for read/write/remove/query operations. The
+`ArchiveManager` does not yet use segment-based storage offsets
+or enforce the segment limit (0x3FF = 1023).
 
 ### Missing Residency Container
 
@@ -259,7 +261,8 @@ cascette-rs has no hard link support.
 Agent supports read-only Static containers for shared installations
 with batch key state lookups via `casc::Residency::GetFileState`.
 
-cascette-rs has only one container type.
+cascette-rs has a working DynamicContainer; Static, Residency, and
+HardLink containers are stubs.
 
 ### Compaction is a Stub
 

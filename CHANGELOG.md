@@ -80,6 +80,11 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `SegmentInfo` with frozen/thawed state tracking and space accounting
   - Segment size constant (1 GiB) and max segment count (1023)
 
+- cascette-client-storage: `DynamicContainer` read-write CASC archive container
+  - Coordinates `IndexManager` (KMT) and `ArchiveManager` for read/write/remove/query
+  - `open` async method loads indices and opens archive data files
+  - Truncation detection converts archive bounds errors to `TruncatedRead`
+  - `remove_span` with +0x1E offset adjustment
 - cascette-formats: K-way merge for archive group building via `build_merged`
   - O(N log K) merge of pre-sorted archive indices using binary min-heap
   - Matches the CASC k-way merge algorithm
