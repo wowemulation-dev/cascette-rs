@@ -80,6 +80,24 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `SegmentInfo` with frozen/thawed state tracking and space accounting
   - Segment size constant (1 GiB) and max segment count (1023)
 
+- cascette-client-storage: `StaticContainer` read-only archive container
+  - `IndexManager` + `ArchiveManager` for read-only key lookups and data reads
+  - Batch `state_lookup` returning `KeyState { has_data, is_resident }` per key
+  - Zero-key filtering
+
+- cascette-client-storage: `ResidencyContainer` download tracking
+  - In-memory key-level residency tracking (mark/unmark/query/scan)
+  - `.residency` token file creation
+  - Scanner API for iterating resident keys
+  - Empty-product fallback
+
+- cascette-client-storage: `HardLinkContainer` filesystem hard links
+  - `test_support` filesystem probe using `casc_hard_link_test_file`
+  - `create_link` with 3-retry delete
+  - `.trie_directory` token file
+  - Zero-key rejection
+  - Silent success on file-not-found during remove
+
 - cascette-client-storage: `DynamicContainer` read-write CASC archive container
   - Coordinates `IndexManager` (KMT) and `ArchiveManager` for read/write/remove/query
   - `open` async method loads indices and opens archive data files

@@ -19,7 +19,7 @@ pub mod static_container;
 pub use dynamic::DynamicContainer;
 pub use hardlink::HardLinkContainer;
 pub use residency::ResidencyContainer;
-pub use static_container::StaticContainer;
+pub use static_container::{KeyState, StaticContainer};
 
 /// Access mode for container operations.
 ///

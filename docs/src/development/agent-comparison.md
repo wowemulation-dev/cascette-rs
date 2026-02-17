@@ -237,32 +237,37 @@ hashing, frozen/thawed state tracking, and a working
 `ArchiveManager` does not yet use segment-based storage offsets
 or enforce the segment limit (0x3FF = 1023).
 
-### Missing Residency Container
+### Partial Residency Container
 
 Agent tracks which content keys are fully downloaded via Residency
 container (0x30 bytes): `.residency` token files, byte-span tracking
 for partial downloads, reserve/mark-resident/remove/query operations,
 and scanner API.
 
-cascette-rs has no residency tracking. All content is assumed fully
-present.
+cascette-rs has in-memory residency tracking with `.residency` token
+file creation. Byte-span tracking for partial downloads and
+file-backed persistence are not yet implemented.
 
-### Missing Hard Link Container
+### Partial Hard Link Container
 
 Agent uses a TrieDirectory with hard links for content sharing between
 installations: 32-char hex filename validation, LRU file descriptor
 cache, 3-retry delete before hard link creation, filesystem support
 detection via `TestSupport`.
 
-cascette-rs has no hard link support.
+cascette-rs has filesystem hard link support detection via
+`TestSupport`, link creation with 3-retry delete, and
+`.trie_directory` token file. TrieDirectory-based metadata tracking
+is not yet implemented.
 
-### Missing Static Container
+### Partial Static Container
 
 Agent supports read-only Static containers for shared installations
 with batch key state lookups via `casc::Residency::GetFileState`.
 
-cascette-rs has a working DynamicContainer; Static, Residency, and
-HardLink containers are stubs.
+cascette-rs has a StaticContainer with `IndexManager` and
+`ArchiveManager` for read-only lookups, including batch
+`state_lookup()` returning `KeyState { has_data, is_resident }`.
 
 ### Compaction is a Stub
 
