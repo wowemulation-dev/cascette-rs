@@ -95,6 +95,11 @@ Branch fix/formats-agent-comparison:
 - Connection parameter limitations documented in `StreamingConfig`
   and `HttpConfig` (low speed limit, receive buffer, DNS cache TTL,
   total connection pool cap)
+- CDN Index Merge: `build_merged()` implements k-way merge via
+  `BinaryHeap` for O(N log K) merging of pre-sorted archive indices,
+  matching Agent.exe `tact::CdnIndex::BuildMergedIndex`. Also fixed
+  entry field write order in `ArchiveGroupBuilder::build()` (was
+  key/offset/size, corrected to key/size/offset)
 
 ## Format Parsing Issues
 
@@ -102,16 +107,7 @@ No open format parsing issues from Agent.exe comparison.
 
 ## Performance Issues
 
-### CDN Index Merge
-
-Agent implements k-way merge sort via binary min-heap
-(`HeapSiftDown`/`HeapSiftUp`) for combining multiple CDN indices.
-This is O(N log K) where K is the number of indices.
-
-cascette-rs `ArchiveGroupBuilder` uses HashMap deduplication +
-final sort: O(N log N). Per-block MD5 hashes, TOC hash, and
-footer hash are computed correctly. The k-way merge optimization
-is not implemented.
+No open performance issues from Agent.exe comparison.
 
 ## Protocol Issues
 
@@ -468,4 +464,6 @@ These cascette-rs implementations match Agent.exe behavior:
 | CDN URL parameters | `ParseCdnServerUrl` parses `?fallback=1`, `?strict=1`, `?maxhosts=N` | `parse_cdn_server_url()` extracts params; `CdnEndpoint` and `CdnServer` store parsed fields |
 | Max redirects | 5 redirect limit | `HttpConfig::max_redirects` (default 5), `StreamingConfig::max_redirects` (default 5), both reqwest builders use configured value |
 | CDN server scoring | `0.9^total_failures` decay, weighted-random selection | `FailoverManager` uses `total_failure_weight` with per-error-code weights matching `tact::HandleHttpResponse` (500/502/503/504=5.0, 401/416=2.5, other 5xx=1.0, 4xx/1xx/3xx=0.5, 429=0.0), `0.9^weight` decay, cumulative-weight random selection. No permanent server exclusion |
+| CDN index k-way merge | `BuildMergedIndex` with `HeapSiftDown`/`HeapSiftUp` | `build_merged()` using `BinaryHeap` for O(N log K) merge with deduplication |
+| Archive group entry order | key, size, offset (standard CDN index format) | `build()` and `build_merged()` write key/size/offset matching `IndexEntry::to_bytes` |
 | China region CDN | `.com.cn` domains for CN region | `Region` enum with `CN` and `SG` variants, `tact_https_url()`, `tact_http_url()`, and `ribbit_address()` return per-region domains |
