@@ -7,7 +7,8 @@
 //! and should be handled separately where needed (e.g., browse commands).
 
 use crate::{
-    Result, StorageError, archive::ArchiveManager, index::IndexManager, resolver::ContentResolver,
+    Result, StorageError, index::IndexManager, resolver::ContentResolver,
+    storage::archive_file::ArchiveManager,
 };
 use cascette_crypto::{ContentKey, EncodingKey};
 use cascette_formats::CascFormat;
@@ -50,19 +51,18 @@ impl Installation {
         }
 
         // Create required subdirectories
-        let indices_path = path.join(crate::INDICES_DIR);
+        // Both .idx and .data files in the same Data/data/ directory
         let data_path = path.join(crate::DATA_DIR);
         let config_path = path.join(crate::CONFIG_DIR);
 
-        for dir in [&indices_path, &data_path, &config_path] {
+        for dir in [&data_path, &config_path] {
             if !dir.exists() {
                 std::fs::create_dir_all(dir)?;
             }
         }
 
         // Initialize managers for local CASC storage
-        // Note: Both .idx (index) and .data (archive) files are in Data/data/ directory
-        // CDN .index files in Data/indices/ are NOT handled here
+        // Both .idx (index) and .data (archive) files live in Data/data/
         let index_manager = Arc::new(AsyncRwLock::new(IndexManager::new(&data_path)));
         let archive_manager = Arc::new(AsyncRwLock::new(ArchiveManager::new(&data_path)));
         let resolver = Arc::new(ContentResolver::new());

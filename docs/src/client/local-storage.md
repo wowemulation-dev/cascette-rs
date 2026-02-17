@@ -34,7 +34,7 @@ concern from local storage.
 
 ## Container Types
 
-Agent.exe manages four container types for local storage:
+CASC manages four container types for local storage:
 
 | Type | Size | Purpose |
 |------|------|---------|
@@ -96,7 +96,7 @@ index files.
 
 ### Key Mapping Table (KMT)
 
-Below the index files, Agent.exe maintains a Key Mapping Table (KMT) as the
+Below the index files, CASC maintains a Key Mapping Table (KMT) as the
 primary on-disk structure for key-to-location resolution:
 
 - Two-tier LSM-tree: sorted section (0x12-byte entries) + update section

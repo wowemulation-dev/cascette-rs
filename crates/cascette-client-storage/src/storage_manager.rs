@@ -78,18 +78,20 @@ impl Storage {
         &self.config
     }
 
-    /// Validate and create official CASC directory structure
-    /// Based on wowdev.wiki CASC specification: `INSTALL_DIR\Data\data\`
+    /// Validate and create official CASC directory structure.
+    ///
+    /// Both `.idx` and `.data` files in `Data/data/`.
+    /// There is no separate indices directory.
     ///
     /// # Errors
     ///
     /// Returns error if directories cannot be created or validated
     fn validate_casc_directory_structure(base_path: &std::path::Path) -> Result<()> {
-        use crate::{CONFIG_DIR, DATA_DIR, INDICES_DIR, SHMEM_DIR};
+        use crate::{CONFIG_DIR, DATA_DIR, SHMEM_DIR};
 
         // Create official CASC subdirectories
+        // CASC uses Data/data/ for both .idx and .data files (no separate indices dir)
         let required_dirs = [
-            ("indices", INDICES_DIR),
             ("data", DATA_DIR),
             ("config", CONFIG_DIR),
             ("shmem", SHMEM_DIR),
@@ -132,9 +134,12 @@ impl Storage {
         Ok(())
     }
 
-    /// Get the indices directory path (for .idx files)
+    /// Get the indices directory path (for .idx files).
+    ///
+    /// CASC stores `.idx` files in the same `Data/data/` directory
+    /// as `.data` archive files.
     pub fn indices_path(&self) -> PathBuf {
-        self.base_path.join(crate::INDICES_DIR)
+        self.base_path.join(crate::DATA_DIR)
     }
 
     /// Get the data directory path (for .data files)

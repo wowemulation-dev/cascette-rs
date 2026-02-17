@@ -1,16 +1,18 @@
 //! Local CASC storage implementation for World of Warcraft game installations.
 //!
 //! This crate provides the local file storage layer that game clients expect,
-//! managing .idx index files and .data archive files on disk.
+//! managing .idx index files and .data archive files on disk. The architecture
+//! mirrors the CASC four-container model:
 //!
-//! # Overview
+//! - **Dynamic Container**: Read-write CASC archives (primary storage)
+//! - **Static Container**: Read-only finalized archives
+//! - **Residency Container**: Download tracking with `.residency` token files
+//! - **Hard Link Container**: Filesystem hard links between installations
 //!
-//! The client storage system handles:
-//! - Index files (.idx) that map content keys to archive locations
-//! - Data files (.data) containing BLTE-encoded game content
-//! - Shared memory for inter-process communication with game clients
-//! - Content resolution from file paths to actual data
-//! - Storage optimization including deduplication and space management
+//! # Storage Layout
+//!
+//! Both `.idx` and `.data` files in `Data/data/`.
+//! The shared memory protocol (v4/v5) coordinates access between processes.
 //!
 //! # Example
 //!
@@ -18,14 +20,12 @@
 //! use cascette_client_storage::{Storage, StorageConfig};
 //!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-//! // Initialize storage system
 //! let config = StorageConfig::default()
 //!     .with_path("/path/to/wow/data");
 //!
 //! let storage = Storage::new(config)?;
 //! let installation = storage.open_installation("wow_retail").await?;
 //!
-//! // Read a file by content key
 //! let content_key = [0xDE, 0xAD, 0xBE, 0xEF, /* ... */];
 //! let data = installation.read_file(&content_key).await?;
 //! # Ok(())
@@ -37,109 +37,198 @@
 
 use thiserror::Error;
 
-pub mod archive;
-pub mod config;
-pub mod index;
-pub mod installation;
-pub mod resolver;
-pub mod shmem;
+// Container architecture (CASC four-container model)
+pub mod container;
+
+// Storage internals
 pub mod storage;
+
+// Index management
+pub mod index;
+
+// Key Mapping Table
+pub mod kmt;
+
+// Shared memory protocol
+pub mod shmem;
+
+// LRU cache
+pub mod lru;
+
+// Content resolution pipeline
+pub mod resolver;
+
+// Installation management
+pub mod installation;
+
+// Configuration
+pub mod config;
+
+// Binary format validation
 pub mod validation;
 
+// Top-level storage manager (manages installations)
+mod storage_manager;
+
 pub use config::StorageConfig;
+pub use container::AccessMode;
 pub use index::IndexEntry;
 pub use installation::Installation;
-pub use storage::Storage;
+pub use storage_manager::Storage;
 
-/// Result type for storage operations
+/// Result type for storage operations.
 pub type Result<T> = std::result::Result<T, StorageError>;
 
-/// Errors that can occur during storage operations
+/// Errors that can occur during storage operations.
+///
+/// Error codes in parentheses reference the TACT error code mapping
+/// from `agent-container-storage.md`.
 #[derive(Debug, Error)]
 pub enum StorageError {
-    /// I/O error occurred
+    /// I/O error occurred.
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
 
-    /// Index file error
+    /// Index file error.
     #[error("Index error: {0}")]
     Index(String),
 
-    /// Archive file error
+    /// Archive file error.
     #[error("Archive error: {0}")]
     Archive(String),
 
-    /// Content not found
+    /// Content not found.
     #[error("Content not found: {0}")]
     NotFound(String),
 
-    /// Invalid data format
+    /// Invalid data format.
     #[error("Invalid format: {0}")]
     InvalidFormat(String),
 
-    /// Shared memory error
+    /// Shared memory error.
     #[error("Shared memory error: {0}")]
     SharedMemory(String),
 
-    /// Installation error
+    /// Installation error.
     #[error("Installation error: {0}")]
     Installation(String),
 
-    /// Configuration error
+    /// Configuration error.
     #[error("Configuration error: {0}")]
     Config(String),
 
-    /// Verification failed
+    /// Verification failed.
     #[error("Verification failed: {0}")]
     Verification(String),
 
-    /// Resolver error
+    /// Resolver error.
     #[error("Resolver error: {0}")]
     Resolver(String),
 
-    /// Cache error
+    /// Cache error.
     #[error("Cache error: {0}")]
     Cache(String),
 
-    /// Corruption detected
+    /// Corruption detected.
     #[error("Data corruption detected: {0}")]
     Corruption(String),
 
-    /// Concurrent operation failed
+    /// Concurrent operation failed.
     #[error("Concurrent operation failed: {0}")]
     ConcurrencyError(String),
 
-    /// Resource exhausted
+    /// Resource exhausted (TACT error code 7).
     #[error("Resource exhausted: {0}")]
     ResourceExhausted(String),
 
-    /// Operation timeout
+    /// Operation timeout.
     #[error("Operation timed out: {0}")]
     Timeout(String),
 
-    /// Access denied
+    /// Access denied.
     #[error("Access denied: {0}")]
     AccessDenied(String),
 
-    /// Incompatible version
+    /// Incompatible version.
     #[error("Incompatible version: {0}")]
     IncompatibleVersion(String),
+
+    /// Container is locked for exclusive access (TACT error code 11/0xb).
+    #[error("Container locked: {0}")]
+    ContainerLocked(String),
+
+    /// Truncated read detected (TACT error code 7).
+    /// Data is partially available; the key should be marked non-resident.
+    #[error("Truncated read: {0}")]
+    TruncatedRead(String),
 }
 
-/// Version information for the storage system
+/// Version information for the storage system.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-/// Default data directory name
+/// Default data directory name (installation root).
 pub const DEFAULT_DATA_DIR: &str = "Data";
 
-/// Default indices subdirectory
-pub const INDICES_DIR: &str = "indices";
-
-/// Default data archives subdirectory
+/// Data subdirectory where both `.idx` and `.data` files live.
+///
+/// CASC stores index and archive files in the same directory:
+/// `<install>/Data/data/`.
 pub const DATA_DIR: &str = "data";
 
-/// Default configuration subdirectory
+/// Default configuration subdirectory.
 pub const CONFIG_DIR: &str = "config";
 
-/// Default shared memory subdirectory
+/// Default shared memory subdirectory.
 pub const SHMEM_DIR: &str = "shmem";
+
+// =============================================================================
+// TACT Error Code Translation
+// =============================================================================
+
+/// CASC error code as used by the CASC storage layer.
+pub type CascErrorCode = u32;
+
+/// TACT error code as returned to callers.
+pub type TactErrorCode = u32;
+
+/// Translate a CASC error code to a TACT error code.
+///
+/// Mapping from `agent-container-storage.md`:
+///
+/// | CASC | TACT | Notes |
+/// |------|------|-------|
+/// | 0    | 0    | Success |
+/// | 2    | 6    | |
+/// | 3    | 7    | Truncated read / needs update |
+/// | 4    | 3    | Invalid parameter |
+/// | 5    | 5    | |
+/// | 7    | 10   | |
+/// | 9    | 11   | Container locked / exclusive access |
+/// | 10   | 3    | Invalid parameter |
+/// | 11   | 16   | |
+/// | 12   | 9    | |
+/// | 13   | 15   | |
+/// | 15   | 2    | |
+/// | 21   | 12   | |
+/// | 23   | 19   | |
+/// | 26   | 24   | |
+/// | default | 1 | Unknown error |
+pub const fn translate_error_code(casc_code: CascErrorCode) -> TactErrorCode {
+    match casc_code {
+        0 => 0,
+        2 => 6,
+        3 => 7,
+        4 | 10 => 3,
+        5 => 5,
+        7 => 10,
+        9 => 11,
+        11 => 16,
+        12 => 9,
+        13 => 15,
+        15 => 2,
+        21 => 12,
+        23 => 19,
+        26 => 24,
+        _ => 1,
+    }
+}

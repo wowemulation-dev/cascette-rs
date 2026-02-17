@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/)
 and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
@@ -29,7 +29,7 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Workspace dependencies: parking_lot 0.12, memmap2 0.9
 
 - cascette-formats: Size manifest format parser and builder
-  - Version 1 and 2 support with `SizeManifest`, `SizeManifestHeader`,
+  - Version 1 and 2 support with `SizeManifest`, `SizeManifestHeader`
     `SizeManifestEntry` types
   - Round-trip binary parsing and building via binrw
   - Version 2 adds 40-bit total size field per entry
@@ -37,7 +37,7 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - docs: Added Size manifest documentation (`formats/size-manifest.md`)
 
 - cascette-ribbit crate: Ribbit protocol server
-  - HTTP server (axum) with `/{product}/versions`, `/{product}/cdns`,
+  - HTTP server (axum) with `/{product}/versions`, `/{product}/cdns`
     `/{product}/bgdl` endpoints
   - TCP server with Ribbit v1 (MIME-wrapped with SHA-256 checksums) and v2
     (raw BPSV) protocol support
@@ -51,7 +51,7 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - Integration tests for HTTP, TCP v1, and TCP v2 protocols
   - Throughput benchmarks for BPSV generation
 - docs: Added Ribbit Server documentation page (`protocols/ribbit-server.md`)
-- Workspace dependencies: axum 0.8, tower-http 0.6, axum-server 0.7,
+- Workspace dependencies: axum 0.8, tower-http 0.6, axum-server 0.7
   tokio-rustls 0.26, clap 4.5, anyhow 1.0, tracing-subscriber 0.3
 - README: Added development section with mise tool version management
 - docs: Added `wow_classic_titan` and `wow_anniversary` product codes with
@@ -63,7 +63,7 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - CDN client for content downloads with range requests and progress tracking
   - CDN streaming module behind `streaming` feature flag with BLTE
     decompression, concurrent chunk downloads, connection pooling with health
-    checks, range request optimization, server failover with circuit breakers,
+    checks, range request optimization, server failover with circuit breakers
     and Prometheus metrics
   - Protocol response caching with configurable TTLs
   - V1 MIME format support with PKCS#7 signature verification
@@ -71,16 +71,16 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - Retry policies with exponential backoff and jitter
   - Thread-local buffers and string interning for performance
 
-- cascette-formats: K-way merge for archive group building via `build_merged()`
+- cascette-formats: K-way merge for archive group building via `build_merged`
   - O(N log K) merge of pre-sorted archive indices using binary min-heap
-  - Matches Agent.exe `tact::CdnIndex::BuildMergedIndex` algorithm
+  - Matches the CASC k-way merge algorithm
   - Deduplicates entries across archives, keeping first occurrence
 
 ### Fixed
 
 - cascette-formats: Archive group builder wrote entry fields in wrong order
   (key, offset, size instead of key, size, offset), causing round-trip
-  parse failures through `ArchiveGroup::parse()`
+  parse failures through `ArchiveGroup::parse`
 
 ### Changed
 
@@ -133,29 +133,29 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - Certificate fetching native-only (requires TCP for Ribbit protocol)
   - Added `UnsupportedOnWasm` error variant for TCP-only endpoints
 - Added `.cargo/config.toml` WASM target configuration for getrandom
-- Added workspace dependencies: reqwest, url, sha2, digest, rsa, base64, mail-parser,
+- Added workspace dependencies: reqwest, url, sha2, digest, rsa, base64, mail-parser
   cms, der, asn1, x509-cert, wiremock
 - Updated deny.toml to allow ISC, BSD-3-Clause, and CDLA-Permissive-2.0 licenses
   (used by ring, subtle, and webpki-roots respectively)
 
 ### Fixed
 
-- cascette-formats: 6 format issues fixed based on Agent.exe binary comparison
+- cascette-formats: 6 format issues fixed based on CASC binary comparison
   - Encoding entry parsing now uses dynamic key sizes from header
     (`ckey_hash_size`, `ekey_hash_size`) instead of hardcoded 16 bytes
   - TOC hash algorithm corrected to `MD5(toc_keys || block_hashes)[:hash_bytes]`
     (was `MD5(toc_keys)[8:16]`). Per-block MD5 hashes now computed and written.
     Archive group builder fixed to use last key per block (was first)
-  - Archive index builder uses configurable field sizes (`key_size`,
+  - Archive index builder uses configurable field sizes (`key_size`
     `offset_bytes`, `size_bytes`) instead of hardcoded 16/4/4. Binary search
     and TOC validation compute records-per-block from footer fields
   - TVFS container table reads `ekey_size` bytes from header instead of
     hardcoded 9. `ContainerEntry.ekey` changed from `[u8; 9]` to `Vec<u8>`
   - TVFS EST (Encoding Spec Table) now parsed when `TVFS_FLAG_ENCODING_SPEC`
     flag is set. Added `EstTable` type with null-terminated string parsing
-  - Batch encoding lookups added: `batch_find_encodings()`,
-    `batch_find_all_encodings()`, `batch_find_especs()` using sort-and-merge
-    algorithm matching Agent.exe `BatchLookupCKeys`/`BatchLookupEKeys`
+  - Batch encoding lookups added: `batch_find_encodings`
+    `batch_find_all_encodings`, `batch_find_especs` using sort-and-merge
+    algorithm/`BatchLookupEKeys`
 - cascette-formats: ESpec parser gaps fixed to match TACT behavior
   - GDeflate level range corrected from [1,9] to [1,12]
   - Window bits minimum lowered from 9 to 8
@@ -174,32 +174,32 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - cascette-protocol: Wired up `streaming` feature gate for CDN streaming module
   - Moved `cdn_streaming/` to `cdn/streaming/` for correct module path resolution
   - Added `streaming` feature with optional `binrw` dependency
-  - Fixed `ArchiveIndex` API usage (`find_entry` instead of HashMap indexing,
+  - Fixed `ArchiveIndex` API usage (`find_entry` instead of HashMap indexing
     `size` instead of `compressed_size`)
   - Fixed rand 0.10 API (`RngExt` trait instead of `Rng`)
-  - Added crypto provider initialization in `ReqwestHttpClient::new()`
+  - Added crypto provider initialization in `ReqwestHttpClient::new`
   - Fixed CDN server count assertions in config tests
   - Removed ~208 redundant per-item `#[cfg(feature = "streaming")]` annotations
     (module-level gate is sufficient)
-- cascette-formats: Fixed 4 format parser bugs found via Agent.exe comparison
+- cascette-formats: Fixed 4 format parser bugs found via CASC comparison
   - EKey page padding detection uses `espec_index == 0xFFFFFFFF` sentinel
-    matching Agent.exe, with zero-fill fallback for backward compatibility
+    matching CASC, with zero-fill fallback for backward compatibility
   - Root V4 content flags widened to `u64` and parsed with
-    `ContentFlags::read_v4()`/`write_v4()` for 5-byte (40-bit) flags instead
+    `ContentFlags::read_v4`/`write_v4` for 5-byte (40-bit) flags instead
     of truncating to `u32`
   - Root version detection heuristic tightened to check version field against
     known values (2..=4) instead of `< 10`
   - EKey entry proptest size assertion corrected (36 -> 25 bytes), added
     missing `#[test]` annotations to 7 proptest macro functions
-- cascette-formats: Added format validation matching Agent.exe constraints
-  - `EncodingHeader::validate()` checks all 8 header fields (version, unk_11,
+- cascette-formats: Added format validation matching CASC constraints
+  - `EncodingHeader::validate` checks all 8 header fields (version, unk_11
     ckey/ekey hash sizes, page counts, espec block size)
-  - `ESpecTable::parse()` rejects empty strings and unterminated data
+  - `ESpecTable::parse` rejects empty strings and unterminated data
   - Install manifest V2 support with per-entry `file_type` byte
-  - `IndexFooter::validate_file_size()` checks expected vs actual file size
-  - `PatchArchiveHeader` flag bit interpretation with `is_plain_data()` and
-    `has_extended_header()`; rejects unsupported extended header flag
-  - `TvfsFile::parse()` and `load_from_blte()` call `header.validate()`
+  - `IndexFooter::validate_file_size` checks expected vs actual file size
+  - `PatchArchiveHeader` flag bit interpretation with `is_plain_data` and
+    `has_extended_header`; rejects unsupported extended header flag
+  - `TvfsFile::parse` and `load_from_blte` call `header.validate`
 
 ### Infrastructure
 
@@ -222,9 +222,9 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Adopted Rust 1.92.0 language features:
   - Let-chains for cleaner conditional logic
-  - `std::io::Error::other()` for error construction
-  - `.is_multiple_of()` for divisibility checks
-  - `usize::midpoint()` for overflow-safe averaging
+  - `std::io::Error::other` for error construction
+  - `.is_multiple_of` for divisibility checks
+  - `usize::midpoint` for overflow-safe averaging
   - `#[default]` attribute on enum variants
 - Updated code to satisfy new clippy lints in Rust 1.92.0
 
