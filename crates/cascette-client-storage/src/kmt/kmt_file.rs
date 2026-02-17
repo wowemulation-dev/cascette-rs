@@ -1,13 +1,14 @@
-//! KMT on-disk format with atomic write support.
+//! KMT on-disk format operations.
 //!
-//! The KMT file has two sections:
-//! - Sorted section: binary-searchable, 0x20-byte buckets
-//! - Update section: append-only, 0x400-byte pages with 0x19 entries each
+//! The KMT file format is identical to the IDX v7 format. All read/write
+//! operations are handled by `IndexManager` in the `index` module.
 //!
-//! Writes use the atomic flush-and-bind pattern (see Phase 11):
-//! 1. Write to temp file
-//! 2. fsync the temp file
-//! 3. Rename temp -> target
-//! 4. Retry up to 3 times on failure
-
-// Implementation will be added in Phase 4/5.
+//! This module exists for documentation and future extensions:
+//! - The sorted section uses per-entry `hashlittle2()` hash accumulation
+//! - The update section uses 0x1000-byte pages with per-entry 32-bit hashes
+//! - Compaction merges the update section into the sorted section
+//!
+//! For current implementation, see:
+//! - `IndexManager::load_index()` -- reads IDX v7 sorted section
+//! - `IndexManager::save_index()` -- writes IDX v7 with guarded blocks
+//! - `IndexManager::lookup()` -- binary search in sorted entries

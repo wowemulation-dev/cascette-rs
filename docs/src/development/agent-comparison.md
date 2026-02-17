@@ -184,43 +184,56 @@ hashes.
 Fixed in `07591c4`. Index writes use temp file + fsync + rename
 with 3 retries, matching Agent's flush-and-bind pattern.
 
-### Missing Key Mapping Table
+### ~~KMT Entry Size Endianness~~ (Fixed)
+
+Fixed in Phase 4+5. The `IndexEntry.size` field was incorrectly
+serialized as little-endian. Agent.exe and CascLib both use big-endian
+for all 18-byte entry fields (verified via `ConvertBytesToInteger_BE`
+in CascLib and BinaryNinja decompilation of `BinarySearchEKey` at
+0x73aef9).
+
+### ~~Incorrect KMT Entry Format~~ (Fixed)
+
+Fixed in Phase 4+5. The `KmtEntry` struct was a fabricated 16-byte
+LE format that did not match any Agent.exe structure. Replaced with
+a re-export of `IndexEntry` (18 bytes), since the KMT and IDX are
+the same file format. Documented the KMT = IDX equivalence.
+
+### ~~Missing Segment Header Support~~ (Fixed)
+
+Fixed in Phase 4+5. Added segment reconstruction header parsing:
+480 bytes = 16 x 30-byte `LocalHeader` entries at the start of each
+`.data` file. Added key generation with bucket hash targeting
+(verified against `sub_72b457` and `GenerateSegmentHeaders` at
+0x7293c6 via BinaryNinja).
+
+### Missing KMT Update Section
 
 Agent uses a two-tier LSM-tree Key Mapping Table (KMT) as the primary
-on-disk structure for key-to-location resolution. The KMT file header
-version is 7 (verified via BinaryNinja decompilation of
-`casc::KeyMappingTable::WriteHeader` at 0x73a35c). The .idx files ARE
-KMT files. Key state tracking uses a separate format version (v8, from
-`key_state_v8.cpp`).
+on-disk structure. The KMT file header version is 7 (verified via
+BinaryNinja decompilation of `casc::KeyMappingTable::WriteHeader` at
+0x73a35c). The .idx files ARE the KMT files.
 
-KMT v7 structure:
-- 8-byte guarded block header + 16-byte file header
-- Sorted section: binary-searchable 18-byte entries (9 EKey + 5
-  StorageOffset BE + 4 EncodedSize BE)
-- Update section: append-only log in 0x1000-byte pages
-- Jenkins lookup3 hashes for integrity validation
-
-Agent rejects KMT versions < 7. Field sizes must be exactly (4, 5, 9)
-for EncodedSizeLength, StorageOffsetLength, and EKeyLength.
+The sorted section is implemented (`IndexManager` read/write with
+guarded blocks, Jenkins hashes, binary search). The update section
+(append-only log in 0x1000-byte pages for recent changes) is not yet
+implemented. Compaction (merging update into sorted) is also pending.
 
 A historical V5 format exists (`data.i##` filenames, 36-byte flat
 header, no guarded blocks) used by Heroes of the Storm build 29049.
 Agent.exe does not support V5. CascLib supports both.
 
-cascette-rs uses in-memory `BTreeMap` indices with no KMT equivalent.
-This limits scalability for large installations and prevents
-interoperability with Agent-managed storage.
-
-### Missing Container Index
+### Incomplete Container Index
 
 Agent maintains a ContainerIndex with 16 segments, supporting
 frozen/thawed archive management with per-segment tracking (0x40
 bytes per segment). Archives can be frozen (read-only) or thawed
 (writable).
 
-cascette-rs uses a flat `DashMap<u16, Arc<ArchiveFile>>` with no
-segment concept. The segment limit (configurable up to 0x3FF = 1023)
-is not enforced.
+cascette-rs now has segment header parsing, key generation, bucket
+hashing, and frozen/thawed state tracking. The `ArchiveManager`
+does not yet use segment-based storage offsets or enforce the
+segment limit (0x3FF = 1023).
 
 ### Missing Residency Container
 

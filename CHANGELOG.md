@@ -71,6 +71,15 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - Retry policies with exponential backoff and jitter
   - Thread-local buffers and string interning for performance
 
+- cascette-client-storage: Segment reconstruction header support
+  - 480-byte header parsed as 16 x 30-byte `LocalHeader` entries (one per
+    KMT bucket)
+  - Segment header key generation with bucket hash targeting
+  - `bucket_hash` function: XOR 9 bytes, `((xor>>4)^xor+seed) & 0xF`
+  - Data file path generation (`data.NNN`) and filename parsing
+  - `SegmentInfo` with frozen/thawed state tracking and space accounting
+  - Segment size constant (1 GiB) and max segment count (1023)
+
 - cascette-formats: K-way merge for archive group building via `build_merged`
   - O(N log K) merge of pre-sorted archive indices using binary min-heap
   - Matches the CASC k-way merge algorithm
@@ -78,6 +87,13 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- cascette-client-storage: `IndexEntry.size` field was serialized as
+  little-endian but the format uses big-endian for all 18-byte
+  entry fields (verified via CascLib `ConvertBytesToInteger_BE`)
+- cascette-client-storage: `KmtEntry` was a fabricated 16-byte LE struct
+  that did not match the format. The KMT file format is identical to IDX
+  v7 (same 18-byte entries, same guarded blocks). `KmtEntry` is now a
+  re-export of `IndexEntry`
 - cascette-formats: Archive group builder wrote entry fields in wrong order
   (key, offset, size instead of key, size, offset), causing round-trip
   parse failures through `ArchiveGroup::parse`

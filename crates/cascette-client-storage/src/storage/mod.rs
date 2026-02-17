@@ -14,4 +14,7 @@ pub mod segment;
 
 pub use archive_file::ArchiveManager;
 pub use local_header::LocalHeader;
-pub use segment::{SegmentHeader, SegmentState};
+pub use segment::{
+    BUCKET_COUNT, DEFAULT_FILE_OFFSET_BITS, MAX_SEGMENTS, SEGMENT_HEADER_SIZE, SEGMENT_SIZE,
+    SegmentHeader, SegmentInfo, SegmentState, bucket_hash, parse_data_filename, segment_data_path,
+};

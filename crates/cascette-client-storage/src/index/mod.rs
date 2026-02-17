@@ -137,8 +137,9 @@ pub struct IndexEntry {
     #[bw(write_with = write_archive_location)]
     pub archive_location: ArchiveLocation,
 
-    /// Size of the content (4 bytes, little-endian for legacy compatibility)
-    #[brw(little)]
+    /// Encoded size of the content (4 bytes, big-endian).
+    ///
+    /// CascLib both use big-endian for all entry fields.
     pub size: u32,
 }
 
@@ -1627,12 +1628,12 @@ mod validation_impls {
                 ));
             }
 
-            // Validate size is little-endian (last 4 bytes)
+            // Validate size is big-endian (last 4 bytes)
             let size_bytes = &data[14..18];
-            let expected_size_bytes = self.size.to_le_bytes(); // Size is little-endian
+            let expected_size_bytes = self.size.to_be_bytes();
             if size_bytes != expected_size_bytes {
                 return Err(StorageError::InvalidFormat(
-                    "Size field not in little-endian format".to_string(),
+                    "Size field not in big-endian format".to_string(),
                 ));
             }
 
