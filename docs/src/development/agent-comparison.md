@@ -132,60 +132,23 @@ cascette-rs has two CDN implementations:
   marked `Failed`, unlike Agent which never fully excludes
   servers.
 
-### Retry-After Header
-
-Agent reads the HTTP `Retry-After` header on 429 responses and
-waits the specified duration before retrying.
-
-cascette-rs defines a `RateLimitExceeded` error with a
-`retry_after_ms` field, but no code reads the `Retry-After` header
-from HTTP responses. Both the non-streaming and streaming CDN
-clients ignore this header.
-
 ### Connection Parameters
 
 | Parameter | Agent | cascette-rs (non-streaming) | cascette-rs (streaming) |
 |-----------|-------|----------------------------|------------------------|
-| Connect timeout | 60s | 10s | 10s |
+| Connect timeout | 60s | 10s (intentional) | 10s |
 | Request timeout | -- | 45s | 30s |
-| Max connections/host | 3 | 10 | 8 |
+| Max connections/host | 3 | 10 (intentional) | 8 |
 | Total connections | 12 | Unlimited | 100 |
-| Max redirects | 5 | 3 | Default (10) |
+| Max redirects | 5 | 5 (configurable) | Default (10) |
 | Low speed limit | 100 bps / 60s | Not set | Not set |
 | Receive buffer | 256KB | Default | 64KB |
 | DNS cache TTL | 300s | Default | Default |
-| HTTP version | Forced 1.1 | 1.1 + HTTP/2 adaptive | 1.1 + HTTP/2 |
+| HTTP version | Forced 1.1 | 1.1 + HTTP/2 adaptive (intentional) | 1.1 + HTTP/2 |
 
 Agent forces HTTP/1.1 for CDN downloads. cascette-rs enables
-HTTP/2 by default with adaptive window sizing.
-
-### CDN URL Parameters
-
-Agent `tact::ParseCdnServerUrl` (`0x6c9e4e`) parses `?fallback=1`,
-`?strict=1`, `?maxhosts=10` query parameters from CDN server URLs
-returned by version servers. These control fallback behavior,
-strict mode, and host limits.
-
-cascette-rs does not parse or honor these URL parameters.
-
-### China Region CDN
-
-Agent uses `.com.cn` domains for China:
-
-```text
-cn.patch.battlenet.com.cn
-cn.patch.battlenet.com.cn:1119
-https://cn.version.battlenet.com.cn
-```
-
-cascette-rs defaults to `.battle.net` domains. No `.com.cn` domain
-handling or region-based domain switching exists.
-
-### CDN URL Trailing Slash
-
-Agent strips trailing slashes from `cdnPath` before constructing
-URLs. cascette-rs does not normalize paths, so a CDN path ending
-with `/` would produce double slashes in the URL.
+HTTP/2 by default with adaptive window sizing. `HttpConfig`
+documents all intentional differences from Agent defaults.
 
 ## Root File Issues
 
@@ -505,3 +468,8 @@ These cascette-rs implementations match Agent.exe behavior:
 | Encoding batch lookups | `BatchLookupCKeys`/`BatchLookupEKeys` | `batch_find_encodings()`, `batch_find_all_encodings()`, `batch_find_especs()` |
 | Archive index builder config | Variable key/offset/size fields | `ArchiveIndexBuilder::with_config(key_size, offset_bytes, size_bytes)` |
 | TVFS EST parsing | EST table when flag bit 1 set | `EstTable` with null-terminated strings, parsed from header offsets |
+| CDN URL trailing slash | `cdnPath` trailing slash stripped | `normalize_cdn_path()` strips trailing slashes before URL construction |
+| Retry-After header | 429 response reads `Retry-After` | `RateLimited { retry_after }` variant, `parse_retry_after()` in CDN client, `RetryPolicy` uses hint |
+| CDN URL parameters | `ParseCdnServerUrl` parses `?fallback=1`, `?strict=1`, `?maxhosts=N` | `parse_cdn_server_url()` extracts params; `CdnEndpoint` and `CdnServer` store parsed fields |
+| Max redirects | 5 redirect limit | `HttpConfig::max_redirects` (default 5), `create_optimized_client()` uses 5 |
+| China region CDN | `.com.cn` domains for CN region | `Region` enum with `CN` and `SG` variants, `tact_https_url()`, `tact_http_url()`, and `ribbit_address()` return per-region domains |

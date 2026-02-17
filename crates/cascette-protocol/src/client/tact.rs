@@ -50,6 +50,11 @@ impl TactClient {
         })
     }
 
+    /// Create a TACT HTTPS (v2) client for a specific region.
+    pub fn for_region(region: super::Region) -> Result<Self> {
+        Self::new(region.tact_https_url().to_string(), true)
+    }
+
     /// Query TACT endpoint
     #[cfg(not(target_arch = "wasm32"))]
     pub async fn query(&self, endpoint: &str) -> Result<BpsvDocument> {
@@ -79,7 +84,9 @@ impl TactClient {
                 <BpsvDocument as CascFormat>::parse(&body)
                     .map_err(|e| ProtocolError::Parse(format!("BPSV parse error: {e}")))
             }
-            StatusCode::TOO_MANY_REQUESTS => Err(ProtocolError::RateLimited),
+            StatusCode::TOO_MANY_REQUESTS => Err(ProtocolError::RateLimited {
+                    retry_after: None,
+                }),
             StatusCode::SERVICE_UNAVAILABLE => Err(ProtocolError::ServiceUnavailable),
             status if status.is_server_error() => Err(ProtocolError::ServerError(status)),
             status => Err(ProtocolError::HttpStatus(status)),
@@ -119,7 +126,9 @@ impl TactClient {
                 <BpsvDocument as CascFormat>::parse(&body)
                     .map_err(|e| ProtocolError::Parse(format!("BPSV parse error: {e}")))
             }
-            StatusCode::TOO_MANY_REQUESTS => Err(ProtocolError::RateLimited),
+            StatusCode::TOO_MANY_REQUESTS => Err(ProtocolError::RateLimited {
+                    retry_after: None,
+                }),
             StatusCode::SERVICE_UNAVAILABLE => Err(ProtocolError::ServiceUnavailable),
             status if status.is_server_error() => Err(ProtocolError::ServerError(status)),
             status => Err(ProtocolError::HttpStatus(status)),
@@ -206,7 +215,7 @@ mod tests {
         assert!(result.is_err());
         assert!(matches!(
             result.expect_err("Test operation should fail"),
-            ProtocolError::RateLimited
+            ProtocolError::RateLimited { .. }
         ));
     }
 
@@ -287,6 +296,17 @@ mod tests {
         let result = client.query("v1/products/wow/versions").await;
 
         assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_for_region_creates_valid_client() {
+        use crate::Region;
+
+        let client = TactClient::for_region(Region::US);
+        assert!(client.is_ok());
+
+        let client = TactClient::for_region(Region::CN);
+        assert!(client.is_ok());
     }
 
     #[tokio::test]

@@ -27,6 +27,12 @@ pub struct CdnServer {
     pub supports_https: bool,
     /// Priority for server selection (lower = higher priority)
     pub priority: u32,
+    /// Whether this is a fallback server (from `?fallback=1` query param)
+    pub is_fallback: bool,
+    /// Strict mode — do not fall back to other servers (from `?strict=1`)
+    pub strict: bool,
+    /// Maximum number of hosts to use (from `?maxhosts=N`)
+    pub max_hosts: Option<u32>,
 }
 
 #[cfg(feature = "streaming")]
@@ -37,6 +43,9 @@ impl CdnServer {
             host,
             supports_https,
             priority,
+            is_fallback: false,
+            strict: false,
+            max_hosts: None,
         }
     }
 

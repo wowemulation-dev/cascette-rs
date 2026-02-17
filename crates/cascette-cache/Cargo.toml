@@ -82,8 +82,8 @@ js-sys = "0.3"
 cascette-formats = { version = "0.2.0", path = "../cascette-formats" }
 
 [target.'cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))'.dependencies]
-# getrandom for WASM
-getrandom = { version = "0.4", features = ["wasm_js"] }
+# getrandom 0.4 (from rand 0.10) needs wasm_js for browser crypto
+getrandom = { workspace = true, features = ["wasm_js"] }
 # wasm-bindgen for JS interop
 wasm-bindgen = "0.2"
 # wasm-bindgen-futures for async JS interop
