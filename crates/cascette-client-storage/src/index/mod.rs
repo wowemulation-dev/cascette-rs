@@ -597,46 +597,157 @@ impl IndexManager {
         Some((bucket, version))
     }
 
-    /// Save a specific index to disk
+    /// Save a specific index to disk using IDX Journal v7 format.
+    ///
+    /// File layout (matching CASC):
+    /// ```text
+    /// [0x00] GuardedBlockHeader (8 bytes): header_size + Jenkins hash of header data
+    /// [0x08] IndexHeaderV2 (16 bytes): version 0x07, bucket config, field sizes
+    /// [0x18] Padding (8 bytes of zeros)
+    /// [0x20] GuardedBlockHeader (8 bytes): entry_data_size + Jenkins hash of entries
+    /// [0x28] Entry data (N bytes): packed index entries
+    /// ```
+    ///
+    /// Uses atomic writes: write to temp file, fsync, rename, retry up to 3 times.
     fn save_index(id: u8, index: &IndexFile, path: &Path) -> Result<()> {
-        let file = File::create(path)
-            .map_err(|e| StorageError::Index(format!("Failed to create index: {e}")))?;
-        let mut writer = BufWriter::new(file);
+        use cascette_crypto::jenkins::hashlittle;
 
-        // Calculate data size
         let entry_size = (index.header.key_size
             + index.header.location_size
             + index.header.length_size) as usize;
-        let _data_section_size = index.entries.len() * entry_size;
 
-        // Write updated header (little-endian for IDX Journal v7)
-        let header = index.header.clone();
-        // Note: data_size would need to include block table, but we'll keep it simple
-        writer
-            .write_le(&header)
-            .map_err(|e| StorageError::Index(format!("Failed to write header: {e}")))?;
+        // Build IndexHeaderV2 bytes
+        let header_v2 = IndexHeaderV2 {
+            version: 7,
+            bucket: id,
+            extra_bytes: 0,
+            encoded_size_length: index.header.length_size,
+            storage_offset_length: index.header.location_size,
+            ekey_length: index.header.key_size,
+            file_offset_bits: index.header.segment_bits,
+            segment_size: 1u64 << u64::from(index.header.segment_bits),
+        };
 
-        // Write entries
+        let mut header_bytes = Vec::new();
+        let mut cursor = std::io::Cursor::new(&mut header_bytes);
+        header_v2
+            .write_le(&mut cursor)
+            .map_err(|e| StorageError::Index(format!("Failed to serialize header: {e}")))?;
+
+        // Build entry data
+        let mut entry_data = Vec::with_capacity(index.entries.len() * entry_size);
         for entry in &index.entries {
-            let packed = entry.to_packed(
-                index.header.key_size as usize,
-                30, // Standard segment bits
-                32, // Standard size bits
-            );
-            writer
-                .write_all(&packed)
-                .map_err(|e| StorageError::Index(format!("Failed to write entry: {e}")))?;
+            let packed = entry.to_packed(index.header.key_size as usize, 30, 32);
+            entry_data.extend_from_slice(&packed);
         }
+
+        // Compute Jenkins hashes for guarded blocks
+        let header_hash = hashlittle(&header_bytes, 0);
+        let entry_hash = hashlittle(&entry_data, 0);
+
+        // Build the complete file content
+        let header_block = GuardedBlockHeader {
+            block_size: u32::try_from(header_bytes.len())
+                .map_err(|e| StorageError::Index(format!("Header too large: {e}")))?,
+            block_hash: header_hash,
+        };
+
+        let entry_block = GuardedBlockHeader {
+            block_size: u32::try_from(entry_data.len())
+                .map_err(|e| StorageError::Index(format!("Entry data too large: {e}")))?,
+            block_hash: entry_hash,
+        };
+
+        // Atomic write: temp file -> fsync -> rename, retry up to 3 times
+        let temp_path = path.with_extension("tmp");
+        let mut last_error = None;
+
+        for attempt in 0..3 {
+            match Self::write_index_to_file(
+                &temp_path,
+                &header_block,
+                &header_bytes,
+                &entry_block,
+                &entry_data,
+            ) {
+                Ok(()) => {
+                    // Atomic rename
+                    match std::fs::rename(&temp_path, path) {
+                        Ok(()) => {
+                            debug!(
+                                "Saved index {:02x} with {} entries (attempt {})",
+                                id,
+                                index.entries.len(),
+                                attempt + 1
+                            );
+                            return Ok(());
+                        }
+                        Err(e) => {
+                            last_error = Some(format!("Failed to rename temp file: {e}"));
+                        }
+                    }
+                }
+                Err(e) => {
+                    last_error = Some(format!("Failed to write temp file: {e}"));
+                }
+            }
+
+            // Clean up temp file on failure
+            let _ = std::fs::remove_file(&temp_path);
+        }
+
+        Err(StorageError::Index(format!(
+            "Failed to save index {:02x} after 3 attempts: {}",
+            id,
+            last_error.unwrap_or_else(|| "unknown error".to_string())
+        )))
+    }
+
+    /// Write index data to a file with proper fsync.
+    fn write_index_to_file(
+        path: &Path,
+        header_block: &GuardedBlockHeader,
+        header_data: &[u8],
+        entry_block: &GuardedBlockHeader,
+        entry_data: &[u8],
+    ) -> Result<()> {
+        let file = File::create(path)
+            .map_err(|e| StorageError::Index(format!("Failed to create temp index: {e}")))?;
+        let mut writer = BufWriter::new(&file);
+
+        // 1. Header guarded block (8 bytes)
+        writer
+            .write_le(header_block)
+            .map_err(|e| StorageError::Index(format!("Failed to write header block: {e}")))?;
+
+        // 2. IndexHeaderV2 data
+        writer
+            .write_all(header_data)
+            .map_err(|e| StorageError::Index(format!("Failed to write header data: {e}")))?;
+
+        // 3. 8 bytes of padding (matches what load_index skips)
+        writer
+            .write_all(&[0u8; 8])
+            .map_err(|e| StorageError::Index(format!("Failed to write padding: {e}")))?;
+
+        // 4. Entry guarded block (8 bytes)
+        writer
+            .write_le(entry_block)
+            .map_err(|e| StorageError::Index(format!("Failed to write entry block: {e}")))?;
+
+        // 5. Entry data
+        writer
+            .write_all(entry_data)
+            .map_err(|e| StorageError::Index(format!("Failed to write entries: {e}")))?;
 
         writer
             .flush()
-            .map_err(|e| StorageError::Index(format!("Failed to flush index: {e}")))?;
+            .map_err(|e| StorageError::Index(format!("Failed to flush: {e}")))?;
 
-        debug!(
-            "Saved index {:02x} with {} entries",
-            id,
-            index.entries.len()
-        );
+        // fsync to ensure data is on disk before rename
+        file.sync_all()
+            .map_err(|e| StorageError::Index(format!("Failed to fsync: {e}")))?;
+
         Ok(())
     }
 
@@ -1268,6 +1379,65 @@ mod tests {
         // Now one exists
         assert!(manager.has_entry(&ekey1));
         assert!(!manager.has_entry(&ekey2));
+    }
+
+    #[test]
+    fn test_idx_journal_v7_write_read_round_trip() {
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let mut manager = IndexManager::new(temp_dir.path());
+
+        let ekey1 = create_test_ekey_1();
+        let ekey2 = create_test_ekey_2();
+        let ekey3 = create_test_ekey_3();
+
+        // Add entries
+        manager
+            .add_entry(&ekey1, 1, 0x1000, 1024)
+            .expect("add_entry should succeed");
+        manager
+            .add_entry(&ekey2, 2, 0x2000, 2048)
+            .expect("add_entry should succeed");
+        manager
+            .add_entry(&ekey3, 3, 0x3000, 3072)
+            .expect("add_entry should succeed");
+
+        let original_count = manager.entry_count();
+        assert!(original_count >= 3);
+
+        // Save all indices to disk (IDX Journal v7 format)
+        manager.save_all().expect("save_all should succeed");
+
+        // Load into a fresh manager
+        let mut reader = IndexManager::new(temp_dir.path());
+        // Use sync load since we wrote with save_all
+        for entry in std::fs::read_dir(temp_dir.path()).expect("read_dir") {
+            let entry = entry.expect("dir entry");
+            let path = entry.path();
+            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                if let Some((bucket, _version)) = IndexManager::parse_index_filename(name) {
+                    reader
+                        .load_index(bucket, &path)
+                        .expect("load_index should succeed");
+                }
+            }
+        }
+
+        // Verify all entries survived the round-trip
+        assert_eq!(reader.entry_count(), original_count);
+        assert!(reader.has_entry(&ekey1));
+        assert!(reader.has_entry(&ekey2));
+        assert!(reader.has_entry(&ekey3));
+
+        // Verify entry data is correct
+        let entry1 = reader.lookup(&ekey1).expect("entry1 should exist");
+        assert_eq!(entry1.archive_id(), 1);
+        assert_eq!(entry1.archive_offset(), 0x1000);
+        assert_eq!(entry1.size, 1024);
+
+        let entry2 = reader.lookup(&ekey2).expect("entry2 should exist");
+        assert_eq!(entry2.archive_id(), 2);
+        assert_eq!(entry2.archive_offset(), 0x2000);
+        assert_eq!(entry2.size, 2048);
     }
 }
 
