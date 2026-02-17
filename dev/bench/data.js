@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1771286355954,
+  "lastUpdate": 1771315523736,
   "repoUrl": "https://github.com/wowemulation-dev/cascette-rs",
   "entries": {
     "Benchmark": [
@@ -503,6 +503,48 @@ window.BENCHMARK_DATA = {
             "name": "bpsv_generation/summary/all",
             "value": 204,
             "range": "± 5",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "daniel@kogito.network",
+            "name": "Daniel S. Reichenbach",
+            "username": "danielsreichenbach"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0a42c6729bd30d4234e91792a8aba3c6f368a007",
+          "message": "Merge pull request #36 from wowemulation-dev/feat/port-client-storage\n\nfeat: add cascette-client-storage crate",
+          "timestamp": "2026-02-17T15:02:05+07:00",
+          "tree_id": "80198bc207c392bcee8386a10a097d7568f28d66",
+          "url": "https://github.com/wowemulation-dev/cascette-rs/commit/0a42c6729bd30d4234e91792a8aba3c6f368a007"
+        },
+        "date": 1771315522828,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "bpsv_generation/versions/wow",
+            "value": 1842,
+            "range": "± 39",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "bpsv_generation/cdns/wow",
+            "value": 1210,
+            "range": "± 7",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "bpsv_generation/summary/all",
+            "value": 209,
+            "range": "± 4",
             "unit": "ns/iter"
           }
         ]
