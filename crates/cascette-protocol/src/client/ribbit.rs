@@ -47,6 +47,11 @@ impl RibbitClient {
         })
     }
 
+    /// Create a Ribbit TCP client for a specific region.
+    pub fn for_region(region: super::Region) -> Result<Self> {
+        Self::new(format!("tcp://{}", region.ribbit_address()))
+    }
+
     /// Query Ribbit endpoint
     pub async fn query(&self, endpoint: &str) -> Result<BpsvDocument> {
         // Ribbit TCP now returns V1 MIME format, use query_v1_mime

@@ -168,7 +168,8 @@ features)
 
 **Container File Table** (CftTableOffset + CftTableSize):
 
-- **EKeys**: 9-byte encoding keys for CDN content lookup
+- **EKeys**: Encoding keys sized by header's `ekey_size` field (typically 9
+  bytes for TACT)
 
 - **File Sizes**: Uncompressed file sizes
 
@@ -184,13 +185,16 @@ absent
   bytes, > 0xFFFF = 3 bytes, > 0xFF = 2 bytes, else 1 byte. This applies to
   both EST table size fields and container file table size fields.
 
-**Encoding Specifier Table** (Optional, if write support enabled):
+**Encoding Specifier Table (EST)** (Optional, if write support enabled):
 
-- Contains encoding specifications for file creation
+- Contains null-terminated encoding spec strings (same format as the ESpec
+  table in the encoding file)
 
 - Only present if flag bit 1 (0x02) is set
 
 - Required for writing files to underlying storage
+
+- Parsed from `est_table_offset` for `est_table_size` bytes
 
 **Sample Table Sizes (Build 11.2.0.62748):**
 

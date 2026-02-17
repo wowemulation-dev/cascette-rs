@@ -32,6 +32,11 @@ rand = "0.10"
 bytes = "1.11"
 dashmap = "6.1"
 getrandom = "0.4"
+# Renamed dep for getrandom 0.2 (transitive via rsa 0.9 -> num-bigint-dig -> rand 0.8).
+# On WASM, getrandom 0.2 needs "js" feature. Since we also depend on getrandom 0.4
+# (via rand 0.10), Cargo requires a renamed dep to activate features on the older version.
+# Remove this when rsa upgrades to rand 0.10 / getrandom 0.4.
+getrandom_02 = { package = "getrandom", version = "0.2" }
 
 # Concurrency
 parking_lot = "0.12"

@@ -3,23 +3,17 @@
 //! This module provides efficient archive content extraction using HTTP range requests,
 //! with automatic range coalescing and parallel streaming capabilities.
 
-#[cfg(feature = "streaming")]
 use futures::stream::{FuturesUnordered, StreamExt};
-#[cfg(feature = "streaming")]
 use std::collections::HashMap;
 
-#[cfg(feature = "streaming")]
 use super::super::{ArchiveError, ArchiveIndex};
-#[cfg(feature = "streaming")]
 use crate::cdn::streaming::{
     HttpClient, HttpRange, RangeCoalescer, StreamingConfig, StreamingError,
     blte::{StreamingBlteConfig, StreamingBlteProcessor},
 };
-#[cfg(feature = "streaming")]
 use cascette_crypto::TactKeyStore;
 
 /// Configuration for streaming archive operations
-#[cfg(feature = "streaming")]
 #[derive(Debug, Clone)]
 pub struct StreamingArchiveConfig {
     /// Maximum number of parallel range requests (default: 4)
@@ -32,7 +26,6 @@ pub struct StreamingArchiveConfig {
     pub blte_config: StreamingBlteConfig,
 }
 
-#[cfg(feature = "streaming")]
 impl Default for StreamingArchiveConfig {
     fn default() -> Self {
         Self {
@@ -45,7 +38,6 @@ impl Default for StreamingArchiveConfig {
 }
 
 /// Archive content extraction request
-#[cfg(feature = "streaming")]
 #[derive(Debug, Clone)]
 pub struct ArchiveExtractionRequest {
     /// Encoding key of the content to extract
@@ -57,7 +49,6 @@ pub struct ArchiveExtractionRequest {
 }
 
 /// Result of archive content extraction
-#[cfg(feature = "streaming")]
 #[derive(Debug)]
 pub struct ArchiveExtractionResult {
     /// The extracted content
@@ -71,7 +62,6 @@ pub struct ArchiveExtractionResult {
 }
 
 /// Streaming archive reader with HTTP range request support
-#[cfg(feature = "streaming")]
 #[derive(Debug)]
 pub struct StreamingArchiveReader<H: HttpClient> {
     http_client: H,
@@ -81,7 +71,6 @@ pub struct StreamingArchiveReader<H: HttpClient> {
     blte_processor: StreamingBlteProcessor<H>,
 }
 
-#[cfg(feature = "streaming")]
 impl<H: HttpClient + Clone> StreamingArchiveReader<H> {
     /// Create a new streaming archive reader
     pub fn new(
@@ -89,7 +78,7 @@ impl<H: HttpClient + Clone> StreamingArchiveReader<H> {
         config: StreamingArchiveConfig,
         streaming_config: StreamingConfig,
     ) -> Self {
-        let range_coalescer = RangeCoalescer::new(streaming_config.clone());
+        let range_coalescer = RangeCoalescer::new(streaming_config);
         let blte_processor =
             StreamingBlteProcessor::new(http_client.clone(), config.blte_config.clone());
 
@@ -125,14 +114,14 @@ impl<H: HttpClient + Clone> StreamingArchiveReader<H> {
         size: u32,
         key_store: Option<&TactKeyStore>,
     ) -> Result<Vec<u8>, StreamingError> {
-        let range = HttpRange::new(offset, offset + size as u64 - 1);
+        let range = HttpRange::new(offset, offset + u64::from(size) - 1);
         let content = self.http_client.get_range(archive_url, Some(range)).await?;
 
         // If key store is provided and content looks like BLTE, try decompression
         if key_store.is_some() && content.len() >= 8 && &content[0..4] == b"BLTE" {
             // Create temporary URL for BLTE processor
             let temp_content = content.to_vec();
-            let decompressed = self.decompress_blte_data(&temp_content, key_store).await?;
+            let decompressed = self.decompress_blte_data(&temp_content, key_store)?;
             Ok(decompressed)
         } else {
             Ok(content.to_vec())
@@ -161,11 +150,8 @@ impl<H: HttpClient + Clone> StreamingArchiveReader<H> {
         let mut request_map = HashMap::new();
 
         for request in requests {
-            if let Some(entry) = index.entries.get(&request.encoding_key) {
-                let range = HttpRange::new(
-                    entry.offset,
-                    entry.offset + entry.compressed_size as u64 - 1,
-                );
+            if let Some(entry) = index.find_entry(&request.encoding_key) {
+                let range = HttpRange::new(entry.offset, entry.offset + u64::from(entry.size) - 1);
                 range_requests.push(range);
                 request_map.insert(range, (request, entry.clone()));
             }
@@ -185,7 +171,7 @@ impl<H: HttpClient + Clone> StreamingArchiveReader<H> {
 
                 // Process BLTE content if needed
                 let final_content = if request.is_blte {
-                    self.decompress_blte_data(&content, key_store).await?
+                    self.decompress_blte_data(&content, key_store)?
                 } else {
                     content.to_vec()
                 };
@@ -222,10 +208,10 @@ impl<H: HttpClient + Clone> StreamingArchiveReader<H> {
         // Convert all index entries to extraction requests
         let requests: Vec<ArchiveExtractionRequest> = index
             .entries
-            .keys()
-            .map(|key| ArchiveExtractionRequest {
-                encoding_key: key.clone(),
-                expected_size: index.entries.get(key).map(|entry| entry.compressed_size),
+            .iter()
+            .map(|entry| ArchiveExtractionRequest {
+                encoding_key: entry.encoding_key.clone(),
+                expected_size: Some(entry.size),
                 is_blte: true, // Assume BLTE by default
             })
             .collect();
@@ -263,8 +249,7 @@ impl<H: HttpClient + Clone> StreamingArchiveReader<H> {
     ) -> Result<ArchiveExtractionResult, StreamingError> {
         let entry =
             index
-                .entries
-                .get(encoding_key)
+                .find_entry(encoding_key)
                 .ok_or_else(|| StreamingError::ArchiveFormat {
                     source: ArchiveError::InvalidFormat(format!(
                         "Encoding key not found in index: {}",
@@ -273,19 +258,20 @@ impl<H: HttpClient + Clone> StreamingArchiveReader<H> {
                 })?;
 
         let content = self
-            .extract_range(archive_url, entry.offset, entry.compressed_size, key_store)
+            .extract_range(archive_url, entry.offset, entry.size, key_store)
             .await?;
 
         Ok(ArchiveExtractionResult {
             size: content.len(),
-            was_compressed: content.len() != entry.compressed_size as usize,
+            was_compressed: content.len() != entry.size as usize,
             archive_offset: entry.offset,
             content,
         })
     }
 
     /// Decompress BLTE data from memory
-    async fn decompress_blte_data(
+    #[allow(clippy::unused_self)]
+    fn decompress_blte_data(
         &self,
         data: &[u8],
         key_store: Option<&TactKeyStore>,
@@ -295,7 +281,7 @@ impl<H: HttpClient + Clone> StreamingArchiveReader<H> {
         use crate::blte::BlteFile;
 
         let blte_file = BlteFile::parse(data).map_err(|e| StreamingError::BlteError {
-            source: crate::blte::BlteError::InvalidHeader(format!("Parse error: {}", e)),
+            source: crate::blte::BlteError::InvalidHeader(format!("Parse error: {e}")),
         })?;
 
         let decompressed = if let Some(key_store) = key_store {
@@ -321,7 +307,6 @@ impl<H: HttpClient + Clone> StreamingArchiveReader<H> {
 }
 
 /// Batch archive extraction for multiple archives
-#[cfg(feature = "streaming")]
 #[derive(Debug)]
 pub struct BatchArchiveExtractor<H: HttpClient> {
     readers: Vec<StreamingArchiveReader<H>>,
@@ -329,7 +314,6 @@ pub struct BatchArchiveExtractor<H: HttpClient> {
     config: StreamingArchiveConfig,
 }
 
-#[cfg(feature = "streaming")]
 impl<H: HttpClient + Clone> BatchArchiveExtractor<H> {
     /// Create a batch extractor for multiple archives
     pub fn new(http_clients: Vec<H>, config: StreamingArchiveConfig) -> Self {
@@ -396,8 +380,12 @@ impl<H: HttpClient + Clone> BatchArchiveExtractor<H> {
     }
 }
 
-#[cfg(all(test, feature = "streaming"))]
-#[allow(clippy::expect_used, clippy::unwrap_used, clippy::uninlined_format_args)]
+#[cfg(test)]
+#[allow(
+    clippy::expect_used,
+    clippy::unwrap_used,
+    clippy::uninlined_format_args
+)]
 mod tests {
     use super::*;
     use crate::cdn::streaming::config::StreamingConfig;
@@ -462,7 +450,7 @@ mod tests {
         let test_content = b"Hello, streaming world!".to_vec();
         mock_client
             .expect_clone()
-            .returning(|| MockTestHttpClient::new());
+            .returning(MockTestHttpClient::new);
 
         mock_client
             .expect_get_range()
@@ -470,8 +458,7 @@ mod tests {
                 url == "http://example.com/archive.dat"
                     && range
                         .as_ref()
-                        .map(|r| r.start == 100 && r.end == 122)
-                        .unwrap_or(false)
+                        .is_some_and(|r| r.start == 100 && r.end == 122)
             })
             .times(1)
             .returning(move |_, _| Ok(Bytes::from(test_content.clone())));
@@ -491,7 +478,7 @@ mod tests {
 
         mock_client
             .expect_clone()
-            .returning(|| MockTestHttpClient::new());
+            .returning(MockTestHttpClient::new);
 
         mock_client
             .expect_get_content_length()
@@ -514,7 +501,7 @@ mod tests {
 
         mock_client
             .expect_clone()
-            .returning(|| MockTestHttpClient::new());
+            .returning(MockTestHttpClient::new);
 
         mock_client
             .expect_supports_ranges()

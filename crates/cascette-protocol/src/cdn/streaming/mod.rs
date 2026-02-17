@@ -20,7 +20,7 @@
 //! ```rust
 //! # #[cfg(feature = "streaming")]
 //! # {
-//! use cascette_formats::cdn::streaming::{
+//! use cascette_protocol::cdn::streaming::{
 //!     StreamingConfig, ReqwestHttpClient, HttpClient, HttpRange, RangeCoalescer,
 //!     CdnServer, ContentType, CdnUrlBuilder, CdnBootstrap
 //! };
@@ -65,7 +65,7 @@
 //! ```rust
 //! # #[cfg(feature = "streaming")]
 //! # {
-//! use cascette_formats::cdn::streaming::{
+//! use cascette_protocol::cdn::streaming::{
 //!     StreamingCdnResolver, CdnResolutionConfig, ContentResolutionRequest,
 //!     ReqwestHttpClient, StreamingConfig
 //! };
@@ -107,7 +107,7 @@
 //! ```rust
 //! # #[cfg(feature = "streaming")]
 //! # {
-//! use cascette_formats::cdn::streaming::{
+//! use cascette_protocol::cdn::streaming::{
 //!     StreamingBlteProcessor, StreamingBlteConfig,
 //!     ReqwestHttpClient, StreamingConfig
 //! };
@@ -139,7 +139,7 @@
 //! ```rust
 //! # #[cfg(feature = "streaming")]
 //! # {
-//! use cascette_formats::cdn::streaming::{
+//! use cascette_protocol::cdn::streaming::{
 //!     ConnectionPool, ConnectionPoolConfig, ReqwestHttpClient, StreamingConfig, CdnServer
 //! };
 //!
@@ -159,7 +159,7 @@
 //! // Add servers to pool
 //! let server = CdnServer::https("level3.blizzard.com".to_string());
 //! let client = ReqwestHttpClient::new(StreamingConfig::default())?;
-//! pool.add_client(server.clone(), client);
+//! pool.add_client(&server, client);
 //!
 //! // Get client with connection limiting
 //! let client = pool.get_client(&server).await?;
@@ -205,86 +205,61 @@
 //! - **Concurrency**: Support 1000+ concurrent connections
 //! - **Efficiency**: 90%+ bandwidth reduction vs full downloads
 
-#[cfg(feature = "streaming")]
 pub mod archive;
-#[cfg(feature = "streaming")]
 pub mod blte;
-#[cfg(feature = "streaming")]
 pub mod bootstrap;
-#[cfg(feature = "streaming")]
 pub mod config;
-#[cfg(feature = "streaming")]
 pub mod error;
-#[cfg(feature = "streaming")]
 pub mod http;
-#[cfg(feature = "streaming")]
 pub mod integration;
-#[cfg(feature = "streaming")]
 pub mod path;
-#[cfg(feature = "streaming")]
 pub mod range;
 
 // Phase 3: Advanced streaming features
-#[cfg(feature = "streaming")]
 pub mod metrics;
-#[cfg(feature = "streaming")]
 pub mod optimizer;
-#[cfg(feature = "streaming")]
 pub mod pool;
-#[cfg(feature = "streaming")]
 pub mod recovery;
 
 // Re-export public types for convenience
-#[cfg(feature = "streaming")]
 pub use archive::{
     ArchiveExtractionRequest, ArchiveExtractionResult, BatchArchiveExtractor,
     StreamingArchiveConfig, StreamingArchiveReader,
 };
-#[cfg(feature = "streaming")]
 pub use blte::{BlteHeaderInfo, StreamingBlteConfig, StreamingBlteProcessor};
-#[cfg(feature = "streaming")]
 pub use bootstrap::{BootstrapStats, CdnBootstrap, CdnEntry};
-#[cfg(feature = "streaming")]
 pub use config::{CdnConfig, ConnectionPoolConfig, RetryConfig, StreamingConfig};
-#[cfg(feature = "streaming")]
 pub use error::{StreamingError, StreamingResult};
-#[cfg(feature = "streaming")]
 pub use http::{CdnServer, HttpClient, ReqwestHttpClient};
-#[cfg(feature = "streaming")]
 pub use integration::{
     BatchContentResolver, CacheStats, CdnResolutionConfig, ContentResolutionRequest,
     ContentResolutionResult, StreamingCdnResolver,
 };
-#[cfg(feature = "streaming")]
 pub use path::{CdnPathCache, CdnUrlBuilder, ContentType};
-#[cfg(feature = "streaming")]
 pub use range::{HttpRange, MultiRangeRequest, RangeCoalescer};
 
 // Phase 3: Advanced streaming feature exports
-#[cfg(feature = "streaming")]
 pub use metrics::{
     CacheStats as MetricsCacheStats, PoolMetrics, PrometheusExporter, StreamingMetrics,
 };
-#[cfg(feature = "streaming")]
 pub use optimizer::{
     AdvancedRangeCoalescer, BandwidthMonitor, PrioritizedRequest, PriorityRequestQueue,
     RequestPriority, ZeroCopyBuffer,
 };
-#[cfg(feature = "streaming")]
 pub use pool::{ConnectionPool, ConnectionState, ConnectionStats};
-#[cfg(feature = "streaming")]
 pub use recovery::{
     ErrorRecoverySystem, FailoverManager, NetworkCondition, NetworkConditionDetector,
     RecoveryContext, RecoveryStatistics, RecoveryStrategy, RetryManager, ServerHealth,
     ServerMetrics,
 };
 
-#[cfg(all(test, feature = "streaming"))]
+#[cfg(test)]
 #[allow(
     clippy::similar_names,
     clippy::float_cmp,
     clippy::no_effect_underscore_binding,
-    clippy::used_underscore_binding
+    clippy::used_underscore_binding,
+    clippy::expect_used
 )]
 mod integration_tests {
     use super::*;
@@ -333,7 +308,7 @@ mod integration_tests {
 
         let test_ranges = vec![HttpRange::new(0, 1023), HttpRange::new(1030, 2047)];
 
-        let advanced_result = advanced_coalescer.coalesce_ranges(test_ranges).await;
+        let advanced_result = advanced_coalescer.coalesce_ranges(test_ranges);
         assert!(advanced_result.is_ok());
     }
 

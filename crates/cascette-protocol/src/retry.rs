@@ -114,8 +114,16 @@ impl RetryPolicy {
                     attempt += 1;
                     tracing::warn!("Attempt {} failed: {}", attempt, e);
 
-                    // Calculate delay with jitter
-                    let mut delay = backoff;
+                    // Use Retry-After hint if available (from HTTP 429 responses),
+                    // otherwise use calculated exponential backoff
+                    let mut delay = if let Some(retry_after) = e.retry_after_hint() {
+                        tracing::debug!("Using Retry-After hint: {:?}", retry_after);
+                        retry_after
+                    } else {
+                        backoff
+                    };
+
+                    // Add jitter to prevent thundering herd
                     if self.jitter {
                         let jitter = rng().random_range(0.0..0.3);
                         #[allow(clippy::cast_precision_loss)]

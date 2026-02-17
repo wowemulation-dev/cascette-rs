@@ -73,8 +73,8 @@ impl HttpClient {
             .gzip(true)
             .brotli(true)
             .deflate(true)
-            // Redirect handling for CDN
-            .redirect(reqwest::redirect::Policy::limited(3))
+            // Redirect handling for CDN (5 matches Agent.exe)
+            .redirect(reqwest::redirect::Policy::limited(5))
             // User agent for NGDP traffic
             .user_agent("cascette-protocol/0.1.0")
             .build()
@@ -110,7 +110,8 @@ impl HttpClient {
             .timeout(config.timeout)
             .connect_timeout(config.connect_timeout)
             .tcp_nodelay(config.tcp_nodelay)
-            .tcp_keepalive(config.tcp_keepalive);
+            .tcp_keepalive(config.tcp_keepalive)
+            .redirect(reqwest::redirect::Policy::limited(config.max_redirects));
 
         // TLS - always use rustls for security and WASM compatibility
         builder = builder.use_rustls_tls();
@@ -175,44 +176,71 @@ impl Default for HttpClient {
     }
 }
 
-/// HTTP client configuration with performance tuning options
+/// HTTP client configuration with performance tuning options.
 ///
 /// Note: On WASM, many of these options are ignored as they're not supported
 /// by the browser's Fetch API. The configuration is kept consistent across
 /// platforms for API compatibility.
+///
+/// Differences from Agent.exe defaults are intentional unless noted:
+/// - Agent uses 60s connect timeout; we use 10s (more appropriate for a library)
+/// - Agent limits to 3 connections per host; we use 10 (higher throughput)
+/// - Agent forces HTTP/1.1; we enable HTTP/2 with adaptive window sizing
+/// - Agent uses 256KB receive buffer; we use OS defaults
+///
+/// # Known limitations vs Agent.exe
+///
+/// The following Agent.exe parameters are not configurable through reqwest:
+///
+/// - **Low speed limit** (Agent: 100 bps / 60s) — reqwest has no stall
+///   detection. Would need application-layer throughput monitoring.
+/// - **Receive buffer** (Agent: 256KB `SO_RCVBUF`) — reqwest does not
+///   expose socket options. OS default applies.
+/// - **DNS cache TTL** (Agent: 300s) — reqwest uses the system resolver.
+///   Custom TTL requires a custom resolver.
+/// - **Total connection pool cap** (Agent: 12 total) — reqwest only
+///   exposes per-host idle limits, not total active connections.
 #[derive(Debug, Clone)]
 pub struct HttpConfig {
-    /// Connection pool idle timeout
+    /// Connection pool idle timeout.
     /// (ignored on WASM - browser manages connections)
     pub pool_idle_timeout: Duration,
 
-    /// Maximum idle connections per host
+    /// Maximum idle connections per host.
+    /// Agent.exe uses 3; we default to 10 for higher throughput.
     /// (ignored on WASM - browser manages connections)
     pub pool_max_idle_per_host: usize,
 
-    /// Request timeout
+    /// Request timeout.
     /// (ignored on WASM - use AbortController in application code)
     pub timeout: Duration,
 
-    /// Connection timeout
+    /// Connection timeout.
+    /// Agent.exe uses 60s; we default to 10s for faster failure detection.
     /// (ignored on WASM - browser manages connections)
     pub connect_timeout: Duration,
 
-    /// Enable `TCP_NODELAY` (disable Nagle's algorithm)
+    /// Enable `TCP_NODELAY` (disable Nagle's algorithm).
     /// (ignored on WASM - no TCP access)
     pub tcp_nodelay: bool,
 
-    /// TCP keep-alive duration
+    /// TCP keep-alive duration.
     /// (ignored on WASM - no TCP access)
     pub tcp_keepalive: Option<Duration>,
 
-    /// Use HTTP/2 prior knowledge (faster but less compatible)
+    /// Use HTTP/2 prior knowledge (faster but less compatible).
+    /// Agent.exe forces HTTP/1.1; we use HTTP/2 adaptive by default.
     /// (ignored on WASM - browser negotiates protocol)
     pub http2_prior_knowledge: bool,
 
-    /// Enable compression (gzip, brotli, deflate)
+    /// Enable compression (gzip, brotli, deflate).
     /// (supported on WASM)
     pub enable_compression: bool,
+
+    /// Maximum number of HTTP redirects to follow.
+    /// Default: 5 (matches Agent.exe).
+    /// (ignored on WASM - browser manages redirects)
+    pub max_redirects: usize,
 }
 
 impl Default for HttpConfig {
@@ -226,6 +254,7 @@ impl Default for HttpConfig {
             tcp_keepalive: Some(Duration::from_secs(60)),
             http2_prior_knowledge: false, // More compatible default
             enable_compression: true,     // Compress protocol responses
+            max_redirects: 5,             // Matches Agent.exe default
         }
     }
 }
@@ -242,6 +271,7 @@ impl HttpConfig {
             tcp_keepalive: Some(Duration::from_secs(30)),
             http2_prior_knowledge: true, // Assume HTTP/2 support
             enable_compression: true,
+            max_redirects: 5,
         }
     }
 
@@ -256,6 +286,7 @@ impl HttpConfig {
             tcp_keepalive: None, // No keep-alive to save memory
             http2_prior_knowledge: false,
             enable_compression: false, // Disable compression to save CPU/memory
+            max_redirects: 5,
         }
     }
 }

@@ -7,7 +7,6 @@
 //! - Network condition adaptation
 //! - Fallback to alternative content sources
 
-#[cfg(feature = "streaming")]
 use std::{
     collections::{HashMap, VecDeque},
     sync::{
@@ -17,19 +16,14 @@ use std::{
     time::{Duration, Instant},
 };
 
-#[cfg(feature = "streaming")]
 use bytes::Bytes;
-#[cfg(feature = "streaming")]
-use rand::{Rng, rng};
-#[cfg(feature = "streaming")]
+use rand::{RngExt, rng};
 use tokio::{
     sync::RwLock,
     time::{sleep, timeout},
 };
-#[cfg(feature = "streaming")]
 use tracing::{debug, error, info, warn};
 
-#[cfg(feature = "streaming")]
 use super::{
     config::{RetryConfig, StreamingConfig},
     error::{StreamingError, StreamingResult},
@@ -39,7 +33,6 @@ use super::{
 };
 
 /// Recovery strategy for different types of errors
-#[cfg(feature = "streaming")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RecoveryStrategy {
     /// Retry with exponential backoff
@@ -55,9 +48,9 @@ pub enum RecoveryStrategy {
     },
     /// Failover to next CDN server
     Failover {
-        /// Whether to exclude previously failed servers
+        /// Whether to exclude servers within their unavailability window
         exclude_failed: bool,
-        /// Duration after which failed servers are reset
+        /// Duration after which unavailable servers are reconsidered
         reset_after: Duration,
     },
     /// Split request into smaller ranges
@@ -77,7 +70,10 @@ pub enum RecoveryStrategy {
 }
 
 /// Server health status for failover decisions
-#[cfg(feature = "streaming")]
+///
+/// Servers are never permanently excluded. Instead, failure weight accumulates
+/// in `ServerMetrics::total_failure_weight` and reduces the server's selection
+/// score via exponential decay (`0.9^weight`). This matches Agent.exe behavior.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ServerHealth {
     /// Server is healthy and responsive
@@ -92,13 +88,10 @@ pub enum ServerHealth {
         /// When the server will be available again
         until: Instant,
     },
-    /// Server is permanently failed
-    Failed,
 }
 
 /// Network condition assessment
-#[cfg(feature = "streaming")]
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NetworkCondition {
     /// Excellent network conditions
     Excellent,
@@ -113,7 +106,6 @@ pub enum NetworkCondition {
 }
 
 /// Recovery context for making informed decisions
-#[cfg(feature = "streaming")]
 #[derive(Debug)]
 pub struct RecoveryContext {
     /// Request URL
@@ -135,7 +127,6 @@ pub struct RecoveryContext {
 }
 
 /// Advanced retry manager with intelligent backoff
-#[cfg(feature = "streaming")]
 #[derive(Debug)]
 pub struct RetryManager {
     /// Retry configuration
@@ -148,7 +139,6 @@ pub struct RetryManager {
     failed_retries: AtomicU64,
 }
 
-#[cfg(feature = "streaming")]
 impl RetryManager {
     /// Create new retry manager
     pub fn new(config: RetryConfig) -> Self {
@@ -162,6 +152,11 @@ impl RetryManager {
     }
 
     /// Calculate delay for retry attempt
+    #[allow(
+        clippy::cast_precision_loss,
+        clippy::cast_possible_wrap,
+        clippy::cast_sign_loss
+    )]
     pub fn calculate_delay(&self, attempt: u32, network_condition: NetworkCondition) -> Duration {
         if attempt == 0 {
             return Duration::from_millis(0);
@@ -195,12 +190,15 @@ impl RetryManager {
     }
 
     /// Add jitter to delay
+    #[allow(clippy::cast_precision_loss, clippy::cast_sign_loss)]
     fn add_jitter(&self, delay: Duration) -> Duration {
         let jitter_factor = self.config.jitter_factor.clamp(0.0, 1.0);
         let base_millis = delay.as_millis() as f64;
         let jitter_range = base_millis * jitter_factor;
 
-        let mut rng = self.rng.lock().expect("Operation should succeed");
+        let Ok(mut rng) = self.rng.lock() else {
+            return delay; // Return unmodified delay if lock is poisoned
+        };
         let jitter: f64 = rng.random_range(-jitter_range..=jitter_range);
 
         let final_delay = (base_millis + jitter).max(0.0) as u64;
@@ -210,35 +208,35 @@ impl RetryManager {
     /// Check if error is retryable
     pub fn is_retryable(&self, error: &StreamingError) -> bool {
         match error {
-            StreamingError::NetworkRequest { .. } => true,
-            StreamingError::Timeout { .. } => true,
             StreamingError::HttpStatus { status_code, .. } => {
                 // Retry on specific status codes
                 self.config.retry_on_status.contains(status_code)
             }
-            StreamingError::CdnFailover { .. } => true,
-            StreamingError::ServerUnavailable { .. } => true,
-            StreamingError::ConnectionLimit { .. } => true,
-            StreamingError::ConnectionPoolExhausted { .. } => true,
-            StreamingError::RateLimitExceeded { .. } => true,
-            StreamingError::MirrorSyncLag { .. } => true,
+            StreamingError::NetworkRequest { .. }
+            | StreamingError::Timeout { .. }
+            | StreamingError::CdnFailover { .. }
+            | StreamingError::ServerUnavailable { .. }
+            | StreamingError::ConnectionLimit { .. }
+            | StreamingError::ConnectionPoolExhausted { .. }
+            | StreamingError::RateLimitExceeded { .. }
+            | StreamingError::MirrorSyncLag { .. } => true,
             // Don't retry these errors
-            StreamingError::InvalidRange { .. } => false,
-            StreamingError::Configuration { .. } => false,
-            StreamingError::MissingContentLength { .. } => false,
-            StreamingError::HttpClientSetup { .. } => false,
-            StreamingError::RangeNotSupported { .. } => false,
-            StreamingError::RangeCoalescingFailed { .. } => false,
-            StreamingError::BufferOverflow { .. } => false,
-            StreamingError::ArchiveFormat { .. } => false,
-            StreamingError::Io { .. } => false,
-            StreamingError::AllCdnServersFailed { .. } => false,
-            StreamingError::CdnPathNotCached { .. } => false,
-            StreamingError::CdnPathResolution { .. } => false,
-            StreamingError::InvalidHashFormat { .. } => false,
-            StreamingError::CdnRegionUnavailable { .. } => false,
-            StreamingError::ContentVerificationFailed { .. } => false,
-            StreamingError::BlteError { .. } => false,
+            StreamingError::InvalidRange { .. }
+            | StreamingError::Configuration { .. }
+            | StreamingError::MissingContentLength { .. }
+            | StreamingError::HttpClientSetup { .. }
+            | StreamingError::RangeNotSupported { .. }
+            | StreamingError::RangeCoalescingFailed { .. }
+            | StreamingError::BufferOverflow { .. }
+            | StreamingError::ArchiveFormat { .. }
+            | StreamingError::Io { .. }
+            | StreamingError::AllCdnServersFailed { .. }
+            | StreamingError::CdnPathNotCached { .. }
+            | StreamingError::CdnPathResolution { .. }
+            | StreamingError::InvalidHashFormat { .. }
+            | StreamingError::CdnRegionUnavailable { .. }
+            | StreamingError::ContentVerificationFailed { .. }
+            | StreamingError::BlteError { .. } => false,
         }
     }
 
@@ -262,6 +260,7 @@ impl RetryManager {
     }
 
     /// Get success rate
+    #[allow(clippy::cast_precision_loss)]
     pub fn success_rate(&self) -> f64 {
         let total = self.total_retries.load(Ordering::Relaxed);
         if total == 0 {
@@ -274,7 +273,6 @@ impl RetryManager {
 }
 
 /// CDN failover manager with intelligent server selection
-#[cfg(feature = "streaming")]
 #[derive(Debug)]
 pub struct FailoverManager {
     /// Server health tracking
@@ -290,7 +288,6 @@ pub struct FailoverManager {
 }
 
 /// Performance metrics for a server
-#[cfg(feature = "streaming")]
 #[derive(Debug, Clone, Default)]
 pub struct ServerMetrics {
     /// Average response time
@@ -307,9 +304,50 @@ pub struct ServerMetrics {
     pub last_failure: Option<Instant>,
     /// Bandwidth estimate
     pub bandwidth_estimate: u64, // bytes/sec
+    /// Accumulated failure weight for exponential decay scoring.
+    ///
+    /// Different error types contribute different weights:
+    /// - 503 (Unavailable): 5.0
+    /// - 404 (Not found): 2.5
+    /// - 429 (Rate limited): 0.0 (handled via Retry-After)
+    /// - Timeout / network error: 1.0
+    /// - Other HTTP errors: 1.0
+    ///
+    /// The server score is multiplied by `0.9^total_failure_weight`,
+    /// matching Agent.exe's exponential decay model.
+    pub total_failure_weight: f64,
 }
 
-#[cfg(feature = "streaming")]
+/// Compute the failure weight for an error, matching Agent.exe backoff weights.
+///
+/// | Error | Weight |
+/// Weights match `tact::HandleHttpResponse` from Agent.exe:
+///
+/// | Status Code | Weight |
+/// |-------------|--------|
+/// | HTTP 2xx | 0.0 |
+/// | HTTP 429 | 0.0 (uses Retry-After backoff handler) |
+/// | HTTP 500, 502, 503, 504 | 5.0 |
+/// | HTTP 401, 416 | 2.5 |
+/// | Other 5xx | 1.0 |
+/// | HTTP 404 | 0.5 (expected missing content) |
+/// | Other 4xx | 0.5 |
+/// | 1xx, 3xx | 0.5 |
+/// | Timeout / NetworkRequest | 1.0 |
+/// | Other variants | 1.0 |
+fn failure_weight_for_error(error: &StreamingError) -> f64 {
+    match error {
+        StreamingError::HttpStatus { status_code, .. } => match *status_code {
+            200..=299 | 429 => 0.0,
+            500 | 502 | 503 | 504 => 5.0,
+            401 | 416 => 2.5,
+            505..=599 => 1.0,
+            _ => 0.5,
+        },
+        _ => 1.0,
+    }
+}
+
 impl FailoverManager {
     /// Create new failover manager
     pub fn new(config: StreamingConfig) -> Self {
@@ -322,28 +360,63 @@ impl FailoverManager {
         }
     }
 
-    /// Mark server as failed
+    /// Mark server as failed and accumulate failure weight.
+    ///
+    /// Unlike permanent exclusion, servers are only temporarily unavailable.
+    /// Failure weight accumulates in `ServerMetrics` and reduces the server's
+    /// selection score via exponential decay.
     pub async fn mark_server_failed(&self, server: &str, error: &StreamingError) {
+        let now = Instant::now();
         let mut health = self.server_health.write().await;
 
         let new_health = match error {
-            // Temporary failures
+            // Timeout / network errors: 5 minute unavailability
             StreamingError::Timeout { .. } | StreamingError::NetworkRequest { .. } => {
                 ServerHealth::Unavailable {
-                    until: Instant::now() + Duration::from_secs(300), // 5 minutes
+                    until: now + Duration::from_secs(300),
                 }
             }
-            // More severe failures
-            StreamingError::HttpStatus { status_code, .. } if *status_code >= 500 => {
-                ServerHealth::Unavailable {
-                    until: Instant::now() + Duration::from_secs(900), // 15 minutes
+            StreamingError::HttpStatus { status_code, .. } => match *status_code {
+                // 429: use Retry-After header hint, default 60s
+                429 => ServerHealth::Unavailable {
+                    until: now + Duration::from_secs(60),
+                },
+                // 5xx (non-429): 15 minute unavailability
+                500..=599 => ServerHealth::Unavailable {
+                    until: now + Duration::from_secs(900),
+                },
+                // 404: no unavailability (content-specific, not server failure)
+                404 => {
+                    // Don't change health status for 404 — server is fine,
+                    // just this particular content is missing.
+                    // Still accumulate failure weight below.
+                    health
+                        .entry(server.to_string())
+                        .or_insert(ServerHealth::Healthy);
+                    self.accumulate_failure_weight(server, error).await;
+                    self.failover_count.fetch_add(1, Ordering::Relaxed);
+                    debug!(
+                        "Server {} returned 404, added failure weight (no unavailability)",
+                        server
+                    );
+                    return;
                 }
-            }
-            // Permanent failures
-            _ => ServerHealth::Failed,
+                // Other HTTP errors: 5 minute unavailability
+                _ => ServerHealth::Unavailable {
+                    until: now + Duration::from_secs(300),
+                },
+            },
+            // All other errors: 5 minute unavailability
+            _ => ServerHealth::Unavailable {
+                until: now + Duration::from_secs(300),
+            },
         };
 
         health.insert(server.to_string(), new_health.clone());
+        // Drop health lock before acquiring metrics lock
+        drop(health);
+
+        self.accumulate_failure_weight(server, error).await;
         self.failover_count.fetch_add(1, Ordering::Relaxed);
 
         warn!(
@@ -352,23 +425,35 @@ impl FailoverManager {
         );
     }
 
+    /// Add failure weight to a server's metrics based on the error type.
+    async fn accumulate_failure_weight(&self, server: &str, error: &StreamingError) {
+        let weight = failure_weight_for_error(error);
+        if weight > 0.0 {
+            let mut metrics = self.server_metrics.write().await;
+            let server_metrics = metrics.entry(server.to_string()).or_default();
+            server_metrics.total_failure_weight += weight;
+            let total = server_metrics.total_failure_weight;
+            drop(metrics);
+            debug!("Server {} failure weight: +{} = {}", server, weight, total);
+        }
+    }
+
     /// Mark server as healthy
     pub async fn mark_server_healthy(&self, server: &str) {
         let mut health = self.server_health.write().await;
-        let was_failed = matches!(
-            health.get(server),
-            Some(ServerHealth::Failed | ServerHealth::Unavailable { .. })
-        );
+        let was_unavailable = matches!(health.get(server), Some(ServerHealth::Unavailable { .. }));
 
         health.insert(server.to_string(), ServerHealth::Healthy);
+        drop(health);
 
-        if was_failed {
+        if was_unavailable {
             self.recovery_count.fetch_add(1, Ordering::Relaxed);
             info!("Server {} recovered and marked as healthy", server);
         }
     }
 
     /// Update server performance metrics
+    #[allow(clippy::cast_precision_loss, clippy::cast_sign_loss)]
     pub async fn update_server_metrics(
         &self,
         server: &str,
@@ -411,20 +496,28 @@ impl FailoverManager {
                 bandwidth
             } else {
                 // Exponential moving average
-                ((server_metrics.bandwidth_estimate as f64 * 0.9) + (bandwidth as f64 * 0.1)) as u64
+                (server_metrics.bandwidth_estimate as f64).mul_add(0.9, bandwidth as f64 * 0.1)
+                    as u64
             };
         }
 
+        let avg_rt = server_metrics.avg_response_time;
+        let success_rate = server_metrics.success_rate;
+        let bandwidth_est = server_metrics.bandwidth_estimate;
+        drop(metrics);
+
         debug!(
             "Updated metrics for {}: avg_rt={:?}, success_rate={:.2}, bandwidth={} B/s",
-            server,
-            server_metrics.avg_response_time,
-            server_metrics.success_rate,
-            server_metrics.bandwidth_estimate
+            server, avg_rt, success_rate, bandwidth_est
         );
     }
 
-    /// Select best available server
+    /// Select server using weighted-random selection.
+    ///
+    /// All servers whose unavailability window has expired are candidates.
+    /// Selection probability is proportional to each server's score
+    /// (which includes exponential decay from failures). This matches
+    /// Agent.exe's randomized linear interpolation approach.
     pub async fn select_best_server(&self, available_servers: &[CdnServer]) -> Option<CdnServer> {
         if available_servers.is_empty() {
             return None;
@@ -439,49 +532,77 @@ impl FailoverManager {
         for server in available_servers {
             let server_key = &server.host;
 
-            // Check health status
-            let is_healthy = match health.get(server_key) {
-                Some(ServerHealth::Healthy) => true,
-                Some(ServerHealth::Degraded { .. }) => true, // Still usable
+            // Check health status — servers are never permanently excluded
+            let is_available = match health.get(server_key) {
                 Some(ServerHealth::Unavailable { until }) => now >= *until,
-                Some(ServerHealth::Failed) => false,
-                None => true, // Unknown servers are considered healthy
+                Some(ServerHealth::Healthy | ServerHealth::Degraded { .. }) | None => true,
             };
 
-            if !is_healthy {
+            if !is_available {
                 continue;
             }
 
-            // Calculate server score based on performance metrics
+            // Calculate server score (includes decay from failure weight)
             let server_metrics = metrics.get(server_key);
             let score = self.calculate_server_score(server, server_metrics);
 
             candidates.push((server.clone(), score));
         }
+        drop(health);
+        drop(metrics);
 
         if candidates.is_empty() {
-            warn!("No healthy servers available");
+            warn!("No available servers (all within unavailability windows)");
             return None;
         }
 
-        // Sort by score (higher is better) and return best
-        candidates.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        // Weighted-random selection: probability proportional to score
+        let total_weight: f64 = candidates.iter().map(|(_, s)| s).sum();
+        if total_weight <= 0.0 {
+            // All scores are zero (shouldn't happen with base score),
+            // fall back to first candidate
+            return Some(candidates[0].0.clone());
+        }
 
-        let best_server = candidates[0].0.clone();
-        debug!(
-            "Selected server {} with score {:.2}",
-            best_server.host, candidates[0].1
-        );
+        let pick = {
+            let mut rng_guard = rng();
+            rng_guard.random_range(0.0..total_weight)
+        };
 
-        Some(best_server)
+        let mut cumulative = 0.0;
+        for (server, score) in &candidates {
+            cumulative += score;
+            if pick < cumulative {
+                debug!(
+                    "Selected server {} (score {:.2}, weight {:.4})",
+                    server.host,
+                    score,
+                    score / total_weight
+                );
+                return Some(server.clone());
+            }
+        }
+
+        // Floating-point edge case — return last candidate
+        Some(
+            candidates
+                .last()
+                .map_or_else(|| candidates[0].0.clone(), |(s, _)| s.clone()),
+        )
     }
 
-    /// Calculate server selection score
+    /// Calculate server selection score with exponential decay.
+    ///
+    /// Base score is computed from priority, HTTPS support, and performance
+    /// metrics. Then multiplied by `0.9^total_failure_weight` to apply
+    /// exponential decay from accumulated failures. Servers with high
+    /// failure weights get proportionally lower scores but never reach zero.
+    #[allow(clippy::cast_precision_loss, clippy::unused_self)]
     fn calculate_server_score(&self, server: &CdnServer, metrics: Option<&ServerMetrics>) -> f64 {
         let mut score = 100.0; // Base score
 
         // Priority bonus (lower priority value = higher score)
-        score += 1000.0 / (server.priority as f64 + 1.0);
+        score += 1000.0 / (f64::from(server.priority) + 1.0);
 
         // HTTPS bonus
         if server.supports_https {
@@ -512,6 +633,11 @@ impl FailoverManager {
                 };
                 score += recency_bonus;
             }
+
+            // Apply exponential decay from failure weight
+            // weight = 0.9 ^ total_failure_weight (matches Agent.exe)
+            let decay = 0.9_f64.powf(metrics.total_failure_weight);
+            score *= decay;
         }
 
         score.max(0.0)
@@ -544,22 +670,25 @@ impl FailoverManager {
         let mut to_remove = Vec::new();
 
         for (server, status) in health.iter() {
-            if let ServerHealth::Unavailable { until } = status {
-                if now >= *until {
-                    to_remove.push(server.clone());
-                }
+            if let ServerHealth::Unavailable { until } = status
+                && now >= *until
+            {
+                to_remove.push(server.clone());
             }
         }
 
-        for server in to_remove {
+        for server in &to_remove {
             health.insert(server.clone(), ServerHealth::Healthy);
+        }
+        drop(health);
+
+        for server in &to_remove {
             info!("Server {} health status expired, marked as healthy", server);
         }
     }
 }
 
 /// Network condition detector
-#[cfg(feature = "streaming")]
 #[derive(Debug)]
 pub struct NetworkConditionDetector {
     /// Recent error history
@@ -570,7 +699,6 @@ pub struct NetworkConditionDetector {
     window_duration: Duration,
 }
 
-#[cfg(feature = "streaming")]
 impl NetworkConditionDetector {
     /// Create new network condition detector
     pub fn new(window_duration: Duration) -> Self {
@@ -586,10 +714,10 @@ impl NetworkConditionDetector {
         let mut history = self.error_history.write().await;
         let now = Instant::now();
 
-        history.push_back((now, format!("{:?}", error)));
+        history.push_back((now, format!("{error:?}")));
 
         // Cleanup old entries
-        let cutoff = now - self.window_duration;
+        let cutoff = now.checked_sub(self.window_duration).unwrap_or(now);
         while let Some((timestamp, _)) = history.front() {
             if *timestamp < cutoff {
                 history.pop_front();
@@ -597,6 +725,7 @@ impl NetworkConditionDetector {
                 break;
             }
         }
+        drop(history);
     }
 
     /// Record performance sample
@@ -607,7 +736,7 @@ impl NetworkConditionDetector {
         history.push_back((now, response_time, success));
 
         // Cleanup old entries
-        let cutoff = now - self.window_duration;
+        let cutoff = now.checked_sub(self.window_duration).unwrap_or(now);
         while let Some((timestamp, _, _)) = history.front() {
             if *timestamp < cutoff {
                 history.pop_front();
@@ -615,16 +744,17 @@ impl NetworkConditionDetector {
                 break;
             }
         }
+        drop(history);
     }
 
     /// Assess current network condition
+    #[allow(clippy::cast_precision_loss)]
     pub async fn assess_condition(&self) -> NetworkCondition {
-        let error_history = self.error_history.read().await;
-        let performance_history = self.performance_history.read().await;
+        let error_count = self.error_history.read().await.len();
 
-        // Calculate error rate
+        let performance_history = self.performance_history.read().await;
         let total_requests = performance_history.len();
-        let error_count = error_history.len();
+
         let error_rate = if total_requests == 0 {
             0.0
         } else {
@@ -687,6 +817,7 @@ impl NetworkConditionDetector {
     }
 
     /// Get current statistics
+    #[allow(clippy::cast_precision_loss)]
     pub async fn statistics(&self) -> (usize, usize, f64, Duration) {
         let error_count = self.error_history.read().await.len();
         let performance_history = self.performance_history.read().await;
@@ -719,7 +850,6 @@ impl NetworkConditionDetector {
 }
 
 /// Complete error recovery system
-#[cfg(feature = "streaming")]
 #[derive(Debug)]
 pub struct ErrorRecoverySystem<T: HttpClient> {
     /// HTTP client
@@ -737,7 +867,6 @@ pub struct ErrorRecoverySystem<T: HttpClient> {
     config: StreamingConfig,
 }
 
-#[cfg(feature = "streaming")]
 impl<T: HttpClient> ErrorRecoverySystem<T> {
     /// Create new error recovery system
     pub fn new(client: Arc<T>, config: StreamingConfig, metrics: Arc<StreamingMetrics>) -> Self {
@@ -756,6 +885,7 @@ impl<T: HttpClient> ErrorRecoverySystem<T> {
     }
 
     /// Execute request with full error recovery
+    #[allow(clippy::future_not_send)]
     pub async fn execute_with_recovery(
         &self,
         url: String,
@@ -804,7 +934,7 @@ impl<T: HttpClient> ErrorRecoverySystem<T> {
                 let error = StreamingError::Configuration {
                     reason: "No healthy servers available".to_string(),
                 };
-                context.error_descriptions.push(format!("{:?}", error));
+                context.error_descriptions.push(format!("{error:?}"));
                 return Err(error);
             };
 
@@ -859,7 +989,7 @@ impl<T: HttpClient> ErrorRecoverySystem<T> {
                     if context.attempts > 1 {
                         self.metrics
                             .retry_attempts
-                            .fetch_add(context.attempts as u64 - 1, Ordering::Relaxed);
+                            .fetch_add(u64::from(context.attempts) - 1, Ordering::Relaxed);
                     }
 
                     return Ok(bytes);
@@ -887,7 +1017,7 @@ impl<T: HttpClient> ErrorRecoverySystem<T> {
 
                     context
                         .error_descriptions
-                        .push(format!("{:?}", streaming_error));
+                        .push(format!("{streaming_error:?}"));
 
                     // Check if error is retryable
                     if !self.retry_manager.is_retryable(&streaming_error) {
@@ -927,7 +1057,7 @@ impl<T: HttpClient> ErrorRecoverySystem<T> {
 
                     context
                         .error_descriptions
-                        .push(format!("{:?}", streaming_error));
+                        .push(format!("{streaming_error:?}"));
 
                     // Check if error is retryable
                     if !self.retry_manager.is_retryable(&streaming_error) {
@@ -945,6 +1075,7 @@ impl<T: HttpClient> ErrorRecoverySystem<T> {
     }
 
     /// Get recovery system statistics
+    #[allow(clippy::future_not_send)]
     pub async fn statistics(&self) -> RecoveryStatistics {
         let (retry_total, retry_successful, retry_failed) = self.retry_manager.statistics();
         let (failover_count, recovery_count) = self.failover_manager.statistics();
@@ -970,13 +1101,13 @@ impl<T: HttpClient> ErrorRecoverySystem<T> {
     }
 
     /// Cleanup expired health statuses and old history
+    #[allow(clippy::future_not_send)]
     pub async fn cleanup(&self) {
         self.failover_manager.cleanup_expired().await;
     }
 }
 
 /// Comprehensive recovery statistics
-#[cfg(feature = "streaming")]
 #[derive(Debug, Clone)]
 pub struct RecoveryStatistics {
     /// Total number of retry attempts
@@ -1005,8 +1136,14 @@ pub struct RecoveryStatistics {
     pub server_metrics: HashMap<String, ServerMetrics>,
 }
 
-#[cfg(all(test, feature = "streaming"))]
-#[allow(clippy::expect_used, clippy::unwrap_used, clippy::uninlined_format_args)]
+#[cfg(test)]
+#[allow(
+    clippy::expect_used,
+    clippy::unwrap_used,
+    clippy::uninlined_format_args,
+    clippy::float_cmp,
+    clippy::useless_vec
+)]
 mod tests {
     use super::*;
     use crate::cdn::streaming::{
@@ -1070,15 +1207,11 @@ mod tests {
             CdnServer::new("server2.com".to_string(), true, 200),
         ];
 
-        // Initially, should select first server (lower priority)
+        // Initially, should select a server (weighted-random, both candidates)
         let selected = failover_manager.select_best_server(&servers).await;
         assert!(selected.is_some());
-        assert_eq!(
-            selected.expect("Operation should succeed").host,
-            "server1.com"
-        );
 
-        // Mark first server as failed
+        // Mark first server as unavailable via timeout
         let error = StreamingError::Timeout {
             timeout_ms: 5000,
             url: "http://server1.com/test".to_string(),
@@ -1087,12 +1220,234 @@ mod tests {
             .mark_server_failed("server1.com", &error)
             .await;
 
-        // Should now select second server
+        // server1 is within its 5-minute unavailability window,
+        // so only server2 is a candidate
         let selected = failover_manager.select_best_server(&servers).await;
         assert!(selected.is_some());
         assert_eq!(
             selected.expect("Operation should succeed").host,
             "server2.com"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_failure_weight_for_error() {
+        // HTTP 503 should have highest weight (5.0, matching Agent.exe)
+        let err_503 = StreamingError::HttpStatus {
+            status_code: 503,
+            url: "http://example.com".to_string(),
+        };
+        assert!((failure_weight_for_error(&err_503) - 5.0).abs() < f64::EPSILON);
+
+        // HTTP 500/502/504 also get weight 5.0
+        for code in [500, 502, 504] {
+            let err = StreamingError::HttpStatus {
+                status_code: code,
+                url: "http://example.com".to_string(),
+            };
+            assert!(
+                (failure_weight_for_error(&err) - 5.0).abs() < f64::EPSILON,
+                "HTTP {code} should have weight 5.0"
+            );
+        }
+
+        // HTTP 401/416 get weight 2.5
+        for code in [401, 416] {
+            let err = StreamingError::HttpStatus {
+                status_code: code,
+                url: "http://example.com".to_string(),
+            };
+            assert!(
+                (failure_weight_for_error(&err) - 2.5).abs() < f64::EPSILON,
+                "HTTP {code} should have weight 2.5"
+            );
+        }
+
+        // HTTP 404 gets default 4xx weight (0.5, expected missing content)
+        let err_404 = StreamingError::HttpStatus {
+            status_code: 404,
+            url: "http://example.com".to_string(),
+        };
+        assert!((failure_weight_for_error(&err_404) - 0.5).abs() < f64::EPSILON);
+
+        // HTTP 429 should have zero weight (handled via Retry-After)
+        let err_429 = StreamingError::HttpStatus {
+            status_code: 429,
+            url: "http://example.com".to_string(),
+        };
+        assert!((failure_weight_for_error(&err_429)).abs() < f64::EPSILON);
+
+        // HTTP 2xx should have zero weight
+        let err_200 = StreamingError::HttpStatus {
+            status_code: 200,
+            url: "http://example.com".to_string(),
+        };
+        assert!((failure_weight_for_error(&err_200)).abs() < f64::EPSILON);
+
+        // Other 5xx should have weight 1.0
+        let err_505 = StreamingError::HttpStatus {
+            status_code: 505,
+            url: "http://example.com".to_string(),
+        };
+        assert!((failure_weight_for_error(&err_505) - 1.0).abs() < f64::EPSILON);
+
+        // Other 4xx should have weight 0.5
+        let err_403 = StreamingError::HttpStatus {
+            status_code: 403,
+            url: "http://example.com".to_string(),
+        };
+        assert!((failure_weight_for_error(&err_403) - 0.5).abs() < f64::EPSILON);
+
+        // 1xx/3xx should have weight 0.5
+        let err_301 = StreamingError::HttpStatus {
+            status_code: 301,
+            url: "http://example.com".to_string(),
+        };
+        assert!((failure_weight_for_error(&err_301) - 0.5).abs() < f64::EPSILON);
+
+        // Timeout should have weight 1.0
+        let err_timeout = StreamingError::Timeout {
+            timeout_ms: 5000,
+            url: "http://example.com".to_string(),
+        };
+        assert!((failure_weight_for_error(&err_timeout) - 1.0).abs() < f64::EPSILON);
+    }
+
+    #[tokio::test]
+    async fn test_decay_scoring() {
+        let config = StreamingConfig::default();
+        let failover_manager = FailoverManager::new(config);
+
+        let servers = vec![
+            CdnServer::new("healthy.com".to_string(), true, 100),
+            CdnServer::new("failing.com".to_string(), true, 100), // Same priority
+        ];
+
+        // Accumulate failures on one server (503 = weight 5.0 each)
+        for _ in 0..3 {
+            let error = StreamingError::HttpStatus {
+                status_code: 503,
+                url: "http://failing.com/test".to_string(),
+            };
+            failover_manager
+                .mark_server_failed("failing.com", &error)
+                .await;
+            // Mark healthy again so it's available (clear unavailability)
+            failover_manager.mark_server_healthy("failing.com").await;
+        }
+
+        // Check that failing server has accumulated weight
+        let metrics = failover_manager.get_all_metrics().await;
+        let failing_metrics = metrics.get("failing.com").expect("Should have metrics");
+        assert!(
+            (failing_metrics.total_failure_weight - 15.0).abs() < f64::EPSILON,
+            "Expected 15.0 (3 * 5.0), got {}",
+            failing_metrics.total_failure_weight
+        );
+
+        // Score the failing server - decay should be 0.9^15 ≈ 0.206
+        let failing_server = &servers[1];
+        let failing_server_metrics = metrics.get("failing.com");
+        let failing_score =
+            failover_manager.calculate_server_score(failing_server, failing_server_metrics);
+
+        // Score the healthy server (no metrics = no decay)
+        let healthy_server = &servers[0];
+        let healthy_score = failover_manager.calculate_server_score(healthy_server, None);
+
+        assert!(
+            healthy_score > failing_score,
+            "Healthy server score ({}) should be higher than failing server score ({})",
+            healthy_score,
+            failing_score
+        );
+
+        // Failing server score should still be positive (never zero)
+        assert!(
+            failing_score > 0.0,
+            "Failing server score should never reach zero, got {}",
+            failing_score
+        );
+    }
+
+    #[tokio::test]
+    async fn test_no_permanent_exclusion() {
+        let config = StreamingConfig::default();
+        let failover_manager = FailoverManager::new(config);
+
+        let servers = vec![CdnServer::new("server1.com".to_string(), true, 100)];
+
+        // Accumulate many failures
+        for _ in 0..20 {
+            let error = StreamingError::HttpStatus {
+                status_code: 503,
+                url: "http://server1.com/test".to_string(),
+            };
+            failover_manager
+                .mark_server_failed("server1.com", &error)
+                .await;
+        }
+
+        // Server is within unavailability window, so not selectable yet
+        let selected = failover_manager.select_best_server(&servers).await;
+        assert!(
+            selected.is_none(),
+            "Server should be within unavailability window"
+        );
+
+        // Clear the unavailability by marking healthy (simulates window expiry)
+        failover_manager.mark_server_healthy("server1.com").await;
+
+        // Server should be selectable again (with reduced weight)
+        let selected = failover_manager.select_best_server(&servers).await;
+        assert!(
+            selected.is_some(),
+            "Server should be selectable after unavailability expires"
+        );
+        assert_eq!(
+            selected.expect("Operation should succeed").host,
+            "server1.com"
+        );
+
+        // Verify it has accumulated failure weight
+        let metrics = failover_manager.get_all_metrics().await;
+        let server_metrics = metrics.get("server1.com").expect("Should have metrics");
+        assert!(
+            server_metrics.total_failure_weight > 0.0,
+            "Server should have accumulated failure weight"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_404_no_unavailability() {
+        let config = StreamingConfig::default();
+        let failover_manager = FailoverManager::new(config);
+
+        let servers = vec![CdnServer::new("server1.com".to_string(), true, 100)];
+
+        // 404 should add failure weight but not make server unavailable
+        let error = StreamingError::HttpStatus {
+            status_code: 404,
+            url: "http://server1.com/missing".to_string(),
+        };
+        failover_manager
+            .mark_server_failed("server1.com", &error)
+            .await;
+
+        // Server should still be healthy/selectable
+        let health = failover_manager.get_server_health("server1.com").await;
+        assert_eq!(health, ServerHealth::Healthy);
+
+        let selected = failover_manager.select_best_server(&servers).await;
+        assert!(selected.is_some(), "Server should be available after 404");
+
+        // But failure weight should be accumulated (404 = 0.5, matching Agent.exe)
+        let metrics = failover_manager.get_all_metrics().await;
+        let server_metrics = metrics.get("server1.com").expect("Should have metrics");
+        assert!(
+            (server_metrics.total_failure_weight - 0.5).abs() < f64::EPSILON,
+            "404 should add weight 0.5, got {}",
+            server_metrics.total_failure_weight
         );
     }
 

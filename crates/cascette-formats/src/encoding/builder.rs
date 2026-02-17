@@ -277,7 +277,7 @@ impl EncodingBuilder {
 
         for entry in entries {
             entry
-                .write_options(&mut cursor, binrw::Endian::Big, ())
+                .write_options(&mut cursor, binrw::Endian::Big, (16, 16))
                 .map_err(EncodingError::BinRw)?;
         }
 
@@ -296,7 +296,7 @@ impl EncodingBuilder {
 
         for entry in entries {
             entry
-                .write_options(&mut cursor, binrw::Endian::Big, ())
+                .write_options(&mut cursor, binrw::Endian::Big, (16,))
                 .map_err(EncodingError::BinRw)?;
         }
 

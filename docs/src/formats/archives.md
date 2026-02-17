@@ -152,7 +152,7 @@ Archive Index files use a 28-byte footer at the end of the file:
 
 ```c
 struct ArchiveIndexFooter {  // 28 bytes total
-    uint8_t  toc_hash[8];     // First 8 bytes of MD5 hash of table of contents
+    uint8_t  toc_hash[8];     // MD5(toc_keys || block_hashes)[:footer_hash_bytes]
     uint8_t  version;         // Must be <= 1 (0 or 1)
     uint8_t  reserved[2];     // Must be [0, 0]
     uint8_t  page_size_kb;    // Must be 4 (4KB pages)
@@ -212,17 +212,18 @@ struct ArchiveIndexFooter {  // 28 bytes total
 
 **Chunk Structure**:
 
-- All indexes use 4KB chunks (170 entries max per chunk: 4096 / 24 = 170
+- All indexes use 4KB chunks. Max entries per chunk =
+  `4096 / (ekey_length + offset_bytes + size_bytes)`. With default 16+4+4
+  fields: 170 entries per chunk.
 
-  entries)
+- Table of contents (TOC) is stored after data chunks and contains two
+  sections:
+  1. Last encoding key of each data chunk (for binary search)
+  2. Per-block MD5 hash of each data chunk (truncated to `footer_hash_bytes`)
 
-- Table of contents is stored separately after chunks, containing last key of
-
-  each chunk
+- TOC hash = `MD5(toc_keys || block_hashes)[:footer_hash_bytes]`
 
 - Chunk structure enables streaming and memory-efficient processing
-
-- TOC hash validates chunk integrity separately from footer hash
 
 - Chunks are padded with zeros to maintain 4KB alignment
 

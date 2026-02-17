@@ -3,21 +3,17 @@
 //! Provides functionality to parse CDN server information from Ribbit responses
 //! and configure streaming CDN clients with dynamically discovered endpoints.
 
-#[cfg(feature = "streaming")]
 use super::{
     error::{StreamingError, StreamingResult},
     http::CdnServer,
 };
-#[cfg(feature = "streaming")]
 use crate::bpsv::{BpsvRow, BpsvSchema};
-#[cfg(feature = "streaming")]
 use std::collections::HashMap;
 
 /// CDN bootstrap configuration from Ribbit responses
 ///
 /// Contains parsed CDN server information and paths extracted from
 /// Ribbit `/cdns` endpoint responses in BPSV format.
-#[cfg(feature = "streaming")]
 #[derive(Debug, Clone)]
 pub struct CdnBootstrap {
     /// CDN servers discovered from Ribbit
@@ -34,8 +30,7 @@ pub struct CdnBootstrap {
 ///
 /// Represents a single CDN configuration entry with all fields
 /// that may appear in `/cdns` endpoint responses.
-#[cfg(feature = "streaming")]
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CdnEntry {
     /// CDN name/identifier
     pub name: String,
@@ -47,7 +42,6 @@ pub struct CdnEntry {
     pub config_path: Option<String>,
 }
 
-#[cfg(feature = "streaming")]
 impl CdnBootstrap {
     /// Create empty bootstrap configuration
     pub fn new() -> Self {
@@ -90,14 +84,14 @@ impl CdnBootstrap {
             let cdn_entry = Self::parse_cdn_entry(row, schema)?;
 
             // Filter by product if specified
-            if let Some(product) = product {
-                if !cdn_entry.name.contains(product) {
-                    continue;
-                }
+            if let Some(product) = product
+                && !cdn_entry.name.contains(product)
+            {
+                continue;
             }
 
             // Extract CDN servers from hosts field
-            let servers = Self::parse_cdn_hosts(&cdn_entry.hosts)?;
+            let servers = Self::parse_cdn_hosts(&cdn_entry.hosts);
             bootstrap.servers.extend(servers);
 
             // Cache path for this CDN entry
@@ -152,7 +146,7 @@ impl CdnBootstrap {
         let config_path = row
             .get_by_name("ConfigPath", schema)
             .and_then(|v| v.as_string())
-            .map(|s| s.to_string());
+            .map(std::string::ToString::to_string);
 
         if hosts.is_empty() {
             return Err(StreamingError::Configuration {
@@ -169,7 +163,7 @@ impl CdnBootstrap {
     }
 
     /// Parse CDN hosts from space-separated host list
-    fn parse_cdn_hosts(hosts_str: &str) -> StreamingResult<Vec<CdnServer>> {
+    fn parse_cdn_hosts(hosts_str: &str) -> Vec<CdnServer> {
         let mut servers = Vec::new();
         let mut priority = 10; // Start with high priority
 
@@ -189,7 +183,7 @@ impl CdnBootstrap {
             priority += 10; // Decrease priority for subsequent servers
         }
 
-        Ok(servers)
+        servers
     }
 
     /// Extract path for a specific product
@@ -233,13 +227,14 @@ impl CdnBootstrap {
     ///
     /// # Returns
     /// Merged bootstrap configuration
-    pub fn merge_with_fallback(mut self, fallback: CdnBootstrap) -> Self {
-        let mut fallback_priority_offset = 1000;
-
-        // Find highest priority in current servers
-        if let Some(max_priority) = self.servers.iter().map(|s| s.priority).max() {
-            fallback_priority_offset = max_priority + 100;
-        }
+    #[must_use]
+    pub fn merge_with_fallback(mut self, fallback: Self) -> Self {
+        let fallback_priority_offset =
+            if let Some(max_priority) = self.servers.iter().map(|s| s.priority).max() {
+                max_priority + 100
+            } else {
+                1000
+            };
 
         // Add fallback servers with lower priority
         for mut server in fallback.servers {
@@ -254,9 +249,7 @@ impl CdnBootstrap {
 
         // Merge paths (prefer official)
         for (product, path) in fallback.paths {
-            if !self.paths.contains_key(&product) {
-                self.paths.insert(product, path);
-            }
+            self.paths.entry(product).or_insert(path);
         }
 
         // Re-sort servers by priority
@@ -343,8 +336,7 @@ impl CdnBootstrap {
 }
 
 /// Statistics about bootstrap configuration
-#[cfg(feature = "streaming")]
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BootstrapStats {
     /// Total number of CDN servers configured
     pub total_servers: usize,
@@ -358,14 +350,13 @@ pub struct BootstrapStats {
     pub is_official: bool,
 }
 
-#[cfg(feature = "streaming")]
 impl Default for CdnBootstrap {
     fn default() -> Self {
         Self::new()
     }
 }
 
-#[cfg(all(test, feature = "streaming"))]
+#[cfg(test)]
 #[allow(clippy::expect_used)]
 mod tests {
     use super::*;
@@ -396,7 +387,7 @@ mod tests {
     #[test]
     fn test_cdn_host_parsing() {
         let hosts = "level3.blizzard.com edgecast.blizzard.com";
-        let servers = CdnBootstrap::parse_cdn_hosts(hosts).expect("Operation should succeed");
+        let servers = CdnBootstrap::parse_cdn_hosts(hosts);
 
         assert_eq!(servers.len(), 2);
         assert_eq!(servers[0].host, "level3.blizzard.com");

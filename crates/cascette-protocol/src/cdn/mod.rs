@@ -2,10 +2,19 @@
 
 pub mod range;
 
+#[cfg(all(not(target_arch = "wasm32"), feature = "streaming"))]
+pub mod streaming;
+
+// Re-export types needed by the streaming submodule (resolves super::super::ArchiveError paths)
+#[cfg(all(not(target_arch = "wasm32"), feature = "streaming"))]
+pub use cascette_formats::archive::{ArchiveError, ArchiveIndex};
+
 #[cfg(not(target_arch = "wasm32"))]
 use futures::StreamExt;
 use std::fmt;
 use std::sync::Arc;
+
+use std::time::Duration;
 
 use crate::config::CdnConfig;
 use crate::error::{ProtocolError, Result};
@@ -13,6 +22,26 @@ use crate::retry::RetryPolicy;
 use crate::transport::HttpClient;
 
 pub use range::{RangeDownloader, RangeError};
+
+/// Strip trailing slashes from a CDN path to prevent double slashes in URLs.
+///
+/// Agent.exe normalizes `cdnPath` by removing trailing slashes before URL construction.
+fn normalize_cdn_path(path: &str) -> &str {
+    path.trim_end_matches('/')
+}
+
+/// Parse the `Retry-After` header from an HTTP response.
+///
+/// Agent.exe reads this header on 429 responses and waits the specified duration.
+/// Only the seconds (integer) format is supported. HTTP-date format is ignored.
+fn parse_retry_after(response: &reqwest::Response) -> Option<Duration> {
+    response
+        .headers()
+        .get(reqwest::header::RETRY_AFTER)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.parse::<u64>().ok())
+        .map(Duration::from_secs)
+}
 
 /// CDN endpoint configuration injected from external source
 #[derive(Debug, Clone)]
@@ -25,6 +54,48 @@ pub struct CdnEndpoint {
     pub product_path: Option<String>,
     /// URL scheme (defaults to "https")
     pub scheme: Option<String>,
+    /// Whether this is a fallback server (from `?fallback=1` query param)
+    pub is_fallback: bool,
+    /// Strict mode — do not fall back to other servers (from `?strict=1`)
+    pub strict: bool,
+    /// Maximum number of hosts to use (from `?maxhosts=N`)
+    pub max_hosts: Option<u32>,
+}
+
+/// Parse a CDN server URL string, extracting the hostname and query parameters.
+///
+/// Agent.exe's `ParseCdnServerUrl` extracts `?fallback=1`, `?strict=1`, and
+/// `?maxhosts=N` from CDN server URLs. Unknown parameters are ignored.
+///
+/// Returns `(host, is_fallback, strict, max_hosts)`.
+fn parse_cdn_server_url(raw_host: &str) -> (String, bool, bool, Option<u32>) {
+    let (host, query) = match raw_host.split_once('?') {
+        Some((h, q)) => (h.to_string(), q),
+        None => return (raw_host.to_string(), false, false, None),
+    };
+
+    let mut is_fallback = false;
+    let mut strict = false;
+    let mut max_hosts = None;
+
+    for param in query.split('&') {
+        if let Some((key, value)) = param.split_once('=') {
+            match key {
+                "fallback" => is_fallback = value == "1",
+                "strict" => strict = value == "1",
+                "maxhosts" => {
+                    if let Ok(n) = value.parse::<u32>()
+                        && n >= 1
+                    {
+                        max_hosts = Some(n);
+                    }
+                }
+                _ => {} // Unknown params ignored
+            }
+        }
+    }
+
+    (host, is_fallback, strict, max_hosts)
 }
 
 /// Content type for different CDN paths
@@ -69,7 +140,7 @@ impl CdnClient {
         // IMPORTANT: Always use path field for ALL game content (config, data, patch)
         // ProductPath is ONLY for Battle.net launcher product configuration files
         // See docs/cdn.md for details on Path vs ProductPath distinction
-        let base_path = &endpoint.path;
+        let base_path = normalize_cdn_path(&endpoint.path);
 
         // Use endpoint scheme if specified, otherwise default to https
         let scheme = endpoint.scheme.as_deref().unwrap_or("https");
@@ -100,7 +171,7 @@ impl CdnClient {
         // Always use path field for ALL game content (config, data, patch)
         let cache_key = format!(
             "cdn/{}/{}/{}/{}/{}",
-            endpoint.path,
+            normalize_cdn_path(&endpoint.path),
             content_type,
             &hex_key[..2],
             &hex_key[2..4],
@@ -308,7 +379,7 @@ impl CdnClient {
         // Always use path field for ALL game content
         let cache_key = format!(
             "cdn/{}/data/{}/{}/{}.index",
-            endpoint.path,
+            normalize_cdn_path(&endpoint.path),
             &archive_key[..2],
             &archive_key[2..4],
             archive_key
@@ -323,11 +394,12 @@ impl CdnClient {
         // Build URL with .index suffix
         // Always use path field for ALL game content
         let scheme = endpoint.scheme.as_deref().unwrap_or("https");
+        let base_path = normalize_cdn_path(&endpoint.path);
         let url = format!(
             "{}://{}/{}/data/{}/{}/{}.index",
             scheme,
             endpoint.host,
-            endpoint.path,
+            base_path,
             &archive_key[..2],
             &archive_key[2..4],
             archive_key
@@ -383,11 +455,12 @@ impl CdnClient {
         archive_key: &str,
     ) -> Result<Option<u64>> {
         let scheme = endpoint.scheme.as_deref().unwrap_or("https");
+        let base_path = normalize_cdn_path(&endpoint.path);
         let url = format!(
             "{}://{}/{}/data/{}/{}/{}.index",
             scheme,
             endpoint.host,
-            endpoint.path,
+            base_path,
             &archive_key[..2],
             &archive_key[2..4],
             archive_key
@@ -421,6 +494,9 @@ impl CdnClient {
 
                 if response.status().is_success() {
                     Ok(response.bytes().await?.to_vec())
+                } else if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
+                    let retry_after = parse_retry_after(&response);
+                    Err(ProtocolError::RateLimited { retry_after })
                 } else if response.status().is_server_error() {
                     Err(ProtocolError::ServerError(response.status()))
                 } else {
@@ -436,7 +512,7 @@ impl CdnClient {
         row: &cascette_formats::bpsv::BpsvRow,
         schema: &cascette_formats::bpsv::BpsvSchema,
     ) -> Result<CdnEndpoint> {
-        let host = row
+        let hosts_raw = row
             .get_by_name("Hosts", schema)
             .and_then(|v| v.as_string())
             .ok_or_else(|| ProtocolError::Parse("Missing Hosts field".to_string()))?;
@@ -452,11 +528,19 @@ impl CdnClient {
             .and_then(|v| v.as_string())
             .map(std::string::ToString::to_string);
 
+        // Hosts field can contain space-separated multiple hosts; use the first one.
+        // Parse query parameters from the host URL.
+        let first_host = hosts_raw.split_whitespace().next().unwrap_or(hosts_raw);
+        let (host, is_fallback, strict, max_hosts) = parse_cdn_server_url(first_host);
+
         Ok(CdnEndpoint {
-            host: host.to_string(),
-            path: path.to_string(),
+            host,
+            path: normalize_cdn_path(path).to_string(),
             product_path,
             scheme: None, // Defaults to https in production
+            is_fallback,
+            strict,
+            max_hosts,
         })
     }
 }
@@ -496,6 +580,9 @@ mod tests {
             path: "tpr/wow".to_string(),
             product_path: None,
             scheme: None,
+            is_fallback: false,
+            strict: false,
+            max_hosts: None,
         };
 
         assert_eq!(endpoint.host, "level3.blizzard.com");
@@ -518,6 +605,9 @@ mod tests {
             path: "tpr/wow".to_string(),
             product_path: None,
             scheme: Some("http".to_string()),
+            is_fallback: false,
+            strict: false,
+            max_hosts: None,
         };
 
         let key = hex::decode("abcdef1234567890").expect("Operation should succeed");
@@ -538,6 +628,9 @@ mod tests {
             path: "tpr/wow".to_string(),
             product_path: Some("tpr/configs".to_string()), // Should be ignored
             scheme: Some("http".to_string()),
+            is_fallback: false,
+            strict: false,
+            max_hosts: None,
         };
 
         let key = hex::decode("abcdef1234567890").expect("Operation should succeed");
@@ -572,6 +665,9 @@ mod tests {
             path: "tpr/wow".to_string(),
             product_path: None,
             scheme: Some("http".to_string()),
+            is_fallback: false,
+            strict: false,
+            max_hosts: None,
         };
 
         let key = hex::decode("abcdef1234567890").expect("Operation should succeed");
@@ -605,6 +701,9 @@ mod tests {
             path: "tpr/wow".to_string(),
             product_path: None,
             scheme: Some("http".to_string()),
+            is_fallback: false,
+            strict: false,
+            max_hosts: None,
         };
 
         let key = hex::decode("abcdef1234567890").expect("Operation should succeed");
@@ -643,6 +742,9 @@ mod tests {
             path: "tpr/wow".to_string(),
             product_path: None,
             scheme: Some("http".to_string()),
+            is_fallback: false,
+            strict: false,
+            max_hosts: None,
         };
 
         let key = hex::decode("abcdef1234567890").expect("Operation should succeed");
@@ -674,6 +776,9 @@ mod tests {
             path: "tpr/wow".to_string(),
             product_path: None,
             scheme: Some("http".to_string()),
+            is_fallback: false,
+            strict: false,
+            max_hosts: None,
         };
 
         let key = hex::decode("abcdef1234567890").expect("Operation should succeed");
@@ -708,6 +813,9 @@ mod tests {
             path: "tpr/wow".to_string(),
             product_path: None,
             scheme: Some("http".to_string()),
+            is_fallback: false,
+            strict: false,
+            max_hosts: None,
         };
 
         let key = hex::decode("abcdef1234567890").expect("Operation should succeed");
@@ -740,6 +848,9 @@ mod tests {
             path: "tpr/wow".to_string(),
             product_path: None,
             scheme: Some("http".to_string()),
+            is_fallback: false,
+            strict: false,
+            max_hosts: None,
         };
 
         let key = hex::decode("abcdef1234567890").expect("Operation should succeed");
@@ -772,6 +883,9 @@ mod tests {
             path: "tpr/wow".to_string(),
             product_path: None,
             scheme: Some("http".to_string()),
+            is_fallback: false,
+            strict: false,
+            max_hosts: None,
         };
 
         let key = hex::decode("abcdef1234567890").expect("Operation should succeed");
@@ -812,6 +926,9 @@ mod tests {
             path: "tpr/wow".to_string(),
             product_path: None,
             scheme: Some("http".to_string()),
+            is_fallback: false,
+            strict: false,
+            max_hosts: None,
         };
 
         let key = hex::decode("abcdef1234567890").expect("Operation should succeed");
@@ -867,6 +984,9 @@ mod tests {
             path: "tpr/wow".to_string(),
             product_path: None,
             scheme: Some("http".to_string()),
+            is_fallback: false,
+            strict: false,
+            max_hosts: None,
         };
 
         let key = hex::decode("abcdef1234567890").expect("Operation should succeed");
@@ -880,6 +1000,142 @@ mod tests {
             counter.load(Ordering::SeqCst) >= 2,
             "Should have made at least 2 requests"
         );
+    }
+
+    #[test]
+    fn test_build_url_trailing_slash_stripped() {
+        let endpoint = CdnEndpoint {
+            host: "level3.blizzard.com".to_string(),
+            path: "tpr/wow/".to_string(),
+            product_path: None,
+            scheme: Some("http".to_string()),
+            is_fallback: false,
+            strict: false,
+            max_hosts: None,
+        };
+
+        let key = hex::decode("abcdef1234567890").expect("Operation should succeed");
+        let url = CdnClient::build_url(&endpoint, ContentType::Data, &key);
+
+        // Should NOT have double slash between path and content type
+        assert_eq!(
+            url,
+            "http://level3.blizzard.com/tpr/wow/data/ab/cd/abcdef1234567890"
+        );
+        assert!(!url.contains("//data"));
+    }
+
+    #[test]
+    fn test_build_url_multiple_trailing_slashes() {
+        let endpoint = CdnEndpoint {
+            host: "level3.blizzard.com".to_string(),
+            path: "tpr/wow///".to_string(),
+            product_path: None,
+            scheme: Some("http".to_string()),
+            is_fallback: false,
+            strict: false,
+            max_hosts: None,
+        };
+
+        let key = hex::decode("abcdef1234567890").expect("Operation should succeed");
+        let url = CdnClient::build_url(&endpoint, ContentType::Config, &key);
+
+        assert_eq!(
+            url,
+            "http://level3.blizzard.com/tpr/wow/config/ab/cd/abcdef1234567890"
+        );
+    }
+
+    #[test]
+    fn test_parse_cdn_server_url_no_params() {
+        let (host, fallback, strict, max_hosts) = parse_cdn_server_url("level3.blizzard.com");
+        assert_eq!(host, "level3.blizzard.com");
+        assert!(!fallback);
+        assert!(!strict);
+        assert_eq!(max_hosts, None);
+    }
+
+    #[test]
+    fn test_parse_cdn_server_url_all_params() {
+        let (host, fallback, strict, max_hosts) =
+            parse_cdn_server_url("cdn.blizzard.com?fallback=1&strict=1&maxhosts=10");
+        assert_eq!(host, "cdn.blizzard.com");
+        assert!(fallback);
+        assert!(strict);
+        assert_eq!(max_hosts, Some(10));
+    }
+
+    #[test]
+    fn test_parse_cdn_server_url_partial_params() {
+        let (host, fallback, strict, max_hosts) =
+            parse_cdn_server_url("cdn.blizzard.com?fallback=1");
+        assert_eq!(host, "cdn.blizzard.com");
+        assert!(fallback);
+        assert!(!strict);
+        assert_eq!(max_hosts, None);
+    }
+
+    #[test]
+    fn test_parse_cdn_server_url_invalid_values() {
+        let (host, fallback, strict, max_hosts) =
+            parse_cdn_server_url("cdn.blizzard.com?fallback=2&maxhosts=0&strict=yes");
+        assert_eq!(host, "cdn.blizzard.com");
+        assert!(!fallback); // "2" != "1"
+        assert!(!strict); // "yes" != "1"
+        assert_eq!(max_hosts, None); // 0 < 1
+    }
+
+    #[test]
+    fn test_parse_cdn_server_url_unknown_params() {
+        let (host, fallback, _, _) =
+            parse_cdn_server_url("cdn.blizzard.com?unknown=foo&fallback=1");
+        assert_eq!(host, "cdn.blizzard.com");
+        assert!(fallback);
+    }
+
+    #[test]
+    fn test_endpoint_from_bpsv_row_with_query_params() {
+        let schema = BpsvSchema::new(vec![
+            BpsvField::new("Name", BpsvType::String(0)),
+            BpsvField::new("Hosts", BpsvType::String(0)),
+            BpsvField::new("Path", BpsvType::String(0)),
+        ]);
+
+        let row = BpsvRow::from_values(vec![
+            BpsvValue::String("us".to_string()),
+            BpsvValue::String("level3.blizzard.com?fallback=1&maxhosts=5".to_string()),
+            BpsvValue::String("tpr/wow".to_string()),
+        ]);
+
+        let result = CdnClient::endpoint_from_bpsv_row(&row, &schema);
+        assert!(result.is_ok());
+
+        let endpoint = result.expect("Operation should succeed");
+        assert_eq!(endpoint.host, "level3.blizzard.com");
+        assert!(endpoint.is_fallback);
+        assert_eq!(endpoint.max_hosts, Some(5));
+    }
+
+    #[test]
+    fn test_endpoint_from_bpsv_row_trailing_slash() {
+        let schema = BpsvSchema::new(vec![
+            BpsvField::new("Name", BpsvType::String(0)),
+            BpsvField::new("Hosts", BpsvType::String(0)),
+            BpsvField::new("Path", BpsvType::String(0)),
+        ]);
+
+        let row = BpsvRow::from_values(vec![
+            BpsvValue::String("us".to_string()),
+            BpsvValue::String("level3.blizzard.com".to_string()),
+            BpsvValue::String("tpr/wow/".to_string()),
+        ]);
+
+        let result = CdnClient::endpoint_from_bpsv_row(&row, &schema);
+        assert!(result.is_ok());
+
+        let endpoint = result.expect("Operation should succeed");
+        // Path should have trailing slash stripped
+        assert_eq!(endpoint.path, "tpr/wow");
     }
 
     #[test]
@@ -919,6 +1175,62 @@ mod tests {
             result.expect_err("Test operation should fail"),
             ProtocolError::Parse(_)
         ));
+    }
+
+    #[tokio::test]
+    async fn test_download_rate_limited_with_retry_after() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let mock_server = MockServer::start().await;
+        let test_data = b"success after rate limit";
+
+        let counter = Arc::new(AtomicUsize::new(0));
+        let counter_clone = Arc::clone(&counter);
+
+        Mock::given(method("GET"))
+            .and(path("/tpr/wow/data/ab/cd/abcdef1234567890"))
+            .respond_with(move |_req: &wiremock::Request| {
+                let count = counter_clone.fetch_add(1, Ordering::SeqCst);
+                if count == 0 {
+                    // First request returns 429 with Retry-After header
+                    ResponseTemplate::new(429).append_header("Retry-After", "1")
+                } else {
+                    ResponseTemplate::new(200).set_body_bytes(test_data.to_vec())
+                }
+            })
+            .expect(2..)
+            .mount(&mock_server)
+            .await;
+
+        let cache = create_test_cache();
+        let client = CdnClient::new(cache, CdnConfig::default()).expect("Operation should succeed");
+
+        let host = mock_server.uri().replace("http://", "");
+        let endpoint = CdnEndpoint {
+            host,
+            path: "tpr/wow".to_string(),
+            product_path: None,
+            scheme: Some("http".to_string()),
+            is_fallback: false,
+            strict: false,
+            max_hosts: None,
+        };
+
+        let key = hex::decode("abcdef1234567890").expect("Operation should succeed");
+        let start = std::time::Instant::now();
+        let result = client.download(&endpoint, ContentType::Data, &key).await;
+
+        assert!(result.is_ok(), "Download should succeed after retry");
+        // Should have waited at least ~1 second for the Retry-After header
+        assert!(
+            start.elapsed() >= std::time::Duration::from_millis(900),
+            "Should have respected Retry-After delay"
+        );
+        assert!(
+            counter.load(Ordering::SeqCst) >= 2,
+            "Should have made at least 2 requests"
+        );
     }
 
     #[test]

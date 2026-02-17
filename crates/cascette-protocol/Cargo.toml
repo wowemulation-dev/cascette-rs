@@ -12,9 +12,14 @@ readme = "README.md"
 keywords = ["blizzard", "ngdp", "casc", "ribbit", "tact"]
 categories = ["network-programming", "game-development", "parsing"]
 
+[features]
+default = []
+streaming = ["dep:binrw"]
+
 [dependencies]
 # Workspace dependencies (available on all platforms)
 thiserror = { workspace = true }
+binrw = { workspace = true, optional = true }
 hex = { workspace = true }
 async-trait = { workspace = true }
 bytes = { workspace = true }
@@ -55,8 +60,6 @@ cascette-crypto = { version = "0.2.0", path = "../cascette-crypto" }
 tokio = { version = "1.49", default-features = false, features = ["sync", "macros"] }
 # WASM-compatible reqwest (uses web-sys/fetch API instead of native sockets)
 reqwest = { version = "0.13", default-features = false, features = ["gzip", "brotli", "deflate", "charset"] }
-# getrandom 0.3.x needs "wasm_js" feature for WASM
-getrandom = "0.4"
 # gloo-timers provides WASM-compatible sleep functionality
 gloo-timers = { version = "0.3", features = ["futures"] }
 # web-sys for browser APIs (console logging, localStorage for caching)
@@ -68,11 +71,14 @@ cascette-cache = { version = "0.2.0", path = "../cascette-cache" }
 # js-sys for Date.now() timestamp access
 js-sys = "0.3"
 
-# Target wasm32-unknown-unknown
+# Browser WASM (wasm32-unknown-unknown) — not WASI
 [target.'cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))'.dependencies]
-getrandom = { version = "0.4", features = ["wasm_js"] }
 # wasm-bindgen-futures provides async runtime for WASM
 wasm-bindgen-futures = "0.4"
+# getrandom 0.4 (from rand 0.10) needs wasm_js for browser crypto
+getrandom = { workspace = true, features = ["wasm_js"] }
+# getrandom 0.2 (transitive from rsa 0.9) needs js for browser crypto
+getrandom_02 = { workspace = true, features = ["js"] }
 
 [dev-dependencies]
 tempfile = { workspace = true }
@@ -94,7 +100,8 @@ path = "examples/wow_classic_wasm.rs"
 
 [package.metadata.cargo-machete]
 # These dependencies are used for V1 MIME format support and other features
-ignored = ["asn1", "async-trait", "cascette-crypto", "digest", "url"]
+# getrandom_02 is a renamed dep to enable the "js" feature for getrandom 0.2 on WASM
+ignored = ["asn1", "async-trait", "cascette-crypto", "digest", "getrandom_02", "url"]
 
 [lints]
 workspace = true

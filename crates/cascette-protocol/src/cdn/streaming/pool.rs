@@ -9,7 +9,6 @@
 //! - Performance metrics collection
 //! - Automatic cleanup and resource management
 
-#[cfg(feature = "streaming")]
 use std::{
     collections::HashMap,
     sync::{
@@ -19,17 +18,13 @@ use std::{
     time::{Duration, Instant},
 };
 
-#[cfg(feature = "streaming")]
 use dashmap::DashMap;
-#[cfg(feature = "streaming")]
 use tokio::{
     sync::{RwLock, Semaphore},
     time::interval,
 };
-#[cfg(feature = "streaming")]
 use tracing::{debug, info, warn};
 
-#[cfg(feature = "streaming")]
 use super::{
     config::ConnectionPoolConfig,
     error::{StreamingError, StreamingResult},
@@ -40,15 +35,13 @@ use super::{
 /// RAII guard for connection permits
 ///
 /// Ensures that connection permits are properly released when dropped
-#[cfg(feature = "streaming")]
 #[must_use = "ConnectionGuard must be held to maintain the connection permit"]
 pub struct ConnectionGuard {
-    _semaphore: Arc<Semaphore>,
+    semaphore: Arc<Semaphore>,
     active_counter: Arc<AtomicUsize>,
     metrics: Arc<PoolMetrics>,
 }
 
-#[cfg(feature = "streaming")]
 impl Drop for ConnectionGuard {
     fn drop(&mut self) {
         // Decrement active request counter
@@ -61,12 +54,11 @@ impl Drop for ConnectionGuard {
 
         // Release the permit back to the semaphore
         // This is safe because we know exactly one permit was acquired
-        self._semaphore.add_permits(1);
+        self.semaphore.add_permits(1);
     }
 }
 
 /// Connection state for health checking
-#[cfg(feature = "streaming")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConnectionState {
     /// Connection is healthy and available
@@ -83,7 +75,6 @@ pub enum ConnectionState {
 }
 
 /// Statistics for a connection
-#[cfg(feature = "streaming")]
 #[derive(Debug, Clone)]
 pub struct ConnectionStats {
     /// Total number of requests made
@@ -102,7 +93,6 @@ pub struct ConnectionStats {
     pub state: ConnectionState,
 }
 
-#[cfg(feature = "streaming")]
 impl Default for ConnectionStats {
     fn default() -> Self {
         Self {
@@ -117,9 +107,9 @@ impl Default for ConnectionStats {
     }
 }
 
-#[cfg(feature = "streaming")]
 impl ConnectionStats {
     /// Calculate success rate (0.0 to 1.0)
+    #[allow(clippy::cast_precision_loss)]
     pub fn success_rate(&self) -> f64 {
         if self.requests == 0 {
             1.0
@@ -139,12 +129,13 @@ impl ConnectionStats {
         let recent_failures = self.failures > 0
             && self
                 .last_failure
-                .map_or(false, |t| t.elapsed() < Duration::from_secs(60));
+                .is_some_and(|t| t.elapsed() < Duration::from_secs(60));
 
         success_rate < 0.5 && recent_failures
     }
 
     /// Update stats with request result
+    #[allow(clippy::cast_precision_loss)]
     pub fn update(&mut self, success: bool, response_time: Duration) {
         self.requests += 1;
 
@@ -162,13 +153,13 @@ impl ConnectionStats {
             self.avg_response_time_ms = response_time_ms;
         } else {
             // Exponential moving average with alpha = 0.1
-            self.avg_response_time_ms = 0.9 * self.avg_response_time_ms + 0.1 * response_time_ms;
+            self.avg_response_time_ms =
+                0.9f64.mul_add(self.avg_response_time_ms, 0.1 * response_time_ms);
         }
     }
 }
 
 /// Advanced connection pool with health checking and circuit breaking
-#[cfg(feature = "streaming")]
 #[derive(Clone)]
 pub struct ConnectionPool<T: HttpClient> {
     /// Underlying HTTP clients per server
@@ -189,7 +180,6 @@ pub struct ConnectionPool<T: HttpClient> {
     cleanup_task: Arc<tokio::sync::Mutex<Option<tokio::task::JoinHandle<()>>>>,
 }
 
-#[cfg(feature = "streaming")]
 impl<T: HttpClient> ConnectionPool<T> {
     /// Create new connection pool with configuration
     pub fn new(config: ConnectionPoolConfig) -> Self {
@@ -210,7 +200,7 @@ impl<T: HttpClient> ConnectionPool<T> {
     }
 
     /// Add client for a server
-    pub fn add_client(&self, server: CdnServer, client: T) {
+    pub fn add_client(&self, server: &CdnServer, client: T) {
         let server_id = format!(
             "{}:{}",
             server.host,
@@ -286,7 +276,7 @@ impl<T: HttpClient> ConnectionPool<T> {
         // Acquire connection permit
         let semaphore = if let Some(semaphore_ref) = self.connection_limits.get(&server_id) {
             let semaphore = semaphore_ref.clone();
-            let _permit = semaphore
+            let permit = semaphore
                 .try_acquire()
                 .map_err(|_| StreamingError::ConnectionLimit {
                     server: server.host.clone(),
@@ -295,7 +285,7 @@ impl<T: HttpClient> ConnectionPool<T> {
 
             // Store the semaphore reference instead of the permit to enable proper cleanup
             // The permit is released when the guard is dropped via the semaphore add_permits call
-            std::mem::forget(_permit); // Managed by ConnectionGuard
+            std::mem::forget(permit); // Managed by ConnectionGuard
             semaphore
         } else {
             return Err(StreamingError::Configuration {
@@ -320,7 +310,7 @@ impl<T: HttpClient> ConnectionPool<T> {
 
         // Create connection guard
         let guard = ConnectionGuard {
-            _semaphore: semaphore,
+            semaphore,
             active_counter,
             metrics: self.metrics.clone(),
         };
@@ -365,6 +355,7 @@ impl<T: HttpClient> ConnectionPool<T> {
                 stats.state = ConnectionState::CircuitOpen {
                     until: circuit_open_until,
                 };
+                drop(stats);
 
                 self.metrics
                     .circuit_breakers_activated
@@ -462,11 +453,10 @@ impl<T: HttpClient> ConnectionPool<T> {
             let server_id = entry.key().clone();
             let client = entry.value().clone();
             let url = test_url.to_string();
-            let stats_lock = self
-                .stats
-                .get(&server_id)
-                .expect("Server stats should exist")
-                .clone();
+            let Some(stats_ref) = self.stats.get(&server_id) else {
+                continue;
+            };
+            let stats_lock = stats_ref.clone();
             let cleanup_handle_task = cleanup_handle.clone();
 
             let task = tokio::spawn(async move {
@@ -486,13 +476,13 @@ impl<T: HttpClient> ConnectionPool<T> {
                 // Health check with timeout to prevent hanging
                 let health_check_result = tokio::select! {
                     result = client.get_content_length(&url) => result,
-                    _ = tokio::time::sleep(Duration::from_secs(10)) => {
+                    () = tokio::time::sleep(Duration::from_secs(10)) => {
                         Err(StreamingError::Timeout {
                             timeout_ms: 10000,
                             url: url.clone(),
                         })
                     }
-                    _ = async {
+                    () = async {
                         while cleanup_handle_task.load(Ordering::Relaxed) {
                             tokio::time::sleep(Duration::from_millis(100)).await;
                         }
@@ -503,10 +493,8 @@ impl<T: HttpClient> ConnectionPool<T> {
                 };
 
                 let success = health_check_result.is_ok();
-                if !success {
-                    if let Err(e) = health_check_result {
-                        debug!("Health check failed for {}: {:?}", server_id, e);
-                    }
+                if !success && let Err(e) = health_check_result {
+                    debug!("Health check failed for {}: {:?}", server_id, e);
                 }
 
                 let response_time = start_time.elapsed();
@@ -527,12 +515,14 @@ impl<T: HttpClient> ConnectionPool<T> {
 
                     if success {
                         stats.state = ConnectionState::Healthy;
+                        drop(stats);
                         info!("Server {} is healthy", server_id);
                     } else {
                         let circuit_open_until = Instant::now() + Duration::from_secs(300); // 5 minutes
                         stats.state = ConnectionState::CircuitOpen {
                             until: circuit_open_until,
                         };
+                        drop(stats);
                         warn!("Server {} failed health check", server_id);
                     }
                 }
@@ -556,7 +546,7 @@ impl<T: HttpClient> ConnectionPool<T> {
                         }
                         completed_indices.push(index);
                     }
-                    _ = tokio::time::sleep(Duration::from_millis(10)) => {
+                    () = tokio::time::sleep(Duration::from_millis(10)) => {
                         // Continue to next iteration
                     }
                 }
@@ -565,7 +555,7 @@ impl<T: HttpClient> ConnectionPool<T> {
                 if !cleanup_handle.load(Ordering::Relaxed) {
                     warn!("Health check cancelled, aborting remaining tasks");
                     // Abort all remaining tasks to prevent resource leaks
-                    for remaining_task in pending_tasks.iter() {
+                    for remaining_task in &pending_tasks {
                         remaining_task.abort();
                     }
                     break;
@@ -660,15 +650,13 @@ impl<T: HttpClient> ConnectionPool<T> {
                             let server_id = entry.key();
                             let stats_lock = entry.value();
 
-                            if let Ok(mut stats) = stats_lock.try_write() {
-                                if let ConnectionState::CircuitOpen { until } = stats.state {
-                                    if now >= until {
+                            if let Ok(mut stats) = stats_lock.try_write()
+                                && let ConnectionState::CircuitOpen { until } = stats.state
+                                    && now >= until {
                                         info!("Recovering server from circuit breaker: {}", server_id);
                                         stats.state = ConnectionState::Healthy;
                                         metrics.circuit_breakers_recovered.fetch_add(1, Ordering::Relaxed);
                                     }
-                                }
-                            }
                         }
 
                         // Update pool metrics if not cancelled
@@ -682,7 +670,7 @@ impl<T: HttpClient> ConnectionPool<T> {
                         }
                     }
                     // Explicit cancellation check
-                    _ = tokio::time::sleep(Duration::from_millis(100)) => {
+                    () = tokio::time::sleep(Duration::from_millis(100)) => {
                         if !cleanup_handle.load(Ordering::Relaxed) {
                             debug!("Cleanup task cancelled via periodic check");
                             break;
@@ -696,7 +684,7 @@ impl<T: HttpClient> ConnectionPool<T> {
 
         // Store the task handle for proper cleanup immediately
         // This avoids spawning an additional task that can't be tracked
-        let cleanup_task_clone = cleanup_task_handle.clone();
+        let cleanup_task_clone = cleanup_task_handle;
         let runtime_handle = tokio::runtime::Handle::current();
         runtime_handle.spawn(async move {
             // Store the handle immediately to ensure proper cleanup
@@ -718,7 +706,8 @@ impl<T: HttpClient> ConnectionPool<T> {
         self.cleanup_handle.store(false, Ordering::Relaxed);
 
         // Wait for cleanup task to finish properly
-        if let Some(task_handle) = self.cleanup_task.lock().await.take() {
+        let task_handle = self.cleanup_task.lock().await.take();
+        if let Some(task_handle) = task_handle {
             match tokio::time::timeout(Duration::from_secs(5), task_handle).await {
                 Ok(Ok(())) => {
                     debug!("Cleanup task joined successfully");
@@ -767,15 +756,18 @@ impl<T: HttpClient> ConnectionPool<T> {
     }
 }
 
-#[cfg(feature = "streaming")]
 impl<T: HttpClient> Drop for ConnectionPool<T> {
     fn drop(&mut self) {
         self.shutdown_sync();
     }
 }
 
-#[cfg(all(test, feature = "streaming"))]
-#[allow(clippy::expect_used, clippy::unwrap_used, clippy::uninlined_format_args)]
+#[cfg(test)]
+#[allow(
+    clippy::expect_used,
+    clippy::unwrap_used,
+    clippy::uninlined_format_args
+)]
 mod tests {
     use super::*;
     use crate::cdn::streaming::{config::ConnectionPoolConfig, http::CdnServer};
@@ -788,7 +780,7 @@ mod tests {
 
         #[async_trait::async_trait]
         impl HttpClient for TestHttpClient {
-            async fn get_range(&self, url: &str, range: Option<super::super::range::HttpRange>) -> Result<bytes::Bytes, StreamingError>;
+            async fn get_range(&self, url: &str, range: Option<crate::cdn::streaming::range::HttpRange>) -> Result<bytes::Bytes, StreamingError>;
             async fn get_content_length(&self, url: &str) -> Result<u64, StreamingError>;
             async fn supports_ranges(&self, url: &str) -> Result<bool, StreamingError>;
         }
@@ -810,7 +802,7 @@ mod tests {
         let server = CdnServer::https("example.com".to_string());
         let client = MockTestHttpClient::new();
 
-        pool.add_client(server.clone(), client);
+        pool.add_client(&server, client);
 
         // Should be able to get client with guard
         let result = pool.get_client(&server).await;
@@ -836,7 +828,7 @@ mod tests {
         let server = CdnServer::https("example.com".to_string());
         let client = MockTestHttpClient::new();
 
-        pool.add_client(server.clone(), client);
+        pool.add_client(&server, client);
 
         // Record multiple failures to trigger circuit breaker
         for _ in 0..15 {
@@ -871,7 +863,7 @@ mod tests {
         let server = CdnServer::https("example.com".to_string());
         let client = MockTestHttpClient::new();
 
-        pool.add_client(server.clone(), client);
+        pool.add_client(&server, client);
 
         // Record some successful and failed requests
         pool.record_result(&server, true, Duration::from_millis(100))
@@ -910,7 +902,7 @@ mod tests {
 
         client.expect_get_content_length().returning(|_| Ok(1024));
 
-        pool.add_client(server.clone(), client);
+        pool.add_client(&server, client);
 
         // Run health check
         let health_check_future = pool.health_check("https://example.com/test");
@@ -944,7 +936,7 @@ mod tests {
         let server = CdnServer::https("example.com".to_string());
         let client = MockTestHttpClient::new();
 
-        pool.add_client(server.clone(), client);
+        pool.add_client(&server, client);
 
         // Should be able to get client initially
         let result = pool.get_client(&server).await;

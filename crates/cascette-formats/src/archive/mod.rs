@@ -131,13 +131,13 @@ mod tests {
     mod archive_group_tests;
 }
 
-pub use archive_group::{ArchiveGroup, ArchiveGroupBuilder, ArchiveGroupEntry};
+pub use archive_group::{ArchiveGroup, ArchiveGroupBuilder, ArchiveGroupEntry, build_merged};
 pub use builder::{ArchiveBuilder, ArchiveEntry};
 pub use error::{ArchiveError, ArchiveResult};
 pub use file::{ArchiveFile, ArchiveLocation, ArchiveReader};
 pub use index::{
     ArchiveIndex, ArchiveIndexBuilder, ChunkedArchiveIndex, IndexEntry, IndexFooter,
-    calculate_chunks, calculate_toc_hash, is_sorted,
+    calculate_block_hash, calculate_chunks, calculate_toc_hash, is_sorted,
 };
 
 /// Archive system constants

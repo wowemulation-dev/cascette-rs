@@ -35,14 +35,14 @@
 //! ## Protocol Support
 //!
 //! ### TACT (Tooling And Content Technology)
-//! - **HTTPS Primary**: Secure connections to `us.version.battle.net`
-//! - **HTTP Fallback**: Fallback protocol if HTTPS fails
+//! - **TACT v2 HTTPS**: `{region}.version.battle.net` (port 443)
+//! - **TACT v1 HTTP**: `{region}.patch.battle.net:1119` (fallback)
 //! - **Response Caching**: Automatic caching of BPSV responses
 //!
 //! ### Ribbit TCP Protocol
-//! - **Direct TCP**: Low-level TCP connections to `*.version.battle.net:1119`
+//! - **Direct TCP**: `{region}.version.battle.net:1119`
 //! - **Final Fallback**: Used when HTTP protocols fail
-//! - **Multiple Hosts**: Automatic failover between regional hosts
+//! - **Region Support**: US, EU, KR, TW, CN (`.com.cn`), SG via [`Region`] enum
 //!
 //! ### CDN Content Delivery
 //! - **Range Requests**: Partial content downloads for efficiency
@@ -134,6 +134,9 @@
 //!         path: "tpr/wow".to_string(),
 //!         product_path: None, // Optional for newer products
 //!         scheme: None, // Optional, defaults to HTTPS
+//!         is_fallback: false,
+//!         strict: false,
+//!         max_hosts: None,
 //!     };
 //!
 //!     // Download content by key with progress tracking
@@ -215,7 +218,7 @@
 //! ```bash
 //! # Protocol endpoints
 //! export CASCETTE_TACT_HTTPS_URL="https://us.version.battle.net"
-//! export CASCETTE_TACT_HTTP_URL="http://us.version.battle.net"
+//! export CASCETTE_TACT_HTTP_URL="http://us.patch.battle.net:1119"
 //! export CASCETTE_RIBBIT_HOSTS="us.version.battle.net:1119,eu.version.battle.net:1119"
 //!
 //! # Cache settings
@@ -268,7 +271,7 @@
 //!             // All protocol attempts failed - check network connectivity
 //!             eprintln!("Could not reach any Blizzard servers");
 //!         }
-//!         Err(ProtocolError::RateLimited) => {
+//!         Err(ProtocolError::RateLimited { .. }) => {
 //!             // Rate limited - implement backoff
 //!             tokio::time::sleep(std::time::Duration::from_secs(60)).await;
 //!         }
@@ -383,9 +386,33 @@ pub use retry::RetryPolicy;
 pub use transport::{HttpClient, HttpConfig};
 
 // Re-export internal client types for advanced usage
+pub use client::Region;
 #[cfg(not(target_arch = "wasm32"))]
 pub use client::RibbitClient;
 pub use client::TactClient;
 
 // Re-export optimization utilities for power users
 pub use optimized::{PooledBuffer, format_cache_key, get_buffer, intern_string, return_buffer};
+
+// Re-exports from cascette-formats for the streaming CDN module.
+// These bridge crate::blte::*, crate::bpsv::*, and crate::CascFormat paths
+// that streaming code expects.
+#[cfg(all(not(target_arch = "wasm32"), feature = "streaming"))]
+pub mod blte {
+    pub use cascette_formats::blte::*;
+}
+
+#[cfg(all(not(target_arch = "wasm32"), feature = "streaming"))]
+pub mod bpsv {
+    pub use cascette_formats::bpsv::*;
+}
+
+#[cfg(all(not(target_arch = "wasm32"), feature = "streaming"))]
+pub use cascette_formats::CascFormat;
+
+// Re-export main streaming types for convenience
+#[cfg(all(not(target_arch = "wasm32"), feature = "streaming"))]
+pub use cdn::streaming::{
+    CdnServer, HttpClient as StreamingHttpClient, ReqwestHttpClient, StreamingConfig,
+    StreamingError, StreamingResult,
+};

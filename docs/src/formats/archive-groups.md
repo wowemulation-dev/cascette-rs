@@ -152,7 +152,7 @@ Archive-groups are identified by the `offset_bytes` field in the footer:
 
 ```text
 Footer (28 bytes):
-  [0:8]   TOC hash (first 8 bytes of MD5)
+  [0:8]   TOC hash: MD5(toc_keys || block_hashes)[:footer_hash_bytes]
   [8]     Version (always 1)
   [9:11]  Reserved
   [11]    Page size in KB

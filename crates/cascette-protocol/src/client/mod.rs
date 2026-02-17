@@ -23,9 +23,11 @@
 //!
 //! ## Protocol Fallback Strategy
 //!
-//! 1. **TACT HTTPS** (Primary): Secure HTTP/2 to `us.version.battle.net`
-//! 2. **TACT HTTP** (Fallback): HTTP/1.1 if HTTPS fails
-//! 3. **Ribbit TCP** (Final): Direct TCP to `us.version.battle.net:1119`
+//! Default endpoints (US region, configurable via [`ClientConfig`] or [`Region`]):
+//!
+//! 1. **TACT v2 HTTPS** (Primary): `https://us.version.battle.net` (port 443)
+//! 2. **TACT v1 HTTP** (Fallback): `http://us.patch.battle.net:1119`
+//! 3. **Ribbit TCP** (Final): `us.version.battle.net:1119`
 //!
 //! ## Usage Examples
 //!
@@ -84,7 +86,7 @@
 //!         Err(ProtocolError::AllHostsFailed) => {
 //!             eprintln!("All protocol attempts failed - check network connectivity");
 //!         }
-//!         Err(ProtocolError::RateLimited) => {
+//!         Err(ProtocolError::RateLimited { .. }) => {
 //!             eprintln!("Rate limited - implement backoff");
 //!         }
 //!         Err(e) if e.should_retry() => {
@@ -97,11 +99,13 @@
 //! }
 //! ```
 
+pub mod region;
 // Ribbit TCP is not available on WASM (no raw TCP sockets)
 #[cfg(not(target_arch = "wasm32"))]
 mod ribbit;
 mod tact;
 
+pub use region::Region;
 #[cfg(not(target_arch = "wasm32"))]
 pub use ribbit::RibbitClient;
 pub use tact::TactClient;
@@ -130,11 +134,13 @@ use crate::error::{ProtocolError, Result};
 ///
 /// ## Protocol Selection
 ///
-/// The client attempts protocols in the following order:
+/// The client attempts protocols in the following order (default US endpoints):
 ///
-/// 1. **TACT HTTPS** (Primary): Secure HTTP/2 connections to `us.version.battle.net`
-/// 2. **TACT HTTP** (Fallback): HTTP/1.1 fallback if HTTPS fails
-/// 3. **Ribbit TCP** (Final): Direct TCP connections to `us.version.battle.net:1119`
+/// 1. **TACT v2 HTTPS** (Primary): `https://us.version.battle.net` (port 443)
+/// 2. **TACT v1 HTTP** (Fallback): `http://us.patch.battle.net:1119`
+/// 3. **Ribbit TCP** (Final): `us.version.battle.net:1119`
+///
+/// Use [`ClientConfig`] to customize endpoints, or [`Region`] for per-region defaults.
 ///
 /// ## Cache Behavior
 ///
@@ -243,7 +249,7 @@ use crate::error::{ProtocolError, Result};
 ///             eprintln!("Network connectivity issues - all protocols failed");
 ///             Err(ProtocolError::AllHostsFailed)
 ///         }
-///         Err(ProtocolError::RateLimited) => {
+///         Err(ProtocolError::RateLimited { .. }) => {
 ///             eprintln!("Rate limited - implement backoff strategy");
 ///             tokio::time::sleep(std::time::Duration::from_secs(60)).await;
 ///             client.query(endpoint).await // Retry after backoff
@@ -428,9 +434,9 @@ impl RibbitTactClient {
     ///
     /// If the primary protocol fails, the client automatically attempts fallback protocols:
     ///
-    /// 1. **TACT HTTPS**: `https://us.version.battle.net/ribbit/{endpoint}`
-    /// 2. **TACT HTTP**: `http://us.version.battle.net/ribbit/{endpoint}`
-    /// 3. **Ribbit TCP**: Direct TCP to `us.version.battle.net:1119`
+    /// 1. **TACT v2 HTTPS**: `https://us.version.battle.net/{endpoint}` (port 443)
+    /// 2. **TACT v1 HTTP**: `http://us.patch.battle.net:1119/{endpoint}`
+    /// 3. **Ribbit TCP**: `us.version.battle.net:1119`
     ///
     /// Each failure is logged with context, and the client immediately attempts the next protocol.
     ///
@@ -514,7 +520,7 @@ impl RibbitTactClient {
     ///     loop {
     ///         match client.query(endpoint).await {
     ///             Ok(result) => return Ok(result),
-    ///             Err(ProtocolError::RateLimited) if retries < MAX_RETRIES => {
+    ///             Err(ProtocolError::RateLimited { .. }) if retries < MAX_RETRIES => {
     ///                 retries += 1;
     ///                 let backoff = Duration::from_secs(2_u64.pow(retries)); // Exponential backoff
     ///                 eprintln!("Rate limited, retrying in {:?} (attempt {}/{})", backoff, retries, MAX_RETRIES);

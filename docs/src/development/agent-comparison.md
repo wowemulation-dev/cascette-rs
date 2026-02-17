@@ -65,140 +65,81 @@ PR [#35](https://github.com/wowemulation-dev/cascette-rs/pull/35):
 - Archive group TOC hash: `ArchiveGroupBuilder` computes TOC hash
   from first keys of each data chunk instead of writing zeros
 
+PR [#29](https://github.com/wowemulation-dev/cascette-rs/pull/29):
+
+- Encoding entry parsing uses dynamic key sizes from header
+  (`ckey_hash_size`, `ekey_hash_size`) instead of hardcoded 16
+- Batch encoding lookups: `batch_find_encodings()`,
+  `batch_find_all_encodings()`, `batch_find_especs()` using
+  sort-and-merge algorithm matching Agent's batch functions
+- Archive index builder uses configurable `key_size`,
+  `offset_bytes`, `size_bytes` instead of hardcoded 16/4/4
+- TOC hash corrected to `MD5(toc_keys || block_hashes)[:hash_bytes]`
+  with per-block MD5 hashes, matching Agent's `BuildMergedIndex`
+- Archive group builder uses last key per block for TOC (was first)
+- TVFS container table reads `ekey_size` bytes from header instead
+  of hardcoded 9. `ContainerEntry.ekey` changed to `Vec<u8>`
+- TVFS EST (Encoding Spec Table) parsed when
+  `TVFS_FLAG_ENCODING_SPEC` flag is set
+
+Branch fix/formats-agent-comparison:
+
+- CDN server selection: `FailoverManager` uses exponential decay
+  scoring (`0.9^total_failure_weight`) with per-error-code weights
+  and weighted-random selection, matching Agent.exe. Removed
+  permanent server exclusion (`ServerHealth::Failed`). Per-status
+  weights match `tact::HandleHttpResponse`: 500/502/503/504=5.0,
+  401/416=2.5, other 5xx=1.0, 4xx/1xx/3xx=0.5, 429=0.0
+- Streaming `max_redirects`: configurable (default 5), applied to
+  both reqwest builder paths
+- Connection parameter limitations documented in `StreamingConfig`
+  and `HttpConfig` (low speed limit, receive buffer, DNS cache TTL,
+  total connection pool cap)
+- CDN Index Merge: `build_merged()` implements k-way merge via
+  `BinaryHeap` for O(N log K) merging of pre-sorted archive indices,
+  matching Agent.exe `tact::CdnIndex::BuildMergedIndex`. Also fixed
+  entry field write order in `ArchiveGroupBuilder::build()` (was
+  key/offset/size, corrected to key/size/offset)
+
 ## Format Parsing Issues
 
-### Encoding Table Hardcoded Key Size
-
-cascette-rs hardcodes key size to 16 bytes in the encoding
-module's `IndexEntry`, `CKeyPageEntry`, and `EKeyPageEntry`,
-ignoring the header's `ckey_hash_size` and `ekey_hash_size`
-fields. The archive module's `IndexEntry` uses variable-length
-keys via `Vec<u8>` sized from `footer.ekey_length`. This works
-for all known CASC data but diverges from Agent's flexible key
-size support in the encoding table. Making encoding key size
-dynamic requires changing the crypto types (`ContentKey`/
-`EncodingKey` are `[u8; 16]` wrappers), threading sizes through
-BinRead Args, and updating all consumers.
+No open format parsing issues from Agent.exe comparison.
 
 ## Performance Issues
 
-### Encoding Table Batch Lookups
-
-Agent provides 4 batch lookup functions
-(`BatchLookupCKeys`, `BatchLookupCKeyPages`, `BatchLookupEKeys`,
-`BatchLookupEKeysSorted`) that sort input keys and scan pages in
-a single pass.
-
-cascette-rs has no batch lookup API. Individual lookups use binary
-search on the page index (O(log p + e)), but batch operations
-would be more efficient for bulk resolution.
-
-### CDN Index Merge
-
-Agent implements k-way merge sort via binary min-heap
-(`HeapSiftDown`/`HeapSiftUp`) for combining multiple CDN indices.
-This is O(N log K) where K is the number of indices, with
-per-block MD5 validation computed during the merge.
-
-cascette-rs `ArchiveGroupBuilder` uses HashMap deduplication +
-final sort: O(N log N). Per-block page hashes are not computed
-during building. TOC hash and footer hash are computed correctly.
-
-### Archive Index Builder Hardcoded Key Size
-
-`ArchiveIndexBuilder::build()` hardcodes 4-byte offsets and a
-16-byte TOC key size. Entry keys use `Vec<u8>` (variable length),
-but `ENTRY_SIZE` (24 bytes) and chunk calculations assume a fixed
-record layout. Cannot generate 9-byte truncated key indices used
-by local CASC storage.
+No open performance issues from Agent.exe comparison.
 
 ## Protocol Issues
-
-### CDN Server Selection
-
-Agent uses exponential decay scoring for server selection:
-
-```text
-weight = 0.9 ^ total_failures
-selection = randomized linear interpolation across scored servers
-```
-
-Failed servers get progressively lower weights but are never fully
-excluded. HTTP response codes carry different backoff weights:
-
-| Code | Category | Backoff Weight |
-|------|----------|---------------|
-| 200-299 | Success | 0 |
-| 429 | Rate limited | Reads Retry-After header |
-| 503 | Unavailable | 5.0 |
-| 404 | Not found | 2.5 |
-| Other 4xx/5xx | Error | 1.0 |
-
-cascette-rs has two CDN implementations:
-
-- **Non-streaming** (`cdn/mod.rs`): Single configured host, no
-  server scoring, plain exponential backoff retry.
-- **Streaming** (`cdn_streaming/`): `FailoverManager` with
-  per-server metrics (success rate, response time, bandwidth).
-  Uses fixed unavailability windows (5 min for timeout, 15 min
-  for 5xx) instead of decay scoring. Servers can be permanently
-  marked `Failed`, unlike Agent which never fully excludes
-  servers.
-
-### Retry-After Header
-
-Agent reads the HTTP `Retry-After` header on 429 responses and
-waits the specified duration before retrying.
-
-cascette-rs defines a `RateLimitExceeded` error with a
-`retry_after_ms` field, but no code reads the `Retry-After` header
-from HTTP responses. Both the non-streaming and streaming CDN
-clients ignore this header.
 
 ### Connection Parameters
 
 | Parameter | Agent | cascette-rs (non-streaming) | cascette-rs (streaming) |
 |-----------|-------|----------------------------|------------------------|
-| Connect timeout | 60s | 10s | 10s |
+| Connect timeout | 60s | 10s (intentional) | 10s |
 | Request timeout | -- | 45s | 30s |
-| Max connections/host | 3 | 10 | 8 |
-| Total connections | 12 | Unlimited | 100 |
-| Max redirects | 5 | 3 | Default (10) |
-| Low speed limit | 100 bps / 60s | Not set | Not set |
-| Receive buffer | 256KB | Default | 64KB |
-| DNS cache TTL | 300s | Default | Default |
-| HTTP version | Forced 1.1 | 1.1 + HTTP/2 adaptive | 1.1 + HTTP/2 |
+| Max connections/host | 3 | 10 (intentional) | 8 |
+| Total connections | 12 | Unlimited | 100 (not a hard cap) |
+| Max redirects | 5 | 5 (configurable) | 5 (configurable) |
+| Low speed limit | 100 bps / 60s | Not set (reqwest limitation) | Not set (reqwest limitation) |
+| Receive buffer | 256KB | Default (reqwest limitation) | Default (reqwest limitation) |
+| DNS cache TTL | 300s | Default (reqwest limitation) | Default (reqwest limitation) |
+| HTTP version | Forced 1.1 | 1.1 + HTTP/2 adaptive (intentional) | 1.1 + HTTP/2 |
 
 Agent forces HTTP/1.1 for CDN downloads. cascette-rs enables
-HTTP/2 by default with adaptive window sizing.
+HTTP/2 by default with adaptive window sizing. `HttpConfig`
+documents all intentional differences from Agent defaults.
 
-### CDN URL Parameters
+The following Agent.exe parameters cannot be configured through
+reqwest and are documented in `StreamingConfig` and `HttpConfig`:
 
-Agent `tact::ParseCdnServerUrl` (`0x6c9e4e`) parses `?fallback=1`,
-`?strict=1`, `?maxhosts=10` query parameters from CDN server URLs
-returned by version servers. These control fallback behavior,
-strict mode, and host limits.
-
-cascette-rs does not parse or honor these URL parameters.
-
-### China Region CDN
-
-Agent uses `.com.cn` domains for China:
-
-```text
-cn.patch.battlenet.com.cn
-cn.patch.battlenet.com.cn:1119
-https://cn.version.battlenet.com.cn
-```
-
-cascette-rs defaults to `.battle.net` domains. No `.com.cn` domain
-handling or region-based domain switching exists.
-
-### CDN URL Trailing Slash
-
-Agent strips trailing slashes from `cdnPath` before constructing
-URLs. cascette-rs does not normalize paths, so a CDN path ending
-with `/` would produce double slashes in the URL.
+- **Low speed limit** (100 bps / 60s): reqwest has no stall
+  detection. Application-layer throughput monitoring would be
+  needed.
+- **Receive buffer** (256KB `SO_RCVBUF`): reqwest does not
+  expose socket options.
+- **DNS cache TTL** (300s): reqwest uses the system resolver.
+- **Total connection pool cap** (12): reqwest only exposes
+  per-host idle limits, not total active connections.
 
 ## Root File Issues
 
@@ -206,19 +147,7 @@ No open root file issues from Agent.exe comparison.
 
 ## TVFS Issues
 
-### Hardcoded 9-Byte EKey Size
-
-`ContainerEntry` (`container_table.rs:19`) uses `[u8; 9]` for
-EKey. The header has `ekey_size` and `pkey_size` fields that could
-vary, but cascette-rs always reads 9 bytes. Matches Agent's
-TACT 3.13.3 behavior but would break on future format changes.
-
-### No Encoding Spec Table Parsing
-
-The header supports optional EST (Encoding Spec Table) offset/size
-fields (`header.rs:62-69`), but no code parses the EST data. The
-`TVFS_FLAG_ENCODING_SPEC` flag is recognized but the table content
-is ignored.
+No open TVFS issues from Agent.exe comparison.
 
 ## Local Storage Issues (cascette-client-storage)
 
@@ -510,7 +439,7 @@ These cascette-rs implementations match Agent.exe behavior:
 | Root file V1-V4 | MFST/TSFM magic | Interleaved and separated formats |
 | TVFS header validation | `format_version`, key sizes | `TvfsHeader::validate()` called on parse |
 | TVFS path table | Prefix tree with varints | LEB128-like encoding |
-| TVFS container table | 9-byte EKey entries | EKey + file\_size + optional CKey |
+| TVFS container table | Variable EKey entries | `ekey_size` from header, `Vec<u8>` EKey + file\_size + optional CKey |
 | Encoding header validation | 8-field check | `EncodingHeader::validate()` all fields |
 | ESpec table validation | Null-terminated, no empty | Rejects empty strings and unterminated data |
 | Install manifest V1+V2 | Version 1-2, file\_type byte | `InstallFileEntry::file_type` for V2 |
@@ -525,4 +454,16 @@ These cascette-rs implementations match Agent.exe behavior:
 | Root empty block handling | Skip empty, continue parsing | EOF-based termination, empty blocks do not truncate |
 | Root format scope | WoW-specific root format | Module docs note WoW-specific nature |
 | Encoding page lookup | `PageBinarySearch` O(log p) | `partition_point` on page index `first_key` |
-| Archive group TOC hash | MD5 of first keys per chunk | `calculate_toc_hash()` on chunk first keys (build path only; parse path skips TOC hash validation -- algorithm does not match Agent's stored values) |
+| Archive group TOC hash | `MD5(toc_keys \|\| block_hashes)[:hash_bytes]` | `calculate_toc_hash()` with per-block MD5 hashes, last key per block |
+| Encoding dynamic key sizes | `ckey_hash_size`/`ekey_hash_size` from header | `CKeyPageEntry` and `EKeyPageEntry` use header sizes via BinRead Args |
+| Encoding batch lookups | `BatchLookupCKeys`/`BatchLookupEKeys` | `batch_find_encodings()`, `batch_find_all_encodings()`, `batch_find_especs()` |
+| Archive index builder config | Variable key/offset/size fields | `ArchiveIndexBuilder::with_config(key_size, offset_bytes, size_bytes)` |
+| TVFS EST parsing | EST table when flag bit 1 set | `EstTable` with null-terminated strings, parsed from header offsets |
+| CDN URL trailing slash | `cdnPath` trailing slash stripped | `normalize_cdn_path()` strips trailing slashes before URL construction |
+| Retry-After header | 429 response reads `Retry-After` | `RateLimited { retry_after }` variant, `parse_retry_after()` in CDN client, `RetryPolicy` uses hint |
+| CDN URL parameters | `ParseCdnServerUrl` parses `?fallback=1`, `?strict=1`, `?maxhosts=N` | `parse_cdn_server_url()` extracts params; `CdnEndpoint` and `CdnServer` store parsed fields |
+| Max redirects | 5 redirect limit | `HttpConfig::max_redirects` (default 5), `StreamingConfig::max_redirects` (default 5), both reqwest builders use configured value |
+| CDN server scoring | `0.9^total_failures` decay, weighted-random selection | `FailoverManager` uses `total_failure_weight` with per-error-code weights matching `tact::HandleHttpResponse` (500/502/503/504=5.0, 401/416=2.5, other 5xx=1.0, 4xx/1xx/3xx=0.5, 429=0.0), `0.9^weight` decay, cumulative-weight random selection. No permanent server exclusion |
+| CDN index k-way merge | `BuildMergedIndex` with `HeapSiftDown`/`HeapSiftUp` | `build_merged()` using `BinaryHeap` for O(N log K) merge with deduplication |
+| Archive group entry order | key, size, offset (standard CDN index format) | `build()` and `build_merged()` write key/size/offset matching `IndexEntry::to_bytes` |
+| China region CDN | `.com.cn` domains for CN region | `Region` enum with `CN` and `SG` variants, `tact_https_url()`, `tact_http_url()`, and `ribbit_address()` return per-region domains |

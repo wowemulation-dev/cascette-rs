@@ -3,17 +3,14 @@
 //! Provides efficient handling of HTTP range requests including automatic coalescing
 //! of adjacent ranges, validation, and optimization strategies for CDN streaming.
 
-#[cfg(feature = "streaming")]
 use std::fmt;
 
-#[cfg(feature = "streaming")]
 use super::{config::StreamingConfig, error::StreamingError};
 
 /// HTTP range specification for partial content requests
 ///
 /// Represents a byte range request as defined by RFC 7233.
 /// Supports both inclusive ranges (start-end) and suffix ranges.
-#[cfg(feature = "streaming")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct HttpRange {
     /// Start byte offset (inclusive)
@@ -22,7 +19,6 @@ pub struct HttpRange {
     pub end: u64,
 }
 
-#[cfg(feature = "streaming")]
 impl HttpRange {
     /// Create a new range from start and end offsets (both inclusive)
     ///
@@ -51,11 +47,12 @@ impl HttpRange {
     ///
     /// # Panics
     /// Panics if length is 0 or if offset + length would overflow
+    #[allow(clippy::panic)]
     pub fn from_offset_length(offset: u64, length: u64) -> Self {
         assert!(length > 0, "Range length must be > 0");
-        let end = offset
-            .checked_add(length - 1)
-            .expect("Range offset + length overflow");
+        let Some(end) = offset.checked_add(length - 1) else {
+            panic!("Range offset + length overflow");
+        };
         Self { start: offset, end }
     }
 
@@ -178,7 +175,6 @@ impl HttpRange {
     }
 }
 
-#[cfg(feature = "streaming")]
 impl fmt::Display for HttpRange {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
@@ -195,13 +191,11 @@ impl fmt::Display for HttpRange {
 ///
 /// Automatically combines small, nearby ranges into larger requests to reduce
 /// HTTP overhead while respecting server limitations and configuration constraints.
-#[cfg(feature = "streaming")]
 #[derive(Debug)]
 pub struct RangeCoalescer {
     config: StreamingConfig,
 }
 
-#[cfg(feature = "streaming")]
 impl RangeCoalescer {
     /// Create a new range coalescer with the given configuration
     pub fn new(config: StreamingConfig) -> Self {
@@ -318,14 +312,12 @@ impl RangeCoalescer {
 ///
 /// Constructs HTTP requests with multiple ranges according to RFC 7233.
 /// Handles the complexity of multipart range requests and response parsing.
-#[cfg(feature = "streaming")]
 #[derive(Debug)]
 pub struct MultiRangeRequest {
     ranges: Vec<HttpRange>,
     url: String,
 }
 
-#[cfg(feature = "streaming")]
 impl MultiRangeRequest {
     /// Create a new multi-range request
     ///
@@ -372,8 +364,12 @@ impl MultiRangeRequest {
     }
 }
 
-#[cfg(all(test, feature = "streaming"))]
-#[allow(clippy::expect_used, clippy::unwrap_used, clippy::uninlined_format_args)]
+#[cfg(test)]
+#[allow(
+    clippy::expect_used,
+    clippy::unwrap_used,
+    clippy::uninlined_format_args
+)]
 mod tests {
     use super::*;
 

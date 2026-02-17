@@ -1,6 +1,7 @@
 //! Error types for protocol operations
 
 use reqwest::StatusCode;
+use std::time::Duration;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -21,7 +22,10 @@ pub enum ProtocolError {
     AllHostsFailed,
 
     #[error("Rate limited")]
-    RateLimited,
+    RateLimited {
+        /// Duration from the HTTP Retry-After header, if present
+        retry_after: Option<Duration>,
+    },
 
     #[error("Service unavailable")]
     ServiceUnavailable,
@@ -62,7 +66,7 @@ impl ProtocolError {
             // Transient errors that should be retried
             Self::Network(_)
             | Self::ServerError(_)
-            | Self::RateLimited
+            | Self::RateLimited { .. }
             | Self::ServiceUnavailable
             | Self::Timeout => true,
             Self::Http(e) => e.is_timeout() || e.is_connect(),
@@ -90,7 +94,7 @@ impl ProtocolError {
             // Transient errors that should be retried
             Self::Network(_)
             | Self::ServerError(_)
-            | Self::RateLimited
+            | Self::RateLimited { .. }
             | Self::ServiceUnavailable
             | Self::Timeout => true,
             // On WASM, is_connect() is not available, only check timeout
@@ -106,6 +110,14 @@ impl ProtocolError {
                 )
             }
             _ => false,
+        }
+    }
+
+    /// Get the Retry-After hint duration, if this is a rate-limited error with one.
+    pub fn retry_after_hint(&self) -> Option<Duration> {
+        match self {
+            Self::RateLimited { retry_after } => *retry_after,
+            _ => None,
         }
     }
 }

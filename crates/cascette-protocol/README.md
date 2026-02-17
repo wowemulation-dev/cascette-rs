@@ -9,8 +9,9 @@ Working implementation with protocol clients, CDN downloading, and caching.
 ## Features
 
 - Unified protocol client with automatic fallback (TACT HTTPS -> HTTP -> Ribbit TCP)
-- TACT client for HTTPS/HTTP queries to `us.version.battle.net`
+- TACT client for HTTPS (v2) and HTTP (v1) queries
 - Ribbit TCP client for direct protocol connections on port 1119
+- Region support (US, EU, KR, TW, CN, SG) with correct per-region hostnames
 - CDN client for content downloads with range requests and progress tracking
 - CDN streaming with BLTE decompression and concurrent chunk downloads
 - Protocol response caching with configurable TTLs
@@ -22,6 +23,7 @@ Working implementation with protocol clients, CDN downloading, and caching.
 ## Modules
 
 - `client` - Unified `RibbitTactClient` with fallback between protocols
+  - `region` - Region enum with TACT and Ribbit address mapping (including China `.com.cn`)
   - `ribbit` - Ribbit TCP protocol client *(native only)*
   - `tact` - TACT HTTPS/HTTP client
 - `cdn` - CDN content delivery client
