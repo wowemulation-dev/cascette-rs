@@ -85,9 +85,10 @@ impl CdnBootstrap {
 
             // Filter by product if specified
             if let Some(product) = product
-                && !cdn_entry.name.contains(product) {
-                    continue;
-                }
+                && !cdn_entry.name.contains(product)
+            {
+                continue;
+            }
 
             // Extract CDN servers from hosts field
             let servers = Self::parse_cdn_hosts(&cdn_entry.hosts);
@@ -228,13 +229,12 @@ impl CdnBootstrap {
     /// Merged bootstrap configuration
     #[must_use]
     pub fn merge_with_fallback(mut self, fallback: Self) -> Self {
-        let fallback_priority_offset = if let Some(max_priority) =
-            self.servers.iter().map(|s| s.priority).max()
-        {
-            max_priority + 100
-        } else {
-            1000
-        };
+        let fallback_priority_offset =
+            if let Some(max_priority) = self.servers.iter().map(|s| s.priority).max() {
+                max_priority + 100
+            } else {
+                1000
+            };
 
         // Add fallback servers with lower priority
         for mut server in fallback.servers {

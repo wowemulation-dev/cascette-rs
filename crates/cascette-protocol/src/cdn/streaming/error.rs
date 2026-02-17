@@ -306,7 +306,8 @@ impl StreamingError {
     pub fn network_with_context(source: reqwest::Error, context: &str) -> Self {
         if let Some(status) = source.status() {
             let url = source
-                .url().map_or_else(|| context.to_string(), std::string::ToString::to_string);
+                .url()
+                .map_or_else(|| context.to_string(), std::string::ToString::to_string);
 
             Self::HttpStatus {
                 status_code: status.as_u16(),
@@ -744,7 +745,8 @@ impl From<reqwest::Error> for StreamingError {
         if let Some(status) = error.status() {
             // Extract URL from the error if available
             let url = error
-                .url().map_or_else(|| "<unknown>".to_string(), std::string::ToString::to_string);
+                .url()
+                .map_or_else(|| "<unknown>".to_string(), std::string::ToString::to_string);
 
             debug!("HTTP status error: {} for URL: {}", status.as_u16(), url);
             Self::HttpStatus {
@@ -776,7 +778,11 @@ impl From<crate::blte::BlteError> for StreamingError {
 }
 
 #[cfg(test)]
-#[allow(clippy::expect_used, clippy::unwrap_used, clippy::uninlined_format_args)]
+#[allow(
+    clippy::expect_used,
+    clippy::unwrap_used,
+    clippy::uninlined_format_args
+)]
 mod tests {
     use super::*;
 

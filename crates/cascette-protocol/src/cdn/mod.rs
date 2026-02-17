@@ -1087,7 +1087,8 @@ mod tests {
 
     #[test]
     fn test_parse_cdn_server_url_unknown_params() {
-        let (host, fallback, _, _) = parse_cdn_server_url("cdn.blizzard.com?unknown=foo&fallback=1");
+        let (host, fallback, _, _) =
+            parse_cdn_server_url("cdn.blizzard.com?unknown=foo&fallback=1");
         assert_eq!(host, "cdn.blizzard.com");
         assert!(fallback);
     }

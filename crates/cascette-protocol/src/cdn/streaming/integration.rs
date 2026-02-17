@@ -553,11 +553,12 @@ impl<H: HttpClient + Clone> StreamingCdnResolver<H> {
                 tasks.push(async move {
                     // Check for cancellation
                     if let Some(token) = &token
-                        && token.is_cancelled() {
-                            return Err(StreamingError::Configuration {
-                                reason: "Preload cancelled".to_string(),
-                            });
-                        }
+                        && token.is_cancelled()
+                    {
+                        return Err(StreamingError::Configuration {
+                            reason: "Preload cancelled".to_string(),
+                        });
+                    }
 
                     Ok::<String, StreamingError>(hash_copy)
                 });
@@ -587,9 +588,10 @@ impl<H: HttpClient + Clone> StreamingCdnResolver<H> {
             };
             // Check cancellation before processing result
             if let Some(token) = &cancellation_token
-                && token.is_cancelled() {
-                    break;
-                }
+                && token.is_cancelled()
+            {
+                break;
+            }
 
             if let Ok(archive_hash) = task_result {
                 if self.get_archive_index(&archive_hash).await.is_ok() {
@@ -709,7 +711,11 @@ impl<H: HttpClient + Clone> BatchContentResolver<H> {
 }
 
 #[cfg(test)]
-#[allow(clippy::expect_used, clippy::unwrap_used, clippy::uninlined_format_args)]
+#[allow(
+    clippy::expect_used,
+    clippy::unwrap_used,
+    clippy::uninlined_format_args
+)]
 mod tests {
     use super::*;
     use crate::cdn::streaming::HttpRange;

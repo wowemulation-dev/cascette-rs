@@ -114,7 +114,11 @@ impl BandwidthMonitor {
     }
 
     /// Record bandwidth sample
-    #[allow(clippy::cast_precision_loss, clippy::cast_sign_loss, clippy::suboptimal_flops)] // Performance metrics are positive, mathematical precision not critical
+    #[allow(
+        clippy::cast_precision_loss,
+        clippy::cast_sign_loss,
+        clippy::suboptimal_flops
+    )] // Performance metrics are positive, mathematical precision not critical
     pub async fn record_sample(&self, bytes: u64, duration: Duration) {
         if duration.is_zero() {
             return;
@@ -228,10 +232,7 @@ impl AdvancedRangeCoalescer {
     }
 
     /// Coalesce ranges with bandwidth-aware optimization
-    pub fn coalesce_ranges(
-        &self,
-        mut ranges: Vec<HttpRange>,
-    ) -> StreamingResult<Vec<HttpRange>> {
+    pub fn coalesce_ranges(&self, mut ranges: Vec<HttpRange>) -> StreamingResult<Vec<HttpRange>> {
         if ranges.is_empty() {
             return Ok(ranges);
         }
@@ -568,7 +569,11 @@ impl ZeroCopyBuffer {
 }
 
 #[cfg(test)]
-#[allow(clippy::expect_used, clippy::unwrap_used, clippy::uninlined_format_args)]
+#[allow(
+    clippy::expect_used,
+    clippy::unwrap_used,
+    clippy::uninlined_format_args
+)]
 mod tests {
     use super::*;
     use crate::cdn::streaming::{config::StreamingConfig, error::StreamingError};

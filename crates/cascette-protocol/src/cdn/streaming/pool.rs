@@ -153,7 +153,8 @@ impl ConnectionStats {
             self.avg_response_time_ms = response_time_ms;
         } else {
             // Exponential moving average with alpha = 0.1
-            self.avg_response_time_ms = 0.9f64.mul_add(self.avg_response_time_ms, 0.1 * response_time_ms);
+            self.avg_response_time_ms =
+                0.9f64.mul_add(self.avg_response_time_ms, 0.1 * response_time_ms);
         }
     }
 }
@@ -492,10 +493,9 @@ impl<T: HttpClient> ConnectionPool<T> {
                 };
 
                 let success = health_check_result.is_ok();
-                if !success
-                    && let Err(e) = health_check_result {
-                        debug!("Health check failed for {}: {:?}", server_id, e);
-                    }
+                if !success && let Err(e) = health_check_result {
+                    debug!("Health check failed for {}: {:?}", server_id, e);
+                }
 
                 let response_time = start_time.elapsed();
 
@@ -763,7 +763,11 @@ impl<T: HttpClient> Drop for ConnectionPool<T> {
 }
 
 #[cfg(test)]
-#[allow(clippy::expect_used, clippy::unwrap_used, clippy::uninlined_format_args)]
+#[allow(
+    clippy::expect_used,
+    clippy::unwrap_used,
+    clippy::uninlined_format_args
+)]
 mod tests {
     use super::*;
     use crate::cdn::streaming::{config::ConnectionPoolConfig, http::CdnServer};

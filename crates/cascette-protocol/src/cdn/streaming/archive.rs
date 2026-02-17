@@ -151,10 +151,7 @@ impl<H: HttpClient + Clone> StreamingArchiveReader<H> {
 
         for request in requests {
             if let Some(entry) = index.find_entry(&request.encoding_key) {
-                let range = HttpRange::new(
-                    entry.offset,
-                    entry.offset + u64::from(entry.size) - 1,
-                );
+                let range = HttpRange::new(entry.offset, entry.offset + u64::from(entry.size) - 1);
                 range_requests.push(range);
                 request_map.insert(range, (request, entry.clone()));
             }
@@ -384,7 +381,11 @@ impl<H: HttpClient + Clone> BatchArchiveExtractor<H> {
 }
 
 #[cfg(test)]
-#[allow(clippy::expect_used, clippy::unwrap_used, clippy::uninlined_format_args)]
+#[allow(
+    clippy::expect_used,
+    clippy::unwrap_used,
+    clippy::uninlined_format_args
+)]
 mod tests {
     use super::*;
     use crate::cdn::streaming::config::StreamingConfig;

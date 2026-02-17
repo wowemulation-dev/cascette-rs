@@ -90,10 +90,7 @@ mod tests {
 
     #[test]
     fn test_us_region_urls() {
-        assert_eq!(
-            Region::US.tact_https_url(),
-            "https://us.version.battle.net"
-        );
+        assert_eq!(Region::US.tact_https_url(), "https://us.version.battle.net");
         assert_eq!(
             Region::US.tact_http_url(),
             "http://us.patch.battle.net:1119"
@@ -103,10 +100,7 @@ mod tests {
 
     #[test]
     fn test_eu_region_urls() {
-        assert_eq!(
-            Region::EU.tact_https_url(),
-            "https://eu.version.battle.net"
-        );
+        assert_eq!(Region::EU.tact_https_url(), "https://eu.version.battle.net");
         assert_eq!(
             Region::EU.tact_http_url(),
             "http://eu.patch.battle.net:1119"
@@ -116,10 +110,7 @@ mod tests {
 
     #[test]
     fn test_kr_region_urls() {
-        assert_eq!(
-            Region::KR.tact_https_url(),
-            "https://kr.version.battle.net"
-        );
+        assert_eq!(Region::KR.tact_https_url(), "https://kr.version.battle.net");
         assert_eq!(
             Region::KR.tact_http_url(),
             "http://kr.patch.battle.net:1119"
@@ -129,10 +120,7 @@ mod tests {
 
     #[test]
     fn test_tw_region_urls() {
-        assert_eq!(
-            Region::TW.tact_https_url(),
-            "https://tw.version.battle.net"
-        );
+        assert_eq!(Region::TW.tact_https_url(), "https://tw.version.battle.net");
         assert_eq!(
             Region::TW.tact_http_url(),
             "http://tw.patch.battle.net:1119"
@@ -158,10 +146,7 @@ mod tests {
 
     #[test]
     fn test_sg_region_urls() {
-        assert_eq!(
-            Region::SG.tact_https_url(),
-            "https://sg.version.battle.net"
-        );
+        assert_eq!(Region::SG.tact_https_url(), "https://sg.version.battle.net");
         assert_eq!(
             Region::SG.tact_http_url(),
             "http://sg.patch.battle.net:1119"

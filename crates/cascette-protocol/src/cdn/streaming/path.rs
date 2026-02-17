@@ -104,9 +104,10 @@ impl CdnPathCache {
 
         // Check TTL if configured
         if let Some(ttl) = self.ttl
-            && cached_entry.cached_at.elapsed() > ttl {
-                return None; // Expired
-            }
+            && cached_entry.cached_at.elapsed() > ttl
+        {
+            return None; // Expired
+        }
 
         Some(&cached_entry.path)
     }
@@ -557,7 +558,11 @@ pub struct CacheStats {
 }
 
 #[cfg(test)]
-#[allow(clippy::expect_used, clippy::unwrap_used, clippy::uninlined_format_args)]
+#[allow(
+    clippy::expect_used,
+    clippy::unwrap_used,
+    clippy::uninlined_format_args
+)]
 mod tests {
     use super::*;
 

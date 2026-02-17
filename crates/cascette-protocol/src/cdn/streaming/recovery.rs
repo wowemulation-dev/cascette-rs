@@ -152,7 +152,11 @@ impl RetryManager {
     }
 
     /// Calculate delay for retry attempt
-    #[allow(clippy::cast_precision_loss, clippy::cast_possible_wrap, clippy::cast_sign_loss)]
+    #[allow(
+        clippy::cast_precision_loss,
+        clippy::cast_possible_wrap,
+        clippy::cast_sign_loss
+    )]
     pub fn calculate_delay(&self, attempt: u32, network_condition: NetworkCondition) -> Duration {
         if attempt == 0 {
             return Duration::from_millis(0);
@@ -430,20 +434,14 @@ impl FailoverManager {
             server_metrics.total_failure_weight += weight;
             let total = server_metrics.total_failure_weight;
             drop(metrics);
-            debug!(
-                "Server {} failure weight: +{} = {}",
-                server, weight, total
-            );
+            debug!("Server {} failure weight: +{} = {}", server, weight, total);
         }
     }
 
     /// Mark server as healthy
     pub async fn mark_server_healthy(&self, server: &str) {
         let mut health = self.server_health.write().await;
-        let was_unavailable = matches!(
-            health.get(server),
-            Some(ServerHealth::Unavailable { .. })
-        );
+        let was_unavailable = matches!(health.get(server), Some(ServerHealth::Unavailable { .. }));
 
         health.insert(server.to_string(), ServerHealth::Healthy);
         drop(health);
@@ -498,7 +496,8 @@ impl FailoverManager {
                 bandwidth
             } else {
                 // Exponential moving average
-                (server_metrics.bandwidth_estimate as f64).mul_add(0.9, bandwidth as f64 * 0.1) as u64
+                (server_metrics.bandwidth_estimate as f64).mul_add(0.9, bandwidth as f64 * 0.1)
+                    as u64
             };
         }
 
@@ -585,7 +584,11 @@ impl FailoverManager {
         }
 
         // Floating-point edge case — return last candidate
-        Some(candidates.last().map_or_else(|| candidates[0].0.clone(), |(s, _)| s.clone()))
+        Some(
+            candidates
+                .last()
+                .map_or_else(|| candidates[0].0.clone(), |(s, _)| s.clone()),
+        )
     }
 
     /// Calculate server selection score with exponential decay.
@@ -668,9 +671,10 @@ impl FailoverManager {
 
         for (server, status) in health.iter() {
             if let ServerHealth::Unavailable { until } = status
-                && now >= *until {
-                    to_remove.push(server.clone());
-                }
+                && now >= *until
+            {
+                to_remove.push(server.clone());
+            }
         }
 
         for server in &to_remove {
@@ -1386,7 +1390,10 @@ mod tests {
 
         // Server is within unavailability window, so not selectable yet
         let selected = failover_manager.select_best_server(&servers).await;
-        assert!(selected.is_none(), "Server should be within unavailability window");
+        assert!(
+            selected.is_none(),
+            "Server should be within unavailability window"
+        );
 
         // Clear the unavailability by marking healthy (simulates window expiry)
         failover_manager.mark_server_healthy("server1.com").await;

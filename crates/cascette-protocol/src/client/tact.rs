@@ -84,9 +84,7 @@ impl TactClient {
                 <BpsvDocument as CascFormat>::parse(&body)
                     .map_err(|e| ProtocolError::Parse(format!("BPSV parse error: {e}")))
             }
-            StatusCode::TOO_MANY_REQUESTS => Err(ProtocolError::RateLimited {
-                    retry_after: None,
-                }),
+            StatusCode::TOO_MANY_REQUESTS => Err(ProtocolError::RateLimited { retry_after: None }),
             StatusCode::SERVICE_UNAVAILABLE => Err(ProtocolError::ServiceUnavailable),
             status if status.is_server_error() => Err(ProtocolError::ServerError(status)),
             status => Err(ProtocolError::HttpStatus(status)),
@@ -126,9 +124,7 @@ impl TactClient {
                 <BpsvDocument as CascFormat>::parse(&body)
                     .map_err(|e| ProtocolError::Parse(format!("BPSV parse error: {e}")))
             }
-            StatusCode::TOO_MANY_REQUESTS => Err(ProtocolError::RateLimited {
-                    retry_after: None,
-                }),
+            StatusCode::TOO_MANY_REQUESTS => Err(ProtocolError::RateLimited { retry_after: None }),
             StatusCode::SERVICE_UNAVAILABLE => Err(ProtocolError::ServiceUnavailable),
             status if status.is_server_error() => Err(ProtocolError::ServerError(status)),
             status => Err(ProtocolError::HttpStatus(status)),

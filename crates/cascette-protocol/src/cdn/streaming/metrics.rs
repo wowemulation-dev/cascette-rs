@@ -82,7 +82,8 @@ impl PoolMetrics {
         }
 
         times.sort();
-        #[allow(clippy::cast_precision_loss, clippy::cast_sign_loss)] // 0.95 factor ensures positive result
+        #[allow(clippy::cast_precision_loss, clippy::cast_sign_loss)]
+        // 0.95 factor ensures positive result
         let index = (times.len() as f64 * 0.95).round() as usize;
         times.get(index.min(times.len() - 1)).copied()
     }
