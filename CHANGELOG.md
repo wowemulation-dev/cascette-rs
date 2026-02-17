@@ -103,6 +103,12 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `open` async method loads indices and opens archive data files
   - Truncation detection converts archive bounds errors to `TruncatedRead`
   - `remove_span` with +0x1E offset adjustment
+- cascette-client-storage: LRU cache with flat-file doubly-linked list
+  - 28-byte header (version, MD5 hash, MRU head/LRU tail indices) and 20-byte
+    entries (prev/next index, 9-byte ekey, flags)
+  - O(1) touch/evict via hash map + doubly-linked list in flat array
+  - Generation-based `.lru` file persistence with MD5 integrity check
+  - File naming: 16 hex chars (big-endian 64-bit generation) + `.lru`
 - cascette-client-storage: Shmem v4/v5 control block protocol
   - Version 4 (16-byte alignment, 0x150 header) and version 5 (page alignment
     0x154/0x258 header) layout constants

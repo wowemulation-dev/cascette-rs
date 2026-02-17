@@ -16,6 +16,7 @@ rust-version.workspace = true
 thiserror = { workspace = true }
 binrw = { workspace = true }
 hex = { workspace = true }
+md5 = { workspace = true }
 
 # Internal dependencies
 cascette-formats = { version = "0.2.0", path = "../cascette-formats" }

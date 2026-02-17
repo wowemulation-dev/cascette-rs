@@ -279,12 +279,18 @@ algorithms: defrag (moves data to fill gaps) and fillholes (estimates
 free space without moves). Async read/write pipeline with 128 KB
 minimum buffer.
 
-### No LRU Eviction
+### Partial LRU Cache
 
-Agent maintains an LRU cache in shared memory with generation-based
-checkpoints and 20-char hex `.lru` filenames. cascette-rs uses
-unbounded `DashMap` caches with no eviction policy, risking
-unbounded memory growth.
+LRU manager implemented with flat-array doubly-linked list and
+hash map, matching Agent.exe's architecture. File format implemented
+(28-byte header + 20-byte entries with MD5 checksum, generation-based
+filenames). Persistence via checkpoint/load operations.
+
+Not yet implemented:
+- Shared memory integration (LRU table in shmem)
+- Size-based eviction target (evict until under configured limit)
+- Directory scanning to discover new files
+- Integration with `DynamicContainer` and compactor
 
 ### Partial Shared Memory Protocol
 
