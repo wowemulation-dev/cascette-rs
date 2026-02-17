@@ -10,6 +10,24 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- cascette-client-storage crate: Local CASC storage for game installations
+  - Bucket-based .idx index files with 18-byte entries, big-endian 9-byte
+    truncated encoding keys, and archive location bit-packing
+  - Memory-mapped .data archive files with BLTE compression (none, zlib, lz4)
+    and compaction support
+  - Content resolution pipeline: path/FileDataID -> ContentKey -> EncodingKey
+    -> archive location, with DashMap-based caching
+  - `Installation` async API for reading and writing files with 30-byte local
+    archive header parsing
+  - `Storage` multi-installation management with CASC directory structure
+    validation (indices, data, config, shmem directories)
+  - Shared memory IPC with binrw-serialized messages, platform-specific
+    implementations (Windows `CreateFileMapping`, Unix `shm_open`), connection
+    tracking, and CASC-compatible shmem file format
+  - `BinaryFormatValidator` trait for round-trip testing with batch validation
+    runner and property-based testing utilities
+- Workspace dependencies: parking_lot 0.12, memmap2 0.9
+
 - cascette-formats: Size manifest format parser and builder
   - Version 1 and 2 support with `SizeManifest`, `SizeManifestHeader`,
     `SizeManifestEntry` types
