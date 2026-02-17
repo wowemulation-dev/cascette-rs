@@ -65,7 +65,7 @@ PR [#35](https://github.com/wowemulation-dev/cascette-rs/pull/35):
 - Archive group TOC hash: `ArchiveGroupBuilder` computes TOC hash
   from first keys of each data chunk instead of writing zeros
 
-Pending PR (fix/formats-agent-comparison):
+PR [#29](https://github.com/wowemulation-dev/cascette-rs/pull/29):
 
 - Encoding entry parsing uses dynamic key sizes from header
   (`ckey_hash_size`, `ekey_hash_size`) instead of hardcoded 16
@@ -81,10 +81,15 @@ Pending PR (fix/formats-agent-comparison):
   of hardcoded 9. `ContainerEntry.ekey` changed to `Vec<u8>`
 - TVFS EST (Encoding Spec Table) parsed when
   `TVFS_FLAG_ENCODING_SPEC` flag is set
+
+Branch fix/formats-agent-comparison:
+
 - CDN server selection: `FailoverManager` uses exponential decay
   scoring (`0.9^total_failure_weight`) with per-error-code weights
   and weighted-random selection, matching Agent.exe. Removed
-  permanent server exclusion (`ServerHealth::Failed`)
+  permanent server exclusion (`ServerHealth::Failed`). Per-status
+  weights match `tact::HandleHttpResponse`: 500/502/503/504=5.0,
+  401/416=2.5, other 5xx=1.0, 4xx/1xx/3xx=0.5, 429=0.0
 - Streaming `max_redirects`: configurable (default 5), applied to
   both reqwest builder paths
 - Connection parameter limitations documented in `StreamingConfig`
@@ -462,5 +467,5 @@ These cascette-rs implementations match Agent.exe behavior:
 | Retry-After header | 429 response reads `Retry-After` | `RateLimited { retry_after }` variant, `parse_retry_after()` in CDN client, `RetryPolicy` uses hint |
 | CDN URL parameters | `ParseCdnServerUrl` parses `?fallback=1`, `?strict=1`, `?maxhosts=N` | `parse_cdn_server_url()` extracts params; `CdnEndpoint` and `CdnServer` store parsed fields |
 | Max redirects | 5 redirect limit | `HttpConfig::max_redirects` (default 5), `StreamingConfig::max_redirects` (default 5), both reqwest builders use configured value |
-| CDN server scoring | `0.9^total_failures` decay, weighted-random selection | `FailoverManager` uses `total_failure_weight` with per-error-code weights (503=5.0, 404=2.5, 429=0, other=1.0), `0.9^weight` decay, cumulative-weight random selection. No permanent server exclusion |
+| CDN server scoring | `0.9^total_failures` decay, weighted-random selection | `FailoverManager` uses `total_failure_weight` with per-error-code weights matching `tact::HandleHttpResponse` (500/502/503/504=5.0, 401/416=2.5, other 5xx=1.0, 4xx/1xx/3xx=0.5, 429=0.0), `0.9^weight` decay, cumulative-weight random selection. No permanent server exclusion |
 | China region CDN | `.com.cn` domains for CN region | `Region` enum with `CN` and `SG` variants, `tact_https_url()`, `tact_http_url()`, and `ribbit_address()` return per-region domains |

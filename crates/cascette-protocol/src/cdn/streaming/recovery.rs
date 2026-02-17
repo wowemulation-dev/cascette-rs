@@ -317,21 +317,28 @@ pub struct ServerMetrics {
 /// Compute the failure weight for an error, matching Agent.exe backoff weights.
 ///
 /// | Error | Weight |
-/// |-------|--------|
-/// | HTTP 503 | 5.0 |
-/// | HTTP 404 | 2.5 |
-/// | HTTP 429 | 0.0 (uses Retry-After instead) |
+/// Weights match `tact::HandleHttpResponse` from Agent.exe:
+///
+/// | Status Code | Weight |
+/// |-------------|--------|
 /// | HTTP 2xx | 0.0 |
+/// | HTTP 429 | 0.0 (uses Retry-After backoff handler) |
+/// | HTTP 500, 502, 503, 504 | 5.0 |
+/// | HTTP 401, 416 | 2.5 |
+/// | Other 5xx | 1.0 |
+/// | HTTP 404 | 0.5 (expected missing content) |
+/// | Other 4xx | 0.5 |
+/// | 1xx, 3xx | 0.5 |
 /// | Timeout / NetworkRequest | 1.0 |
-/// | Other HTTP errors | 1.0 |
 /// | Other variants | 1.0 |
 fn failure_weight_for_error(error: &StreamingError) -> f64 {
     match error {
         StreamingError::HttpStatus { status_code, .. } => match *status_code {
             200..=299 | 429 => 0.0,
-            503 => 5.0,
-            404 => 2.5,
-            _ => 1.0,
+            500 | 502 | 503 | 504 => 5.0,
+            401 | 416 => 2.5,
+            505..=599 => 1.0,
+            _ => 0.5,
         },
         _ => 1.0,
     }
@@ -1221,19 +1228,43 @@ mod tests {
 
     #[tokio::test]
     async fn test_failure_weight_for_error() {
-        // HTTP 503 should have highest weight
+        // HTTP 503 should have highest weight (5.0, matching Agent.exe)
         let err_503 = StreamingError::HttpStatus {
             status_code: 503,
             url: "http://example.com".to_string(),
         };
         assert!((failure_weight_for_error(&err_503) - 5.0).abs() < f64::EPSILON);
 
-        // HTTP 404 should have moderate weight
+        // HTTP 500/502/504 also get weight 5.0
+        for code in [500, 502, 504] {
+            let err = StreamingError::HttpStatus {
+                status_code: code,
+                url: "http://example.com".to_string(),
+            };
+            assert!(
+                (failure_weight_for_error(&err) - 5.0).abs() < f64::EPSILON,
+                "HTTP {code} should have weight 5.0"
+            );
+        }
+
+        // HTTP 401/416 get weight 2.5
+        for code in [401, 416] {
+            let err = StreamingError::HttpStatus {
+                status_code: code,
+                url: "http://example.com".to_string(),
+            };
+            assert!(
+                (failure_weight_for_error(&err) - 2.5).abs() < f64::EPSILON,
+                "HTTP {code} should have weight 2.5"
+            );
+        }
+
+        // HTTP 404 gets default 4xx weight (0.5, expected missing content)
         let err_404 = StreamingError::HttpStatus {
             status_code: 404,
             url: "http://example.com".to_string(),
         };
-        assert!((failure_weight_for_error(&err_404) - 2.5).abs() < f64::EPSILON);
+        assert!((failure_weight_for_error(&err_404) - 0.5).abs() < f64::EPSILON);
 
         // HTTP 429 should have zero weight (handled via Retry-After)
         let err_429 = StreamingError::HttpStatus {
@@ -1249,19 +1280,33 @@ mod tests {
         };
         assert!((failure_weight_for_error(&err_200)).abs() < f64::EPSILON);
 
+        // Other 5xx should have weight 1.0
+        let err_505 = StreamingError::HttpStatus {
+            status_code: 505,
+            url: "http://example.com".to_string(),
+        };
+        assert!((failure_weight_for_error(&err_505) - 1.0).abs() < f64::EPSILON);
+
+        // Other 4xx should have weight 0.5
+        let err_403 = StreamingError::HttpStatus {
+            status_code: 403,
+            url: "http://example.com".to_string(),
+        };
+        assert!((failure_weight_for_error(&err_403) - 0.5).abs() < f64::EPSILON);
+
+        // 1xx/3xx should have weight 0.5
+        let err_301 = StreamingError::HttpStatus {
+            status_code: 301,
+            url: "http://example.com".to_string(),
+        };
+        assert!((failure_weight_for_error(&err_301) - 0.5).abs() < f64::EPSILON);
+
         // Timeout should have weight 1.0
         let err_timeout = StreamingError::Timeout {
             timeout_ms: 5000,
             url: "http://example.com".to_string(),
         };
         assert!((failure_weight_for_error(&err_timeout) - 1.0).abs() < f64::EPSILON);
-
-        // Other HTTP errors should have weight 1.0
-        let err_500 = StreamingError::HttpStatus {
-            status_code: 500,
-            url: "http://example.com".to_string(),
-        };
-        assert!((failure_weight_for_error(&err_500) - 1.0).abs() < f64::EPSILON);
     }
 
     #[tokio::test]
@@ -1389,12 +1434,12 @@ mod tests {
         let selected = failover_manager.select_best_server(&servers).await;
         assert!(selected.is_some(), "Server should be available after 404");
 
-        // But failure weight should be accumulated
+        // But failure weight should be accumulated (404 = 0.5, matching Agent.exe)
         let metrics = failover_manager.get_all_metrics().await;
         let server_metrics = metrics.get("server1.com").expect("Should have metrics");
         assert!(
-            (server_metrics.total_failure_weight - 2.5).abs() < f64::EPSILON,
-            "404 should add weight 2.5, got {}",
+            (server_metrics.total_failure_weight - 0.5).abs() < f64::EPSILON,
+            "404 should add weight 0.5, got {}",
             server_metrics.total_failure_weight
         );
     }
