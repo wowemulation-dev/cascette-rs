@@ -71,6 +71,17 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - Retry policies with exponential backoff and jitter
   - Thread-local buffers and string interning for performance
 
+- cascette-formats: K-way merge for archive group building via `build_merged()`
+  - O(N log K) merge of pre-sorted archive indices using binary min-heap
+  - Matches Agent.exe `tact::CdnIndex::BuildMergedIndex` algorithm
+  - Deduplicates entries across archives, keeping first occurrence
+
+### Fixed
+
+- cascette-formats: Archive group builder wrote entry fields in wrong order
+  (key, offset, size instead of key, size, offset), causing round-trip
+  parse failures through `ArchiveGroup::parse()`
+
 ### Changed
 
 - **Breaking**: cascette-formats ESpec type model updated to match TACT behavior
