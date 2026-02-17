@@ -97,10 +97,10 @@ struct CKeyEntry {
 };
 ```
 
-Entry layout:
+Entry layout (sizes from header):
 
 ```text
-[count:1] [size:5] [ckey:16] [ekey1:16] [ekey2:16] ...
+[count:1] [size:5] [ckey:ckey_size] [ekey1:ekey_size] [ekey2:ekey_size] ...
 ```
 
 **Multiple EKeys**: A single content key can map to multiple encoding keys,
@@ -510,8 +510,14 @@ Complete Encoding file parser and builder with full format support:
 
 - **Page-based architecture** - CKey and EKey page support (complete)
 
+- **Dynamic key sizes** - Entries use `ckey_size` and `ekey_size` from header
+instead of hardcoded 16 bytes (complete)
+
 - **Content resolution** - CKey to EKey mapping with multi-version support
 (complete)
+
+- **Batch lookups** - `batch_find_encodings()`, `batch_find_all_encodings()`,
+`batch_find_especs()` using sort-and-merge across pages (complete)
 
 - **Binary preservation** - Page-level binary data for perfect round-trip
 (complete)

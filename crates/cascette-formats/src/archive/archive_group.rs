@@ -198,72 +198,86 @@ impl ArchiveGroupBuilder {
         let total_data_size = entry_count * bytes_per_entry;
         let chunk_count = total_data_size.div_ceil(0x1000); // 4KB chunks
 
-        // Write entries in chunks, collecting first keys for TOC hash
+        // Write entries in chunks, collecting last keys for TOC and block hashes
         let entries_per_chunk = 0x1000 / bytes_per_entry;
+        let hash_bytes: u8 = 8;
         let mut toc_keys: Vec<Vec<u8>> = Vec::with_capacity(chunk_count);
+        let mut block_hashes: Vec<Vec<u8>> = Vec::with_capacity(chunk_count);
 
         for chunk_idx in 0..chunk_count {
             let start_idx = chunk_idx * entries_per_chunk;
             let end_idx = ((chunk_idx + 1) * entries_per_chunk).min(entry_count);
 
-            // Record first key of each chunk for TOC hash
-            if let Some(first_entry) = entries.get(start_idx) {
-                toc_keys.push(first_entry.encoding_key.clone());
-            }
-
             // Prepare chunk data
             let mut chunk_data = Vec::with_capacity(0x1000);
 
             for entry in &entries[start_idx..end_idx] {
-                // Write encoding key
                 chunk_data.extend_from_slice(&entry.encoding_key);
-
-                // Write 6-byte combined offset
                 chunk_data.extend_from_slice(&entry.combined_offset());
-
-                // Write size
                 chunk_data.extend_from_slice(&entry.size.to_be_bytes());
             }
 
             // Pad chunk to 4KB
             chunk_data.resize(0x1000, 0);
 
+            // Record last key of each chunk for TOC
+            if end_idx > start_idx {
+                toc_keys.push(entries[end_idx - 1].encoding_key.clone());
+            }
+
+            // Compute block hash
+            block_hashes.push(super::index::calculate_block_hash(&chunk_data, hash_bytes));
+
             writer.write_all(&chunk_data)?;
         }
 
-        // Write footer with computed TOC hash
-        let toc_hash = super::index::calculate_toc_hash(&toc_keys);
-        let footer = IndexFooter {
-            toc_hash,
-            version: 1, // Standard version
+        // Write TOC: keys then block hashes
+        for key in &toc_keys {
+            // Pad to 16 bytes (ekey_length)
+            let mut padded = vec![0u8; 16];
+            let copy_len = key.len().min(16);
+            padded[..copy_len].copy_from_slice(&key[..copy_len]);
+            writer.write_all(&padded)?;
+        }
+
+        for block_hash in &block_hashes {
+            writer.write_all(block_hash)?;
+        }
+
+        // Compute TOC hash using padded keys
+        let padded_toc_keys: Vec<Vec<u8>> = toc_keys
+            .iter()
+            .map(|key| {
+                let mut padded = vec![0u8; 16];
+                let copy_len = key.len().min(16);
+                padded[..copy_len].copy_from_slice(&key[..copy_len]);
+                padded
+            })
+            .collect();
+        let toc_hash =
+            super::index::calculate_toc_hash(&padded_toc_keys, &block_hashes, hash_bytes);
+
+        // Create footer
+        let mut footer = IndexFooter {
+            toc_hash: {
+                let mut arr = [0u8; 8];
+                let copy_len = toc_hash.len().min(8);
+                arr[..copy_len].copy_from_slice(&toc_hash[..copy_len]);
+                arr
+            },
+            version: 1,
             reserved: [0, 0],
             page_size_kb: 4,
-            offset_bytes: 6, // 6-byte offsets for archive-groups!
+            offset_bytes: 6, // 6-byte offsets for archive-groups
             size_bytes: 4,
             ekey_length: 16,
-            footer_hash_bytes: 8,
+            footer_hash_bytes: hash_bytes,
             element_count: entry_count as u32,
-            footer_hash: vec![0; 8],
+            footer_hash: vec![0; hash_bytes as usize],
         };
+        footer.footer_hash = footer.calculate_footer_hash();
 
-        // Prepare footer bytes
-        let mut footer_bytes = Vec::new();
-        footer_bytes.extend_from_slice(&footer.toc_hash);
-        footer_bytes.push(footer.version);
-        footer_bytes.extend_from_slice(&footer.reserved);
-        footer_bytes.push(footer.page_size_kb);
-        footer_bytes.push(footer.offset_bytes);
-        footer_bytes.push(footer.size_bytes);
-        footer_bytes.push(footer.ekey_length);
-        footer_bytes.push(footer.footer_hash_bytes);
-        footer_bytes.extend_from_slice(&footer.element_count.to_le_bytes());
-
-        // Calculate MD5 hash of footer (excluding the hash itself)
-        let content_key = cascette_crypto::md5::ContentKey::from_data(&footer_bytes);
-        let footer_hash = content_key.as_bytes()[..8].to_vec();
-        footer_bytes.extend_from_slice(&footer_hash);
-
-        writer.write_all(&footer_bytes)?;
+        footer.write(&mut writer)?;
 
         Ok(ArchiveGroup { entries, footer })
     }

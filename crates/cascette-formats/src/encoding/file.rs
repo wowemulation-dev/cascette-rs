@@ -45,6 +45,11 @@ impl EncodingFile {
     ) -> Result<Vec<Page<CKeyPageEntry>>, EncodingError> {
         let mut ckey_pages = Vec::with_capacity(header.ckey_page_count as usize);
         let ckey_page_size = header.ckey_page_size();
+        let ckey_hash_size = header.ckey_hash_size;
+        let ekey_hash_size = header.ekey_hash_size;
+
+        // Minimum entry size: 1 (key_count) + 5 (file_size) + ckey_hash_size
+        let min_entry_size = 1 + 5 + ckey_hash_size as u64;
 
         for index in ckey_index {
             let mut page_data = vec![0u8; ckey_page_size];
@@ -62,15 +67,18 @@ impl EncodingFile {
             while page_cursor.position() < page_data.len() as u64 {
                 let pos_before = page_cursor.position();
                 // Try to read entry using BinRead implementation
-                match CKeyPageEntry::read_options(&mut page_cursor, binrw::Endian::Big, ()) {
+                match CKeyPageEntry::read_options(
+                    &mut page_cursor,
+                    binrw::Endian::Big,
+                    (ckey_hash_size, ekey_hash_size),
+                ) {
                     Ok(entry) => {
                         entries.push(entry);
                     }
                     Err(e) => {
                         // Check if we're at the end of meaningful data
                         let remaining = page_data.len() as u64 - pos_before;
-                        if remaining < 22 {
-                            // Minimum entry size (1 + 5 + 16 + 0*16)
+                        if remaining < min_entry_size {
                             break; // Not enough space for another entry
                         }
                         // If we have space but still failed, it might be padding
@@ -106,6 +114,10 @@ impl EncodingFile {
     ) -> Result<Vec<Page<EKeyPageEntry>>, EncodingError> {
         let mut ekey_pages = Vec::with_capacity(header.ekey_page_count as usize);
         let ekey_page_size = header.ekey_page_size();
+        let ekey_hash_size = header.ekey_hash_size;
+
+        // Minimum entry size: ekey_hash_size + 4 (espec_index) + 5 (file_size)
+        let min_entry_size = ekey_hash_size as u64 + 4 + 5;
 
         for index in ekey_index {
             let mut page_data = vec![0u8; ekey_page_size];
@@ -123,15 +135,18 @@ impl EncodingFile {
             while page_cursor.position() < page_data.len() as u64 {
                 let pos_before = page_cursor.position();
                 // Try to read entry using BinRead implementation
-                match EKeyPageEntry::read_options(&mut page_cursor, binrw::Endian::Big, ()) {
+                match EKeyPageEntry::read_options(
+                    &mut page_cursor,
+                    binrw::Endian::Big,
+                    (ekey_hash_size,),
+                ) {
                     Ok(entry) => {
                         entries.push(entry);
                     }
                     Err(e) => {
                         // Check if we're at the end of meaningful data
                         let remaining = page_data.len() as u64 - pos_before;
-                        if remaining < 25 {
-                            // Minimum EKey entry size (16 + 4 + 5)
+                        if remaining < min_entry_size {
                             break; // Not enough space for another entry
                         }
                         // If we have space but still failed, it might be padding
@@ -139,12 +154,17 @@ impl EncodingFile {
                         // 1. espec_index == 0xFFFFFFFF (Agent.exe sentinel)
                         // 2. all-zero key + espec_index == 0 (zero-fill padding)
                         page_cursor.set_position(pos_before);
-                        let mut check_bytes = [0u8; 20]; // 16 key + 4 espec_index
+                        let check_size = ekey_hash_size as usize + 4;
+                        let mut check_bytes = vec![0u8; check_size];
                         if page_cursor.read_exact(&mut check_bytes).is_ok() {
-                            let espec_bytes: [u8; 4] =
-                                check_bytes[16..20].try_into().unwrap_or([0; 4]);
+                            let espec_start = ekey_hash_size as usize;
+                            let espec_bytes: [u8; 4] = check_bytes[espec_start..espec_start + 4]
+                                .try_into()
+                                .unwrap_or([0; 4]);
                             let espec_val = u32::from_be_bytes(espec_bytes);
-                            let key_all_zero = check_bytes[..16].iter().all(|&b| b == 0x00);
+                            let key_all_zero = check_bytes[..ekey_hash_size as usize]
+                                .iter()
+                                .all(|&b| b == 0x00);
                             if espec_val == 0xFFFF_FFFF || (espec_val == 0 && key_all_zero) {
                                 break; // Hit padding
                             }
@@ -415,6 +435,171 @@ impl EncodingFile {
             }
         }
         None
+    }
+
+    /// Find encoding keys for multiple content keys in a single pass.
+    ///
+    /// Uses sort-and-merge to efficiently scan pages. Returns results
+    /// in the same order as the input slice.
+    pub fn batch_find_encodings(&self, content_keys: &[ContentKey]) -> Vec<Option<EncodingKey>> {
+        if content_keys.is_empty() {
+            return Vec::new();
+        }
+
+        // Create indexed pairs and sort by key for sequential page access
+        let mut indexed: Vec<(usize, &ContentKey)> = content_keys.iter().enumerate().collect();
+        indexed.sort_by(|a, b| a.1.as_bytes().cmp(b.1.as_bytes()));
+
+        let mut results = vec![None; content_keys.len()];
+        let mut key_cursor = 0;
+
+        for (page_idx, page) in self.ckey_pages.iter().enumerate() {
+            if key_cursor >= indexed.len() {
+                break;
+            }
+
+            // Determine the key range for this page
+            let page_first = &self.ckey_index[page_idx].first_key;
+            let page_last = if page_idx + 1 < self.ckey_index.len() {
+                Some(&self.ckey_index[page_idx + 1].first_key)
+            } else {
+                None
+            };
+
+            // Skip keys below this page
+            while key_cursor < indexed.len() && indexed[key_cursor].1.as_bytes() < page_first {
+                key_cursor += 1;
+            }
+
+            // Process keys that fall in this page's range
+            let page_start = key_cursor;
+            while key_cursor < indexed.len() {
+                if let Some(next_first) = page_last
+                    && indexed[key_cursor].1.as_bytes() >= next_first
+                {
+                    break;
+                }
+                key_cursor += 1;
+            }
+
+            // Match keys against page entries
+            for &(orig_idx, search_key) in &indexed[page_start..key_cursor] {
+                for entry in &page.entries {
+                    if entry.content_key == *search_key {
+                        results[orig_idx] = entry.encoding_keys.first().copied();
+                        break;
+                    }
+                }
+            }
+        }
+
+        results
+    }
+
+    /// Find all encoding keys for multiple content keys in a single pass.
+    ///
+    /// Returns a `Vec<Vec<EncodingKey>>` in the same order as the input.
+    pub fn batch_find_all_encodings(&self, content_keys: &[ContentKey]) -> Vec<Vec<EncodingKey>> {
+        if content_keys.is_empty() {
+            return Vec::new();
+        }
+
+        let mut indexed: Vec<(usize, &ContentKey)> = content_keys.iter().enumerate().collect();
+        indexed.sort_by(|a, b| a.1.as_bytes().cmp(b.1.as_bytes()));
+
+        let mut results: Vec<Vec<EncodingKey>> = vec![Vec::new(); content_keys.len()];
+        let mut key_cursor = 0;
+
+        for (page_idx, page) in self.ckey_pages.iter().enumerate() {
+            if key_cursor >= indexed.len() {
+                break;
+            }
+
+            let page_first = &self.ckey_index[page_idx].first_key;
+            let page_last = if page_idx + 1 < self.ckey_index.len() {
+                Some(&self.ckey_index[page_idx + 1].first_key)
+            } else {
+                None
+            };
+
+            while key_cursor < indexed.len() && indexed[key_cursor].1.as_bytes() < page_first {
+                key_cursor += 1;
+            }
+
+            let page_start = key_cursor;
+            while key_cursor < indexed.len() {
+                if let Some(next_first) = page_last
+                    && indexed[key_cursor].1.as_bytes() >= next_first
+                {
+                    break;
+                }
+                key_cursor += 1;
+            }
+
+            for &(orig_idx, search_key) in &indexed[page_start..key_cursor] {
+                for entry in &page.entries {
+                    if entry.content_key == *search_key {
+                        results[orig_idx].clone_from(&entry.encoding_keys);
+                        break;
+                    }
+                }
+            }
+        }
+
+        results
+    }
+
+    /// Find ESpec strings for multiple encoding keys in a single pass.
+    ///
+    /// Returns results in the same order as the input slice.
+    pub fn batch_find_especs<'a>(&'a self, encoding_keys: &[EncodingKey]) -> Vec<Option<&'a str>> {
+        if encoding_keys.is_empty() {
+            return Vec::new();
+        }
+
+        let mut indexed: Vec<(usize, &EncodingKey)> = encoding_keys.iter().enumerate().collect();
+        indexed.sort_by(|a, b| a.1.as_bytes().cmp(b.1.as_bytes()));
+
+        let mut results = vec![None; encoding_keys.len()];
+        let mut key_cursor = 0;
+
+        for (page_idx, page) in self.ekey_pages.iter().enumerate() {
+            if key_cursor >= indexed.len() {
+                break;
+            }
+
+            let page_first = &self.ekey_index[page_idx].first_key;
+            let page_last = if page_idx + 1 < self.ekey_index.len() {
+                Some(&self.ekey_index[page_idx + 1].first_key)
+            } else {
+                None
+            };
+
+            while key_cursor < indexed.len() && indexed[key_cursor].1.as_bytes() < page_first {
+                key_cursor += 1;
+            }
+
+            let page_start = key_cursor;
+            while key_cursor < indexed.len() {
+                if let Some(next_first) = page_last
+                    && indexed[key_cursor].1.as_bytes() >= next_first
+                {
+                    break;
+                }
+                key_cursor += 1;
+            }
+
+            for &(orig_idx, search_key) in &indexed[page_start..key_cursor] {
+                for entry in &page.entries {
+                    if entry.encoding_key == *search_key {
+                        results[orig_idx] = self.espec_table.get(entry.espec_index);
+                        break;
+                    }
+                }
+            }
+        }
+
+        results
     }
 
     /// Get total number of content keys

@@ -15,8 +15,8 @@ pub struct ContainerFileTable {
 /// Container entry with EKey and optional content key
 #[derive(Debug, Clone)]
 pub struct ContainerEntry {
-    /// Encoding key (9 bytes for TACT)
-    pub ekey: [u8; 9],
+    /// Encoding key (variable length, typically 9 bytes for TACT)
+    pub ekey: Vec<u8>,
     /// File size (decompressed)
     pub file_size: u32,
     /// Compressed size (optional, present when INCLUDE_CKEY flag is set)
@@ -26,21 +26,21 @@ pub struct ContainerEntry {
 }
 
 impl BinRead for ContainerFileTable {
-    type Args<'a> = (u32, u32); // table_size, flags
+    type Args<'a> = (u32, u32, u8); // table_size, flags, ekey_size
 
     fn read_options<R: Read + Seek>(
         reader: &mut R,
         endian: binrw::Endian,
         args: Self::Args<'_>,
     ) -> BinResult<Self> {
-        let (table_size, flags) = args;
+        let (table_size, flags, ekey_size) = args;
         let include_ckey = (flags & TVFS_FLAG_INCLUDE_CKEY) != 0;
 
         let mut entries = Vec::new();
         let start_pos = reader.stream_position()?;
 
         while reader.stream_position()? - start_pos < u64::from(table_size) {
-            let entry = ContainerEntry::read_with_flags(reader, endian, include_ckey)?;
+            let entry = ContainerEntry::read_with_flags(reader, endian, include_ckey, ekey_size)?;
             entries.push(entry);
         }
 
@@ -49,7 +49,7 @@ impl BinRead for ContainerFileTable {
 }
 
 impl BinWrite for ContainerFileTable {
-    type Args<'a> = (u32,); // flags
+    type Args<'a> = (u32, u8); // flags, ekey_size
 
     fn write_options<W: Write + Seek>(
         &self,
@@ -57,11 +57,11 @@ impl BinWrite for ContainerFileTable {
         endian: binrw::Endian,
         args: Self::Args<'_>,
     ) -> BinResult<()> {
-        let flags = args.0;
+        let (flags, ekey_size) = args;
         let include_ckey = (flags & TVFS_FLAG_INCLUDE_CKEY) != 0;
 
         for entry in &self.entries {
-            entry.write_with_flags(writer, endian, include_ckey)?;
+            entry.write_with_flags(writer, endian, include_ckey, ekey_size)?;
         }
 
         Ok(())
@@ -87,8 +87,8 @@ impl ContainerFileTable {
     }
 
     /// Calculate table size in bytes
-    pub fn calculate_size(&self, include_ckey: bool) -> u32 {
-        let base_size = 9 + 4; // ekey (9) + file_size (4)
+    pub fn calculate_size(&self, include_ckey: bool, ekey_size: u8) -> u32 {
+        let base_size = ekey_size as usize + 4; // ekey + file_size (4)
         let entry_size = if include_ckey {
             base_size + 4 + 16 // + compressed_size (4) + content_key (16)
         } else {
@@ -106,9 +106,24 @@ impl Default for ContainerFileTable {
 }
 
 impl ContainerEntry {
-    /// Create a new container entry
+    /// Create a new container entry with a fixed-size ekey
     pub fn new(
         ekey: [u8; 9],
+        file_size: u32,
+        compressed_size: Option<u32>,
+        content_key: Option<[u8; 16]>,
+    ) -> Self {
+        Self {
+            ekey: ekey.to_vec(),
+            file_size,
+            compressed_size,
+            content_key,
+        }
+    }
+
+    /// Create a new container entry with a variable-length ekey
+    pub fn with_ekey(
+        ekey: Vec<u8>,
         file_size: u32,
         compressed_size: Option<u32>,
         content_key: Option<[u8; 16]>,
@@ -126,9 +141,10 @@ impl ContainerEntry {
         reader: &mut R,
         endian: binrw::Endian,
         include_ckey: bool,
+        ekey_size: u8,
     ) -> BinResult<Self> {
-        // Read EKey (9 bytes)
-        let mut ekey = [0u8; 9];
+        // Read EKey (variable length from header)
+        let mut ekey = vec![0u8; ekey_size as usize];
         reader.read_exact(&mut ekey)?;
 
         // Read file size
@@ -158,9 +174,16 @@ impl ContainerEntry {
         writer: &mut W,
         endian: binrw::Endian,
         include_ckey: bool,
+        ekey_size: u8,
     ) -> BinResult<()> {
-        // Write EKey
-        writer.write_all(&self.ekey)?;
+        // Write EKey, padded or truncated to ekey_size
+        let size = ekey_size as usize;
+        if self.ekey.len() >= size {
+            writer.write_all(&self.ekey[..size])?;
+        } else {
+            writer.write_all(&self.ekey)?;
+            writer.write_all(&vec![0u8; size - self.ekey.len()])?;
+        }
 
         // Write file size
         self.file_size.write_options(writer, endian, ())?;
@@ -187,7 +210,7 @@ impl ContainerEntry {
 
     /// Get EKey as hex string
     pub fn ekey_hex(&self) -> String {
-        hex::encode(self.ekey)
+        hex::encode(&self.ekey)
     }
 
     /// Get content key as hex string (if present)

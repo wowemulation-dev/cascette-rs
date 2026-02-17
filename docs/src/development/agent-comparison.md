@@ -65,52 +65,39 @@ PR [#35](https://github.com/wowemulation-dev/cascette-rs/pull/35):
 - Archive group TOC hash: `ArchiveGroupBuilder` computes TOC hash
   from first keys of each data chunk instead of writing zeros
 
+Pending PR (fix/formats-agent-comparison):
+
+- Encoding entry parsing uses dynamic key sizes from header
+  (`ckey_hash_size`, `ekey_hash_size`) instead of hardcoded 16
+- Batch encoding lookups: `batch_find_encodings()`,
+  `batch_find_all_encodings()`, `batch_find_especs()` using
+  sort-and-merge algorithm matching Agent's batch functions
+- Archive index builder uses configurable `key_size`,
+  `offset_bytes`, `size_bytes` instead of hardcoded 16/4/4
+- TOC hash corrected to `MD5(toc_keys || block_hashes)[:hash_bytes]`
+  with per-block MD5 hashes, matching Agent's `BuildMergedIndex`
+- Archive group builder uses last key per block for TOC (was first)
+- TVFS container table reads `ekey_size` bytes from header instead
+  of hardcoded 9. `ContainerEntry.ekey` changed to `Vec<u8>`
+- TVFS EST (Encoding Spec Table) parsed when
+  `TVFS_FLAG_ENCODING_SPEC` flag is set
+
 ## Format Parsing Issues
 
-### Encoding Table Hardcoded Key Size
-
-cascette-rs hardcodes key size to 16 bytes in the encoding
-module's `IndexEntry`, `CKeyPageEntry`, and `EKeyPageEntry`,
-ignoring the header's `ckey_hash_size` and `ekey_hash_size`
-fields. The archive module's `IndexEntry` uses variable-length
-keys via `Vec<u8>` sized from `footer.ekey_length`. This works
-for all known CASC data but diverges from Agent's flexible key
-size support in the encoding table. Making encoding key size
-dynamic requires changing the crypto types (`ContentKey`/
-`EncodingKey` are `[u8; 16]` wrappers), threading sizes through
-BinRead Args, and updating all consumers.
+No open format parsing issues from Agent.exe comparison.
 
 ## Performance Issues
-
-### Encoding Table Batch Lookups
-
-Agent provides 4 batch lookup functions
-(`BatchLookupCKeys`, `BatchLookupCKeyPages`, `BatchLookupEKeys`,
-`BatchLookupEKeysSorted`) that sort input keys and scan pages in
-a single pass.
-
-cascette-rs has no batch lookup API. Individual lookups use binary
-search on the page index (O(log p + e)), but batch operations
-would be more efficient for bulk resolution.
 
 ### CDN Index Merge
 
 Agent implements k-way merge sort via binary min-heap
 (`HeapSiftDown`/`HeapSiftUp`) for combining multiple CDN indices.
-This is O(N log K) where K is the number of indices, with
-per-block MD5 validation computed during the merge.
+This is O(N log K) where K is the number of indices.
 
 cascette-rs `ArchiveGroupBuilder` uses HashMap deduplication +
-final sort: O(N log N). Per-block page hashes are not computed
-during building. TOC hash and footer hash are computed correctly.
-
-### Archive Index Builder Hardcoded Key Size
-
-`ArchiveIndexBuilder::build()` hardcodes 4-byte offsets and a
-16-byte TOC key size. Entry keys use `Vec<u8>` (variable length),
-but `ENTRY_SIZE` (24 bytes) and chunk calculations assume a fixed
-record layout. Cannot generate 9-byte truncated key indices used
-by local CASC storage.
+final sort: O(N log N). Per-block MD5 hashes, TOC hash, and
+footer hash are computed correctly. The k-way merge optimization
+is not implemented.
 
 ## Protocol Issues
 
@@ -206,19 +193,7 @@ No open root file issues from Agent.exe comparison.
 
 ## TVFS Issues
 
-### Hardcoded 9-Byte EKey Size
-
-`ContainerEntry` (`container_table.rs:19`) uses `[u8; 9]` for
-EKey. The header has `ekey_size` and `pkey_size` fields that could
-vary, but cascette-rs always reads 9 bytes. Matches Agent's
-TACT 3.13.3 behavior but would break on future format changes.
-
-### No Encoding Spec Table Parsing
-
-The header supports optional EST (Encoding Spec Table) offset/size
-fields (`header.rs:62-69`), but no code parses the EST data. The
-`TVFS_FLAG_ENCODING_SPEC` flag is recognized but the table content
-is ignored.
+No open TVFS issues from Agent.exe comparison.
 
 ## Local Storage Issues (cascette-client-storage)
 
@@ -510,7 +485,7 @@ These cascette-rs implementations match Agent.exe behavior:
 | Root file V1-V4 | MFST/TSFM magic | Interleaved and separated formats |
 | TVFS header validation | `format_version`, key sizes | `TvfsHeader::validate()` called on parse |
 | TVFS path table | Prefix tree with varints | LEB128-like encoding |
-| TVFS container table | 9-byte EKey entries | EKey + file\_size + optional CKey |
+| TVFS container table | Variable EKey entries | `ekey_size` from header, `Vec<u8>` EKey + file\_size + optional CKey |
 | Encoding header validation | 8-field check | `EncodingHeader::validate()` all fields |
 | ESpec table validation | Null-terminated, no empty | Rejects empty strings and unterminated data |
 | Install manifest V1+V2 | Version 1-2, file\_type byte | `InstallFileEntry::file_type` for V2 |
@@ -525,4 +500,8 @@ These cascette-rs implementations match Agent.exe behavior:
 | Root empty block handling | Skip empty, continue parsing | EOF-based termination, empty blocks do not truncate |
 | Root format scope | WoW-specific root format | Module docs note WoW-specific nature |
 | Encoding page lookup | `PageBinarySearch` O(log p) | `partition_point` on page index `first_key` |
-| Archive group TOC hash | MD5 of first keys per chunk | `calculate_toc_hash()` on chunk first keys (build path only; parse path skips TOC hash validation -- algorithm does not match Agent's stored values) |
+| Archive group TOC hash | `MD5(toc_keys \|\| block_hashes)[:hash_bytes]` | `calculate_toc_hash()` with per-block MD5 hashes, last key per block |
+| Encoding dynamic key sizes | `ckey_hash_size`/`ekey_hash_size` from header | `CKeyPageEntry` and `EKeyPageEntry` use header sizes via BinRead Args |
+| Encoding batch lookups | `BatchLookupCKeys`/`BatchLookupEKeys` | `batch_find_encodings()`, `batch_find_all_encodings()`, `batch_find_especs()` |
+| Archive index builder config | Variable key/offset/size fields | `ArchiveIndexBuilder::with_config(key_size, offset_bytes, size_bytes)` |
+| TVFS EST parsing | EST table when flag bit 1 set | `EstTable` with null-terminated strings, parsed from header offsets |

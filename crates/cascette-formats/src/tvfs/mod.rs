@@ -18,6 +18,7 @@
 mod builder;
 mod container_table;
 mod error;
+mod est_table;
 mod header;
 mod path_table;
 mod utils;
@@ -26,6 +27,7 @@ mod vfs_table;
 pub use builder::TvfsBuilder;
 pub use container_table::{ContainerEntry, ContainerFileTable};
 pub use error::{TvfsError, TvfsResult};
+pub use est_table::EstTable;
 pub use header::{
     TVFS_FLAG_ENCODING_SPEC, TVFS_FLAG_INCLUDE_CKEY, TVFS_FLAG_PATCH_SUPPORT,
     TVFS_FLAG_WRITE_SUPPORT, TvfsHeader,
@@ -49,6 +51,8 @@ pub struct TvfsFile {
     pub vfs_table: VfsTable,
     /// Container file table with EKeys
     pub container_table: ContainerFileTable,
+    /// Encoding spec table (present when TVFS_FLAG_ENCODING_SPEC is set)
+    pub est_table: Option<EstTable>,
 }
 
 impl BinRead for TvfsFile {
@@ -75,14 +79,27 @@ impl BinRead for TvfsFile {
         let container_table = ContainerFileTable::read_options(
             reader,
             endian,
-            (header.cft_table_size, header.flags),
+            (header.cft_table_size, header.flags, header.ekey_size),
         )?;
+
+        // Load EST table if present
+        let est_table = if header.has_encoding_spec() {
+            if let (Some(offset), Some(size)) = (header.est_table_offset, header.est_table_size) {
+                reader.seek(SeekFrom::Start(u64::from(offset)))?;
+                Some(EstTable::read_options(reader, endian, (size,))?)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
 
         Ok(Self {
             header,
             path_table,
             vfs_table,
             container_table,
+            est_table,
         })
     }
 }
@@ -106,8 +123,16 @@ impl BinWrite for TvfsFile {
         self.vfs_table.write_options(writer, endian, ())?;
 
         // Write container file table
-        self.container_table
-            .write_options(writer, endian, (self.header.flags,))?;
+        self.container_table.write_options(
+            writer,
+            endian,
+            (self.header.flags, self.header.ekey_size),
+        )?;
+
+        // Write EST table if present
+        if let Some(ref est_table) = self.est_table {
+            est_table.write_options(writer, endian, ())?;
+        }
 
         Ok(())
     }
@@ -336,7 +361,7 @@ mod tests {
         let content_key = [0x34; 16];
         let entry = ContainerEntry::new(ekey, 1024, Some(512), Some(content_key));
 
-        assert_eq!(entry.ekey, ekey);
+        assert_eq!(entry.ekey, ekey.to_vec());
         assert_eq!(entry.file_size, 1024);
         assert_eq!(entry.effective_compressed_size(), 512);
         assert!(entry.has_content_key());

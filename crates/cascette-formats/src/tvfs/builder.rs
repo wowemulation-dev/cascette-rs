@@ -64,6 +64,27 @@ impl TvfsBuilder {
         self.max_depth = self.max_depth.max(depth);
     }
 
+    /// Add a file to the TVFS with a variable-length encoding key
+    pub fn add_file_with_ekey(
+        &mut self,
+        path: String,
+        ekey: Vec<u8>,
+        file_size: u32,
+        content_key: Option<[u8; 16]>,
+    ) {
+        let compressed_size = if (self.flags & TVFS_FLAG_INCLUDE_CKEY) != 0 {
+            Some(file_size)
+        } else {
+            None
+        };
+
+        let entry = ContainerEntry::with_ekey(ekey, file_size, compressed_size, content_key);
+        let depth = path.split('/').filter(|s| !s.is_empty()).count() as u16;
+
+        self.files.push((path, entry));
+        self.max_depth = self.max_depth.max(depth);
+    }
+
     /// Build the TVFS file
     pub fn build(&mut self) -> TvfsResult<Vec<u8>> {
         // Sort files for optimal path table generation
@@ -84,6 +105,7 @@ impl TvfsBuilder {
             path_table,
             vfs_table,
             container_table,
+            est_table: None,
         };
 
         // Serialize to bytes
@@ -235,7 +257,8 @@ impl TvfsBuilder {
         // Calculate table sizes
         let path_table_size = self.calculate_path_table_size(path_table);
         let vfs_table_size = vfs_table.table_size();
-        let container_table_size = container_table.calculate_size(header.includes_content_keys());
+        let container_table_size =
+            container_table.calculate_size(header.includes_content_keys(), header.ekey_size);
 
         // Calculate offsets
         let header_size = u32::from(header.header_size);

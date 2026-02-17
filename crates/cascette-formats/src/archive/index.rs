@@ -237,9 +237,14 @@ pub struct IndexFooter {
 
 impl IndexFooter {
     /// Create new footer with standard CASC values
-    pub fn new(toc_hash: [u8; 8], element_count: u32) -> Self {
+    pub fn new(toc_hash: Vec<u8>, element_count: u32) -> Self {
         let mut footer = Self {
-            toc_hash,
+            toc_hash: {
+                let mut arr = [0u8; 8];
+                let copy_len = toc_hash.len().min(8);
+                arr[..copy_len].copy_from_slice(&toc_hash[..copy_len]);
+                arr
+            },
             version: 1,
             reserved: [0, 0],
             page_size_kb: 4,
@@ -518,20 +523,13 @@ impl ArchiveIndex {
             toc.push(key);
         }
 
-        // Then skip over ALL the hashes (we don't need them for now)
+        // Skip per-block hashes. The correct TOC hash algorithm is
+        // `toc_hash = MD5(toc_keys || block_hashes)[:hash_bytes]`
+        // (from Agent.exe BuildMergedIndex at 0x7118c7).
+        // Validation is not enforced on parse because Blizzard-generated
+        // files may use a different generation path.
         let hash_section_size = chunk_count * footer.footer_hash_bytes as usize;
         reader.seek(SeekFrom::Current(hash_section_size as i64))?;
-
-        // TOC hash validation is intentionally disabled.
-        //
-        // Research shows no reference implementation (CascLib, TACT.Net, rustycasc) validates
-        // this field. Multiple algorithms were tested against WoW Classic 1.15.2.55140 files:
-        // - MD5(keys)[:8], MD5(keys)[8:16]
-        // - MD5(keys+hashes)[:8], MD5(keys+hashes)[8:16]
-        // - MD5(keys+page_hashes+last_page_hash)[:8] (TACT.Net generation algorithm)
-        //
-        // None matched Blizzard's stored values. The field appears to be metadata only,
-        // not used for integrity verification.
 
         // Read entries from chunks
         reader.seek(SeekFrom::Start(0))?;
@@ -598,20 +596,20 @@ impl ArchiveIndex {
     /// Build archive index to writer
     pub fn build<W: Write + Seek>(&self, mut writer: W) -> ArchiveResult<()> {
         let chunk_count = self.footer.element_count as usize;
-        let block_size = (self.footer.page_size_kb as usize) * 1024; // Convert KB to bytes
+        let block_size = (self.footer.page_size_kb as usize) * 1024;
         let record_size = self.footer.ekey_length as usize
             + self.footer.size_bytes as usize
             + self.footer.offset_bytes as usize;
         let records_per_block = block_size / record_size;
+        let hash_bytes = self.footer.footer_hash_bytes;
 
-        // Write entry chunks
+        // Write entry chunks and compute block hashes
         let mut entry_idx = 0;
+        let mut block_hashes = Vec::with_capacity(chunk_count);
         for chunk_idx in 0..chunk_count {
             let mut chunk_data = vec![0u8; block_size];
 
-            // Write entries for this chunk
             let entries_in_chunk = if chunk_idx == chunk_count - 1 {
-                // Last chunk gets remaining entries
                 self.entries.len() - entry_idx
             } else {
                 records_per_block.min(self.entries.len() - entry_idx)
@@ -628,13 +626,17 @@ impl ArchiveIndex {
                 }
             }
 
-            // Chunk is automatically padded with zeros
+            block_hashes.push(calculate_block_hash(&chunk_data, hash_bytes));
             writer.write_all(&chunk_data)?;
         }
 
-        // Write table of contents
+        // Write table of contents: keys then block hashes
         for key in &self.toc {
             writer.write_all(key)?;
+        }
+
+        for block_hash in &block_hashes {
+            writer.write_all(block_hash)?;
         }
 
         // Write footer
@@ -653,20 +655,25 @@ impl ArchiveIndex {
         self.find_all_key_matches(encoding_key)
     }
 
+    /// Compute records per block from footer fields
+    fn records_per_block(&self) -> usize {
+        let block_size = (self.footer.page_size_kb as usize) * 1024;
+        let record_size = self.footer.ekey_length as usize
+            + self.footer.size_bytes as usize
+            + self.footer.offset_bytes as usize;
+        block_size / record_size
+    }
+
     /// Binary search for key (variable-length for CDN archives)
     pub fn binary_search_key(&self, search_key: &[u8]) -> Option<&IndexEntry> {
-        // Binary search for chunk using TOC
-        // The TOC contains the maximum key for each chunk
-        // We need to find the first chunk where max_key >= search_key
+        let records_per_block = self.records_per_block();
+
         let chunk_idx = match self.toc.binary_search_by(|toc_key| {
-            // Compare keys (variable length)
             let compare_len = toc_key.len().min(search_key.len());
             toc_key[..compare_len].cmp(&search_key[..compare_len])
         }) {
             Ok(idx) => idx,
             Err(idx) => {
-                // If idx == 0, the key is smaller than any chunk's max
-                // If idx == toc.len(), the key is larger than any chunk's max
                 if idx >= self.toc.len() {
                     return None;
                 }
@@ -674,13 +681,10 @@ impl ArchiveIndex {
             }
         };
 
-        // Binary search within chunk
-        let chunk_start = chunk_idx * MAX_ENTRIES_PER_CHUNK;
-        let chunk_end = (chunk_start + MAX_ENTRIES_PER_CHUNK).min(self.entries.len());
-
+        let chunk_start = chunk_idx * records_per_block;
+        let chunk_end = (chunk_start + records_per_block).min(self.entries.len());
         let chunk_entries = &self.entries[chunk_start..chunk_end];
 
-        // Compare full variable-length keys (exact match)
         match chunk_entries.binary_search_by(|e| e.encoding_key.as_slice().cmp(search_key)) {
             Ok(idx) => Some(&self.entries[chunk_start + idx]),
             Err(_) => None,
@@ -757,14 +761,15 @@ impl ArchiveIndex {
 
     /// Validate TOC matches actual entries
     fn validate_toc_consistency(&self) -> ArchiveResult<()> {
-        let expected_chunks = calculate_chunks(self.entries.len());
+        let records_per_block = self.records_per_block();
+        let expected_chunks = self.entries.len().div_ceil(records_per_block);
         if self.toc.len() != expected_chunks {
             return Err(ArchiveError::TocInconsistent);
         }
 
         for (chunk_idx, expected_last_key) in self.toc.iter().enumerate() {
-            let chunk_start = chunk_idx * MAX_ENTRIES_PER_CHUNK;
-            let chunk_end = (chunk_start + MAX_ENTRIES_PER_CHUNK).min(self.entries.len());
+            let chunk_start = chunk_idx * records_per_block;
+            let chunk_end = (chunk_start + records_per_block).min(self.entries.len());
 
             if chunk_end > chunk_start {
                 let actual_last_key = &self.entries[chunk_end - 1].encoding_key;
@@ -795,48 +800,41 @@ impl ArchiveIndex {
     /// Write archive index to writer
     pub fn write_to<W: Write + Seek>(&self, mut writer: W) -> ArchiveResult<()> {
         let chunk_count = calculate_chunks(self.entries.len());
-        let block_size = CHUNK_SIZE; // Standard block size
+        let block_size = CHUNK_SIZE;
+        let hash_bytes = self.footer.footer_hash_bytes;
 
-        // Write entry chunks
+        // Write entry chunks and compute block hashes
         let mut entry_idx = 0;
+        let mut block_hashes = Vec::with_capacity(chunk_count);
         for chunk_idx in 0..chunk_count {
             let mut chunk_data = vec![0u8; block_size];
             let mut cursor = Cursor::new(&mut chunk_data);
 
             let entries_in_chunk = if chunk_idx == chunk_count - 1 {
-                // Last chunk gets remaining entries
                 self.entries.len() - entry_idx
             } else {
                 MAX_ENTRIES_PER_CHUNK.min(self.entries.len() - entry_idx)
             };
 
-            // Write entries for this chunk
             for _ in 0..entries_in_chunk {
                 if entry_idx < self.entries.len() {
-                    let entry_bytes = self.entries[entry_idx].to_bytes(4, 4)?; // Standard 4-byte size and offset
+                    let entry_bytes = self.entries[entry_idx].to_bytes(4, 4)?;
                     cursor.write_all(&entry_bytes)?;
                     entry_idx += 1;
                 }
             }
 
-            // Write chunk to output
+            block_hashes.push(calculate_block_hash(&chunk_data, hash_bytes));
             writer.write_all(&chunk_data)?;
         }
 
-        // Write table of contents (keys)
+        // Write table of contents: keys then block hashes
         for key in &self.toc {
-            // Pad or truncate key to the expected TOC key size
-            let toc_key_size = 16_usize; // Use 16 bytes for full key support
-            let mut toc_key_padded = vec![0u8; toc_key_size];
-            let copy_len = key.len().min(toc_key_size);
-            toc_key_padded[..copy_len].copy_from_slice(&key[..copy_len]);
-            writer.write_all(&toc_key_padded)?;
+            writer.write_all(key)?;
         }
 
-        // Write TOC hashes (placeholder for now - 8 bytes each)
-        for _ in &self.toc {
-            let placeholder_hash = [0u8; 8];
-            writer.write_all(&placeholder_hash)?;
+        for block_hash in &block_hashes {
+            writer.write_all(block_hash)?;
         }
 
         // Write footer
@@ -849,13 +847,36 @@ impl ArchiveIndex {
 /// Archive index builder
 pub struct ArchiveIndexBuilder {
     entries: Vec<IndexEntry>,
+    /// Key size in bytes (default 16)
+    key_size: u8,
+    /// Offset field size in bytes (default 4)
+    offset_bytes: u8,
+    /// Size field size in bytes (default 4)
+    size_bytes: u8,
+    /// Footer hash size in bytes (default 8)
+    hash_bytes: u8,
 }
 
 impl ArchiveIndexBuilder {
-    /// Create new builder
+    /// Create new builder with default config (16-byte keys, 4-byte offset/size)
     pub fn new() -> Self {
         Self {
             entries: Vec::new(),
+            key_size: 16,
+            offset_bytes: 4,
+            size_bytes: 4,
+            hash_bytes: 8,
+        }
+    }
+
+    /// Create new builder with custom field sizes
+    pub fn with_config(key_size: u8, offset_bytes: u8, size_bytes: u8) -> Self {
+        Self {
+            entries: Vec::new(),
+            key_size,
+            offset_bytes,
+            size_bytes,
+            hash_bytes: 8,
         }
     }
 
@@ -882,63 +903,69 @@ impl ArchiveIndexBuilder {
 
     /// Build index and write to writer
     pub fn build<W: Write + Seek>(mut self, mut writer: W) -> ArchiveResult<ArchiveIndex> {
-        // Sort entries by truncated encoding key
+        // Sort entries by encoding key
         self.entries.sort();
 
-        let chunk_count = calculate_chunks(self.entries.len());
+        let key_size = self.key_size as usize;
+        let entry_size = key_size + self.size_bytes as usize + self.offset_bytes as usize;
+        let max_entries_per_chunk = CHUNK_SIZE / entry_size;
+        let chunk_count = self.entries.len().div_ceil(max_entries_per_chunk);
         let mut toc = Vec::with_capacity(chunk_count);
 
-        // Write entry chunks and build TOC
+        // Write entry chunks, build TOC, and compute per-block hashes
+        let hash_bytes = self.hash_bytes;
         let mut entry_idx = 0;
+        let mut block_hashes = Vec::with_capacity(chunk_count);
         for chunk_idx in 0..chunk_count {
             let mut chunk_data = vec![0u8; CHUNK_SIZE];
             let mut cursor = Cursor::new(&mut chunk_data);
 
             let entries_in_chunk = if chunk_idx == chunk_count - 1 {
-                // Last chunk gets remaining entries
                 self.entries.len() - entry_idx
             } else {
-                MAX_ENTRIES_PER_CHUNK.min(self.entries.len() - entry_idx)
+                max_entries_per_chunk.min(self.entries.len() - entry_idx)
             };
 
-            // Write entries for this chunk
             for _ in 0..entries_in_chunk {
                 if entry_idx < self.entries.len() {
-                    let entry_bytes = self.entries[entry_idx].to_bytes(4, 4)?; // Standard 4-byte size and offset
+                    let entry_bytes =
+                        self.entries[entry_idx].to_bytes(self.size_bytes, self.offset_bytes)?;
                     cursor.write_all(&entry_bytes)?;
                     entry_idx += 1;
                 }
             }
 
-            // Record last key for TOC (using variable-length keys)
+            // Record last key for TOC
             if entries_in_chunk > 0 {
                 let last_entry = &self.entries[entry_idx - 1];
-                toc.push(last_entry.encoding_key.clone());
+                // Pad or truncate key to key_size for TOC
+                let mut toc_key = vec![0u8; key_size];
+                let copy_len = last_entry.encoding_key.len().min(key_size);
+                toc_key[..copy_len].copy_from_slice(&last_entry.encoding_key[..copy_len]);
+                toc.push(toc_key);
             }
 
-            // Write chunk to output
+            block_hashes.push(calculate_block_hash(&chunk_data, hash_bytes));
             writer.write_all(&chunk_data)?;
         }
 
-        // Write table of contents (keys)
+        // Write table of contents: keys then block hashes
         for key in &toc {
-            // Pad or truncate key to the expected TOC key size (max of ekey_length, 9)
-            let toc_key_size = 16_usize; // Use 16 bytes for full key support
-            let mut toc_key_padded = vec![0u8; toc_key_size];
-            let copy_len = key.len().min(toc_key_size);
-            toc_key_padded[..copy_len].copy_from_slice(&key[..copy_len]);
-            writer.write_all(&toc_key_padded)?;
+            writer.write_all(key)?;
         }
 
-        // Write TOC hashes (placeholder for now - 8 bytes each)
-        for _ in &toc {
-            let placeholder_hash = [0u8; 8];
-            writer.write_all(&placeholder_hash)?;
+        for block_hash in &block_hashes {
+            writer.write_all(block_hash)?;
         }
 
-        // Create and write footer
-        let toc_hash = calculate_toc_hash(&toc);
-        let footer = IndexFooter::new(toc_hash, self.entries.len() as u32);
+        // Compute TOC hash and create footer
+        let toc_hash = calculate_toc_hash(&toc, &block_hashes, hash_bytes);
+        let mut footer = IndexFooter::new(toc_hash, self.entries.len() as u32);
+        footer.ekey_length = self.key_size;
+        footer.offset_bytes = self.offset_bytes;
+        footer.size_bytes = self.size_bytes;
+        footer.footer_hash_bytes = hash_bytes;
+        footer.footer_hash = footer.calculate_footer_hash();
         footer.write(&mut writer)?;
 
         Ok(ArchiveIndex {
@@ -995,9 +1022,12 @@ impl ArchiveIndexBuilder {
     /// # }
     /// ```
     pub fn from_archive_index(index: &ArchiveIndex) -> Self {
-        let mut builder = Self::new();
+        let mut builder = Self::with_config(
+            index.footer.ekey_length,
+            index.footer.offset_bytes,
+            index.footer.size_bytes,
+        );
 
-        // Copy all entries from existing index
         for entry in &index.entries {
             builder.entries.push(entry.clone());
         }
@@ -1148,20 +1178,13 @@ impl ChunkedArchiveIndex {
             toc.push(key);
         }
 
-        // Then skip over ALL the hashes (we don't need them for now)
+        // Skip per-block hashes. The correct TOC hash algorithm is
+        // `toc_hash = MD5(toc_keys || block_hashes)[:hash_bytes]`
+        // (from Agent.exe BuildMergedIndex at 0x7118c7).
+        // Validation is not enforced on parse because Blizzard-generated
+        // files may use a different generation path.
         let hash_section_size = chunk_count * footer.footer_hash_bytes as usize;
         file.seek(SeekFrom::Current(hash_section_size as i64))?;
-
-        // TOC hash validation is intentionally disabled.
-        //
-        // Research shows no reference implementation (CascLib, TACT.Net, rustycasc) validates
-        // this field. Multiple algorithms were tested against WoW Classic 1.15.2.55140 files:
-        // - MD5(keys)[:8], MD5(keys)[8:16]
-        // - MD5(keys+hashes)[:8], MD5(keys+hashes)[8:16]
-        // - MD5(keys+page_hashes+last_page_hash)[:8] (TACT.Net generation algorithm)
-        //
-        // None matched Blizzard's stored values. The field appears to be metadata only,
-        // not used for integrity verification.
 
         Ok(Self {
             chunks: vec![None; chunk_count],
@@ -1241,21 +1264,31 @@ impl ChunkedArchiveIndex {
 
 /// Helper functions
 ///
-/// Calculate TOC hash using MD5 (upper 8 bytes)
-pub fn calculate_toc_hash(toc: &[Vec<u8>]) -> [u8; 8] {
-    // Concatenate all TOC keys for hashing
+/// Calculate TOC hash from TOC keys and per-block hashes.
+///
+/// Algorithm (from Agent.exe `BuildMergedIndex` at 0x7118c7):
+/// `toc_hash = MD5(toc_keys || block_hashes)[:hash_bytes]`
+pub fn calculate_toc_hash(
+    toc_keys: &[Vec<u8>],
+    block_hashes: &[Vec<u8>],
+    hash_bytes: u8,
+) -> Vec<u8> {
     let mut data = Vec::new();
-    for key in toc {
+    for key in toc_keys {
         data.extend_from_slice(key);
     }
+    for hash in block_hashes {
+        data.extend_from_slice(hash);
+    }
 
-    // Calculate MD5 hash using cascette-crypto
     let content_key = cascette_crypto::md5::ContentKey::from_data(&data);
+    content_key.as_bytes()[..hash_bytes as usize].to_vec()
+}
 
-    // Return upper 8 bytes of MD5 hash (like reference implementation)
-    let mut result = [0u8; 8];
-    result.copy_from_slice(&content_key.as_bytes()[8..16]);
-    result
+/// Calculate per-block hash: `MD5(block_data)[:hash_bytes]`
+pub fn calculate_block_hash(block_data: &[u8], hash_bytes: u8) -> Vec<u8> {
+    let content_key = cascette_crypto::md5::ContentKey::from_data(block_data);
+    content_key.as_bytes()[..hash_bytes as usize].to_vec()
 }
 
 /// Check if entries are sorted by encoding key
@@ -1342,7 +1375,7 @@ mod tests {
 
     #[test]
     fn test_footer_validation() {
-        let toc_hash = [0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0];
+        let toc_hash = vec![0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0];
         let mut footer = IndexFooter::new(toc_hash, 1);
         assert!(footer.is_valid());
         assert!(footer.validate_format().is_ok());
@@ -1353,7 +1386,7 @@ mod tests {
 
     #[test]
     fn test_footer_format_validation() {
-        let toc_hash = [0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0];
+        let toc_hash = vec![0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0];
         let mut footer = IndexFooter::new(toc_hash, 1);
 
         // Valid format
@@ -1395,7 +1428,7 @@ mod tests {
 
     #[test]
     fn test_footer_file_size_matching() {
-        let toc_hash = [0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0];
+        let toc_hash = vec![0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0];
         let footer = IndexFooter::new(toc_hash, 10);
 
         // Compute expected size
@@ -1622,25 +1655,32 @@ mod tests {
 
     #[test]
     fn test_toc_hash_calculation() {
-        let toc = vec![
+        let toc_keys = vec![
             vec![0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09],
             vec![0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10, 0x11, 0x12],
         ];
+        let block_hashes = vec![vec![0xAA; 8], vec![0xBB; 8]];
 
-        let hash1 = calculate_toc_hash(&toc);
-        let hash2 = calculate_toc_hash(&toc);
+        let hash1 = calculate_toc_hash(&toc_keys, &block_hashes, 8);
+        let hash2 = calculate_toc_hash(&toc_keys, &block_hashes, 8);
 
         // Hash should be deterministic
         assert_eq!(hash1, hash2);
+        assert_eq!(hash1.len(), 8);
 
         // Different TOC should produce different hash
-        let toc2 = vec![
+        let toc_keys2 = vec![
             vec![0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09],
             vec![0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10, 0x11, 0x13], // Changed last byte
         ];
 
-        let hash3 = calculate_toc_hash(&toc2);
+        let hash3 = calculate_toc_hash(&toc_keys2, &block_hashes, 8);
         assert_ne!(hash1, hash3);
+
+        // Different block hashes should also produce different hash
+        let block_hashes2 = vec![vec![0xCC; 8], vec![0xBB; 8]];
+        let hash4 = calculate_toc_hash(&toc_keys, &block_hashes2, 8);
+        assert_ne!(hash1, hash4);
     }
 
     #[test]
@@ -2413,7 +2453,9 @@ mod tests {
                 prop::array::uniform8(0u8..255),
                 1u32..100u32, // reasonable element count for testing
             )
-                .prop_map(|(toc_hash, element_count)| IndexFooter::new(toc_hash, element_count))
+                .prop_map(|(toc_hash, element_count)| {
+                    IndexFooter::new(toc_hash.to_vec(), element_count)
+                })
         }
 
         proptest! {
