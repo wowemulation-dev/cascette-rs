@@ -155,61 +155,57 @@ The `cascette-client-storage` crate provides initial local CASC storage
 support. The following issues were identified by comparing against
 Agent.exe (CASC 1.5.9) reverse engineering.
 
-### Write Path Missing Local Header
+### ~~Write Path Missing Local Header~~ (Fixed)
 
-Agent writes a 30-byte (0x1E) local header before each BLTE entry in
-`.data` files:
+Fixed in `ebbf055`. The write path now prepends a 30-byte local header
+before each BLTE entry, with reversed encoding key, size-with-header,
+flags, and checksums. Both read and write paths handle the header.
 
-```text
-0x00-0x0F: Encoding key (16 bytes, reversed)
-0x10-0x13: Size including header (4 bytes, BE)
-0x14-0x15: Flags (2 bytes)
-0x16-0x19: ChecksumA (4 bytes)
-0x1A-0x1D: ChecksumB (4 bytes)
-0x1E+:     BLTE data
-```
+### ~~Encoding Key Derivation on Write~~ (Fixed)
 
-The read path (`Installation::decode_blte`) correctly handles this
-header. The write path (`ArchiveManager::write_content`) does not
-write it. Data written by cascette-rs would not be readable by the
-official client.
+Fixed in `ebbf055`. Encoding key is now `MD5(blte_encoded_data)`
+matching Agent.exe behavior. The key is a property of the encoded
+content, not the storage location.
 
-### Encoding Key Derivation on Write
+### ~~Index Write Format Incorrect~~ (Fixed)
 
-`Installation::write_file()` computes the encoding key from
-`MD5(archive_id || archive_offset)`. Agent computes encoding keys as
-the MD5 hash of the BLTE-encoded file content. The encoding key is a
-property of the encoded data, not the storage location.
+Fixed in `07591c4`. `save_index()` now writes IDX Journal v7 format
+with guarded block headers (size + Jenkins hash), `IndexHeaderV2`,
+and a second guarded block for entries.
 
-### Index Write Format Incorrect
+### ~~No Jenkins Hash Validation~~ (Fixed)
 
-`IndexManager::save_index()` writes a raw `IndexHeader` struct
-directly to disk. Agent writes the IDX Journal v7 format: guarded
-block header (size + Jenkins hash), then `IndexHeaderV2`, then a
-second guarded block for entries. Index files written by cascette-rs
-would not be readable by the official client.
+Fixed in `07591c4`. Jenkins `hashlittle()` from cascette-crypto is
+used for both read validation and write computation of guarded block
+hashes.
 
-### No Jenkins Hash Validation
+### ~~No Atomic Index Commits~~ (Fixed)
 
-Index guarded blocks use Jenkins hash for integrity validation. The
-read path parses the hash fields but does not verify them. The write
-path does not compute them. Agent validates Jenkins hashes on read and
-computes them on write.
-
-### No Atomic Index Commits
-
-Agent uses a flush-and-bind pattern with 3-retry atomic commits when
-persisting index files. If a write fails, the previous index version
-remains intact. cascette-rs writes directly to the target file without
-atomicity, risking corruption on interrupted writes.
+Fixed in `07591c4`. Index writes use temp file + fsync + rename
+with 3 retries, matching Agent's flush-and-bind pattern.
 
 ### Missing Key Mapping Table
 
 Agent uses a two-tier LSM-tree Key Mapping Table (KMT) as the primary
-on-disk structure for key-to-location resolution. KMT v8 has sorted
-sections (0x20-byte buckets) and update sections (0x400-byte pages
-with 0x19 entries, minimum 0x7800 bytes). Jenkins lookup3 hashes
-distribute keys across buckets.
+on-disk structure for key-to-location resolution. The KMT file header
+version is 7 (verified via BinaryNinja decompilation of
+`casc::KeyMappingTable::WriteHeader` at 0x73a35c). The .idx files ARE
+KMT files. Key state tracking uses a separate format version (v8, from
+`key_state_v8.cpp`).
+
+KMT v7 structure:
+- 8-byte guarded block header + 16-byte file header
+- Sorted section: binary-searchable 18-byte entries (9 EKey + 5
+  StorageOffset BE + 4 EncodedSize BE)
+- Update section: append-only log in 0x1000-byte pages
+- Jenkins lookup3 hashes for integrity validation
+
+Agent rejects KMT versions < 7. Field sizes must be exactly (4, 5, 9)
+for EncodedSizeLength, StorageOffsetLength, and EKeyLength.
+
+A historical V5 format exists (`data.i##` filenames, 36-byte flat
+header, no guarded blocks) used by Heroes of the Storm build 29049.
+Agent.exe does not support V5. CascLib supports both.
 
 cascette-rs uses in-memory `BTreeMap` indices with no KMT equivalent.
 This limits scalability for large installations and prevents
