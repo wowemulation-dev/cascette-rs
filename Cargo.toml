@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "crates/cascette-cache",
+    "crates/cascette-client-storage",
     "crates/cascette-crypto",
     "crates/cascette-formats",
     "crates/cascette-protocol",
@@ -31,6 +32,12 @@ rand = "0.10"
 bytes = "1.11"
 dashmap = "6.1"
 getrandom = "0.4"
+
+# Concurrency
+parking_lot = "0.12"
+
+# Memory-mapped I/O
+memmap2 = "0.9"
 
 # Compression
 flate2 = "1.1"

@@ -4,8 +4,7 @@ Comparison of cascette-rs against the Battle.net Agent binary
 (TACT 3.13.3, CASC 1.5.9) based on reverse engineering of
 Agent.exe. Issues are organized by severity and category.
 
-Source: [management/docs/reverse-engineering/](https://github.com/wowemulation-dev/management/tree/main/docs/reverse-engineering)
-covering ~829 named functions across 113 TACT and 44 CASC source files.
+Based on ~829 named functions across 113 TACT and 44 CASC source files.
 
 ## Bugs
 
@@ -70,13 +69,16 @@ PR [#35](https://github.com/wowemulation-dev/cascette-rs/pull/35):
 
 ### Encoding Table Hardcoded Key Size
 
-cascette-rs hardcodes key size to 16 bytes in `IndexEntry`,
-`CKeyPageEntry`, and `EKeyPageEntry`, ignoring the header's
-`ckey_hash_size` and `ekey_hash_size` fields. This works for all
-known CASC data but diverges from Agent's flexible key size
-support. Making key size dynamic requires changing the crypto
-types (`ContentKey`/`EncodingKey` are `[u8; 16]` wrappers),
-threading sizes through BinRead Args, and updating all consumers.
+cascette-rs hardcodes key size to 16 bytes in the encoding
+module's `IndexEntry`, `CKeyPageEntry`, and `EKeyPageEntry`,
+ignoring the header's `ckey_hash_size` and `ekey_hash_size`
+fields. The archive module's `IndexEntry` uses variable-length
+keys via `Vec<u8>` sized from `footer.ekey_length`. This works
+for all known CASC data but diverges from Agent's flexible key
+size support in the encoding table. Making encoding key size
+dynamic requires changing the crypto types (`ContentKey`/
+`EncodingKey` are `[u8; 16]` wrappers), threading sizes through
+BinRead Args, and updating all consumers.
 
 ## Performance Issues
 
@@ -104,9 +106,11 @@ during building. TOC hash and footer hash are computed correctly.
 
 ### Archive Index Builder Hardcoded Key Size
 
-`ArchiveIndexBuilder::build()` hardcodes 16-byte keys and 4-byte
-offsets. Cannot generate 9-byte truncated key indices used by
-local CASC storage.
+`ArchiveIndexBuilder::build()` hardcodes 4-byte offsets and a
+16-byte TOC key size. Entry keys use `Vec<u8>` (variable length),
+but `ENTRY_SIZE` (24 bytes) and chunk calculations assume a fixed
+record layout. Cannot generate 9-byte truncated key indices used
+by local CASC storage.
 
 ## Protocol Issues
 
@@ -216,11 +220,185 @@ fields (`header.rs:62-69`), but no code parses the EST data. The
 `TVFS_FLAG_ENCODING_SPEC` flag is recognized but the table content
 is ignored.
 
+## Local Storage Issues (cascette-client-storage)
+
+The `cascette-client-storage` crate provides initial local CASC storage
+support. The following issues were identified by comparing against
+Agent.exe (CASC 1.5.9) reverse engineering.
+
+### Write Path Missing Local Header
+
+Agent writes a 30-byte (0x1E) local header before each BLTE entry in
+`.data` files:
+
+```text
+0x00-0x0F: Encoding key (16 bytes, reversed)
+0x10-0x13: Size including header (4 bytes, BE)
+0x14-0x15: Flags (2 bytes)
+0x16-0x19: ChecksumA (4 bytes)
+0x1A-0x1D: ChecksumB (4 bytes)
+0x1E+:     BLTE data
+```
+
+The read path (`Installation::decode_blte`) correctly handles this
+header. The write path (`ArchiveManager::write_content`) does not
+write it. Data written by cascette-rs would not be readable by the
+official client.
+
+### Encoding Key Derivation on Write
+
+`Installation::write_file()` computes the encoding key from
+`MD5(archive_id || archive_offset)`. Agent computes encoding keys as
+the MD5 hash of the BLTE-encoded file content. The encoding key is a
+property of the encoded data, not the storage location.
+
+### Index Write Format Incorrect
+
+`IndexManager::save_index()` writes a raw `IndexHeader` struct
+directly to disk. Agent writes the IDX Journal v7 format: guarded
+block header (size + Jenkins hash), then `IndexHeaderV2`, then a
+second guarded block for entries. Index files written by cascette-rs
+would not be readable by the official client.
+
+### No Jenkins Hash Validation
+
+Index guarded blocks use Jenkins hash for integrity validation. The
+read path parses the hash fields but does not verify them. The write
+path does not compute them. Agent validates Jenkins hashes on read and
+computes them on write.
+
+### No Atomic Index Commits
+
+Agent uses a flush-and-bind pattern with 3-retry atomic commits when
+persisting index files. If a write fails, the previous index version
+remains intact. cascette-rs writes directly to the target file without
+atomicity, risking corruption on interrupted writes.
+
+### Missing Key Mapping Table
+
+Agent uses a two-tier LSM-tree Key Mapping Table (KMT) as the primary
+on-disk structure for key-to-location resolution. KMT v8 has sorted
+sections (0x20-byte buckets) and update sections (0x400-byte pages
+with 0x19 entries, minimum 0x7800 bytes). Jenkins lookup3 hashes
+distribute keys across buckets.
+
+cascette-rs uses in-memory `BTreeMap` indices with no KMT equivalent.
+This limits scalability for large installations and prevents
+interoperability with Agent-managed storage.
+
+### Missing Container Index
+
+Agent maintains a ContainerIndex with 16 segments, supporting
+frozen/thawed archive management with per-segment tracking (0x40
+bytes per segment). Archives can be frozen (read-only) or thawed
+(writable).
+
+cascette-rs uses a flat `DashMap<u16, Arc<ArchiveFile>>` with no
+segment concept. The segment limit (configurable up to 0x3FF = 1023)
+is not enforced.
+
+### Missing Residency Container
+
+Agent tracks which content keys are fully downloaded via Residency
+container (0x30 bytes): `.residency` token files, byte-span tracking
+for partial downloads, reserve/mark-resident/remove/query operations,
+and scanner API.
+
+cascette-rs has no residency tracking. All content is assumed fully
+present.
+
+### Missing Hard Link Container
+
+Agent uses a TrieDirectory with hard links for content sharing between
+installations: 32-char hex filename validation, LRU file descriptor
+cache, 3-retry delete before hard link creation, filesystem support
+detection via `TestSupport`.
+
+cascette-rs has no hard link support.
+
+### Missing Static Container
+
+Agent supports read-only Static containers for shared installations
+with batch key state lookups via `casc::Residency::GetFileState`.
+
+cascette-rs has only one container type.
+
+### Compaction is a Stub
+
+`ArchiveManager::compact()` only truncates files to the write
+position. Agent uses two-phase compaction: archive merge (plan merge
+across segments, MurmurHash3 hash map) then extract-compact (per-segment
+span validation, overlap detection, empty archive deletion). Two
+algorithms: defrag (moves data to fill gaps) and fillholes (estimates
+free space without moves). Async read/write pipeline with 128 KB
+minimum buffer.
+
+### No LRU Eviction
+
+Agent maintains an LRU cache in shared memory with generation-based
+checkpoints and 20-char hex `.lru` filenames. cascette-rs uses
+unbounded `DashMap` caches with no eviction policy, risking
+unbounded memory growth.
+
+### Shared Memory Protocol Mismatch
+
+Agent uses CASC shared memory protocol versions 4/5 with specific
+layout:
+
+- Free space table at offset 0x42 (0x2AB8 bytes)
+- PID tracking with slot array ("PID : name : mode" format)
+- Writer lock via named global mutex (`Global\` prefix)
+- DACL: `D:(A;;GA;;;WD)(A;;GA;;;AN)`
+- `.lock` file with 10-second backoff
+
+cascette-rs defines a new IPC protocol (magic "CASC", version 1,
+custom message types: FileRequest/FileResponse/StatusRequest/
+StatusResponse/KeepAlive/Error). This protocol is not compatible
+with the official Agent. The `CascShmemHeader` struct (32 bytes)
+does not match Agent's shmem layout.
+
+### Directory Structure Divergence
+
+Agent stores both `.idx` and `.data` files in `Data/data/`. There is
+no separate `indices/`, `config/`, or `shmem/` directory at the
+storage root.
+
+cascette-rs creates four directories (`indices/`, `data/`, `config/`,
+`shmem/`). The `Installation` module correctly points both index and
+archive managers at the `data/` directory, but the top-level `Storage`
+creates the extra directories which do not match the official layout.
+
+### Bucket Algorithm Documentation Error
+
+The `local-storage.md` doc previously stated `bucket = key[0] & 0x0F`.
+The actual algorithm (correctly implemented in
+`IndexManager::get_bucket_index`) is:
+
+```text
+hash = key[0] ^ key[1] ^ ... ^ key[8]
+bucket = (hash & 0x0F) ^ (hash >> 4)
+```
+
+This has been corrected in the docs.
+
+### No .build.info Handling
+
+Agent reads `.build.info` (BPSV format) for installation metadata
+including product code, region, build config hash, and CDN config
+hash. cascette-rs does not parse or generate this file.
+
+### Content Read Missing Truncation Tracking
+
+Agent tracks truncated reads via key state and marks content as
+non-resident when a read returns fewer bytes than expected (CASC
+error 3 → TACT error 7). cascette-rs returns an error on short
+reads but does not update any residency state.
+
 ## Not Implemented
 
 These features exist in Agent.exe but have no cascette-rs
-equivalent. They are documented in the management repository
-RE docs for future implementation.
+equivalent. They are documented in the reverse engineering
+docs for future implementation.
 
 ### Containerless Mode
 
@@ -237,23 +415,6 @@ Required components:
 - File identification via hash comparison
 
 Reference: `agent-containerless-mode.md`
-
-### Local CASC Storage
-
-Four container types manage local archive files:
-
-| Type | Purpose |
-|------|---------|
-| Dynamic | Read/write CASC archives (.data files) |
-| Static | Read-only archives (shared installations) |
-| Residency | File state tracking (.residency tokens) |
-| Hard Link | Filesystem hard links (trie directory) |
-
-Key operations: open, read, write, remove, extract, compact.
-Write path uses 0x1E-byte header offset. Read path uses LRU
-caching with truncation tracking.
-
-Reference: `agent-container-storage.md`
 
 ### Garbage Collection
 
@@ -326,7 +487,7 @@ These cascette-rs implementations match Agent.exe behavior:
 | CKey page entry format | Page parser | `CKeyPageEntry` with key_count, 40-bit size |
 | CKey end-of-page | `key_count == 0` sentinel | Same sentinel check |
 | Page checksum verification | MD5 validation | Checksum verified per page |
-| CDN index footer (6 of 7) | `CdnIndexFooterValidator` | Version, hash size, block size, element size, reserved, footer hash |
+| CDN index footer (7 of 7) | `CdnIndexFooterValidator` | Version, hash size, block size, element size, reserved, footer hash bytes, footer hash |
 | CDN index entry format | Variable-length keys | 4/5/6-byte offset support |
 | Archive group format | 6-byte offsets | Archive index + offset parsing |
 | BLTE magic and header | E-header parser | "BLTE" magic, single-chunk mode |
@@ -335,7 +496,7 @@ These cascette-rs implementations match Agent.exe behavior:
 | LZ4 size prefix | 8-byte LE decompressed size | Matches exactly |
 | Encryption format | Salsa20 + ARC4 | Key name, IV, type byte, tau constant, IV extension |
 | ESpec grammar | n/z/c/e/b/g letters | All 6 letters with correct parameters |
-| ESpec block sizes | *=NNNNk/m notation | Numeric, K, M multipliers, * notation |
+| ESpec block sizes | *=NNNNK/M notation | Numeric, K, M multipliers, * notation |
 | BCPack/GDeflate | Stubs in Agent | Parse-only in cascette-rs (correct) |
 | Download manifest V1-V3 | DL magic, 40-bit sizes | All version differences handled |
 | Size manifest V1-V2 | DS magic, V1 variable width | V1 configurable esize\_bytes, V2 fixed 4-byte |
@@ -364,4 +525,4 @@ These cascette-rs implementations match Agent.exe behavior:
 | Root empty block handling | Skip empty, continue parsing | EOF-based termination, empty blocks do not truncate |
 | Root format scope | WoW-specific root format | Module docs note WoW-specific nature |
 | Encoding page lookup | `PageBinarySearch` O(log p) | `partition_point` on page index `first_key` |
-| Archive group TOC hash | MD5 of first keys per chunk | `calculate_toc_hash()` on chunk first keys |
+| Archive group TOC hash | MD5 of first keys per chunk | `calculate_toc_hash()` on chunk first keys (build path only; parse path skips TOC hash validation -- algorithm does not match Agent's stored values) |
