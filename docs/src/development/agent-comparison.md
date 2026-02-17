@@ -313,16 +313,17 @@ Not yet implemented:
 - Free space table read/write operations
 - Network drive detection (`ShouldUseSharedMemory`)
 
-### Directory Structure Divergence
+### Directory Structure (Fixed)
 
-Agent stores both `.idx` and `.data` files in `Data/data/`. There is
-no separate `indices/`, `config/`, or `shmem/` directory at the
-storage root.
+Agent.exe creates five subdirectories under the storage root:
+`data/` (dynamic container), `indices/` (CDN index cache),
+`residency/` (residency tracking DB), `ecache/` (e-header cache),
+`hardlink/` (hard link container trie).
 
-cascette-rs creates four directories (`indices/`, `data/`, `config/`,
-`shmem/`). The `Installation` module correctly points both index and
-archive managers at the `data/` directory, but the top-level `Storage`
-creates the extra directories which do not match the official layout.
+cascette-rs now matches this layout. Build/CDN configs are stored
+inside the dynamic container. Shared memory uses named kernel
+objects + a temp file in `data/`. The incorrect `config/` and
+`shmem/` directories have been removed.
 
 ### Bucket Algorithm Documentation Error
 

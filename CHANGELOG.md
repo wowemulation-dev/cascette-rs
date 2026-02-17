@@ -103,6 +103,12 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `open` async method loads indices and opens archive data files
   - Truncation detection converts archive bounds errors to `TruncatedRead`
   - `remove_span` with +0x1E offset adjustment
+- cascette-client-storage: `.build.info` parser
+  - BPSV file parser using `cascette-formats::bpsv` for installation metadata
+  - Typed accessors for product, branch, build key, CDN key, version, CDN
+    hosts/servers, install key, tags, and Armadillo key
+  - Active entry detection via `Active` column
+
 - cascette-client-storage: LRU cache with flat-file doubly-linked list
   - 28-byte header (version, MD5 hash, MRU head/LRU tail indices) and 20-byte
     entries (prev/next index, 9-byte ekey, flags)
@@ -123,6 +129,14 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- cascette-client-storage: Directory structure corrected to match CASC specification.
+  CASC creates five subdirectories: `data/` (dynamic container with
+  .idx, .data, shmem temp, LRU, KMT files), `indices/` (CDN index cache)
+  `residency/` (residency tracking DB), `ecache/` (e-header cache), and
+  `hardlink/` (hard link container trie). Removed incorrect `config/` and
+  `shmem/` directories. Build/CDN configs are stored inside the dynamic
+  container, not in a separate directory. Shared memory uses named kernel
+  objects + a temp file in `data/`, not a `shmem/` directory.
 - cascette-client-storage: `IndexEntry.size` field was serialized as
   little-endian but the format uses big-endian for all 18-byte
   entry fields (verified via CascLib `ConvertBytesToInteger_BE`)

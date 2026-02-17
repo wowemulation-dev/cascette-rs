@@ -50,12 +50,12 @@ impl Installation {
             std::fs::create_dir_all(&path)?;
         }
 
-        // Create required subdirectories
-        // Both .idx and .data files in the same Data/data/ directory
+        // Both .idx and .data files in the same Data/data/
+        // directory. Additional containers use separate subdirectories.
         let data_path = path.join(crate::DATA_DIR);
-        let config_path = path.join(crate::CONFIG_DIR);
+        let indices_path = path.join(crate::INDICES_DIR);
 
-        for dir in [&data_path, &config_path] {
+        for dir in [&data_path, &indices_path] {
             if !dir.exists() {
                 std::fs::create_dir_all(dir)?;
             }

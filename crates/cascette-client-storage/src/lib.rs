@@ -67,9 +67,13 @@ pub mod config;
 // Binary format validation
 pub mod validation;
 
+// Build info parser (.build.info BPSV file)
+pub mod build_info;
+
 // Top-level storage manager (manages installations)
 mod storage_manager;
 
+pub use build_info::BuildInfoFile;
 pub use config::StorageConfig;
 pub use container::AccessMode;
 pub use index::IndexEntry;
@@ -175,11 +179,35 @@ pub const DEFAULT_DATA_DIR: &str = "Data";
 /// `<install>/Data/data/`.
 pub const DATA_DIR: &str = "data";
 
-/// Default configuration subdirectory.
-pub const CONFIG_DIR: &str = "config";
+/// `.build.info` filename at the installation root.
+///
+/// CASC reads this BPSV file to determine product, region,
+/// build config hash, and CDN config hash for the installation.
+pub const BUILD_INFO_FILE: &str = ".build.info";
 
-/// Default shared memory subdirectory.
-pub const SHMEM_DIR: &str = "shmem";
+/// CDN index cache subdirectory.
+///
+/// CASC stores downloaded CDN archive indices (`.index` files)
+/// in `Data/indices/`.
+pub const INDICES_DIR: &str = "indices";
+
+/// Residency container subdirectory.
+///
+/// CASC stores the residency tracking database in `Data/residency/`.
+/// Created by `tact::ResidencyContainerInit`.
+pub const RESIDENCY_DIR: &str = "residency";
+
+/// E-header cache subdirectory (preservation set).
+///
+/// CASC stores the e-header cache in `Data/ecache/`.
+/// Created by `casc::PreservationSet::CreateEHeaderCache`.
+pub const ECACHE_DIR: &str = "ecache";
+
+/// Hard link container subdirectory.
+///
+/// CASC stores the hard link trie directory in `Data/hardlink/`.
+/// Created by `tact::HardLinkContainerInit`.
+pub const HARDLINK_DIR: &str = "hardlink";
 
 // =============================================================================
 // TACT Error Code Translation
