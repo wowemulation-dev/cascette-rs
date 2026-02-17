@@ -2,8 +2,9 @@
 //!
 //! Data archives contain BLTE-encoded game content.
 
+use crate::storage::local_header::{LOCAL_HEADER_SIZE, LocalHeader};
 use crate::{Result, StorageError};
-use cascette_crypto::ContentKey;
+use cascette_crypto::{ContentKey, EncodingKey};
 use cascette_formats::CascFormat;
 use cascette_formats::blte::{BlteFile, CompressionMode};
 use dashmap::DashMap;
@@ -159,12 +160,14 @@ impl ArchiveManager {
         Ok(())
     }
 
-    /// Read content from an archive at specified location
+    /// Read raw bytes from an archive at specified location without decompression.
+    ///
+    /// Returns the raw bytes as stored on disk, including any local header.
     ///
     /// # Errors
     ///
-    /// Returns error if archive not found, read bounds invalid, or decompression fails
-    pub fn read_content(&self, archive_id: u16, offset: u32, size: u32) -> Result<Vec<u8>> {
+    /// Returns error if archive not found or read bounds are invalid
+    pub fn read_raw(&self, archive_id: u16, offset: u32, size: u32) -> Result<Vec<u8>> {
         let archive = self
             .archives
             .get(&archive_id)
@@ -183,20 +186,34 @@ impl ArchiveManager {
             )));
         }
 
-        // Read raw data from memory map
-        let raw_data = &archive.mmap[offset..offset + size];
-
-        // Copy the data to avoid holding the archive lock
-        let data_copy = raw_data.to_vec();
+        let data = archive.mmap[offset..offset + size].to_vec();
         drop(archive);
+        Ok(data)
+    }
 
-        // Check if data is BLTE-encoded
-        if data_copy.len() >= 4 && &data_copy[0..4] == b"BLTE" {
-            // Parse and decompress BLTE data using cascette-formats
-            Self::decompress_blte_with_formats(&data_copy)
+    /// Read content from an archive at specified location.
+    ///
+    /// Handles the 30-byte local header if present, then decompresses
+    /// BLTE data. The returned bytes are the decompressed file content.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if archive not found, read bounds invalid, or decompression fails
+    pub fn read_content(&self, archive_id: u16, offset: u32, size: u32) -> Result<Vec<u8>> {
+        let data = self.read_raw(archive_id, offset, size)?;
+
+        // Check for 30-byte local header + BLTE at offset 0x1E
+        if data.len() >= LOCAL_HEADER_SIZE + 4
+            && &data[LOCAL_HEADER_SIZE..LOCAL_HEADER_SIZE + 4] == b"BLTE"
+        {
+            // Agent-format archive entry: skip local header, decompress BLTE
+            Self::decompress_blte_with_formats(&data[LOCAL_HEADER_SIZE..])
+        } else if data.len() >= 4 && &data[0..4] == b"BLTE" {
+            // Direct BLTE (e.g., from CDN, no local header)
+            Self::decompress_blte_with_formats(&data)
         } else {
-            // Return raw data
-            Ok(data_copy)
+            // Not BLTE-encoded, return raw data
+            Ok(data)
         }
     }
 
@@ -212,12 +229,20 @@ impl ArchiveManager {
             .map_err(|e| StorageError::Archive(format!("Failed to decompress BLTE: {e}")))
     }
 
-    /// Write content to an archive with size validation using default compression
+    /// Write content to an archive with size validation using default compression.
+    ///
+    /// Returns `(archive_id, offset, total_size, encoding_key)` where:
+    /// - `total_size` includes the 30-byte local header
+    /// - `encoding_key` is `MD5(blte_data)`, a content-addressable key
     ///
     /// # Errors
     ///
     /// Returns error if compression fails, archive creation fails, write fails, or size limits exceeded
-    pub fn write_content(&mut self, data: Vec<u8>, compress: bool) -> Result<(u16, u32, u32)> {
+    pub fn write_content(
+        &mut self,
+        data: &[u8],
+        compress: bool,
+    ) -> Result<(u16, u32, u32, [u8; 16])> {
         let mode = if compress {
             self.default_compression
         } else {
@@ -226,28 +251,41 @@ impl ArchiveManager {
         self.write_content_with_mode(data, mode)
     }
 
-    /// Write content to an archive with specific compression mode
+    /// Write content to an archive with specific compression mode.
+    ///
+    /// Writes a 30-byte local header followed by BLTE data, matching
+    /// the CASC on-disk format.
+    ///
+    /// Returns `(archive_id, offset, total_size, encoding_key)` where:
+    /// - `total_size` includes the 30-byte local header
+    /// - `encoding_key` is `MD5(blte_data)`, a content-addressable key
     ///
     /// # Errors
     ///
     /// Returns error if compression fails, archive creation fails, write fails, or size limits exceeded
     pub fn write_content_with_mode(
         &mut self,
-        data: Vec<u8>,
+        data: &[u8],
         mode: CompressionMode,
-    ) -> Result<(u16, u32, u32)> {
-        // Select archive with space (simple round-robin for now)
+    ) -> Result<(u16, u32, u32, [u8; 16])> {
+        // Select archive with space
         let archive_id = self.select_archive_for_write();
 
-        // Prepare data with specified compression mode
-        let final_data = if mode == CompressionMode::None {
-            data
-        } else {
-            Self::compress_blte_with_mode(&data, mode)?
-        };
+        // BLTE-encode the data (even uncompressed data gets a BLTE wrapper)
+        let blte_data = Self::compress_blte_with_mode(data, mode)?;
 
-        let size = u32::try_from(final_data.len())
-            .map_err(|e| StorageError::Archive(format!("Data too large: {e}")))?;
+        // Compute encoding key as MD5(blte_data) — content-addressable
+        let encoding_key = EncodingKey::from_data(&blte_data);
+
+        // Build the 30-byte local header
+        let blte_size = u32::try_from(blte_data.len())
+            .map_err(|e| StorageError::Archive(format!("BLTE data too large: {e}")))?;
+        let header = LocalHeader::new(*encoding_key.as_bytes(), blte_size);
+        let header_bytes = header.to_bytes();
+
+        // Combined size: 30-byte header + BLTE data
+        let total_size = u32::try_from(LOCAL_HEADER_SIZE + blte_data.len())
+            .map_err(|e| StorageError::Archive(format!("Total data too large: {e}")))?;
 
         // Validate that adding this data won't exceed archive size limits
         let current_size = {
@@ -255,7 +293,7 @@ impl ArchiveManager {
             *positions.get(&archive_id).unwrap_or(&0)
         };
 
-        if current_size + u64::from(size) > MAX_ARCHIVE_SIZE {
+        if current_size + u64::from(total_size) > MAX_ARCHIVE_SIZE {
             return Err(StorageError::Archive(
                 "Adding data would exceed maximum archive size (256 GiB)".to_string(),
             ));
@@ -272,21 +310,22 @@ impl ArchiveManager {
             *positions.get(&archive_id).unwrap_or(&0)
         };
 
-        // Write data to archive
-        self.write_to_archive(archive_id, offset, &final_data)?;
+        // Write local header + BLTE data
+        let mut combined = Vec::with_capacity(LOCAL_HEADER_SIZE + blte_data.len());
+        combined.extend_from_slice(&header_bytes);
+        combined.extend_from_slice(&blte_data);
+        self.write_to_archive(archive_id, offset, &combined)?;
 
         // Update write position
         {
             let mut positions = self.write_positions.write();
-            positions.insert(archive_id, offset + u64::from(size));
+            positions.insert(archive_id, offset + u64::from(total_size));
         }
 
-        Ok((
-            archive_id,
-            u32::try_from(offset)
-                .map_err(|e| StorageError::Archive(format!("Offset too large: {e}")))?,
-            size,
-        ))
+        let offset_u32 = u32::try_from(offset)
+            .map_err(|e| StorageError::Archive(format!("Offset too large: {e}")))?;
+
+        Ok((archive_id, offset_u32, total_size, *encoding_key.as_bytes()))
     }
 
     /// Select archive for writing with proper CASC size limits
@@ -923,5 +962,99 @@ mod tests {
         let single_stats = SingleArchiveStats::default();
         assert_eq!(single_stats.bytes_reclaimed, 0);
         assert_eq!(single_stats.entries_moved, 0);
+    }
+
+    #[test]
+    fn test_write_content_prepends_local_header() {
+        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let mut manager = ArchiveManager::new(temp_dir.path());
+
+        let test_data = b"Hello, CASC local header!";
+
+        // Write content — should prepend 30-byte local header
+        let (archive_id, offset, total_size, encoding_key) = manager
+            .write_content(test_data, false)
+            .expect("write_content should succeed");
+
+        assert_eq!(offset, 0, "first write should be at offset 0");
+
+        // Read raw bytes back — should contain local header + BLTE
+        let raw = manager
+            .read_raw(archive_id, offset, total_size)
+            .expect("read_raw should succeed");
+
+        // First 30 bytes are the local header
+        assert!(raw.len() >= LOCAL_HEADER_SIZE + 4);
+
+        // BLTE magic at offset 0x1E (after local header)
+        assert_eq!(
+            &raw[LOCAL_HEADER_SIZE..LOCAL_HEADER_SIZE + 4],
+            b"BLTE",
+            "BLTE magic should follow the 30-byte local header"
+        );
+
+        // Parse the local header
+        let header =
+            LocalHeader::from_bytes(&raw).expect("local header should parse from raw bytes");
+
+        // Verify encoding key matches what write_content returned
+        assert_eq!(
+            header.original_encoding_key(),
+            encoding_key,
+            "encoding key in header should match returned key"
+        );
+
+        // Verify size_with_header matches total_size
+        assert_eq!(header.size_with_header, total_size);
+    }
+
+    #[test]
+    fn test_write_read_round_trip_with_local_header() {
+        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let mut manager = ArchiveManager::new(temp_dir.path());
+
+        let test_data = b"Round-trip test data through local header path";
+
+        // Write content (with local header)
+        let (archive_id, offset, total_size, _encoding_key) = manager
+            .write_content(test_data, false)
+            .expect("write should succeed");
+
+        // Read content — should skip local header, decompress BLTE, return original data
+        let decompressed = manager
+            .read_content(archive_id, offset, total_size)
+            .expect("read_content should succeed");
+
+        assert_eq!(
+            decompressed, test_data,
+            "round-trip through local header should recover original data"
+        );
+    }
+
+    #[test]
+    fn test_encoding_key_is_md5_of_blte_data() {
+        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let mut manager = ArchiveManager::new(temp_dir.path());
+
+        let test_data = b"Verify encoding key is MD5 of BLTE data";
+
+        let (archive_id, offset, total_size, encoding_key) = manager
+            .write_content(test_data, false)
+            .expect("write should succeed");
+
+        // Read raw bytes and extract BLTE portion (skip 30-byte header)
+        let raw = manager
+            .read_raw(archive_id, offset, total_size)
+            .expect("read_raw");
+        let blte_data = &raw[LOCAL_HEADER_SIZE..];
+
+        // Compute MD5 of BLTE data
+        let expected_key = cascette_crypto::EncodingKey::from_data(blte_data);
+
+        assert_eq!(
+            encoding_key,
+            *expected_key.as_bytes(),
+            "encoding key should be MD5 of the BLTE-encoded data"
+        );
     }
 }

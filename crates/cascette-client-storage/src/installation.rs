@@ -420,7 +420,11 @@ impl Installation {
         results
     }
 
-    /// Write a file to storage
+    /// Write a file to storage.
+    ///
+    /// The data is BLTE-encoded, prepended with a 30-byte local header, and
+    /// written to an archive file. The encoding key is computed as
+    /// `MD5(blte_data)` matching CASC behavior.
     ///
     /// # Errors
     ///
@@ -435,31 +439,27 @@ impl Installation {
         // Calculate content key from uncompressed data
         let content_key = ContentKey::from_data(&data);
 
-        // Write to archive and get location
-        let (archive_id, archive_offset, size) = {
+        // Write to archive: BLTE-encodes, prepends 30-byte local header,
+        // and computes encoding key as MD5(blte_data)
+        let (archive_id, archive_offset, size, encoding_key_bytes) = {
             let mut archive_manager = self.archive_manager.write().await;
-            archive_manager.write_content(data, compress)?
+            archive_manager.write_content(&data, compress)?
         };
 
-        // Create encoding key from compressed data location
-        let mut location_data = Vec::new();
-        location_data.extend_from_slice(&archive_id.to_be_bytes());
-        location_data.extend_from_slice(&archive_offset.to_be_bytes());
-        let encoding_key = EncodingKey::from_data(&location_data);
+        let encoding_key = EncodingKey::from_bytes(encoding_key_bytes);
 
-        // Update indices
+        // Update indices with the content-addressable encoding key
         {
             let mut index_manager = self.index_manager.write().await;
             index_manager.add_entry(&encoding_key, archive_id, archive_offset, size)?;
         }
 
-        // Note: Resolver cache will be updated on next lookup
-
         info!(
-            "Wrote file to archive {} at offset {} (content key: {})",
+            "Wrote file to archive {} at offset {} (content key: {}, encoding key: {})",
             archive_id,
             archive_offset,
-            hex::encode(content_key.as_bytes())
+            hex::encode(content_key.as_bytes()),
+            hex::encode(encoding_key.as_bytes())
         );
 
         Ok(content_key)
