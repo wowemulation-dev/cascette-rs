@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1771315523736,
+  "lastUpdate": 1771338162618,
   "repoUrl": "https://github.com/wowemulation-dev/cascette-rs",
   "entries": {
     "Benchmark": [
@@ -545,6 +545,48 @@ window.BENCHMARK_DATA = {
             "name": "bpsv_generation/summary/all",
             "value": 209,
             "range": "± 4",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "daniel@kogito.network",
+            "name": "Daniel S. Reichenbach",
+            "username": "danielsreichenbach"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d2ec0a9f2b56571b9e43b55ffdf8000176387bdd",
+          "message": "Merge pull request #37 from wowemulation-dev/fix/formats-agent-comparison\n\nfix: format and protocol alignment issues",
+          "timestamp": "2026-02-17T21:19:23+07:00",
+          "tree_id": "b81273c1ef8e7c909dec970a0d58e75041bbea35",
+          "url": "https://github.com/wowemulation-dev/cascette-rs/commit/d2ec0a9f2b56571b9e43b55ffdf8000176387bdd"
+        },
+        "date": 1771338161694,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "bpsv_generation/versions/wow",
+            "value": 1531,
+            "range": "± 5",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "bpsv_generation/cdns/wow",
+            "value": 1161,
+            "range": "± 8",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "bpsv_generation/summary/all",
+            "value": 205,
+            "range": "± 1",
             "unit": "ns/iter"
           }
         ]
