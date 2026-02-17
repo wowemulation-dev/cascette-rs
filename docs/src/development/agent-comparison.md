@@ -151,9 +151,9 @@ No open TVFS issues from Agent.exe comparison.
 
 ## Local Storage Issues (cascette-client-storage)
 
-The `cascette-client-storage` crate provides initial local CASC storage
-support. The following issues were identified by comparing against
-Agent.exe (CASC 1.5.9) reverse engineering.
+The `cascette-client-storage` crate provides local CASC storage
+support. Issues identified by comparing against Agent.exe (CASC 1.5.9)
+reverse engineering. 11 of 19 issues resolved; 8 remain partial.
 
 ### ~~Write Path Missing Local Header~~ (Fixed)
 
@@ -313,7 +313,7 @@ Not yet implemented:
 - Free space table read/write operations
 - Network drive detection (`ShouldUseSharedMemory`)
 
-### Directory Structure (Fixed)
+### ~~Directory Structure~~ (Fixed)
 
 Agent.exe creates five subdirectories under the storage root:
 `data/` (dynamic container), `indices/` (CDN index cache),
@@ -325,7 +325,7 @@ inside the dynamic container. Shared memory uses named kernel
 objects + a temp file in `data/`. The incorrect `config/` and
 `shmem/` directories have been removed.
 
-### Bucket Algorithm Documentation Error
+### ~~Bucket Algorithm Documentation Error~~ (Fixed)
 
 The `local-storage.md` doc previously stated `bucket = key[0] & 0x0F`.
 The actual algorithm (correctly implemented in
@@ -336,20 +336,27 @@ hash = key[0] ^ key[1] ^ ... ^ key[8]
 bucket = (hash & 0x0F) ^ (hash >> 4)
 ```
 
-This has been corrected in the docs.
+Corrected in the docs and verified against BinaryNinja decompilation
+of `sub_72b457`.
 
-### No .build.info Handling
+### ~~No .build.info Handling~~ (Fixed)
 
-Agent reads `.build.info` (BPSV format) for installation metadata
-including product code, region, build config hash, and CDN config
-hash. cascette-rs does not parse or generate this file.
+Fixed in Phase 10. `BuildInfoFile` parses `.build.info` (BPSV format)
+with typed accessors for product, branch, build key, CDN key, version,
+CDN hosts, CDN servers, install key, tags, and armadillo. Async
+`from_path()` reads from disk; `active_entry()` returns the first row
+with `Active == 1`.
 
-### Content Read Missing Truncation Tracking
+### Partial Truncation Tracking
 
 Agent tracks truncated reads via key state and marks content as
 non-resident when a read returns fewer bytes than expected (CASC
-error 3 → TACT error 7). cascette-rs returns an error on short
-reads but does not update any residency state.
+error 3 → TACT error 7). `DynamicContainer::read()` detects
+archive bounds errors and returns `StorageError::TruncatedRead`,
+matching Agent's error code mapping.
+
+Not yet implemented: automatic residency state update on truncated
+reads (marking the key non-resident in the `ResidencyContainer`).
 
 ## Not Implemented
 
