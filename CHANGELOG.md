@@ -103,6 +103,13 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `open` async method loads indices and opens archive data files
   - Truncation detection converts archive bounds errors to `TruncatedRead`
   - `remove_span` with +0x1E offset adjustment
+- cascette-client-storage: Shmem v4/v5 control block protocol
+  - Version 4 (16-byte alignment, 0x150 header) and version 5 (page alignment
+    0x154/0x258 header) layout constants
+  - Free space table format identifier (0x2AB8) and data size validation
+  - PID tracking with state machine (idle/modifying), slot management, recount
+    recovery, and generation counter
+  - `validate_for_bind` with protocol error strings
 - cascette-formats: K-way merge for archive group building via `build_merged`
   - O(N log K) merge of pre-sorted archive indices using binary min-heap
   - Matches the CASC k-way merge algorithm

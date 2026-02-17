@@ -286,22 +286,26 @@ checkpoints and 20-char hex `.lru` filenames. cascette-rs uses
 unbounded `DashMap` caches with no eviction policy, risking
 unbounded memory growth.
 
-### Shared Memory Protocol Mismatch
+### Partial Shared Memory Protocol
 
-Agent uses CASC shared memory protocol versions 4/5 with specific
-layout:
+Agent uses CASC shared memory protocol versions 4/5. The control
+block layout has been implemented with BinaryNinja-verified
+constants and offsets:
 
-- Free space table at offset 0x42 (0x2AB8 bytes)
-- PID tracking with slot array ("PID : name : mode" format)
+- V4 header (0x150 bytes, 16-byte alignment)
+- V5 header (0x154/0x258 bytes, page alignment)
+- Free space table format at offset 0x42 (0x2AB8 identifier)
+- PID tracking with state machine (idle/modifying) and slot management
+- Version validation, exclusive access checks, bind validation
+
+Not yet implemented:
+
+- Platform-specific shmem I/O (`shm_open`, `CreateFileMapping`)
 - Writer lock via named global mutex (`Global\` prefix)
-- DACL: `D:(A;;GA;;;WD)(A;;GA;;;AN)`
-- `.lock` file with 10-second backoff
-
-cascette-rs defines a new IPC protocol (magic "CASC", version 1,
-custom message types: FileRequest/FileResponse/StatusRequest/
-StatusResponse/KeepAlive/Error). This protocol is not compatible
-with the official Agent. The `CascShmemHeader` struct (32 bytes)
-does not match Agent's shmem layout.
+- DACL: `D:(A;;GA;;;WD)(A;;GA;;;AN)S:(ML;;NW;;;ME)`
+- `.shmem.lock` file with retry logic
+- Free space table read/write operations
+- Network drive detection (`ShouldUseSharedMemory`)
 
 ### Directory Structure Divergence
 
