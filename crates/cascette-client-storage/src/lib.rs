@@ -17,17 +17,16 @@
 //! # Example
 //!
 //! ```rust,ignore
-//! use cascette_client_storage::{Storage, StorageConfig};
+//! use cascette_client_storage::Installation;
+//! use std::path::PathBuf;
 //!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-//! let config = StorageConfig::default()
-//!     .with_path("/path/to/wow/data");
+//! let data_root = PathBuf::from("/path/to/wow/Data");
+//! let install = Installation::open(data_root)?;
+//! install.initialize().await?;
 //!
-//! let storage = Storage::new(config)?;
-//! let installation = storage.open_installation("wow_retail").await?;
-//!
-//! let content_key = [0xDE, 0xAD, 0xBE, 0xEF, /* ... */];
-//! let data = installation.read_file(&content_key).await?;
+//! let stats = install.stats().await;
+//! println!("Index entries: {}", stats.index_entries);
 //! # Ok(())
 //! # }
 //! ```

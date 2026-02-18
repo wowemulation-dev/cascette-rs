@@ -23,13 +23,13 @@ pub const FREE_SPACE_TABLE_SIZE: usize = 0x2AB8;
 /// Offset of the initialization byte.
 pub const INIT_BYTE_OFFSET: usize = 0x02;
 
-/// Offset of the free space table format DWORD.
+/// DWORD index of the free space table format field (byte offset = 0x42 * 4).
 pub const FREE_SPACE_FORMAT_OFFSET: usize = 0x42;
 
-/// Offset of the data size field (DWORD).
+/// DWORD index of the data size field (byte offset = 0x43 * 4).
 pub const DATA_SIZE_OFFSET: usize = 0x43;
 
-/// Offset of the V5 exclusive access flag (DWORD).
+/// DWORD index of the V5 exclusive access flag (byte offset = 0x54 * 4).
 pub const V5_EXCLUSIVE_FLAG_OFFSET: usize = 0x54;
 
 /// V4 control block header size in bytes.
@@ -60,7 +60,7 @@ pub const LOCK_FILE_SUFFIX: &str = ".shmem.lock";
 
 /// Align a size to the protocol version's alignment boundary.
 ///
-/// /// - v4: `(size + 0xF) & !0xF` (16-byte alignment)
+/// - v4: `(size + 0xF) & !0xF` (16-byte alignment)
 /// - v5: `(size + 0xFFF) & !0xFFF` (page alignment)
 pub const fn align_size(size: usize, version: u8) -> usize {
     if version == 4 {

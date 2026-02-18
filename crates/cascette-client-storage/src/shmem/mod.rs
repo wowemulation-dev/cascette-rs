@@ -9,7 +9,7 @@
 //! - Offset 0x43: Data size (must be non-zero)
 //! - Offset 0x54: V5 exclusive access flag (bit 0)
 //!
-//! PID tracking uses "PID : name : mode" format in slot array.
+//! V5 PID tracking stores a PID (u32) and mode (u32) per slot.
 //!
 //! ## Platform support
 //!

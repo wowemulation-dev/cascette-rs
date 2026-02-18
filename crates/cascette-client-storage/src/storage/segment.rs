@@ -157,7 +157,7 @@ impl SegmentInfo {
 
 /// Compute the bucket index for a 9-byte EKey.
 ///
-/// /// XOR all 9 bytes, then `((xor >> 4) ^ xor + seed) & 0x0F`.
+/// XOR all 9 bytes, then `(((xor >> 4) ^ xor) + seed) & 0x0F`.
 ///
 /// For standard lookups, `seed` is 0. For segment header key generation,
 /// `seed` is 1.
@@ -171,7 +171,7 @@ pub fn bucket_hash(ekey: &[u8], seed: u8) -> u8 {
 
 /// Generate a 16-byte key for a segment reconstruction header.
 ///
-/// /// - Start with the 16-byte path hash as base
+/// - Start with the 16-byte path hash as base
 /// - Encode segment count in bytes [1] and [2] (big-endian u16)
 /// - Adjust byte [0] (0x00-0xFF) until the first 9 bytes hash to
 ///   the target bucket via `bucket_hash` with seed 1

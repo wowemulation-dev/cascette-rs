@@ -11,7 +11,7 @@ interchangeable. Agent.exe uses the KMT terminology internally
 (`casc::KeyMappingTable`).
 
 Each bucket (0-15) has its own KMT file named `{bucket:02x}{version:08x}.idx`
-in the `indices/` directory.
+in the `data/` directory.
 
 ## File Layout
 
@@ -63,11 +63,14 @@ is 18 bytes:
 Offset  Size  Field
 0x00    9     EKey (truncated encoding key, big-endian)
 0x09    5     StorageOffset (big-endian)
-0x0E    4     EncodedSize (big-endian)
+0x0E    4     EncodedSize (little-endian)
 ```
 
-All fields are big-endian (verified via CascLib `ConvertBytesToInteger_BE`
-and analysis of `BinarySearchEKey`).
+**Mixed endianness**: StorageOffset is big-endian but EncodedSize is
+little-endian. Verified in Agent.exe (`sub_73bed9` reads forward/BE for
+the offset, `sub_73bf18` reads backward/LE for the size) and CascLib
+(`ConvertBytesToInteger_5` for offset, `ConvertBytesToInteger_4_LE` for
+size).
 
 Lookup uses binary search (`casc::KeyMappingTable::BinarySearchEKey`).
 
@@ -99,7 +102,7 @@ Offset  Size  Field
 0x00    4     Hash guard (Jenkins hashlittle | 0x80000000)
 0x04    9     EKey (truncated encoding key)
 0x0D    5     StorageOffset (big-endian)
-0x12    4     EncodedSize (big-endian)
+0x12    4     EncodedSize (little-endian)
 0x16    1     Status byte
 0x17    1     Padding
 ```

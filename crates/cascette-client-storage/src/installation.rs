@@ -127,8 +127,8 @@ impl Installation {
 
         debug!("Cache miss for content key: {}", cache_key);
 
-        // Step 2: Look up content key directly in local indices
-        // Local .idx files use content keys (not encoding keys)
+        // Step 2: Look up content key in local indices
+        // Note: local .idx files are keyed by encoding keys, not content keys
         let index_entry = {
             let index_manager = self.index_manager.read().await;
             index_manager

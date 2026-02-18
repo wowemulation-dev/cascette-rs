@@ -208,7 +208,7 @@ pub fn lru_file_path(dir: &Path, generation: u64) -> PathBuf {
 
 /// Validate an LRU file's size.
 ///
-/// /// - Minimum size is 0x1C (header only)
+/// - Minimum size is 0x1C (header only)
 /// - `(file_size - 0x1C) % 0x14 == 0` (entries are 20 bytes each)
 pub const fn validate_file_size(size: usize) -> bool {
     size >= LRU_HEADER_SIZE && (size - LRU_HEADER_SIZE).is_multiple_of(LRU_ENTRY_SIZE)

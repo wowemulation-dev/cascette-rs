@@ -153,7 +153,7 @@ No open TVFS issues from Agent.exe comparison.
 
 The `cascette-client-storage` crate provides local CASC storage
 support. Issues identified by comparing against Agent.exe (CASC 1.5.9).
-All 19 issues resolved.
+All 20 issues resolved.
 
 ### ~~Write Path Missing Local Header~~ (Fixed)
 
@@ -350,7 +350,7 @@ Required components:
 - E-header cache for batch CDN downloads
 - File identification via hash comparison
 
-Reference: `agent-containerless-mode.md`
+Reference: `agent-containerless-mode.md` (planned)
 
 ### Garbage Collection
 
@@ -393,7 +393,7 @@ Reference: `agent-maintenance-operations.md`
 File classification values: 0=current, 1=needs download,
 2=needs patch, 5=special, 6=obsolete.
 
-Reference: `agent-build-update-flow.md`
+Reference: `agent-build-update-flow.md` (planned)
 
 ### Patch Operations
 
@@ -403,7 +403,7 @@ Three patch types not implemented:
 - Decryption patching (Op 4): key rotation patches
 - Re-encode patching (Op 5): re-encode content after patch
 
-Reference: `agent-async-state-machines.md`
+Reference: `agent-async-state-machines.md` (planned)
 
 ### Download Telemetry
 
