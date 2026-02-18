@@ -10,8 +10,17 @@
 //! - Offset 0x54: V5 exclusive access flag (bit 0)
 //!
 //! PID tracking uses "PID : name : mode" format in slot array.
+//!
+//! ## Platform support
+//!
+//! - Unix: `shm_open` / `mmap` with `flock`-based lock files
+//! - Windows: `CreateFileMappingW` / `MapViewOfFile` with named mutexes
+//!
+//! Network drive detection prevents shmem creation on remote filesystems,
+//! falling back to file-based coordination.
 
 pub mod control_block;
+#[cfg(unix)]
 pub mod platform_unix;
 #[cfg(target_os = "windows")]
 pub mod platform_windows;
@@ -22,3 +31,16 @@ mod legacy;
 
 pub use control_block::ShmemControlBlock;
 pub use legacy::*;
+
+// Platform-specific re-exports
+#[cfg(unix)]
+pub use platform_unix::{
+    is_network_drive, lock_file_path, shmem_file_path, shmem_name_from_path, LockFile,
+    PlatformShmem,
+};
+
+#[cfg(target_os = "windows")]
+pub use platform_windows::{
+    is_network_drive, lock_file_path, shmem_file_path, shmem_name_from_path, LockFile,
+    PlatformShmem,
+};

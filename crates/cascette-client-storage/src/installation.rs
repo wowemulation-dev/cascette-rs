@@ -608,7 +608,7 @@ impl Installation {
         let index_manager = self.index_manager.read().await;
         index_manager
             .iter_entries()
-            .map(|(_, entry)| entry.clone())
+            .map(|(_, entry)| entry)
             .collect()
     }
 

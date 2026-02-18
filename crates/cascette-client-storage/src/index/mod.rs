@@ -1,6 +1,15 @@
 //! Index file (.idx) management
 //!
 //! Index files map content keys to locations within data archives.
+//! Each index file has two sections:
+//! - **Sorted section**: binary-searchable entries (L1)
+//! - **Update section**: append-only log pages (L0, LSM-tree)
+//!
+//! Lookups search the update section first (linear), then the sorted
+//! section (binary search). When the update section fills, entries are
+//! merged into the sorted section via atomic file replacement.
+
+pub mod update;
 
 #[cfg(test)]
 #[allow(unused_imports)]
@@ -11,10 +20,13 @@ use binrw::{BinRead, BinReaderExt, BinResult, BinWrite, BinWriterExt};
 use cascette_crypto::{ContentKey, EncodingKey};
 use std::collections::BTreeMap;
 use std::fs::File;
-use std::io::{BufReader, BufWriter, Cursor, Read, Write};
+use std::io::{BufReader, BufWriter, Cursor, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use tokio::fs;
 use tracing::{debug, info, warn};
+
+pub use update::UpdateStatus;
+use update::{UpdateEntry, UpdateSection, UPDATE_SECTION_ALIGNMENT};
 
 /// Custom binrw parser for archive location (5 bytes: 1 high + 4 packed)
 fn parse_archive_location<R: std::io::Read + std::io::Seek>(
@@ -234,8 +246,10 @@ pub struct IndexManager {
 struct IndexFile {
     /// Index file header
     header: IndexHeader,
-    /// Sorted entries for binary search
+    /// Sorted entries for binary search (L1)
     entries: Vec<IndexEntry>,
+    /// Append-only update section (L0, LSM-tree)
+    update_section: UpdateSection,
 }
 
 impl IndexManager {
@@ -404,12 +418,19 @@ impl IndexManager {
 
     /// Load a specific index file (V2 format with guarded blocks)
     ///
+    /// Reads the sorted section, then attempts to parse the update section
+    /// from the 64KB-aligned boundary after the sorted data.
+    ///
     /// # Errors
     ///
     /// Returns error if file cannot be opened, read, or parsed
     pub fn load_index(&mut self, id: u8, path: &Path) -> Result<()> {
         let file = File::open(path)
             .map_err(|e| StorageError::Index(format!("Failed to open index: {e}")))?;
+        let file_size = file
+            .metadata()
+            .map_err(|e| StorageError::Index(format!("Failed to read file metadata: {e}")))?
+            .len();
         let mut reader = BufReader::new(file);
 
         // Read and validate header
@@ -427,16 +448,58 @@ impl IndexManager {
         // Sort entries by key for binary search
         entries.sort_by_key(|e| e.key);
 
-        debug!("Loaded {} entries from index {:02x}", entries.len(), id);
-        self.indices.insert(id, IndexFile { header, entries });
+        // Parse update section from 64KB-aligned boundary after sorted data
+        // Layout: 8 (header block) + 16 (header) + 8 (padding) + 8 (entry block) + entry_data
+        let sorted_end = 8 + 16 + 8 + 8 + entry_data.len();
+        let update_start =
+            (sorted_end + UPDATE_SECTION_ALIGNMENT - 1) & !(UPDATE_SECTION_ALIGNMENT - 1);
+        let update_section = if (update_start as u64) < file_size {
+            let update_size = file_size as usize - update_start;
+            reader
+                .seek(SeekFrom::Start(update_start as u64))
+                .map_err(|e| {
+                    StorageError::Index(format!("Failed to seek to update section: {e}"))
+                })?;
+            let mut update_data = vec![0u8; update_size];
+            reader.read_exact(&mut update_data).map_err(|e| {
+                StorageError::Index(format!("Failed to read update section: {e}"))
+            })?;
+            let section = UpdateSection::from_bytes(&update_data);
+            if section.entry_count() > 0 {
+                debug!(
+                    "Loaded {} update entries from {} pages in index {:02x}",
+                    section.entry_count(),
+                    section.page_count(),
+                    id
+                );
+            }
+            section
+        } else {
+            UpdateSection::new()
+        };
+
+        debug!(
+            "Loaded {} sorted entries from index {:02x}",
+            entries.len(),
+            id
+        );
+        self.indices.insert(
+            id,
+            IndexFile {
+                header,
+                entries,
+                update_section,
+            },
+        );
 
         Ok(())
     }
 
-    /// Look up an encoding key in the local indices
+    /// Look up an encoding key in the local indices.
     ///
-    /// Local .idx files are keyed by encoding keys (truncated to 9 bytes).
-    /// This is the CORRECT method for local CASC storage lookup.
+    /// Searches the update section first (linear, newest wins), then the
+    /// sorted section (binary search). If the update section contains a
+    /// delete tombstone for the key, returns `None`.
     ///
     /// The CASC lookup chain is:
     /// 1. Root file: FDID -> ContentKey
@@ -444,56 +507,63 @@ impl IndexManager {
     /// 3. Local .idx: EncodingKey -> archive location
     pub fn lookup(&self, key: &EncodingKey) -> Option<IndexEntry> {
         let key_bytes = key.as_bytes();
-
-        // Determine which index to search using official CASC bucket algorithm
         let index_id = Self::get_bucket_index(key_bytes);
 
         self.indices.get(&index_id).and_then(|index| {
-            // Create search key (first 9 bytes)
             let mut search_key = [0u8; 9];
             search_key[..9.min(key_bytes.len())]
                 .copy_from_slice(&key_bytes[..9.min(key_bytes.len())]);
 
-            // Binary search for the key
-            index
-                .entries
-                .binary_search_by_key(&search_key, |e| e.key)
-                .ok()
-                .map(|idx| index.entries[idx].clone())
+            Self::search_both_sections(index, &search_key)
         })
     }
 
-    /// Look up a content key in the indices (backward compatibility)
+    /// Look up a content key in the indices (backward compatibility).
     ///
-    /// WARNING: Local .idx files are actually keyed by ENCODING keys, not content keys.
-    /// This method is provided for backward compatibility but may not find files.
+    /// WARNING: Local .idx files are keyed by ENCODING keys, not content keys.
     /// Use `lookup()` with an EncodingKey for reliable local storage lookup.
     pub fn lookup_by_content_key(&self, key: &ContentKey) -> Option<IndexEntry> {
         let key_bytes = key.as_bytes();
-
-        // Determine which index to search using official CASC bucket algorithm
         let index_id = Self::get_bucket_index(key_bytes);
 
         self.indices.get(&index_id).and_then(|index| {
-            // Create search key (first 9 bytes of content key)
             let mut search_key = [0u8; 9];
             search_key[..9.min(key_bytes.len())]
                 .copy_from_slice(&key_bytes[..9.min(key_bytes.len())]);
 
-            // Binary search for the key
-            index
-                .entries
-                .binary_search_by_key(&search_key, |e| e.key)
-                .ok()
-                .map(|idx| index.entries[idx].clone())
+            Self::search_both_sections(index, &search_key)
         })
     }
 
-    /// Add a new entry to the appropriate index
+    /// Search both sections of an index file.
+    ///
+    /// Agent's `SearchBothSections`: searches update section first (linear),
+    /// then sorted section (binary search). Update entries take precedence.
+    fn search_both_sections(index: &IndexFile, search_key: &[u8; 9]) -> Option<IndexEntry> {
+        // Search update section first (linear scan, newest first)
+        if let Some(update_entry) = index.update_section.search(search_key) {
+            if update_entry.status == UpdateStatus::Delete {
+                return None; // Deleted via tombstone
+            }
+            return Some(update_entry.to_index_entry());
+        }
+
+        // Binary search sorted section
+        index
+            .entries
+            .binary_search_by_key(search_key, |e| e.key)
+            .ok()
+            .map(|idx| index.entries[idx].clone())
+    }
+
+    /// Add a new entry to the appropriate index.
+    ///
+    /// Appends to the update section (LSM-tree L0). If the update section
+    /// is full, flushes it first (merge into sorted section), then retries.
     ///
     /// # Errors
     ///
-    /// Returns error if index allocation fails or entry cannot be added
+    /// Returns error if the update section cannot accept the entry
     pub fn add_entry(
         &mut self,
         key: &EncodingKey,
@@ -504,17 +574,14 @@ impl IndexManager {
         let key_bytes = key.as_bytes();
         let index_id = Self::get_bucket_index(key_bytes);
 
-        // Create truncated key
         let mut truncated_key = [0u8; 9];
         truncated_key[..9.min(key_bytes.len())]
             .copy_from_slice(&key_bytes[..9.min(key_bytes.len())]);
 
-        let entry = IndexEntry::new(truncated_key, archive_id, archive_offset, size);
-
-        // Get or create index
-        let index = self.indices.entry(index_id).or_insert_with(|| IndexFile {
+        // Ensure bucket exists
+        self.indices.entry(index_id).or_insert_with(|| IndexFile {
             header: IndexHeader {
-                data_size: 16, // Minimal header
+                data_size: 16,
                 data_hash: 0,
                 version: 7,
                 bucket: index_id,
@@ -525,21 +592,41 @@ impl IndexManager {
                 segment_bits: 30,
             },
             entries: Vec::new(),
+            update_section: UpdateSection::new(),
         });
 
-        // Insert entry maintaining sort order
-        match index
-            .entries
-            .binary_search_by_key(&truncated_key, |e| e.key)
+        let make_entry = || {
+            UpdateEntry::new(
+                truncated_key,
+                ArchiveLocation {
+                    archive_id,
+                    archive_offset,
+                },
+                size,
+                UpdateStatus::Normal,
+            )
+        };
+
+        // Try to append to update section
         {
-            Ok(idx) => {
-                // Update existing entry
-                index.entries[idx] = entry;
+            let index = self.indices.get_mut(&index_id).unwrap_or_else(|| {
+                unreachable!("bucket was just created")
+            });
+            if index.update_section.append(make_entry()) {
+                return Ok(());
             }
-            Err(idx) => {
-                // Insert new entry
-                index.entries.insert(idx, entry);
-            }
+        }
+
+        // Update section full -- flush (merge into sorted), then retry
+        self.flush_updates_for_bucket(index_id)?;
+
+        let index = self.indices.get_mut(&index_id).unwrap_or_else(|| {
+            unreachable!("bucket was just flushed")
+        });
+        if !index.update_section.append(make_entry()) {
+            return Err(StorageError::Index(
+                "update section full after flush".to_string(),
+            ));
         }
 
         Ok(())
@@ -607,6 +694,8 @@ impl IndexManager {
     /// [0x18] Padding (8 bytes of zeros)
     /// [0x20] GuardedBlockHeader (8 bytes): entry_data_size + Jenkins hash of entries
     /// [0x28] Entry data (N bytes): packed index entries
+    /// [pad]  Padding to 64KB boundary
+    /// [upd]  Update section pages (min 0x7800 bytes)
     /// ```
     ///
     /// Uses atomic writes: write to temp file, fsync, rename, retry up to 3 times.
@@ -646,7 +735,6 @@ impl IndexManager {
         let header_hash = hashlittle(&header_bytes, 0);
         let entry_hash = hashlittle(&entry_data, 0);
 
-        // Build the complete file content
         let header_block = GuardedBlockHeader {
             block_size: u32::try_from(header_bytes.len())
                 .map_err(|e| StorageError::Index(format!("Header too large: {e}")))?,
@@ -659,6 +747,16 @@ impl IndexManager {
             block_hash: entry_hash,
         };
 
+        // Build update section bytes (only if there are pending updates)
+        let update_data = if index.update_section.entry_count() > 0 {
+            Some(index.update_section.to_bytes())
+        } else {
+            None
+        };
+
+        // Sorted section ends at: 8 (header block) + 16 (header) + 8 (padding) + 8 (entry block) + entry_data.len()
+        let sorted_end = 8 + header_bytes.len() + 8 + 8 + entry_data.len();
+
         // Atomic write: temp file -> fsync -> rename, retry up to 3 times
         let temp_path = path.with_extension("tmp");
         let mut last_error = None;
@@ -670,15 +768,17 @@ impl IndexManager {
                 &header_bytes,
                 &entry_block,
                 &entry_data,
+                sorted_end,
+                update_data.as_deref(),
             ) {
                 Ok(()) => {
-                    // Atomic rename
                     match std::fs::rename(&temp_path, path) {
                         Ok(()) => {
                             debug!(
-                                "Saved index {:02x} with {} entries (attempt {})",
+                                "Saved index {:02x} with {} sorted + {} update entries (attempt {})",
                                 id,
                                 index.entries.len(),
+                                index.update_section.entry_count(),
                                 attempt + 1
                             );
                             return Ok(());
@@ -693,7 +793,6 @@ impl IndexManager {
                 }
             }
 
-            // Clean up temp file on failure
             let _ = std::fs::remove_file(&temp_path);
         }
 
@@ -705,12 +804,17 @@ impl IndexManager {
     }
 
     /// Write index data to a file with proper fsync.
+    ///
+    /// Writes the sorted section, then pads to a 64KB boundary and
+    /// writes the update section if present.
     fn write_index_to_file(
         path: &Path,
         header_block: &GuardedBlockHeader,
         header_data: &[u8],
         entry_block: &GuardedBlockHeader,
         entry_data: &[u8],
+        sorted_end: usize,
+        update_data: Option<&[u8]>,
     ) -> Result<()> {
         let file = File::create(path)
             .map_err(|e| StorageError::Index(format!("Failed to create temp index: {e}")))?;
@@ -736,16 +840,31 @@ impl IndexManager {
             .write_le(entry_block)
             .map_err(|e| StorageError::Index(format!("Failed to write entry block: {e}")))?;
 
-        // 5. Entry data
+        // 5. Entry data (sorted section)
         writer
             .write_all(entry_data)
             .map_err(|e| StorageError::Index(format!("Failed to write entries: {e}")))?;
+
+        // 6. Update section (64KB-aligned after sorted section)
+        if let Some(update_bytes) = update_data {
+            let aligned =
+                (sorted_end + UPDATE_SECTION_ALIGNMENT - 1) & !(UPDATE_SECTION_ALIGNMENT - 1);
+            let padding_size = aligned - sorted_end;
+            if padding_size > 0 {
+                let padding = vec![0u8; padding_size];
+                writer.write_all(&padding).map_err(|e| {
+                    StorageError::Index(format!("Failed to write alignment padding: {e}"))
+                })?;
+            }
+            writer.write_all(update_bytes).map_err(|e| {
+                StorageError::Index(format!("Failed to write update section: {e}"))
+            })?;
+        }
 
         writer
             .flush()
             .map_err(|e| StorageError::Index(format!("Failed to flush: {e}")))?;
 
-        // fsync to ensure data is on disk before rename
         file.sync_all()
             .map_err(|e| StorageError::Index(format!("Failed to fsync: {e}")))?;
 
@@ -762,43 +881,74 @@ impl IndexManager {
         }
     }
 
-    /// Iterate over all index entries
+    /// Iterate over all visible index entries.
     ///
-    /// Returns an iterator that yields each entry along with its bucket ID.
-    /// Entries are yielded in bucket order, then in key order within each bucket.
-    pub fn iter_entries(&self) -> impl Iterator<Item = (u8, &IndexEntry)> {
-        self.indices
-            .iter()
-            .flat_map(|(&bucket, index)| index.entries.iter().map(move |entry| (bucket, entry)))
+    /// Yields entries from both the sorted and update sections.
+    /// Update entries take precedence over sorted entries with the same key.
+    /// Delete tombstones suppress the corresponding sorted entry.
+    pub fn iter_entries(&self) -> impl Iterator<Item = (u8, IndexEntry)> + '_ {
+        self.indices.iter().flat_map(|(&bucket, index)| {
+            // Build merged view: start with sorted entries, apply updates
+            let mut merged: BTreeMap<[u8; 9], Option<IndexEntry>> = BTreeMap::new();
+
+            for entry in &index.entries {
+                merged.insert(entry.key, Some(entry.clone()));
+            }
+
+            for update in index.update_section.all_entries() {
+                if update.status == UpdateStatus::Delete {
+                    merged.insert(update.ekey, None);
+                } else {
+                    merged.insert(update.ekey, Some(update.to_index_entry()));
+                }
+            }
+
+            merged
+                .into_values()
+                .flatten()
+                .map(move |entry| (bucket, entry))
+        })
     }
 
-    /// Get total entry count across all indices
+    /// Get total entry count across all indices.
+    ///
+    /// Counts entries from both sorted and update sections,
+    /// accounting for overwrites and deletes.
     pub fn entry_count(&self) -> usize {
-        self.indices.values().map(|idx| idx.entries.len()).sum()
+        self.iter_entries().count()
     }
 
     // =========================================================================
     // Mutation methods for manager-as-mutator pattern
     // =========================================================================
 
-    /// Remove an entry by encoding key
+    /// Remove an entry by encoding key.
     ///
-    /// Returns `true` if the entry was found and removed, `false` otherwise.
+    /// Writes a delete tombstone (status 3) to the update section.
+    /// Returns `true` if the entry was found, `false` otherwise.
     pub fn remove_entry(&mut self, key: &EncodingKey) -> bool {
+        // Check existence first (searches both sections)
+        let entry = self.lookup(key);
+        if entry.is_none() {
+            return false;
+        }
+        let entry = entry.unwrap_or_else(|| unreachable!());
+
         let key_bytes = key.as_bytes();
         let index_id = Self::get_bucket_index(key_bytes);
 
-        // Create truncated key for lookup
         let mut truncated_key = [0u8; 9];
         truncated_key[..9.min(key_bytes.len())]
             .copy_from_slice(&key_bytes[..9.min(key_bytes.len())]);
 
-        if let Some(index) = self.indices.get_mut(&index_id)
-            && let Ok(idx) = index
-                .entries
-                .binary_search_by_key(&truncated_key, |e| e.key)
-        {
-            index.entries.remove(idx);
+        if let Some(index) = self.indices.get_mut(&index_id) {
+            let tombstone = UpdateEntry::new(
+                truncated_key,
+                entry.archive_location,
+                entry.size,
+                UpdateStatus::Delete,
+            );
+            index.update_section.append(tombstone);
             return true;
         }
 
@@ -810,8 +960,9 @@ impl IndexManager {
         self.lookup(key).is_some()
     }
 
-    /// Update an existing entry's location
+    /// Update an existing entry's location.
     ///
+    /// Writes a new entry to the update section with the updated location.
     /// Returns `true` if the entry was found and updated, `false` otherwise.
     pub fn update_entry(
         &mut self,
@@ -820,44 +971,163 @@ impl IndexManager {
         archive_offset: u32,
         size: u32,
     ) -> bool {
+        // Check existence first
+        if self.lookup(key).is_none() {
+            return false;
+        }
+
         let key_bytes = key.as_bytes();
         let index_id = Self::get_bucket_index(key_bytes);
 
-        // Create truncated key for lookup
         let mut truncated_key = [0u8; 9];
         truncated_key[..9.min(key_bytes.len())]
             .copy_from_slice(&key_bytes[..9.min(key_bytes.len())]);
 
-        if let Some(index) = self.indices.get_mut(&index_id)
-            && let Ok(idx) = index
-                .entries
-                .binary_search_by_key(&truncated_key, |e| e.key)
-        {
-            index.entries[idx].archive_location.archive_id = archive_id;
-            index.entries[idx].archive_location.archive_offset = archive_offset;
-            index.entries[idx].size = size;
-            return true;
+        if let Some(index) = self.indices.get_mut(&index_id) {
+            let entry = UpdateEntry::new(
+                truncated_key,
+                ArchiveLocation {
+                    archive_id,
+                    archive_offset,
+                },
+                size,
+                UpdateStatus::Normal,
+            );
+            return index.update_section.append(entry);
         }
 
         false
     }
 
-    /// Clear all entries from all indices
+    /// Update an entry's status byte without changing its location.
     ///
-    /// This removes all entries but keeps the index structure intact.
+    /// Used by truncation tracking (Item 8) to mark entries as
+    /// non-resident (status 7) in the update section.
+    pub fn update_entry_status(&mut self, key: &EncodingKey, status: UpdateStatus) -> bool {
+        let entry = self.lookup(key);
+        if entry.is_none() {
+            return false;
+        }
+        let entry = entry.unwrap_or_else(|| unreachable!());
+
+        let key_bytes = key.as_bytes();
+        let index_id = Self::get_bucket_index(key_bytes);
+
+        let mut truncated_key = [0u8; 9];
+        truncated_key[..9.min(key_bytes.len())]
+            .copy_from_slice(&key_bytes[..9.min(key_bytes.len())]);
+
+        if let Some(index) = self.indices.get_mut(&index_id) {
+            let update = UpdateEntry::new(
+                truncated_key,
+                entry.archive_location,
+                entry.size,
+                status,
+            );
+            return index.update_section.append(update);
+        }
+
+        false
+    }
+
+    /// Flush the update section for a bucket into the sorted section.
+    ///
+    /// Merge-sorts update entries into the sorted section, handling
+    /// deletions and overwrites. Writes the result atomically to disk.
+    pub fn flush_updates_for_bucket(&mut self, bucket: u8) -> Result<()> {
+        // Compute path before taking mutable borrow on indices
+        let path = {
+            let filename = Self::generate_index_filename(bucket, 1);
+            self.base_path.join(filename)
+        };
+
+        let Some(index) = self.indices.get_mut(&bucket) else {
+            return Ok(());
+        };
+
+        if index.update_section.entry_count() == 0 {
+            return Ok(());
+        }
+
+        // Collect and deduplicate updates (latest entry wins via BTreeMap insert)
+        let mut updates: BTreeMap<[u8; 9], UpdateEntry> = BTreeMap::new();
+        for entry in index.update_section.all_entries() {
+            updates.insert(entry.ekey, entry.clone());
+        }
+
+        // Merge-sort: walk sorted section and updates together
+        let mut merged = Vec::with_capacity(index.entries.len() + updates.len());
+        let mut sorted_idx = 0;
+
+        for (update_key, update_entry) in &updates {
+            // Add sorted entries that come before this update key
+            while sorted_idx < index.entries.len() && index.entries[sorted_idx].key < *update_key {
+                merged.push(index.entries[sorted_idx].clone());
+                sorted_idx += 1;
+            }
+
+            // Skip matching sorted entry (update takes precedence)
+            if sorted_idx < index.entries.len() && index.entries[sorted_idx].key == *update_key {
+                sorted_idx += 1;
+            }
+
+            // Add update entry unless it's a delete tombstone
+            if update_entry.status != UpdateStatus::Delete {
+                merged.push(update_entry.to_index_entry());
+            }
+        }
+
+        // Add remaining sorted entries
+        while sorted_idx < index.entries.len() {
+            merged.push(index.entries[sorted_idx].clone());
+            sorted_idx += 1;
+        }
+
+        debug!(
+            "Flushed bucket {:02x}: {} sorted + {} updates -> {} merged",
+            bucket,
+            index.entries.len(),
+            updates.len(),
+            merged.len()
+        );
+
+        index.entries = merged;
+        index.update_section.clear();
+
+        // Save to disk with atomic replacement
+        Self::save_index(bucket, index, &path)?;
+
+        Ok(())
+    }
+
+    /// Flush all update sections across all buckets.
+    pub fn flush_all_updates(&mut self) -> Result<()> {
+        let buckets: Vec<u8> = self.indices.keys().copied().collect();
+        for bucket in buckets {
+            self.flush_updates_for_bucket(bucket)?;
+        }
+        Ok(())
+    }
+
+    /// Clear all entries from all indices.
+    ///
+    /// Clears both sorted and update sections.
     pub fn clear(&mut self) {
         for index in self.indices.values_mut() {
             index.entries.clear();
+            index.update_section.clear();
         }
     }
 
-    /// Remove all entries for a specific bucket
+    /// Remove all entries for a specific bucket.
     ///
-    /// Returns the number of entries removed.
+    /// Clears both sorted and update sections. Returns the total number
+    /// of entries removed (sorted + update).
     pub fn clear_bucket(&mut self, bucket: u8) -> usize {
         if let Some(index) = self.indices.get_mut(&bucket) {
-            let count = index.entries.len();
+            let count = index.entries.len() + index.update_section.entry_count();
             index.entries.clear();
+            index.update_section.clear();
             count
         } else {
             0
@@ -876,11 +1146,13 @@ impl IndexManager {
         self.indices.len()
     }
 
-    /// Get the entry count for a specific bucket
+    /// Get the entry count for a specific bucket.
+    ///
+    /// Includes both sorted and update section entries (approximate).
     pub fn bucket_entry_count(&self, bucket: u8) -> usize {
-        self.indices
-            .get(&bucket)
-            .map_or(0, |index| index.entries.len())
+        self.indices.get(&bucket).map_or(0, |index| {
+            index.entries.len() + index.update_section.entry_count()
+        })
     }
 
     /// Get all loaded bucket IDs

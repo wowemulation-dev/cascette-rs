@@ -9,14 +9,18 @@
 //!
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use cascette_crypto::EncodingKey;
 use parking_lot::RwLock;
 use tracing::{debug, warn};
 
+use crate::container::residency::ResidencyContainer;
 use crate::container::{AccessMode, Container};
-use crate::index::IndexManager;
+use crate::index::{IndexManager, UpdateStatus};
+use crate::lru::LruManager;
 use crate::storage::archive_file::ArchiveManager;
+use crate::storage::segment::SegmentAllocator;
 use crate::{Result, StorageError};
 
 /// Dynamic container for read-write CASC archive storage.
@@ -43,6 +47,8 @@ pub struct DynamicContainer {
     max_segment_size: u64,
     /// Enable free space reclamation during writes.
     free_space_reclaim: bool,
+    /// Path hash for segment header key generation.
+    path_hash: [u8; 16],
     /// Index manager for key-to-location mapping (KMT).
     ///
     /// Wrapped in `RwLock` because the Container trait takes `&self`
@@ -52,10 +58,121 @@ pub struct DynamicContainer {
     ///
     /// Wrapped in `RwLock` for the same reason as `index`.
     archive: RwLock<ArchiveManager>,
+    /// Segment allocator for write path.
+    ///
+    /// Manages frozen/thawed segments and allocates space for new
+    /// data writes.
+    segment_allocator: RwLock<SegmentAllocator>,
+    /// Optional residency container for truncation tracking.
+    ///
+    /// When set, truncated reads mark the affected span as
+    /// non-resident in the residency container.
+    residency: Option<Arc<ResidencyContainer>>,
+    /// Optional LRU cache manager.
+    ///
+    /// When set, read and write operations touch the key to keep
+    /// recently-accessed data from being evicted.
+    lru: Option<Arc<RwLock<LruManager>>>,
 }
 
 /// Maximum number of archive segments .
 pub const MAX_SEGMENTS: u16 = 0x3FF;
+
+/// Builder for `DynamicContainer`.
+///
+/// Absorbs new parameters (path_hash, residency, lru, shmem)
+/// without breaking the existing API.
+pub struct DynamicContainerBuilder {
+    access_mode: AccessMode,
+    storage_path: PathBuf,
+    shared_memory: bool,
+    segment_limit: u16,
+    max_segment_size: u64,
+    free_space_reclaim: bool,
+    path_hash: [u8; 16],
+    residency: Option<Arc<ResidencyContainer>>,
+    lru: Option<Arc<RwLock<LruManager>>>,
+}
+
+impl DynamicContainerBuilder {
+    /// Create a new builder with the storage path.
+    pub fn new(storage_path: PathBuf) -> Self {
+        Self {
+            access_mode: AccessMode::ReadWrite,
+            storage_path,
+            shared_memory: false,
+            segment_limit: MAX_SEGMENTS,
+            max_segment_size: crate::storage::segment::SEGMENT_SIZE,
+            free_space_reclaim: false,
+            path_hash: [0u8; 16],
+            residency: None,
+            lru: None,
+        }
+    }
+
+    /// Set the access mode.
+    #[must_use]
+    pub const fn access_mode(mut self, mode: AccessMode) -> Self {
+        self.access_mode = mode;
+        self
+    }
+
+    /// Enable or disable shared memory.
+    #[must_use]
+    pub const fn shared_memory(mut self, enabled: bool) -> Self {
+        self.shared_memory = enabled;
+        self
+    }
+
+    /// Set the maximum number of segments.
+    #[must_use]
+    pub const fn segment_limit(mut self, limit: u16) -> Self {
+        self.segment_limit = limit;
+        self
+    }
+
+    /// Set the maximum segment size.
+    #[must_use]
+    pub const fn max_segment_size(mut self, size: u64) -> Self {
+        self.max_segment_size = size;
+        self
+    }
+
+    /// Enable or disable free space reclamation.
+    #[must_use]
+    pub const fn free_space_reclaim(mut self, enabled: bool) -> Self {
+        self.free_space_reclaim = enabled;
+        self
+    }
+
+    /// Set the path hash for segment header key generation.
+    #[must_use]
+    pub const fn path_hash(mut self, hash: [u8; 16]) -> Self {
+        self.path_hash = hash;
+        self
+    }
+
+    /// Set the residency container for truncation tracking.
+    #[must_use]
+    pub fn residency(mut self, container: Arc<ResidencyContainer>) -> Self {
+        self.residency = Some(container);
+        self
+    }
+
+    /// Set the LRU cache manager.
+    #[must_use]
+    pub fn lru(mut self, manager: Arc<RwLock<LruManager>>) -> Self {
+        self.lru = Some(manager);
+        self
+    }
+
+    /// Build the `DynamicContainer`.
+    ///
+    /// Returns `StorageError::Config` if `storage_path` is empty.
+    pub fn build(self) -> Result<DynamicContainer> {
+        DynamicContainer::new_from_builder(self)
+    }
+}
 
 impl DynamicContainer {
     /// Create a new dynamic container.
@@ -72,28 +189,52 @@ impl DynamicContainer {
         max_segment_size: u64,
         free_space_reclaim: bool,
     ) -> Result<Self> {
-        if storage_path.as_os_str().is_empty() {
+        DynamicContainerBuilder::new(storage_path)
+            .access_mode(access_mode)
+            .shared_memory(shared_memory)
+            .segment_limit(segment_limit)
+            .max_segment_size(max_segment_size)
+            .free_space_reclaim(free_space_reclaim)
+            .build()
+    }
+
+    /// Create a new builder for configuring a dynamic container.
+    pub fn builder(storage_path: PathBuf) -> DynamicContainerBuilder {
+        DynamicContainerBuilder::new(storage_path)
+    }
+
+    fn new_from_builder(b: DynamicContainerBuilder) -> Result<Self> {
+        if b.storage_path.as_os_str().is_empty() {
             return Err(StorageError::Config(
                 "storage path is required for DynamicContainer".to_string(),
             ));
         }
 
-        let segment_limit = segment_limit.min(MAX_SEGMENTS);
-        let read_only = access_mode == AccessMode::ReadOnly;
+        let segment_limit = b.segment_limit.min(MAX_SEGMENTS);
+        let read_only = b.access_mode == AccessMode::ReadOnly;
 
-        let index = IndexManager::new(&storage_path);
-        let archive = ArchiveManager::new(&storage_path);
+        let index = IndexManager::new(&b.storage_path);
+        let archive = ArchiveManager::new(&b.storage_path);
+        let segment_allocator = SegmentAllocator::new(
+            b.storage_path.clone(),
+            b.path_hash,
+            segment_limit,
+        );
 
         Ok(Self {
-            access_mode,
-            storage_path,
-            shared_memory,
+            access_mode: b.access_mode,
+            storage_path: b.storage_path,
+            shared_memory: b.shared_memory,
             read_only,
             segment_limit,
-            max_segment_size,
-            free_space_reclaim,
+            max_segment_size: b.max_segment_size,
+            free_space_reclaim: b.free_space_reclaim,
+            path_hash: b.path_hash,
             index: RwLock::new(index),
             archive: RwLock::new(archive),
+            segment_allocator: RwLock::new(segment_allocator),
+            residency: b.residency,
+            lru: b.lru,
         })
     }
 
@@ -135,11 +276,15 @@ impl DynamicContainer {
         archive.open_all().await?;
         *self.archive.write() = archive;
 
+        // Load existing segments.
+        self.segment_allocator.write().load_existing()?;
+
         let entry_count = self.index.read().entry_count();
         let archive_count = self.archive.read().stats().archive_count;
+        let segment_count = self.segment_allocator.read().segment_count();
         debug!(
-            "DynamicContainer opened: {} index entries, {} archives",
-            entry_count, archive_count,
+            "DynamicContainer opened: {} index entries, {} archives, {} segments",
+            entry_count, archive_count, segment_count,
         );
 
         Ok(())
@@ -178,6 +323,59 @@ impl DynamicContainer {
     /// Check if free space reclamation is enabled.
     pub const fn free_space_reclaim(&self) -> bool {
         self.free_space_reclaim
+    }
+
+    /// Get the path hash.
+    pub const fn path_hash(&self) -> &[u8; 16] {
+        &self.path_hash
+    }
+
+    /// Get the number of archive segments.
+    pub fn segment_count(&self) -> usize {
+        self.segment_allocator.read().segment_count()
+    }
+
+    /// Flush the KMT update section for a specific bucket.
+    ///
+    /// Merges update entries into the sorted section with atomic
+    /// file replacement.
+    #[allow(clippy::significant_drop_tightening)]
+    pub fn flush_bucket(&self, bucket: u8) -> Result<()> {
+        let alloc = self.segment_allocator.read();
+        let _lock = alloc.bucket_write_lock(bucket);
+        let mut index = self.index.write();
+        index.flush_updates_for_bucket(bucket)?;
+        Ok(())
+    }
+
+    /// Flush all KMT update sections.
+    pub fn flush_all_updates(&self) -> Result<()> {
+        let mut index = self.index.write();
+        index.flush_all_updates()
+    }
+
+    /// Handle a truncated read by marking the affected span as
+    /// non-resident and updating the KMT entry status.
+    ///
+    /// Called when `read_content` fails due to the archive being
+    /// shorter than the entry's recorded size.
+    fn handle_truncated_read(&self, key: &[u8; 16], archive_offset: u32, entry_size: u32) {
+        // Mark span non-resident in residency container
+        if let Some(ref residency) = self.residency {
+            let offset = i32::try_from(archive_offset).unwrap_or(i32::MAX);
+            let length = i32::try_from(entry_size).unwrap_or(i32::MAX);
+            if let Err(e) = residency.mark_span_non_resident(key, offset, length) {
+                warn!(
+                    "failed to mark span non-resident for key {}: {e}",
+                    hex::encode(&key[..9])
+                );
+            }
+        }
+
+        // Update KMT entry status to DATA_NON_RESIDENT (7)
+        let ekey = EncodingKey::from_bytes(*key);
+        let mut index = self.index.write();
+        index.update_entry_status(&ekey, UpdateStatus::DataNonResident);
     }
 
     /// Get the number of indexed entries.
@@ -254,26 +452,39 @@ impl Container for DynamicContainer {
         // TruncatedRead.
         let data = {
             let archive = self.archive.read();
-            archive.read_content(archive_id, archive_offset, entry_size).map_err(|e| {
-                // Convert archive bounds errors to TruncatedRead to match
-                // CASC behavior (CASC error 3 → TACT error 7).
-                if matches!(&e, StorageError::Archive(msg) if msg.contains("beyond archive bounds")) {
-                    warn!(
-                        "truncated read for key {}: archive {} too short for entry at offset {:#x} size {}",
-                        hex::encode(&key[..9]),
-                        archive_id,
-                        archive_offset,
-                        entry_size,
-                    );
-                    StorageError::TruncatedRead(format!(
-                        "key {}: archive file truncated",
-                        hex::encode(&key[..9]),
-                    ))
-                } else {
-                    e
+            match archive.read_content(archive_id, archive_offset, entry_size) {
+                Ok(data) => data,
+                Err(e) => {
+                    // Convert archive bounds errors to TruncatedRead to match
+                    // CASC behavior (CASC error 3 -> TACT error 7).
+                    if matches!(&e, StorageError::Archive(msg) if msg.contains("beyond archive bounds")) {
+                        warn!(
+                            "truncated read for key {}: archive {} too short for entry at offset {:#x} size {}",
+                            hex::encode(&key[..9]),
+                            archive_id,
+                            archive_offset,
+                            entry_size,
+                        );
+
+                        // Truncation tracking: mark span non-resident and
+                        // update KMT entry status to DATA_NON_RESIDENT (7).
+                        self.handle_truncated_read(key, archive_offset, entry_size);
+
+                        return Err(StorageError::TruncatedRead(format!(
+                            "key {}: archive file truncated",
+                            hex::encode(&key[..9]),
+                        )));
+                    }
+                    return Err(e);
                 }
-            })?
+            }
         };
+
+        // Touch LRU cache to keep this key from eviction.
+        if let Some(ref lru) = self.lru {
+            let ekey_9: [u8; 9] = key[..9].try_into().unwrap_or([0; 9]);
+            lru.write().touch(&ekey_9);
+        }
 
         // Copy to output buffer
         let copy_len = data.len().min(buf.len());
@@ -322,6 +533,12 @@ impl Container for DynamicContainer {
                 offset,
                 total_size,
             )?;
+        }
+
+        // Touch LRU cache to keep this key from eviction.
+        if let Some(ref lru) = self.lru {
+            let ekey_9: [u8; 9] = encoding_key[..9].try_into().unwrap_or([0; 9]);
+            lru.write().touch(&ekey_9);
         }
 
         // Persist the updated index to disk

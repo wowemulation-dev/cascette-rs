@@ -1,19 +1,20 @@
 //! Residency container for download tracking.
 //!
-//! Tracks which files have been fully downloaded using a `.residency`
-//! token file. Supports reserve/mark-resident/remove/query operations.
+//! Tracks which files have been fully downloaded using KMT V8
+//! file-backed storage with 16 buckets and MurmurHash3 fast-path
+//! lookups. Falls back to in-memory tracking when no product name
+//! is provided.
 //!
 //! CASC checks drive type before initialization and falls back
 //! gracefully if the filesystem doesn't support the required operations.
-//!
 
-use std::collections::HashSet;
 use std::path::PathBuf;
 
 use parking_lot::RwLock;
 use tracing::{debug, warn};
 
 use crate::container::{AccessMode, Container};
+use crate::kmt::key_state::ResidencyDb;
 use crate::{Result, StorageError};
 
 /// Residency token file name.
@@ -30,9 +31,9 @@ const RESIDENCY_TOKEN: &str = ".residency";
 /// - offset 0x28: residency_db (casc::Residency object)
 /// - offset 0x2c: read_only flag
 ///
-/// The container tracks which encoding keys are fully resident
-/// (downloaded). Partial downloads are tracked via byte spans
-/// (deferred — not implemented yet).
+/// Tracks which encoding keys are fully resident (downloaded).
+/// Partial downloads are tracked via byte spans using
+/// `mark_span_non_resident`.
 pub struct ResidencyContainer {
     /// Product name for this container.
     product_name: String,
@@ -42,11 +43,9 @@ pub struct ResidencyContainer {
     read_only: bool,
     /// Storage directory path.
     storage_path: PathBuf,
-    /// Set of resident keys (simplified in-memory tracking).
-    ///
-    /// CASC uses a flat index at offset +0x40 with SRW locks.
-    /// We use a `HashSet` behind a `RwLock` for now.
-    resident_keys: RwLock<HashSet<[u8; 16]>>,
+    /// File-backed residency database with 16 buckets and MurmurHash3
+    /// fast-path lookups.
+    db: RwLock<ResidencyDb>,
     /// Whether the container has been initialized.
     initialized: bool,
 }
@@ -58,12 +57,13 @@ impl ResidencyContainer {
     /// "No product provided, continuing without residency container."
     pub fn new(product_name: String, access_mode: AccessMode, storage_path: PathBuf) -> Self {
         let read_only = access_mode == AccessMode::ReadOnly;
+        let db_path = storage_path.join("key_state_v8");
         Self {
             product_name,
             access_mode,
             read_only,
             storage_path,
-            resident_keys: RwLock::new(HashSet::new()),
+            db: RwLock::new(ResidencyDb::new(db_path)),
             initialized: false,
         }
     }
@@ -72,7 +72,8 @@ impl ResidencyContainer {
     ///
     /// Creates the storage directory and `.residency` token file for
     /// new writable containers. For read-only or existing containers,
-    /// verifies the token file exists.
+    /// verifies the token file exists. Loads existing residency data
+    /// from disk.
     pub async fn initialize(&mut self) -> Result<()> {
         if self.product_name.is_empty() {
             warn!("no product provided, continuing without residency container");
@@ -111,6 +112,15 @@ impl ResidencyContainer {
             );
         }
 
+        // Load existing residency data from disk
+        {
+            let db_path = self.storage_path.join("key_state_v8");
+            match ResidencyDb::load(&db_path) {
+                Ok(loaded) => *self.db.write() = loaded,
+                Err(e) => debug!("no existing residency data (new container): {e}"),
+            }
+        }
+
         self.initialized = true;
         debug!(
             "residency container initialized for product '{}'",
@@ -132,14 +142,14 @@ impl ResidencyContainer {
     /// Mark a key as fully resident (downloaded).
     ///
     /// CASC calls `casc::Residency::UpdateResidency` which
-    /// updates the flat index at +0x40.
+    /// updates the KMT V8 entry with update type Set(1).
     pub fn mark_resident(&self, key: &[u8; 16]) -> Result<()> {
         if self.read_only {
             return Err(StorageError::AccessDenied(
                 "residency container is read-only".to_string(),
             ));
         }
-        self.resident_keys.write().insert(*key);
+        self.db.write().mark_resident(key);
         Ok(())
     }
 
@@ -150,30 +160,76 @@ impl ResidencyContainer {
                 "residency container is read-only".to_string(),
             ));
         }
-        self.resident_keys.write().remove(key);
+        self.db.write().mark_non_resident(key);
+        Ok(())
+    }
+
+    /// Mark a byte span of a key as non-resident (truncation tracking).
+    ///
+    /// Called when a read detects truncated data. Records the non-resident
+    /// range so the LRU cache and compactor know which spans need
+    /// re-download.
+    pub fn mark_span_non_resident(
+        &self,
+        key: &[u8; 16],
+        offset: i32,
+        length: i32,
+    ) -> Result<()> {
+        if self.read_only {
+            return Err(StorageError::AccessDenied(
+                "residency container is read-only".to_string(),
+            ));
+        }
+        self.db.write().mark_span_non_resident(key, offset, length);
         Ok(())
     }
 
     /// Check if a key is resident.
     ///
-    /// CASC `casc::Residency::CheckResidency` acquires SRW lock
-    /// at +0x74 and checks the data structure at +0x78.
+    /// Uses MurmurHash3 fast-path: computes hash of the key, checks
+    /// hash index first, then does full bucket scan only if the hash
+    /// matches.
     pub fn is_resident(&self, key: &[u8; 16]) -> bool {
-        self.resident_keys.read().contains(key)
+        self.db.read().is_resident(key)
     }
 
     /// Get the number of resident keys.
     pub fn resident_count(&self) -> usize {
-        self.resident_keys.read().len()
+        self.db.read().entry_count()
     }
 
-    /// Iterate over all resident keys.
+    /// Scan all resident keys using two-pass algorithm.
     ///
-    /// CASC's scanner (`casc::Residency::OpenScanner`) uses a
-    /// shuffled index for non-sequential access. We return keys in
-    /// arbitrary order.
+    /// Pass 1: count entries across all 16 buckets.
+    /// Pass 2: populate the output vector.
+    /// Matches Agent.exe's `casc::Residency::OpenScanner` behavior.
     pub fn scan_keys(&self) -> Vec<[u8; 16]> {
-        self.resident_keys.read().iter().copied().collect()
+        self.db.read().scan_keys()
+    }
+
+    /// Delete a batch of keys.
+    ///
+    /// Uses threshold-based strategy: below 10,000 keys uses
+    /// sequential deletion, above switches to batch path with
+    /// page-level scanning.
+    pub fn delete_keys(&self, keys: &[[u8; 16]]) -> Result<()> {
+        if self.read_only {
+            return Err(StorageError::AccessDenied(
+                "residency container is read-only".to_string(),
+            ));
+        }
+        self.db.write().delete_keys(keys);
+        Ok(())
+    }
+
+    /// Flush dirty residency data to disk.
+    pub fn flush(&self) -> Result<()> {
+        if self.read_only {
+            return Ok(());
+        }
+        self.db.write().save().map_err(|e| {
+            StorageError::Archive(format!("failed to flush residency data: {e}"))
+        })
     }
 }
 
@@ -330,5 +386,87 @@ mod tests {
         let mut buf = [0u8; 64];
         assert!(container.read(&[0u8; 16], 0, 0, &mut buf).await.is_err());
         assert!(container.write(&[0u8; 16], b"data").await.is_err());
+    }
+
+    #[test]
+    fn test_span_non_resident() {
+        let dir = tempdir().expect("tempdir");
+        let container = ResidencyContainer::new(
+            "wow".to_string(),
+            AccessMode::ReadWrite,
+            dir.path().to_path_buf(),
+        );
+
+        let key = [0xCC; 16];
+        container.mark_resident(&key).expect("mark");
+        assert!(container.is_resident(&key));
+
+        // Mark a span as non-resident (truncation detection)
+        container
+            .mark_span_non_resident(&key, 1024, 512)
+            .expect("span");
+
+        // Key should still exist in the DB (span tracking, not removal)
+        assert_eq!(container.resident_count(), 1);
+    }
+
+    #[test]
+    fn test_batch_delete() {
+        let dir = tempdir().expect("tempdir");
+        let container = ResidencyContainer::new(
+            "wow".to_string(),
+            AccessMode::ReadWrite,
+            dir.path().to_path_buf(),
+        );
+
+        let keys: Vec<[u8; 16]> = (0..50u8).map(|i| [i; 16]).collect();
+        for key in &keys {
+            container.mark_resident(key).expect("mark");
+        }
+        assert_eq!(container.resident_count(), 50);
+
+        // Delete first 20 keys
+        container.delete_keys(&keys[..20]).expect("batch delete");
+        assert_eq!(container.resident_count(), 30);
+    }
+
+    #[test]
+    fn test_flush_and_reload() {
+        let dir = tempdir().expect("tempdir");
+        let storage_path = dir.path().to_path_buf();
+
+        // Create and populate
+        {
+            let container = ResidencyContainer::new(
+                "wow".to_string(),
+                AccessMode::ReadWrite,
+                storage_path.clone(),
+            );
+
+            let k1 = [0x11; 16];
+            let k2 = [0x22; 16];
+            container.mark_resident(&k1).expect("mark1");
+            container.mark_resident(&k2).expect("mark2");
+            container.flush().expect("flush");
+        }
+
+        // Reload and verify
+        {
+            let db_path = storage_path.join("key_state_v8");
+            let container = ResidencyContainer::new(
+                "wow".to_string(),
+                AccessMode::ReadOnly,
+                storage_path,
+            );
+
+            // Load from disk
+            *container.db.write() = ResidencyDb::load(&db_path).expect("load");
+
+            let k1 = [0x11; 16];
+            let k2 = [0x22; 16];
+            assert!(container.is_resident(&k1));
+            assert!(container.is_resident(&k2));
+            assert_eq!(container.resident_count(), 2);
+        }
     }
 }

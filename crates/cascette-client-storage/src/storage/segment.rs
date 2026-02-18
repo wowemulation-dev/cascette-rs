@@ -243,6 +243,244 @@ pub fn decode_storage_offset(archive_id: u16, archive_offset: u32) -> (u16, u32)
     (archive_id, archive_offset)
 }
 
+/// Allocation result from `SegmentAllocator::allocate`.
+#[derive(Debug, Clone, Copy)]
+pub struct Allocation {
+    /// Index of the segment that was allocated from.
+    pub segment_index: u16,
+    /// Byte offset within the segment's data file.
+    pub file_offset: u32,
+}
+
+/// Manages archive segments for the write path.
+///
+/// Tracks thawed (writable) and frozen (read-only) segments.
+/// Allocation tries thawed segments first, creates new ones when
+/// all are full, and enforces `MAX_SEGMENTS`.
+pub struct SegmentAllocator {
+    /// All known segments, indexed by segment index.
+    segments: Vec<SegmentInfo>,
+    /// Per-bucket RwLock for concurrent KMT access.
+    ///
+    /// Each bucket's index file can be flushed independently.
+    bucket_locks: [parking_lot::RwLock<()>; BUCKET_COUNT],
+    /// Maximum number of segments allowed.
+    max_segments: u16,
+    /// Path hash for generating segment header keys.
+    path_hash: [u8; 16],
+    /// Base directory for data files.
+    base_path: std::path::PathBuf,
+}
+
+impl SegmentAllocator {
+    /// Create a new segment allocator.
+    pub fn new(
+        base_path: std::path::PathBuf,
+        path_hash: [u8; 16],
+        max_segments: u16,
+    ) -> Self {
+        Self {
+            segments: Vec::new(),
+            bucket_locks: std::array::from_fn(|_| parking_lot::RwLock::new(())),
+            max_segments: max_segments.min(MAX_SEGMENTS),
+            path_hash,
+            base_path,
+        }
+    }
+
+    /// Load existing segments from the data directory.
+    ///
+    /// Scans for `data.NNN` files, parses their segment headers,
+    /// and marks all loaded segments as frozen.
+    pub fn load_existing(&mut self) -> crate::Result<()> {
+        let entries = match std::fs::read_dir(&self.base_path) {
+            Ok(e) => e,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(e) => {
+                return Err(crate::StorageError::Archive(format!(
+                    "failed to read data directory {}: {e}",
+                    self.base_path.display()
+                )));
+            }
+        };
+
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            let Some(name_str) = name.to_str() else {
+                continue;
+            };
+            let Some(index) = parse_data_filename(name_str) else {
+                continue;
+            };
+
+            let path = entry.path();
+            let metadata = std::fs::metadata(&path).map_err(|e| {
+                crate::StorageError::Archive(format!(
+                    "failed to stat {}: {e}",
+                    path.display()
+                ))
+            })?;
+
+            // Read segment header
+            let file_data = std::fs::read(&path).map_err(|e| {
+                crate::StorageError::Archive(format!(
+                    "failed to read {}: {e}",
+                    path.display()
+                ))
+            })?;
+
+            let header = if file_data.len() >= SEGMENT_HEADER_SIZE {
+                SegmentHeader::from_bytes(&file_data).unwrap_or_default()
+            } else {
+                SegmentHeader::default()
+            };
+
+            let mut info = SegmentInfo::new(index, header);
+            info.write_position = metadata.len();
+            info.state = SegmentState::Frozen; // All loaded segments start frozen
+
+            // Insert at the right position, expanding if needed
+            while self.segments.len() <= index as usize {
+                self.segments.push(SegmentInfo::new(
+                    self.segments.len() as u16,
+                    SegmentHeader::default(),
+                ));
+            }
+            self.segments[index as usize] = info;
+        }
+
+        Ok(())
+    }
+
+    /// Allocate space in a segment for `size` bytes.
+    ///
+    /// Strategy:
+    /// 1. Try thawed segments in order
+    /// 2. If none have space, create a new segment
+    /// 3. Returns error if MAX_SEGMENTS reached
+    pub fn allocate(&mut self, size: u64) -> crate::Result<Allocation> {
+        // Try existing thawed segments
+        for info in &mut self.segments {
+            if info.has_space_for(size) {
+                let offset = info.write_position;
+                info.write_position += size;
+                return Ok(Allocation {
+                    segment_index: info.index,
+                    file_offset: u32::try_from(offset).map_err(|_| {
+                        crate::StorageError::Archive(
+                            "segment offset exceeds u32 range".to_string(),
+                        )
+                    })?,
+                });
+            }
+        }
+
+        // Create new segment
+        let new_index = u16::try_from(self.segments.len()).map_err(|_| {
+            crate::StorageError::Archive("too many segments".to_string())
+        })?;
+
+        if new_index >= self.max_segments {
+            return Err(crate::StorageError::Archive(format!(
+                "maximum segment count ({}) reached",
+                self.max_segments
+            )));
+        }
+
+        let header = SegmentHeader::generate(new_index, &self.path_hash);
+        let header_bytes = header.to_bytes();
+
+        // Write the segment header to the new data file
+        let data_path = segment_data_path(&self.base_path, new_index);
+        std::fs::write(&data_path, header_bytes).map_err(|e| {
+            crate::StorageError::Archive(format!(
+                "failed to create segment file {}: {e}",
+                data_path.display()
+            ))
+        })?;
+
+        let mut info = SegmentInfo::new(new_index, header);
+        // write_position starts after the header (set by SegmentInfo::new)
+
+        let offset = info.write_position;
+        info.write_position += size;
+        self.segments.push(info);
+
+        Ok(Allocation {
+            segment_index: new_index,
+            file_offset: u32::try_from(offset).map_err(|_| {
+                crate::StorageError::Archive(
+                    "segment offset exceeds u32 range".to_string(),
+                )
+            })?,
+        })
+    }
+
+    /// Freeze a segment (make it read-only).
+    pub fn freeze(&mut self, segment_index: u16) -> bool {
+        if let Some(info) = self.segments.get_mut(segment_index as usize)
+            && info.state == SegmentState::Thawed
+        {
+            info.state = SegmentState::Frozen;
+            return true;
+        }
+        false
+    }
+
+    /// Thaw a segment (make it writable).
+    pub fn thaw(&mut self, segment_index: u16) -> bool {
+        if let Some(info) = self.segments.get_mut(segment_index as usize)
+            && info.state == SegmentState::Frozen
+        {
+            info.state = SegmentState::Thawed;
+            return true;
+        }
+        false
+    }
+
+    /// Get the number of segments.
+    pub fn segment_count(&self) -> usize {
+        self.segments.len()
+    }
+
+    /// Get segment info by index.
+    pub fn segment(&self, index: u16) -> Option<&SegmentInfo> {
+        self.segments.get(index as usize)
+    }
+
+    /// Get mutable segment info by index.
+    pub fn segment_mut(&mut self, index: u16) -> Option<&mut SegmentInfo> {
+        self.segments.get_mut(index as usize)
+    }
+
+    /// Acquire a bucket lock for KMT operations.
+    ///
+    /// Returns a guard that releases the lock on drop.
+    pub fn bucket_lock(&self, bucket: u8) -> parking_lot::RwLockReadGuard<'_, ()> {
+        self.bucket_locks[(bucket & 0x0F) as usize].read()
+    }
+
+    /// Acquire a bucket write lock for KMT flush operations.
+    pub fn bucket_write_lock(&self, bucket: u8) -> parking_lot::RwLockWriteGuard<'_, ()> {
+        self.bucket_locks[(bucket & 0x0F) as usize].write()
+    }
+
+    /// Iterate over all segments.
+    pub fn segments(&self) -> &[SegmentInfo] {
+        &self.segments
+    }
+}
+
+impl std::fmt::Debug for SegmentAllocator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SegmentAllocator")
+            .field("segment_count", &self.segments.len())
+            .field("max_segments", &self.max_segments)
+            .field("base_path", &self.base_path)
+            .finish_non_exhaustive()
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::expect_used)]
 mod tests {
@@ -382,5 +620,118 @@ mod tests {
     fn test_too_short_data_rejected() {
         let short = [0u8; 100];
         assert!(SegmentHeader::from_bytes(&short).is_none());
+    }
+
+    #[test]
+    fn test_segment_allocator_allocate() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path_hash = [0xAB; 16];
+        let mut alloc = SegmentAllocator::new(dir.path().to_path_buf(), path_hash, 10);
+
+        // First allocation creates a new segment
+        let a1 = alloc.allocate(1024).expect("alloc1");
+        assert_eq!(a1.segment_index, 0);
+        assert_eq!(a1.file_offset, SEGMENT_HEADER_SIZE as u32);
+
+        // Second allocation in the same segment
+        let a2 = alloc.allocate(2048).expect("alloc2");
+        assert_eq!(a2.segment_index, 0);
+        assert_eq!(a2.file_offset, SEGMENT_HEADER_SIZE as u32 + 1024);
+
+        // Data file should exist
+        assert!(segment_data_path(dir.path(), 0).exists());
+    }
+
+    #[test]
+    fn test_segment_allocator_creates_new_segment_when_full() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path_hash = [0xCD; 16];
+        let mut alloc = SegmentAllocator::new(dir.path().to_path_buf(), path_hash, 10);
+
+        // Fill first segment almost completely
+        let remaining = SEGMENT_SIZE - SEGMENT_HEADER_SIZE as u64;
+        let a1 = alloc.allocate(remaining).expect("alloc big");
+        assert_eq!(a1.segment_index, 0);
+
+        // Next allocation must create a new segment
+        let a2 = alloc.allocate(1024).expect("alloc overflow");
+        assert_eq!(a2.segment_index, 1);
+        assert_eq!(a2.file_offset, SEGMENT_HEADER_SIZE as u32);
+
+        assert_eq!(alloc.segment_count(), 2);
+    }
+
+    #[test]
+    fn test_segment_allocator_max_segments_enforced() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path_hash = [0xEF; 16];
+        let mut alloc = SegmentAllocator::new(dir.path().to_path_buf(), path_hash, 2);
+
+        // Fill two segments
+        let remaining = SEGMENT_SIZE - SEGMENT_HEADER_SIZE as u64;
+        alloc.allocate(remaining).expect("seg0");
+        alloc.allocate(remaining).expect("seg1");
+
+        // Third segment should fail
+        let result = alloc.allocate(1024);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_segment_allocator_freeze_thaw() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path_hash = [0x12; 16];
+        let mut alloc = SegmentAllocator::new(dir.path().to_path_buf(), path_hash, 10);
+
+        alloc.allocate(1024).expect("alloc");
+
+        // Segment 0 starts thawed
+        assert_eq!(alloc.segment(0).unwrap().state, SegmentState::Thawed);
+
+        // Freeze
+        assert!(alloc.freeze(0));
+        assert_eq!(alloc.segment(0).unwrap().state, SegmentState::Frozen);
+
+        // Can't allocate in frozen segment
+        // But there's space, so allocator creates segment 1
+        let a = alloc.allocate(512).expect("alloc after freeze");
+        assert_eq!(a.segment_index, 1);
+
+        // Thaw segment 0
+        assert!(alloc.thaw(0));
+        assert_eq!(alloc.segment(0).unwrap().state, SegmentState::Thawed);
+    }
+
+    #[test]
+    fn test_segment_allocator_load_existing() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path_hash = [0x34; 16];
+
+        // Create some segment files
+        {
+            let mut alloc = SegmentAllocator::new(dir.path().to_path_buf(), path_hash, 10);
+            alloc.allocate(1024).expect("alloc0");
+            alloc.allocate(SEGMENT_SIZE - SEGMENT_HEADER_SIZE as u64).expect("fill0");
+            alloc.allocate(2048).expect("alloc1");
+        }
+
+        // Reload
+        let mut alloc2 = SegmentAllocator::new(dir.path().to_path_buf(), path_hash, 10);
+        alloc2.load_existing().expect("load");
+
+        // Should find the segment files (loaded as frozen)
+        assert!(alloc2.segment_count() >= 1);
+        // All loaded segments are frozen
+        for seg in alloc2.segments() {
+            assert_eq!(seg.state, SegmentState::Frozen);
+        }
+    }
+
+    #[test]
+    fn test_storage_offset_encoding_round_trip() {
+        let (seg, off) = encode_storage_offset(42, 0x1234);
+        let (seg2, off2) = decode_storage_offset(seg, off);
+        assert_eq!(seg2, 42);
+        assert_eq!(off2, 0x1234);
     }
 }

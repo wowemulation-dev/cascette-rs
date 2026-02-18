@@ -10,6 +10,55 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- cascette-client-storage: KMT update section for LSM-tree L0 writes
+  - 24-byte `UpdateEntry` with hash guard, status byte, and delete markers
+  - 512-byte `UpdatePage` (21 entries max) with 4KB sync every 8th page
+  - `UpdateSection` with linear search (newest wins), merge-sort flush to
+    sorted section via atomic file replacement
+  - Lookup searches update section first, then sorted section
+- cascette-client-storage: Residency container with KMT V8 file-backed storage
+  - 40-byte `ResidencyEntry` with MurmurHash3 fast-path for `is_resident()`
+  - Two-pass `scan_keys()` (count then populate) across 16 buckets
+  - Batch delete with 10K threshold switching to batch path
+  - `mark_span_non_resident(key, offset, length)` for truncation tracking
+- cascette-client-storage: Hard link container with TrieDirectory and FD cache
+  - `format_content_key_path(ekey)` -> `XX/YY/ZZZZ...ZZZZ` trie path layout
+  - LRU FD cache with doubly-linked list eviction
+  - Two-phase delete (collect entries with nlink <= 1, then remove)
+  - `compact_directory()` validates trie at each depth, removes orphans
+  - `query()` returns actual trie lookup result
+- cascette-client-storage: Segment allocator for write path
+  - Per-bucket `RwLock` array for concurrent KMT access
+  - `allocate(size)` tries thawed segments first, creates new if full
+  - Freeze/thaw state transitions with MAX_SEGMENTS (0x3FF) enforcement
+  - `DynamicContainerBuilder` for configuring containers without breaking API
+- cascette-client-storage: Two-phase compaction pipeline
+  - Archive merge (between segments) and extract-compact (in-place) modes
+  - `CompactionFileMover` with buffered I/O (`min(total >> 17, 16)` buffers)
+  - `ExtractorCompactorBackup` crash recovery file (append-only segment list)
+  - `validate_spans()` detects overlapping data ranges
+  - `plan_archive_merge()` identifies low-utilization frozen segments
+- cascette-client-storage: LRU cache shmem integration and eviction
+  - `evict_to_target(target_bytes)` evicts from tail until target freed
+  - `scan_directory()` removes stale `.lru` files from old generations
+  - `for_each_entry(callback)` walks linked list for size accounting
+  - `run_cycle()` and `shutdown()` matching Agent.exe `LRUManager::Run`
+  - DynamicContainer touches LRU on `read()` and `write()`
+- cascette-client-storage: Platform shared memory implementations
+  - Unix: `shm_open`/`mmap` with owner-only permissions (0600), `flock`-based
+    lock files with 100s timeout, `statfs` network drive detection
+  - Windows: Type stubs with path normalization (lowercase, forward slashes,
+    resolve `.`/`..`, max 248 bytes)
+  - Control block `from_mapped()`/`to_mapped()` serialization for v4/v5
+  - PID tracking serialization with slot management
+- cascette-client-storage: Truncation tracking wired to residency and index
+  - Truncated reads mark affected span non-resident via residency container
+  - KMT entry status updated to DATA_NON_RESIDENT (7) via update section
+  - Missing archive triggers key removal from container index
+- docs: Agent container storage architecture documentation
+- docs: Agent IDX/KMT file format reverse engineering documentation
+- docs: Agent maintenance operations documentation
+
 - cascette-client-storage crate: Local CASC storage for game installations
   - Bucket-based .idx index files with 18-byte entries, big-endian 9-byte
     truncated encoding keys, and archive location bit-packing

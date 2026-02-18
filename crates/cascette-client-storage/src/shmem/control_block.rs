@@ -142,7 +142,112 @@ pub struct PidTracking {
     pub modes: Vec<u32>,
 }
 
+/// PID tracking layout in mapped memory (starts after V5 base header):
+/// - Offset 0x00: state (u32, LE)
+/// - Offset 0x04: writer_count (u32, LE)
+/// - Offset 0x08: total_count (u32, LE)
+/// - Offset 0x0C: last_modified_slot (u32, LE)
+/// - Offset 0x10: generation (u64, LE)
+/// - Offset 0x18: max_slots (u32, LE)
+/// - Offset 0x1C: pids array (max_slots * u32, LE)
+/// - After pids: modes array (max_slots * u32, LE)
+const PID_TRACKING_HEADER_SIZE: usize = 0x1C;
+
 impl PidTracking {
+    /// Read PID tracking state from mapped memory.
+    ///
+    /// `data` starts at the PID tracking region (after V5 base header).
+    pub fn from_mapped(data: &[u8]) -> Self {
+        if data.len() < PID_TRACKING_HEADER_SIZE {
+            return Self::new(0);
+        }
+
+        let state = u32::from_le_bytes([data[0], data[1], data[2], data[3]]);
+        let writer_count = u32::from_le_bytes([data[4], data[5], data[6], data[7]]);
+        let total_count = u32::from_le_bytes([data[8], data[9], data[10], data[11]]);
+        let last_modified_slot =
+            u32::from_le_bytes([data[12], data[13], data[14], data[15]]);
+        let generation = u64::from_le_bytes([
+            data[16], data[17], data[18], data[19], data[20], data[21], data[22],
+            data[23],
+        ]);
+        let max_slots = u32::from_le_bytes([data[24], data[25], data[26], data[27]]);
+
+        let slot_count = max_slots as usize;
+        let pids_start = PID_TRACKING_HEADER_SIZE;
+        let modes_start = pids_start + slot_count * 4;
+
+        let mut pids = vec![0u32; slot_count];
+        let mut modes = vec![0u32; slot_count];
+
+        for (i, pid) in pids.iter_mut().enumerate().take(slot_count) {
+            let offset = pids_start + i * 4;
+            if offset + 4 <= data.len() {
+                *pid = u32::from_le_bytes([
+                    data[offset],
+                    data[offset + 1],
+                    data[offset + 2],
+                    data[offset + 3],
+                ]);
+            }
+        }
+
+        for (i, mode) in modes.iter_mut().enumerate().take(slot_count) {
+            let offset = modes_start + i * 4;
+            if offset + 4 <= data.len() {
+                *mode = u32::from_le_bytes([
+                    data[offset],
+                    data[offset + 1],
+                    data[offset + 2],
+                    data[offset + 3],
+                ]);
+            }
+        }
+
+        Self {
+            state,
+            writer_count,
+            total_count,
+            last_modified_slot,
+            generation,
+            max_slots,
+            pids,
+            modes,
+        }
+    }
+
+    /// Write PID tracking state to mapped memory.
+    pub fn to_mapped(&self, data: &mut [u8]) {
+        if data.len() < PID_TRACKING_HEADER_SIZE {
+            return;
+        }
+
+        data[0..4].copy_from_slice(&self.state.to_le_bytes());
+        data[4..8].copy_from_slice(&self.writer_count.to_le_bytes());
+        data[8..12].copy_from_slice(&self.total_count.to_le_bytes());
+        data[12..16].copy_from_slice(&self.last_modified_slot.to_le_bytes());
+        data[16..24].copy_from_slice(&self.generation.to_le_bytes());
+        data[24..28].copy_from_slice(&self.max_slots.to_le_bytes());
+
+        let slot_count = self.max_slots as usize;
+        let pids_start = PID_TRACKING_HEADER_SIZE;
+        let modes_start = pids_start + slot_count * 4;
+
+        for i in 0..slot_count {
+            let offset = pids_start + i * 4;
+            if offset + 4 <= data.len() {
+                data[offset..offset + 4].copy_from_slice(&self.pids[i].to_le_bytes());
+            }
+        }
+
+        for i in 0..slot_count {
+            let offset = modes_start + i * 4;
+            if offset + 4 <= data.len() {
+                data[offset..offset + 4].copy_from_slice(&self.modes[i].to_le_bytes());
+            }
+        }
+    }
+
     /// Create a new PID tracking state with the given slot count.
     pub fn new(max_slots: u32) -> Self {
         Self {
@@ -254,6 +359,142 @@ impl PidTracking {
 }
 
 impl ShmemControlBlock {
+    /// Read a control block from a mapped memory region.
+    ///
+    /// Reads fields at their documented DWORD offsets:
+    /// - 0x00: version byte
+    /// - 0x02: initialization byte
+    /// - 0x42: free space table format (DWORD, little-endian)
+    /// - 0x43: data size (DWORD, little-endian)
+    /// - 0x54: V5 exclusive access flag (DWORD, little-endian)
+    ///
+    /// Note: offsets 0x42, 0x43, 0x54 are DWORD indices (multiply by 4
+    /// for byte offset). CASC uses `*(DWORD*)(base + index*4)`.
+    pub fn from_mapped(data: &[u8]) -> Option<Self> {
+        // Need at least the v4 header
+        if data.len() < V4_HEADER_SIZE {
+            return None;
+        }
+
+        let version = data[0];
+        if !(MIN_SHMEM_VERSION..=MAX_SHMEM_VERSION).contains(&version) {
+            return None;
+        }
+
+        // Initialization byte at offset 0x02
+        let initialized = data[INIT_BYTE_OFFSET] != 0;
+
+        // Free space table format at DWORD offset 0x42 (byte offset 0x108)
+        let fst_byte_offset = FREE_SPACE_FORMAT_OFFSET * 4;
+        let free_space_format = u32::from_le_bytes([
+            data[fst_byte_offset],
+            data[fst_byte_offset + 1],
+            data[fst_byte_offset + 2],
+            data[fst_byte_offset + 3],
+        ]);
+
+        // Data size at DWORD offset 0x43 (byte offset 0x10C)
+        let ds_byte_offset = DATA_SIZE_OFFSET * 4;
+        let data_size = u32::from_le_bytes([
+            data[ds_byte_offset],
+            data[ds_byte_offset + 1],
+            data[ds_byte_offset + 2],
+            data[ds_byte_offset + 3],
+        ]);
+
+        let mut cb = Self {
+            version,
+            initialized,
+            free_space_format,
+            data_size,
+            exclusive_access: false,
+            pid_tracking: None,
+        };
+
+        // V5 fields
+        if version >= 5 && data.len() >= V5_BASE_HEADER_SIZE {
+            // Exclusive access at DWORD offset 0x54 (byte offset 0x150)
+            let ea_byte_offset = V5_EXCLUSIVE_FLAG_OFFSET * 4;
+            if data.len() > ea_byte_offset + 3 {
+                let ea_dword = u32::from_le_bytes([
+                    data[ea_byte_offset],
+                    data[ea_byte_offset + 1],
+                    data[ea_byte_offset + 2],
+                    data[ea_byte_offset + 3],
+                ]);
+                cb.exclusive_access = (ea_dword & 1) != 0;
+            }
+
+            // PID tracking if the region is large enough for the extended header
+            if data.len() >= V5_EXTENDED_HEADER_SIZE {
+                cb.pid_tracking = Some(PidTracking::from_mapped(
+                    &data[V5_BASE_HEADER_SIZE..],
+                ));
+            }
+        }
+
+        Some(cb)
+    }
+
+    /// Write the control block to a mapped memory region.
+    ///
+    /// Writes fields at their documented DWORD offsets. The caller
+    /// must ensure `data` is large enough (`file_size()` bytes).
+    pub fn to_mapped(&self, data: &mut [u8]) {
+        let required = self.file_size();
+        debug_assert!(
+            data.len() >= required,
+            "mapped region too small: {} < {}",
+            data.len(),
+            required
+        );
+
+        // Version byte at offset 0x00
+        data[0] = self.version;
+
+        // Initialization byte at offset 0x02
+        data[INIT_BYTE_OFFSET] = u8::from(self.initialized);
+
+        // Free space table format at DWORD offset 0x42
+        let fst_byte_offset = FREE_SPACE_FORMAT_OFFSET * 4;
+        data[fst_byte_offset..fst_byte_offset + 4]
+            .copy_from_slice(&self.free_space_format.to_le_bytes());
+
+        // Data size at DWORD offset 0x43
+        let ds_byte_offset = DATA_SIZE_OFFSET * 4;
+        data[ds_byte_offset..ds_byte_offset + 4]
+            .copy_from_slice(&self.data_size.to_le_bytes());
+
+        // V5 fields
+        if self.version >= 5 && data.len() >= V5_BASE_HEADER_SIZE {
+            let ea_byte_offset = V5_EXCLUSIVE_FLAG_OFFSET * 4;
+            let ea_dword: u32 = u32::from(self.exclusive_access);
+            data[ea_byte_offset..ea_byte_offset + 4]
+                .copy_from_slice(&ea_dword.to_le_bytes());
+
+            if let Some(ref pt) = self.pid_tracking
+                && data.len() >= V5_EXTENDED_HEADER_SIZE
+            {
+                pt.to_mapped(&mut data[V5_BASE_HEADER_SIZE..]);
+            }
+        }
+    }
+
+    /// Get the data size field.
+    pub const fn data_size(&self) -> u32 {
+        self.data_size
+    }
+
+    /// Set the data size field.
+    pub fn set_data_size(&mut self, size: u32) {
+        self.data_size = size;
+    }
+
+    /// Check if the control block is initialized.
+    pub const fn is_initialized(&self) -> bool {
+        self.initialized
+    }
+
     /// Create a new control block with the given protocol version.
     ///
     /// Returns `None` if the version is not in [4, 5].
@@ -518,5 +759,89 @@ mod tests {
         assert_eq!(cb.version(), 5);
         assert!(cb.pid_tracking().is_some());
         assert_eq!(cb.pid_tracking().unwrap().max_slots, 8);
+    }
+
+    #[test]
+    fn test_v4_mapped_round_trip() {
+        let mut cb = ShmemControlBlock::new(4).unwrap();
+        cb.initialize(0x1234);
+
+        let size = cb.file_size();
+        let mut buf = vec![0u8; size];
+        cb.to_mapped(&mut buf);
+
+        let loaded = ShmemControlBlock::from_mapped(&buf).unwrap();
+        assert_eq!(loaded.version(), 4);
+        assert!(loaded.is_initialized());
+        assert_eq!(loaded.data_size(), 0x1234);
+        assert!(loaded.validate());
+    }
+
+    #[test]
+    fn test_v5_mapped_round_trip() {
+        let mut cb = ShmemControlBlock::new_v5_with_pid_tracking(4);
+        cb.initialize(0xABCD);
+        cb.set_exclusive(true);
+
+        // Add some processes
+        cb.pid_tracking_mut().unwrap().add_process(1234, 5);
+        cb.pid_tracking_mut().unwrap().add_process(5678, 2);
+
+        let size = cb.file_size();
+        let mut buf = vec![0u8; size];
+        cb.to_mapped(&mut buf);
+
+        let loaded = ShmemControlBlock::from_mapped(&buf).unwrap();
+        assert_eq!(loaded.version(), 5);
+        assert!(loaded.is_initialized());
+        assert_eq!(loaded.data_size(), 0xABCD);
+        assert!(loaded.is_exclusive());
+
+        let pt = loaded.pid_tracking().unwrap();
+        assert_eq!(pt.total_count, 2);
+        assert_eq!(pt.writer_count, 1);
+        assert_eq!(pt.pids[0], 1234);
+        assert_eq!(pt.pids[1], 5678);
+        assert_eq!(pt.modes[0], 5);
+        assert_eq!(pt.modes[1], 2);
+    }
+
+    #[test]
+    fn test_from_mapped_too_small() {
+        let buf = vec![0u8; 10];
+        assert!(ShmemControlBlock::from_mapped(&buf).is_none());
+    }
+
+    #[test]
+    fn test_from_mapped_invalid_version() {
+        let mut buf = vec![0u8; V4_HEADER_SIZE];
+        buf[0] = 3; // Invalid version
+        assert!(ShmemControlBlock::from_mapped(&buf).is_none());
+
+        buf[0] = 6; // Invalid version
+        assert!(ShmemControlBlock::from_mapped(&buf).is_none());
+    }
+
+    #[test]
+    fn test_pid_tracking_mapped_round_trip() {
+        let mut pt = PidTracking::new(4);
+        pt.add_process(100, 5);
+        pt.add_process(200, 2);
+        pt.add_process(300, 5);
+
+        let buf_size = PID_TRACKING_HEADER_SIZE + 4 * 4 * 2; // header + 4 pids + 4 modes
+        let mut buf = vec![0u8; buf_size];
+        pt.to_mapped(&mut buf);
+
+        let loaded = PidTracking::from_mapped(&buf);
+        assert_eq!(loaded.state, 1);
+        assert_eq!(loaded.total_count, 3);
+        assert_eq!(loaded.writer_count, 2);
+        assert_eq!(loaded.generation, 3);
+        assert_eq!(loaded.max_slots, 4);
+        assert_eq!(loaded.pids[0], 100);
+        assert_eq!(loaded.pids[1], 200);
+        assert_eq!(loaded.pids[2], 300);
+        assert_eq!(loaded.pids[3], 0);
     }
 }

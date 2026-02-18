@@ -9,6 +9,7 @@
 //! individually frozen (read-only) or thawed (writable).
 
 pub mod archive_file;
+pub mod compaction;
 pub mod local_header;
 pub mod segment;
 
