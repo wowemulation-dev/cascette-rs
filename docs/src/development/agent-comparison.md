@@ -157,36 +157,36 @@ reverse engineering. 11 of 19 issues resolved; 8 remain partial.
 
 ### ~~Write Path Missing Local Header~~ (Fixed)
 
-Fixed in `ebbf055`. The write path now prepends a 30-byte local header
+Fixed in `881ab60`. The write path now prepends a 30-byte local header
 before each BLTE entry, with reversed encoding key, size-with-header,
 flags, and checksums. Both read and write paths handle the header.
 
 ### ~~Encoding Key Derivation on Write~~ (Fixed)
 
-Fixed in `ebbf055`. Encoding key is now `MD5(blte_encoded_data)`
+Fixed in `881ab60`. Encoding key is now `MD5(blte_encoded_data)`
 matching Agent.exe behavior. The key is a property of the encoded
 content, not the storage location.
 
 ### ~~Index Write Format Incorrect~~ (Fixed)
 
-Fixed in `07591c4`. `save_index()` now writes IDX Journal v7 format
+Fixed in `cc96203`. `save_index()` now writes IDX Journal v7 format
 with guarded block headers (size + Jenkins hash), `IndexHeaderV2`,
 and a second guarded block for entries.
 
 ### ~~No Jenkins Hash Validation~~ (Fixed)
 
-Fixed in `07591c4`. Jenkins `hashlittle()` from cascette-crypto is
+Fixed in `cc96203`. Jenkins `hashlittle()` from cascette-crypto is
 used for both read validation and write computation of guarded block
 hashes.
 
 ### ~~No Atomic Index Commits~~ (Fixed)
 
-Fixed in `07591c4`. Index writes use temp file + fsync + rename
+Fixed in `cc96203`. Index writes use temp file + fsync + rename
 with 3 retries, matching Agent's flush-and-bind pattern.
 
 ### ~~KMT Entry Size Endianness~~ (Fixed)
 
-Fixed in Phase 4+5. The `IndexEntry.size` field was incorrectly
+Fixed in `498cb2c`. The `IndexEntry.size` field was incorrectly
 serialized as little-endian. Agent.exe and CascLib both use big-endian
 for all 18-byte entry fields (verified via `ConvertBytesToInteger_BE`
 in CascLib and BinaryNinja decompilation of `BinarySearchEKey` at
@@ -194,14 +194,14 @@ in CascLib and BinaryNinja decompilation of `BinarySearchEKey` at
 
 ### ~~Incorrect KMT Entry Format~~ (Fixed)
 
-Fixed in Phase 4+5. The `KmtEntry` struct was a fabricated 16-byte
+Fixed in `498cb2c`. The `KmtEntry` struct was a fabricated 16-byte
 LE format that did not match any Agent.exe structure. Replaced with
 a re-export of `IndexEntry` (18 bytes), since the KMT and IDX are
 the same file format. Documented the KMT = IDX equivalence.
 
 ### ~~Missing Segment Header Support~~ (Fixed)
 
-Fixed in Phase 4+5. Added segment reconstruction header parsing:
+Fixed in `498cb2c`. Added segment reconstruction header parsing:
 480 bytes = 16 x 30-byte `LocalHeader` entries at the start of each
 `.data` file. Added key generation with bucket hash targeting
 (verified against `sub_72b457` and `GenerateSegmentHeaders` at
@@ -341,7 +341,7 @@ of `sub_72b457`.
 
 ### ~~No .build.info Handling~~ (Fixed)
 
-Fixed in Phase 10. `BuildInfoFile` parses `.build.info` (BPSV format)
+Fixed in `fa741c6`. `BuildInfoFile` parses `.build.info` (BPSV format)
 with typed accessors for product, branch, build key, CDN key, version,
 CDN hosts, CDN servers, install key, tags, and armadillo. Async
 `from_path()` reads from disk; `active_entry()` returns the first row
