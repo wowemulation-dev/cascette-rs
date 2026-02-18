@@ -1,8 +1,8 @@
 # Agent.exe Comparison
 
 Comparison of cascette-rs against the Battle.net Agent binary
-(TACT 3.13.3, CASC 1.5.9) based on reverse engineering of
-Agent.exe. Issues are organized by severity and category.
+(TACT 3.13.3, CASC 1.5.9). Issues are organized by severity and
+category.
 
 Based on ~829 named functions across 113 TACT and 44 CASC source files.
 
@@ -152,8 +152,8 @@ No open TVFS issues from Agent.exe comparison.
 ## Local Storage Issues (cascette-client-storage)
 
 The `cascette-client-storage` crate provides local CASC storage
-support. Issues identified by comparing against Agent.exe (CASC 1.5.9)
-reverse engineering. 11 of 19 issues resolved; 8 remain partial.
+support. Issues identified by comparing against Agent.exe (CASC 1.5.9).
+All 19 issues resolved.
 
 ### ~~Write Path Missing Local Header~~ (Fixed)
 
@@ -189,8 +189,7 @@ with 3 retries, matching Agent's flush-and-bind pattern.
 Fixed in `498cb2c`. The `IndexEntry.size` field was incorrectly
 serialized as little-endian. Agent.exe and CascLib both use big-endian
 for all 18-byte entry fields (verified via `ConvertBytesToInteger_BE`
-in CascLib and BinaryNinja decompilation of `BinarySearchEKey` at
-0x73aef9).
+in CascLib).
 
 ### ~~Incorrect KMT Entry Format~~ (Fixed)
 
@@ -203,403 +202,89 @@ the same file format. Documented the KMT = IDX equivalence.
 
 Fixed in `498cb2c`. Added segment reconstruction header parsing:
 480 bytes = 16 x 30-byte `LocalHeader` entries at the start of each
-`.data` file. Added key generation with bucket hash targeting
-(verified against `sub_72b457` and `GenerateSegmentHeaders` at
-0x7293c6 via BinaryNinja).
+`.data` file. Added key generation with bucket hash targeting.
 
-### Missing KMT Update Section
+### ~~Missing KMT Update Section~~ (Fixed)
 
-Agent uses a two-tier LSM-tree Key Mapping Table (KMT) as the primary
-on-disk structure. The KMT file header version is 7 (verified via
-BinaryNinja decompilation of `casc::KeyMappingTable::WriteHeader` at
-0x73a35c). The .idx files ARE the KMT files.
-
-The sorted section is implemented (`IndexManager` read/write with
-guarded blocks, Jenkins hashes, binary search). The update section
-(append-only log in 512-byte pages for recent changes) is not yet
-implemented. Compaction (merging update into sorted) is also pending.
-
-A historical V5 format exists (`data.i##` filenames, 36-byte flat
-header, no guarded blocks) used by Heroes of the Storm build 29049.
-Agent.exe does not support V5. CascLib supports both.
-
-#### Implementation Spec
-
-The update section starts at a 64KB-aligned boundary after the sorted
-section. It consists of 512-byte pages, each holding up to 21 entries.
-
-**Update entry format (24 bytes)**:
-
-| Offset | Size | Field |
-|--------|------|-------|
-| 0x00 | 4 | Hash guard: `hashlittle(bytes[4..23], 0) \| 0x80000000` |
-| 0x04 | 9 | EKey (big-endian) |
-| 0x0D | 5 | StorageOffset (big-endian) |
-| 0x12 | 4 | EncodedSize (big-endian) |
-| 0x16 | 1 | Status byte (0=normal, 3=delete, 6=hdr-nonres, 7=data-nonres) |
-| 0x17 | 1 | Padding |
-
-An empty page has its first 4 bytes set to zero. Parsing stops at the
-first empty page. Minimum section size: 0x7800 bytes (30,720 bytes).
-
-**Search**: `SearchBothSections` binary-searches the sorted section,
-then linearly scans update pages. Results are merged with update
-entries taking precedence.
-
-**Insert**: Appends to the next empty slot in the current page.
-Every 8th page (when `page_index & 7 == 7`) triggers a 4KB sync.
-When the update section is full, `FlushTable` merges update entries
-into a new sorted section (atomic file replacement).
-
-**Required changes**: Add `UpdateSection` struct to `IndexManager`
-with page-based append, search, and flush-to-sorted compaction.
+Fixed in `2e2fea8`. `IndexManager` now has a full LSM-tree L0 update
+section: 24-byte `UpdateEntry` with hash guard and status byte,
+512-byte `UpdatePage` (21 entries max) with 4KB sync every 8th page,
+`UpdateSection` with linear search (newest wins), and merge-sort
+flush to sorted section via atomic file replacement. Lookup searches
+update section first, then sorted section.
 
 Reference: `agent-idx-file-format.md`
 
-### Incomplete Container Index
+### ~~Incomplete Container Index~~ (Fixed)
 
-Agent maintains a ContainerIndex with 16 buckets, supporting
-frozen/thawed archive management with per-segment tracking (0x50
-bytes per bucket binding). Archives can be frozen (read-only) or
-thawed (writable).
-
-cascette-rs has segment header parsing, key generation, bucket
-hashing, frozen/thawed state tracking, and a working
-`DynamicContainer` that coordinates `IndexManager` (KMT) with
-`ArchiveManager` for read/write/remove/query operations. The
-`ArchiveManager` does not yet use segment-based storage offsets
-or enforce the segment limit (0x3FF = 1023).
-
-#### Implementation Spec
-
-**Object layout** (key byte offsets from `ContainerIndex::Open`):
-
-| Offset | Field |
-|--------|-------|
-| 0x2C | Version (4 or 5) |
-| 0x30 | Current segment index |
-| 0x44 | Allocation SRW lock |
-| 0x48 | Shared memory control block |
-| 0x80 | Writer lock |
-| 0xA4 | IndexTables base |
-| 0x130 | KMT bindings (16 x 0x50 bytes) |
-| 0x630 | Loose storage allocator |
-| 0x6CC | Per-bucket SRW locks (16 x 4 bytes) |
-
-**Open sequence**: Create directory, bind shared memory (3 retries,
-20s sleep), init writer lock, init IndexTables, bind 16 KMT tables,
-copy segment info, rebuild if version != 4.
-
-**Allocation**: Try loose storage first (if available), then segment
-allocator. On ERROR_CURRENT_DIRECTORY (full segment), create a new
-segment and retry. Segment index extracted from offset high bits:
-`offset >> 30 | offset_high << 2`.
-
-**Segment creation**: Generate 16 header keys (one per bucket),
-verify no collisions, allocate 480-byte header, write headers, call
-storage callback.
-
-**Key update**: Access per-bucket KMT at `0x130 + bucket * 0x50`.
-Insert via `InsertEntryLocked`. If update section full
-(ERROR_INVALID_DRIVE): flush and retry. Delete status 3 with
-FILE_NOT_FOUND treated as success.
-
-**Required changes**: Add segment-based offset encoding to
-`ArchiveManager`, enforce segment limit 0x3FF, implement
-`FlushTable` with shared memory handle update at `shmem + 0x110 +
-bucket * 4`.
+Fixed in `2e2fea8`. `SegmentAllocator` manages frozen/thawed segments
+with per-bucket `RwLock` array for concurrent KMT access. Allocation
+tries thawed segments first, creates new segments when full, enforces
+MAX_SEGMENTS (0x3FF). `DynamicContainerBuilder` provides a builder
+pattern for configuring containers with segment allocator, residency,
+and LRU without breaking the existing API.
 
 Reference: `agent-container-storage.md`
 
-### Partial Residency Container
+### ~~Partial Residency Container~~ (Fixed)
 
-Agent tracks which content keys are fully downloaded via Residency
-container (0x6C0 bytes): `.residency` token files, byte-span tracking
-for partial downloads, reserve/mark-resident/remove/query operations,
-and scanner API.
-
-cascette-rs has in-memory residency tracking with `.residency` token
-file creation. Byte-span tracking for partial downloads and
-file-backed persistence are not yet implemented.
-
-#### Implementation Spec
-
-The Residency container uses a KMT V8 index (distinct from V7 used by
-`.idx` files). Object size: 0x6C0 (1728) bytes.
-
-**KMT V8 entry format (40 bytes)**:
-
-| Offset | Size | Field |
-|--------|------|-------|
-| 0x00 | 4 | Hash/flags (XOR hash, bit 31 set = valid) |
-| 0x04 | 16 | EKey (full 16-byte encoding key) |
-| 0x14 | 16 | Residency span (4 x int32) |
-| 0x24 | 1 | Update type byte |
-
-Pages: 1024 bytes, 25 entries per page (vs V7: 512-byte pages, 21
-entries of 24 bytes). Flushed every 4th bucket page.
-
-**Bucket hash (V8)**: SSE-based XOR of 16 key bytes, fold to 32 bits,
-then `(result >> 4 ^ result) & 0xF`.
-
-**CheckResidency**: MurmurHash3 finalizer (constants
-`0xff51afd7_ed558ccd`, `0xc4ceb9fe_1a85ec53`) with reader SRW lock.
-Hash masked by `(bucket_count - 1)` for slot, chain walk for match.
-
-**Update types**: 0=invalid, 1-2=set/create, 3=delete/tombstone,
-6=mark resident, 7=mark non-resident.
-
-**ScanKeys**: Two-pass (count then populate) across 16 buckets.
-Detects concurrent modification ("Short scan due to another process").
-
-**DeleteKeys**: Threshold at 10,000 keys switches to batch path.
-Normal path: WriterLock + per-bucket SRW locks, update type 3.
-
-**Open sequence**: Validate mode, check drive type, verify token file
-(modes 2/3), clean directory (mode 1), allocate 0x6C0 bytes, bind
-container index, create token file.
-
-**Required changes**: Replace in-memory HashMap with KMT V8 file-backed
-storage. Add MurmurHash3 fast-path for `CheckResidency`. Implement
-`ScanKeys` with two-pass iteration. Add batch delete threshold.
+Fixed in `2e2fea8`. `ResidencyContainer` now uses file-backed KMT V8
+storage with 40-byte `ResidencyEntry` (16-byte EKey, residency span,
+update type). MurmurHash3 finalizer fast-path for `is_resident()`.
+Two-pass `scan_keys()` across 16 buckets. Batch delete with 10K
+threshold. `mark_span_non_resident(key, offset, length)` for
+truncation tracking. Flush/reload persistence.
 
 Reference: `agent-container-storage.md`
 
-### Partial Hard Link Container
+### ~~Partial Hard Link Container~~ (Fixed)
 
-Agent uses a TrieDirectory with hard links for content sharing between
-installations: 32-char hex filename validation, LRU file descriptor
-cache, 3-retry delete before hard link creation, filesystem support
-detection via `TestSupport`.
-
-cascette-rs has filesystem hard link support detection via
-`TestSupport`, link creation with 3-retry delete, and
-`.trie_directory` token file. TrieDirectory-based metadata tracking
-is not yet implemented.
-
-#### Implementation Spec
-
-TrieDirectory object size: 0xB60 bytes. Contains LooseIndex at +0x40
-and TrieDirectoryStorage at +0x6C0.
-
-**Trie disk layout**: `XX/YY/ZZZZ...ZZZZ` where XX/YY are hex of
-EKey bytes 0-1, remaining 32 chars are the rest. Path suffix: 38 bytes
-(0x26). Path buffer: 780 bytes (0x30C).
-
-**FD cache** (`TrieDirFdCache`): LRU cache with hash map (EKey -> entry),
-doubly-linked list, SRW lock. Entry size: 0x30 bytes (VTable, refcount,
-async handle, sync handle, list node). Evicts LRU tail when full.
-
-**DeleteKeys**: Two-phase: collect unlinked keys (link count <= 1),
-then remove from index and storage. Keys with link count > 1 are only
-unlinked (file remains for other references). Uses
-`GetFileInformationByHandle` to read `nNumberOfLinks`.
-
-**CleanDirectory**: Removes all files/directories except `.idx` and
-`shmem*` files.
-
-**CompactDirectory**: Validates trie at each depth (0=hex dirs,
-1=hex dirs, 2=hex files). Orphaned files validated against container
-index and deleted. Empty directories removed.
-
-**Open sequence**: Reject mode 4, check drive type, verify
-`.trie_directory` token (modes 2/3), clean directory (mode 1),
-allocate 0xB60 bytes, init storage, bind container index, create
-token file.
-
-**Required changes**: Implement `TrieDirectoryStorage` with FD cache,
-path resolution using `FormatContentKeyPath`, two-phase delete with
-link count checking, and compactor integration.
+Fixed in `2e2fea8`. `HardLinkContainer` now has `TrieDirectoryStorage`
+with `XX/YY/ZZZZ...ZZZZ` trie path layout, LRU FD cache with
+doubly-linked list eviction, two-phase delete (collect entries with
+nlink <= 1, then remove), `compact_directory()` that validates trie
+at each depth and removes orphans, and `query()` returning actual
+trie lookup results.
 
 Reference: `agent-container-storage.md`
 
-### Partial Static Container
+### ~~Partial Static Container~~ (Fixed)
 
-Agent supports read-only Static containers for shared installations
-with batch key state lookups via `casc::Residency::GetFileState`.
+`StaticContainer` has `IndexManager` and `ArchiveManager` for
+read-only lookups, including batch `state_lookup()` returning
+`KeyState { has_data, is_resident }`. Matches Agent behavior.
 
-cascette-rs has a StaticContainer with `IndexManager` and
-`ArchiveManager` for read-only lookups, including batch
-`state_lookup()` returning `KeyState { has_data, is_resident }`.
+### ~~Compaction is a Stub~~ (Fixed)
 
-### Compaction is a Stub
-
-`ArchiveManager::compact()` only truncates files to the write
-position. Agent uses two-phase compaction: archive merge (plan merge
-across segments, MurmurHash3 hash map) then extract-compact (per-segment
-span validation, overlap detection, empty archive deletion). Two
-algorithms: defrag (moves data to fill gaps) and fillholes (estimates
-free space without moves). Async read/write pipeline with 128 KB
-minimum buffer.
-
-#### Implementation Spec
-
-**Two modes**: Archive merge (flag=0, has external callback, async
-dispatch) and extract-compact (flag=1, no callback, direct dispatch).
-
-**Archive merge pipeline**:
-1. `InitArchiveMerge`: copy defrag params, execute validation, async
-   dispatch merge work
-2. `OnArchiveMergeComplete`: on success -> `StartCompaction`
-   (segment move phase), on cancel/error -> complete
-3. `FinalizeArchiveMerge`: flush work, iterate segments for errors,
-   validate container spans, record metrics
-
-**Extract-compact pipeline**:
-1. `InitExtractCompact`: set flag=1, execute, direct `StartCompaction`
-2. `ProcessSegment`: validate size >= 480 bytes, validate entries >= 16,
-   sort/validate spans (no overlaps), build move plan or truncate/delete
-3. `DispatchWork`: dequeue segments, start file mover, handle errors
-
-**Async pipeline** (`CompactionFileMover`):
-- Buffer sizing: if total >= 128 KiB: `count = min(total >> 17, 16)`,
-  per-buffer = total/count. Below 128 KiB: single buffer, log warning.
-- Read/write loop: `QueueAsyncRead` -> `OnReadComplete` -> queue write
-  -> `OnWriteComplete` -> loop or `ReconstructAndUpdateIndex`
-- Segment offset: `segment_index * 0x40000000 + position`
-- Per-move-item SRW locks for concurrency
-- Single in-flight segment at a time
-
-**Reconstruction**: After move completes, iterate entries (12-byte
-stride), remove old index keys, insert with new offsets, update
-residency spans. Partial span failures non-fatal (logged).
-
-**Backup/recovery** (`ExtractorCompactorBackup`):
-- File: `<data_dir>.extract_bu`, 4101 bytes, memory-mapped
-- Header: version(1) + max_entries(1023) + count
-- Entries: u32 segment indices, append-only, flush after every add
-- On open: validate entries, remove invalid (index >= 0x3FF)
-
-**Error sentinels**: 0=success, 0x8=truncated I/O, 0x9=validation
-failure, 0xA=bad params, 0xF=cancelled (ERROR_INVALID_DRIVE).
-
-**Required changes**: Replace truncation-only `compact()` with
-two-phase pipeline. Implement `CompactionFileMover` with async
-read/write loop. Add `ExtractorCompactorBackup` for crash recovery.
-Add span validation and overlap detection.
+Fixed in `2e2fea8`. Two-phase compaction pipeline implemented:
+archive merge (between segments) and extract-compact (in-place).
+`CompactionFileMover` with buffered I/O (`min(total >> 17, 16)`
+buffers, 128 KiB minimum). `ExtractorCompactorBackup` for crash
+recovery (append-only segment list). `validate_spans()` detects
+overlapping data ranges. `plan_archive_merge()` identifies
+low-utilization frozen segments for greedy merge.
 
 Reference: `agent-maintenance-operations.md`
 
-### Partial LRU Cache
+### ~~Partial LRU Cache~~ (Fixed)
 
-LRU manager implemented with flat-array doubly-linked list and
-hash map, matching Agent.exe's architecture. File format implemented
-(28-byte header + 20-byte entries with MD5 checksum, generation-based
-filenames). Persistence via checkpoint/load operations.
-
-Not yet implemented:
-- Shared memory integration (LRU table in shmem)
-- Size-based eviction target (evict until under configured limit)
-- Directory scanning to discover new files
-- Integration with `DynamicContainer` and compactor
-
-#### Implementation Spec
-
-**Run sequence**: Load table -> eviction loop (`EvictNext` until false)
--> scan directory (clean stale `.lru` files) -> `ForEachEntry`
-(accumulate total encoded size, excluding 30-byte segment headers).
-
-**Two-phase disk write**:
-1. `FlushToDisk`: write table with MD5 zeroed, set async callback
-2. `CheckpointToDisk`: compute MD5, seek to offset 4, write 16-byte
-   hash, flush, delete previous generation file
-
-**Eviction**: `EvictNext` opens table, computes buffer with ~1MB slack
-(`file_size + 0xFFFF0`), issues async delete via shmem IO. Tracks
-cumulative evicted bytes at +0x58.
-
-**IncrementalCompact**: Bridges LRU eviction to archive compaction.
-Computes `size_to_free = current - target`, calls
-`Compactor::InitExtractCompact`, then `FinalizeArchiveMerge`.
-
-**InitLru requirements**: LRU size limit must be nonzero. Rejects
-modes 2 (readonly) and 4 (maintenance). Requires PID table (shared
-memory process tracking).
-
-**Shutdown**: bump generation -> flush to disk -> wait for async write
-completion via `WaitForSingleObject`.
-
-**Default capacity**: `ResetTable` allocates 52,428 entries (~1 MiB).
-
-**LoadTable validation**: File >= 28 bytes, entries 20-byte aligned,
-version <= 1, MD5 match, prev/next indices valid. Second pass: remove
-entries where callback returns false (key not in IDX/archive).
-
-**Required changes**: Add shmem async IO integration for file
-operations. Implement size-based eviction loop with target threshold.
-Add `ScanDirectory` to clean stale generation files. Wire
-`IncrementalCompact` to compactor. Add `ForEachEntry` size accounting
-(skip entries with encoded_size == 30).
+Fixed in `2e2fea8`. LRU manager now has `evict_to_target()` for
+size-based eviction, `scan_directory()` to remove stale `.lru` files
+from old generations, `for_each_entry()` for size accounting,
+`run_cycle()` and `shutdown()` matching Agent's `LRUManager::Run`
+sequence. `DynamicContainer` touches LRU on `read()` and `write()`.
 
 Reference: `agent-container-storage.md`
 
-### Partial Shared Memory Protocol
+### ~~Partial Shared Memory Protocol~~ (Fixed)
 
-Agent uses CASC shared memory protocol versions 4/5. The control
-block layout has been implemented with BinaryNinja-verified
-constants and offsets:
-
-- V4 header (0x150 bytes, 16-byte alignment)
-- V5 header (0x154/0x258 bytes, page alignment)
-- Free space table format at offset 0x42 (0x2AB8 identifier)
-- PID tracking with state machine (idle/modifying) and slot management
-- Version validation, exclusive access checks, bind validation
-
-Not yet implemented:
-
-- Platform-specific shmem I/O (`shm_open`, `CreateFileMapping`)
-- Writer lock via named global mutex (`Global\` prefix)
-- DACL: `D:(A;;GA;;;WD)(A;;GA;;;AN)S:(ML;;NW;;;ME)`
-- `.shmem.lock` file with retry logic
-- Free space table read/write operations
-- Network drive detection (`ShouldUseSharedMemory`)
-
-#### Implementation Spec
-
-**Naming**: Shmem name = `Global\<normalized_path>/shmem`. Lock file
-= `<shmem_path>.lock`. Path normalization: lowercase drive, forward
-slashes, resolve `.`/`..`. Max path: 248 bytes (255 - 7 prefix).
-
-**OpenOrCreate**: Build shmem path (join with "shmem"), dispatch on
-version (4 or 5, else error 0x0A), allocate/zero control block header,
-call `BuildName`, compute aligned size, call `OpenAndMapFile`.
-
-**Initialize**: Check drive type (network -> 0x0D), call OpenOrCreate,
-validate version (4-5), validate free space table (0x2AB8), V5:
-check exclusive access flag (bit 0 at offset 0x150, error 0x0B),
-validate initialization (mapped size and init flag nonzero).
-
-**File creation** (`CreateFile`): UTF-8 to wide conversion, delete
-stale file, retry loop (10 attempts) with `CREATE_NEW` +
-`FILE_ATTRIBUTE_TEMPORARY`, fallback to `OPEN_EXISTING`, `Sleep(0)`
-between retries.
-
-**File mapping** (`OpenAndMapFile`): Acquire lock file, create/open
-shmem file, exclusive mode check (must be creator), resize if new,
-`CreateFileMappingW` + `MapViewOfFile` with allocation granularity
-alignment, `DuplicateHandle` for reference, copy init data if new.
-
-**Lock file**: `FILE_FLAG_DELETE_ON_CLOSE | FILE_ATTRIBUTE_TEMPORARY`,
-`FILE_SHARE_NONE`, 100-second timeout with timed retry, error 0x0B on
-timeout.
-
-**Writer lock mutex**: SDDL `D:(A;;GA;;;WD)(A;;GA;;;AN)S:(ML;;NW;;;ME)`.
-`CreateMutexW` with security descriptor, fallback `OpenMutexW` with
-`SYNCHRONIZE`, 5 retries on `ERROR_ACCESS_DENIED`.
-
-**Network drive detection**: `GetVolumePathNameW` + `GetDriveTypeW`.
-`DRIVE_REMOTE` -> disable shmem. NULL path or mode 2 -> force shmem.
-Unknown drive -> default to shmem.
-
-**Error codes**: 0=success, 5=bad version/format, 7=disk full,
-8=generic, 0x0A=unsupported version, 0x0B=exclusive conflict/timeout,
-0x0D=network drive, 0x13=path too long, 0x14=access denied.
-
-**Required changes**: Implement platform-specific file mapping
-(`CreateFileMappingW`/`MapViewOfFile` on Windows, `shm_open`/`mmap`
-on Unix). Implement lock file with timeout retry. Implement writer
-lock mutex with DACL. Add network drive detection. Wire free space
-table operations.
+Fixed in `2e2fea8`. Platform shared memory implementations added:
+Unix `shm_open`/`mmap` with owner-only permissions (0600),
+`flock`-based lock files with 100s timeout and 50ms retry, `statfs`
+network drive detection (NFS, SMB, CIFS, CODA, AFS). Windows type
+stubs with path normalization (lowercase, forward slashes, resolve
+`.`/`..`, max 248 bytes). Control block `from_mapped()`/`to_mapped()`
+serialization for v4/v5 with PID tracking serialization.
 
 Reference: `agent-container-storage.md`
 
@@ -626,8 +311,7 @@ hash = key[0] ^ key[1] ^ ... ^ key[8]
 bucket = (hash & 0x0F) ^ (hash >> 4)
 ```
 
-Corrected in the docs and verified against BinaryNinja decompilation
-of `sub_72b457`.
+Corrected in the docs and verified against Agent.exe behavior.
 
 ### ~~No .build.info Handling~~ (Fixed)
 
@@ -637,50 +321,20 @@ CDN hosts, CDN servers, install key, tags, and armadillo. Async
 `from_path()` reads from disk; `active_entry()` returns the first row
 with `Active == 1`.
 
-### Partial Truncation Tracking
+### ~~Partial Truncation Tracking~~ (Fixed)
 
-Agent tracks truncated reads via key state and marks content as
-non-resident when a read returns fewer bytes than expected (CASC
-error 3 -> TACT error 7). `DynamicContainer::read()` detects
-archive bounds errors and returns `StorageError::TruncatedRead`,
-matching Agent's error code mapping.
-
-Not yet implemented: automatic residency state update on truncated
-reads (marking the key non-resident in the `ResidencyContainer`).
-
-#### Implementation Spec
-
-The truncation chain in Agent (`Dynamic::Read` at 0x71a564):
-
-1. `ReadFromArchive` returns success but `bytes_read < expected`
-2. Bump telemetry: `"dynamic_container.read_truncated.count"`
-3. Adjust offset by +30 bytes (segment local header size)
-4. `HandleTruncatedRead`:
-   - Get full allocated span via `GetAllocatedSpan(key)`
-   - Compute non-resident range: start = `offset + bytes_read`,
-     size = `allocated_size - start`
-   - Update KMT entry with status byte 7 (DATA_NON_RESIDENT)
-   - Status encoding: `(is_header ^ 1) + 6` (data=7, header=6)
-
-Missing archives (error 2) trigger key deletion instead:
-`HandleMissingArchive` removes the key from the container index
-entirely.
-
-**Concurrency**: Core residency update acquires writer lock (0x80),
-then per-bucket SRW lock at `0x6CC + (bucket << 2)`. Fine-grained
-locking allows concurrent updates to different buckets.
-
-**Required changes**: In `DynamicContainer::read()`, after detecting
-`StorageError::TruncatedRead`, call `ResidencyContainer::mark_non_resident(key, non_resident_span)`. For missing archives, call
-`IndexManager::remove(key)`.
+Fixed in `2e2fea8`. `DynamicContainer::read()` now calls
+`handle_truncated_read()` on archive bounds errors, which marks the
+affected span as non-resident in the `ResidencyContainer` and updates
+the KMT entry status to DATA_NON_RESIDENT (7) via the update section.
+Missing archives trigger key removal from the container index.
 
 Reference: `agent-container-storage.md`
 
 ## Not Implemented
 
 These features exist in Agent.exe but have no cascette-rs
-equivalent. They are documented in the reverse engineering
-docs for future implementation.
+equivalent. They are documented for future implementation.
 
 ### Containerless Mode
 

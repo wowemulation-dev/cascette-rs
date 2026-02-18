@@ -1,24 +1,17 @@
 # Agent.exe Container Storage
 
-Reverse engineering notes from Agent.exe (TACT 3.13.3, CASC 1.5.9).
-Source: BinaryNinja decompilation of `casc::ContainerIndex::*`,
-`casc::Dynamic::*`, `casc::Residency::*`, `TrieDirectory::*`,
-`casc::Lru::*`, and `ShmemControlBlock::*` functions.
+Technical notes on Agent.exe (TACT 3.13.3, CASC 1.5.9) covering
+`casc::ContainerIndex`, `casc::Dynamic`, `casc::Residency`,
+`TrieDirectory`, `casc::Lru`, and `ShmemControlBlock` operations.
 
 ## Container Index
 
 The ContainerIndex manages 16 KMT buckets and coordinates segment
 lifecycle, storage allocation, and key mapping.
 
-Source: `casc::ContainerIndex::Open` (0x72a8fd),
-`casc::ContainerIndex::CreateSegment` (0x72a303),
-`casc::ContainerIndex::AllocateKeyMapping` (0x72868e),
-`casc::ContainerIndex::UpdateKeyMapping` (0x72abe7).
-
 ### Object Layout
 
-Key offsets within the ContainerIndex object (dword-indexed from
-decompilation, multiply by 4 for byte offsets):
+Key offsets within the ContainerIndex object:
 
 | Byte Offset | Field |
 |-------------|-------|
@@ -107,7 +100,7 @@ Segment limit: index 0x3FF (1023). Segment size: 1 GiB (0x40000000).
 
 ### Flush
 
-`ContainerIndex::FlushTable` (0x7291f5):
+`ContainerIndex::FlushTable`:
 
 1. Calls `IndexTables::FlushAndBindLoose` with the KMT binding
    at `0xA4` (IndexTables) and `0x130 + bucket * 0x50` (KMT binding)
@@ -119,11 +112,6 @@ Segment limit: index 0x3FF (1023). Segment size: 1 GiB (0x40000000).
 Agent tracks truncated reads and missing archives as part of the
 read path. This is how partially-downloaded content gets marked as
 non-resident.
-
-Source: `casc::Dynamic::Read` (0x71a564),
-`casc::Dynamic::HandleTruncatedRead` (0x718c0d),
-`casc::Dynamic::HandleMissingArchive` (0x718b84),
-`casc::Dynamic::UpdateResidency` (0x71a09f).
 
 ### Read Flow
 
@@ -153,7 +141,7 @@ two error cases:
    - Size: `allocated_size - start`
 5. Call core residency update with the non-resident span and
    `is_header=0` (data type)
-6. The core update function (`sub_72ace3`) converts this to status
+6. The core update function converts this to status
    byte 7 (DATA_NON_RESIDENT) via `(0 ^ 1) + 6 = 7`
 7. If residency update fails: log "Failed to update residency after
    truncated read."
@@ -171,11 +159,11 @@ unlike truncated reads which only degrade residency.
 
 ### Core Residency Update
 
-The core residency update function (`sub_72ace3`):
+The core residency update function:
 
 1. Check state != 2 (ERROR_BAD_FORMAT if in bad state)
 2. Acquire writer lock at offset 0x80
-3. Compute bucket hash via `sub_72b457(key, section)`
+3. Compute bucket hash from key and section
 4. Acquire per-bucket SRW lock at `0x6CC + (bucket << 2)`
 5. Load/validate bucket data
 6. Compute status byte: `(is_header ^ 1) + 6`
@@ -187,7 +175,7 @@ The core residency update function (`sub_72ace3`):
 
 ### UpdateResidency Wrapper
 
-`Dynamic::UpdateResidency` (0x71a09f):
+`Dynamic::UpdateResidency`:
 
 1. Check residency container is valid (non-null and has bound
    container at offset 0x48)
@@ -199,23 +187,16 @@ The core residency update function (`sub_72ace3`):
 
 Two dedicated logging functions:
 
-- `LogDataResidencyError` (0x719693): "Failed to update data
-  residency for handle key '%s'. Error (%u): %s" (line 0x62)
-- `LogHeaderResidencyError` (0x7196ea): "Failed to update header
-  residency for handle key '%s'. Error (%u): %s" (line 0x59)
+- `LogDataResidencyError`: "Failed to update data
+  residency for handle key '%s'. Error (%u): %s"
+- `LogHeaderResidencyError`: "Failed to update header
+  residency for handle key '%s'. Error (%u): %s"
 
 ## Residency Container
 
 The Residency container tracks which content keys are fully or
 partially downloaded. It uses a KMT V8 index (40-byte entries) for
 persistence and a MurmurHash3-based hash table for fast lookups.
-
-Source: `casc::Residency::Open` (0x7218d5),
-`casc::Residency::CheckResidency` (0x720632),
-`casc::Residency::UpdateResidency` (0x721734),
-`casc::Residency::ScanKeys` (0x7214a0),
-`casc::Residency::DeleteKeys` (0x721c33),
-`casc::Residency::BindContainerIndex` (0x721561).
 
 ### Object Layout
 
@@ -349,13 +330,6 @@ that maps EKeys to files on the filesystem. It uses a two-level
 directory trie derived from the hex-encoded EKey, with NTFS hard
 links for deduplication. An LRU-based file descriptor cache
 (`TrieDirFdCache`) manages open file handles.
-
-Source: `TrieDirectory::Open` (0x7224f0),
-`TrieDirectory::WriteFileData` (0x722266),
-`TrieDirectory::DeleteKeys` (0x7227a4),
-`TrieDirFdCache::CreateHardLink` (0x742579),
-`TrieDirUtil::ResolvePath` (0x743341),
-`TrieDirectoryCompactor::CompactDirectory` (0x7311d7).
 
 ### Object Layout
 
@@ -493,15 +467,6 @@ The LRU manager tracks access recency for eviction decisions using a
 flat-file doubly-linked list with generation-based filenames and MD5
 checksums.
 
-Source: `casc::Lru::Run` (0x73060f),
-`casc::Lru::EvictNext` (0x730dd6),
-`casc::Lru::CheckpointToDisk` (0x730b18),
-`casc::Lru::FlushToDisk` (0x731056),
-`casc::Lru::LoadTable` (0x741919),
-`casc::Lru::ForEachEntry` (0x730088),
-`casc::Lru::Shutdown` (0x730f96),
-`casc::Dynamic::InitLru` (0x7195f3).
-
 ### Object Layout
 
 Key offsets within the Lru object:
@@ -544,7 +509,7 @@ Sentinel value: 0xFFFFFFFF for empty prev/next links.
 
 ### Validation
 
-From `LoadTable` / `sub_741cf7`:
+From `LoadTable`:
 
 - File size >= 0x1C (28 bytes)
 - `(file_size - 0x1C) % 0x14 == 0` (entries are 20-byte aligned)
@@ -634,15 +599,6 @@ compaction:
 
 Agent uses shared memory to coordinate between processes accessing
 the same CASC storage. Protocol versions 4 and 5 are supported.
-
-Source: `casc::ShmemControlBlock::OpenOrCreate` (0x736bcf),
-`casc::ShmemControlBlock::Initialize` (0x736f7a),
-`casc::ShmemControlBlock::BuildName` (0x736ebc),
-`casc::ShmemControlBlock::Unmap` (0x73714d),
-`casc::ShmemControlBlock::LogExclusiveAccessError` (0x736ae3),
-`casc::ShmemControl::CreateFile` (0x747507),
-`casc::ShmemControl::OpenAndMapFile` (0x747911),
-`casc::ShmemControl::AcquireLockFile` (0x7476c4).
 
 ### Control Block Layout
 

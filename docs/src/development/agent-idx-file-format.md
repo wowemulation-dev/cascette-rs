@@ -1,7 +1,7 @@
 # Agent.exe IDX / KMT File Format
 
-Reverse engineering notes from Agent.exe (TACT 3.13.3, CASC 1.5.9).
-Source: BinaryNinja decompilation of `casc::KeyMappingTable::*` functions.
+Technical notes on Agent.exe (TACT 3.13.3, CASC 1.5.9) covering
+`casc::KeyMappingTable` operations.
 
 ## Overview
 
@@ -35,7 +35,7 @@ A KMT file has three regions:
 
 ## File Header (16 bytes)
 
-Written by `casc::KeyMappingTable::WriteHeader` (0x73a35c).
+Written by `casc::KeyMappingTable::WriteHeader`.
 
 ```text
 Offset  Size  Field
@@ -67,7 +67,7 @@ Offset  Size  Field
 ```
 
 All fields are big-endian (verified via CascLib `ConvertBytesToInteger_BE`
-and BinaryNinja decompilation of `BinarySearchEKey` at 0x73aef9).
+and analysis of `BinarySearchEKey`).
 
 Lookup uses binary search (`casc::KeyMappingTable::BinarySearchEKey`).
 
@@ -75,9 +75,6 @@ Lookup uses binary search (`casc::KeyMappingTable::BinarySearchEKey`).
 
 The update section is an append-only log for recent changes. It starts
 at a 64KB-aligned boundary after the sorted section.
-
-Source: `casc::KeyMappingTable::ParseUpdateSection` (0x73aab9),
-`casc::KeyMappingTable::InsertEntry` (0x73a5d4).
 
 ### Page Format
 
@@ -130,7 +127,7 @@ yields 6 (header non-resident).
 
 Every 8th page (when `page_index & 7 == 7`) and the last entry slot
 (index 0x14 = 20) is filled, a 4KB block (8 pages) is synced to disk
-via `sub_75295e`. This provides write-ahead durability without flushing
+to disk. This provides write-ahead durability without flushing
 the entire file.
 
 ### Minimum Section Size
@@ -141,7 +138,7 @@ pages). If the remaining file space is less than this, parsing logs
 
 ## Search Algorithm
 
-`casc::KeyMappingTable::SearchBothSections` (0x739da1) searches both
+`casc::KeyMappingTable::SearchBothSections` searches both
 sections and merges results:
 
 1. **Sorted section**: Binary search on the 9-byte EKey
@@ -152,14 +149,14 @@ sections and merges results:
    each entry (three 4-byte comparisons for the first 8 bytes plus
    a single byte comparison for byte 8).
 
-3. **Merge**: Results from both sections are merged via `sub_747f72`,
-   which deduplicates by EKey. Update section entries take precedence
+3. **Merge**: Results from both sections are merged and deduplicated
+   by EKey. Update section entries take precedence
    over sorted section entries (newer wins).
 
 ## Compaction (Flush)
 
 When the update section is full, `casc::ContainerIndex::FlushTable`
-(0x7291f5) triggers compaction:
+triggers compaction:
 
 1. Calls `casc::IndexTables::FlushAndBindLoose` which merges the
    update section entries into the sorted section
@@ -167,13 +164,13 @@ When the update section is full, `casc::ContainerIndex::FlushTable`
 3. The new file atomically replaces the old one (rename)
 4. Updates the shared memory control block with the new file handle
 
-`FlushTableWithDeletes` (0x72934e) is a variant that also processes
+`FlushTableWithDeletes` is a variant that also processes
 delete entries (status byte 3), removing them from the sorted section
 during the merge.
 
 ## Insert Flow
 
-`casc::KeyMappingTable::InsertEntry` (0x73a5d4):
+`casc::KeyMappingTable::InsertEntry`:
 
 1. If status is 3 (delete) and no update section exists: return
    error 0x0A (not supported without update section)
@@ -182,7 +179,7 @@ during the merge.
    offset by adding the existing offset (accumulate)
 4. Write entry to the next available slot in the current update page:
    - Copy 9-byte EKey to offset 0x04
-   - Write 5-byte StorageOffset at offset 0x0D via `sub_728774`
+   - Write 5-byte StorageOffset at offset 0x0D
    - Write 4-byte EncodedSize at offset 0x12
    - Write status byte at offset 0x16
    - Compute and write hash guard at offset 0x00

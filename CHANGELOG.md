@@ -56,7 +56,7 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - KMT entry status updated to DATA_NON_RESIDENT (7) via update section
   - Missing archive triggers key removal from container index
 - docs: Agent container storage architecture documentation
-- docs: Agent IDX/KMT file format reverse engineering documentation
+- docs: Agent IDX/KMT file format documentation
 - docs: Agent maintenance operations documentation
 
 - cascette-client-storage crate: Local CASC storage for game installations

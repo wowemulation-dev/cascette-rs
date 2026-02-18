@@ -1,29 +1,14 @@
 # Agent.exe Maintenance Operations
 
-Reverse engineering notes from Agent.exe (TACT 3.13.3, CASC 1.5.9).
-Source: BinaryNinja decompilation of `Compactor::*`,
-`ExtractCompactor::*`, `CompactionFileMover::*`, and
-`ExtractorCompactorBackup::*` functions.
+Technical notes on Agent.exe (TACT 3.13.3, CASC 1.5.9) covering
+`Compactor`, `ExtractCompactor`, `CompactionFileMover`, and
+`ExtractorCompactorBackup` operations.
 
 ## Compaction
 
 Agent uses two-phase compaction: archive merge followed by
 extract-compact. Two algorithms are available: defrag (moves data
 to fill gaps) and fillholes (estimates free space without moves).
-
-Source: `casc::Compactor::InitArchiveMerge` (0x72d75f),
-`casc::Compactor::FinalizeArchiveMerge` (0x72daae),
-`casc::Compactor::OnArchiveMergeComplete` (0x72dfca),
-`casc::Compactor::InitExtractCompact` (0x72dcbd),
-`casc::Compactor::DispatchSegmentWork` (0x72e436),
-`casc::ExtractCompactor::ProcessSegment` (0x72f458),
-`casc::ExtractCompactor::ValidateSpans` (0x72f016),
-`casc::CompactionFileMover::Initialize` (0x73d5b7),
-`casc::CompactionFileMover::QueueAsyncRead` (0x73dcf7),
-`casc::CompactionFileMover::OnReadComplete` (0x73d828),
-`casc::CompactionFileMover::OnWriteComplete` (0x73e171),
-`casc::CompactionFileMover::ReconstructAndUpdateIndex` (0x73df73),
-`casc::ExtractorCompactorBackup::Open` (0x72ea30).
 
 ### Two Compaction Modes
 
@@ -41,8 +26,8 @@ Source: `casc::Compactor::InitArchiveMerge` (0x72d75f),
 3. Read archive merge threshold
 4. Initialize compaction progress tracker
 5. Call `Compactor::Execute` to validate container and build work plan
-6. On success: dispatch async merge via `sub_73f7a7` with
-   `OnArchiveMergeComplete` as handler
+6. On success: dispatch async merge with `OnArchiveMergeComplete`
+   as handler
 7. On failure: log "Failed to initialize information necessary to run
    compaction"
 
