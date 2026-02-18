@@ -70,7 +70,7 @@ impl UpdateStatus {
 /// [0x00] hash_guard  (4 bytes, LE) = hashlittle(bytes[4..23], 0) | 0x80000000
 /// [0x04] ekey        (9 bytes)
 /// [0x0D] offset      (5 bytes, BE packed archive location)
-/// [0x12] size        (4 bytes, BE)
+/// [0x12] size        (4 bytes, LE)
 /// [0x16] status      (1 byte)
 /// [0x17] padding     (1 byte)
 /// ```
@@ -132,7 +132,7 @@ impl UpdateEntry {
         buf[13] = index_high;
         buf[14..18].copy_from_slice(&packed.to_be_bytes());
 
-        buf[18..22].copy_from_slice(&self.encoded_size.to_be_bytes());
+        buf[18..22].copy_from_slice(&self.encoded_size.to_le_bytes());
         buf[22] = self.status as u8;
         buf[23] = 0; // padding
 
@@ -152,7 +152,7 @@ impl UpdateEntry {
         let archive_id = (index_high << 2) | u16::try_from(packed >> 30).unwrap_or(0);
         let archive_offset = packed & 0x3FFF_FFFF;
 
-        let encoded_size = u32::from_be_bytes([data[18], data[19], data[20], data[21]]);
+        let encoded_size = u32::from_le_bytes([data[18], data[19], data[20], data[21]]);
         let status = UpdateStatus::from_byte(data[22]);
 
         Self {

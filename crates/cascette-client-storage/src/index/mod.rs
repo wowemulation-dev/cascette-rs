@@ -138,8 +138,16 @@ pub struct IndexHeader {
 }
 
 /// Entry in an index file (18-byte IDX Journal format)
+///
+/// Mixed endianness (verified against Agent.exe and CascLib):
+/// - Key: 9 bytes (endianness irrelevant)
+/// - StorageOffset: 5 bytes big-endian
+/// - EncodedSize: 4 bytes **little-endian**
+///
+/// CascLib uses `ConvertBytesToInteger_5` (BE) for the offset and
+/// `ConvertBytesToInteger_4_LE` (LE) for the size.
 #[derive(Debug, Clone, PartialEq, Eq, BinRead, BinWrite)]
-#[brw(big)] // NGDP uses big-endian by default
+#[brw(big)]
 pub struct IndexEntry {
     /// Truncated encoding key (first 9 bytes)
     pub key: [u8; 9],
@@ -149,9 +157,12 @@ pub struct IndexEntry {
     #[bw(write_with = write_archive_location)]
     pub archive_location: ArchiveLocation,
 
-    /// Encoded size of the content (4 bytes, big-endian).
+    /// Encoded size of the content (4 bytes, little-endian).
     ///
-    /// CascLib both use big-endian for all entry fields.
+    /// Agent.exe reads this with a backward byte loop (LE) and CascLib
+    /// uses `ConvertBytesToInteger_4_LE`. This is the one field in the
+    /// 18-byte entry that is NOT big-endian.
+    #[brw(little)]
     pub size: u32,
 }
 
@@ -1900,12 +1911,12 @@ mod validation_impls {
                 ));
             }
 
-            // Validate size is big-endian (last 4 bytes)
+            // Validate size is little-endian (last 4 bytes)
             let size_bytes = &data[14..18];
-            let expected_size_bytes = self.size.to_be_bytes();
+            let expected_size_bytes = self.size.to_le_bytes();
             if size_bytes != expected_size_bytes {
                 return Err(StorageError::InvalidFormat(
-                    "Size field not in big-endian format".to_string(),
+                    "Size field not in little-endian format".to_string(),
                 ));
             }
 

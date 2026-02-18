@@ -12,7 +12,7 @@
 //! |--------|------|-------|
 //! | 0x00   | 9    | EKey (first 9 bytes of encoding key) |
 //! | 0x09   | 5    | StorageOffset (big-endian, packed segment index + file offset) |
-//! | 0x0E   | 4    | EncodedSize (big-endian, total encoded size including BLTE framing) |
+//! | 0x0E   | 4    | EncodedSize (little-endian, total encoded size including BLTE framing) |
 //!
 //! The StorageOffset packs two values using FileOffsetBits (typically 30):
 //! - Upper bits (30-39): segment index (up to 1023)
