@@ -70,5 +70,32 @@ proptest = { workspace = true }
 # These dependencies are used internally or for specific features
 ignored = ["flate2", "serde_json"]
 
+[features]
+local-install = []
+
+[[example]]
+name = "dump_build_info"
+required-features = ["local-install"]
+
+[[example]]
+name = "dump_index"
+required-features = ["local-install"]
+
+[[example]]
+name = "dump_segments"
+required-features = ["local-install"]
+
+[[example]]
+name = "dump_shmem"
+required-features = ["local-install"]
+
+[[example]]
+name = "dump_local_headers"
+required-features = ["local-install"]
+
+[[example]]
+name = "read_archives"
+required-features = ["local-install"]
+
 [lints]
 workspace = true
