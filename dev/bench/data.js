@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1771501786957,
+  "lastUpdate": 1771502653298,
   "repoUrl": "https://github.com/wowemulation-dev/cascette-rs",
   "entries": {
     "Benchmark": [
@@ -629,6 +629,48 @@ window.BENCHMARK_DATA = {
             "name": "bpsv_generation/summary/all",
             "value": 212,
             "range": "± 2",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "daniel@kogito.network",
+            "name": "Daniel S. Reichenbach",
+            "username": "danielsreichenbach"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "75e49f7e9e1f5ff3f87bfd8bd6c41dc6479e4a4d",
+          "message": "Merge pull request #39 from wowemulation-dev/fix/install-script-double-v\n\nfix: replace hardcoded install scripts with unified generic versions",
+          "timestamp": "2026-02-19T19:02:16+07:00",
+          "tree_id": "baf2f8d506748b3ba5acfc689cc9fef2368980d8",
+          "url": "https://github.com/wowemulation-dev/cascette-rs/commit/75e49f7e9e1f5ff3f87bfd8bd6c41dc6479e4a4d"
+        },
+        "date": 1771502652372,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "bpsv_generation/versions/wow",
+            "value": 1871,
+            "range": "± 34",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "bpsv_generation/cdns/wow",
+            "value": 1106,
+            "range": "± 17",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "bpsv_generation/summary/all",
+            "value": 207,
+            "range": "± 1",
             "unit": "ns/iter"
           }
         ]
