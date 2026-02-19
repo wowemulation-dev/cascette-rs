@@ -67,8 +67,7 @@ Offset  Size  Field
 ```
 
 **Mixed endianness**: StorageOffset is big-endian but EncodedSize is
-little-endian. Verified in Agent.exe (`sub_73bed9` reads forward/BE for
-the offset, `sub_73bf18` reads backward/LE for the size) and CascLib
+little-endian. Verified against Agent.exe behavior and CascLib
 (`ConvertBytesToInteger_5` for offset, `ConvertBytesToInteger_4_LE` for
 size).
 
