@@ -1693,12 +1693,12 @@ mod tests {
         for entry in std::fs::read_dir(temp_dir.path()).expect("read_dir") {
             let entry = entry.expect("dir entry");
             let path = entry.path();
-            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                if let Some((bucket, _version)) = IndexManager::parse_index_filename(name) {
-                    reader
-                        .load_index(bucket, &path)
-                        .expect("load_index should succeed");
-                }
+            if let Some(name) = path.file_name().and_then(|n| n.to_str())
+                && let Some((bucket, _version)) = IndexManager::parse_index_filename(name)
+            {
+                reader
+                    .load_index(bucket, &path)
+                    .expect("load_index should succeed");
             }
         }
 

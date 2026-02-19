@@ -891,13 +891,13 @@ mod tests {
             path,
             PathBuf::from("/data/trie/ab/cd/12345678_9abcde")
                 .parent()
-                .unwrap()
+                .expect("path has parent")
                 .join("123456789abcde")
         );
         // Verify trie structure: XX/YY/remaining
         let components: Vec<_> = path
             .strip_prefix(base)
-            .unwrap()
+            .expect("path has base prefix")
             .components()
             .map(|c| c.as_os_str().to_string_lossy().to_string())
             .collect();
@@ -954,7 +954,7 @@ mod tests {
 
         // Create the file
         let path = trie.path_for_key(&ekey);
-        std::fs::create_dir_all(path.parent().unwrap()).expect("mkdir");
+        std::fs::create_dir_all(path.parent().expect("path has parent")).expect("mkdir");
         std::fs::write(&path, b"data").expect("write");
 
         // Invalidate cache so next check goes to disk
@@ -973,8 +973,8 @@ mod tests {
         let ekey2: [u8; 9] = [0xCC, 0xDD, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E];
         let path1 = format_content_key_path(&base, &ekey1);
         let path2 = format_content_key_path(&base, &ekey2);
-        std::fs::create_dir_all(path1.parent().unwrap()).expect("mkdir");
-        std::fs::create_dir_all(path2.parent().unwrap()).expect("mkdir");
+        std::fs::create_dir_all(path1.parent().expect("path1 has parent")).expect("mkdir");
+        std::fs::create_dir_all(path2.parent().expect("path2 has parent")).expect("mkdir");
         std::fs::write(&path1, b"data1").expect("write");
         std::fs::write(&path2, b"data2").expect("write");
 
@@ -998,7 +998,8 @@ mod tests {
 
         // Create valid trie structure
         let valid_path = base.join("ab").join("cd").join("123456789abcde");
-        std::fs::create_dir_all(valid_path.parent().unwrap()).expect("mkdir");
+        std::fs::create_dir_all(valid_path.parent().expect("valid_path has parent"))
+            .expect("mkdir");
         std::fs::write(&valid_path, b"valid").expect("write");
 
         // Create orphan file with wrong name length
@@ -1033,7 +1034,7 @@ mod tests {
             let mut ekey = [0u8; 9];
             ekey.copy_from_slice(&key[..9]);
             let path = format_content_key_path(&base, &ekey);
-            std::fs::create_dir_all(path.parent().unwrap()).expect("mkdir");
+            std::fs::create_dir_all(path.parent().expect("path has parent")).expect("mkdir");
             std::fs::write(&path, b"data").expect("write");
         }
 
@@ -1058,7 +1059,7 @@ mod tests {
         let mut ekey = [0u8; 9];
         ekey.copy_from_slice(&key[..9]);
         let path = format_content_key_path(&base, &ekey);
-        std::fs::create_dir_all(path.parent().unwrap()).expect("mkdir");
+        std::fs::create_dir_all(path.parent().expect("path has parent")).expect("mkdir");
         std::fs::write(&path, b"data").expect("write");
 
         // Invalidate cache

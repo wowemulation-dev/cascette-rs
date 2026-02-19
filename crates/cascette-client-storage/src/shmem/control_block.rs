@@ -607,6 +607,7 @@ impl ShmemControlBlock {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used)]
 mod tests {
     use super::*;
 
@@ -620,18 +621,18 @@ mod tests {
 
     #[test]
     fn test_exclusive_access_v5_only() {
-        let mut v4 = ShmemControlBlock::new(4).unwrap();
+        let mut v4 = ShmemControlBlock::new(4).expect("v4 is a supported version");
         v4.set_exclusive(true);
         assert!(!v4.is_exclusive()); // V4 ignores exclusive flag
 
-        let mut v5 = ShmemControlBlock::new(5).unwrap();
+        let mut v5 = ShmemControlBlock::new(5).expect("v5 is a supported version");
         v5.set_exclusive(true);
         assert!(v5.is_exclusive());
     }
 
     #[test]
     fn test_validation() {
-        let mut cb = ShmemControlBlock::new(4).unwrap();
+        let mut cb = ShmemControlBlock::new(4).expect("v4 is a supported version");
         assert!(!cb.validate()); // Not initialized
 
         cb.initialize(1024);
@@ -640,12 +641,12 @@ mod tests {
 
     #[test]
     fn test_validate_for_bind() {
-        let mut cb = ShmemControlBlock::new(4).unwrap();
+        let mut cb = ShmemControlBlock::new(4).expect("v4 is a supported version");
         cb.initialize(1024);
         assert!(cb.validate_for_bind().is_ok());
 
         // V5 exclusive access blocks binding
-        let mut v5 = ShmemControlBlock::new(5).unwrap();
+        let mut v5 = ShmemControlBlock::new(5).expect("v5 is a supported version");
         v5.initialize(1024);
         v5.set_exclusive(true);
         assert!(v5.validate_for_bind().is_err());
@@ -683,14 +684,14 @@ mod tests {
         let mut pt = PidTracking::new(4);
 
         // Add a process
-        let slot = pt.add_process(1234, 5).unwrap(); // RW mode
+        let slot = pt.add_process(1234, 5).expect("table has capacity"); // RW mode
         assert_eq!(slot, 0);
         assert_eq!(pt.total_count, 1);
         assert_eq!(pt.writer_count, 1);
         assert_eq!(pt.generation, 1);
 
         // Add another (read-only)
-        let slot2 = pt.add_process(5678, 2).unwrap(); // RO mode
+        let slot2 = pt.add_process(5678, 2).expect("table has capacity"); // RO mode
         assert_eq!(slot2, 1);
         assert_eq!(pt.total_count, 2);
         assert_eq!(pt.writer_count, 1); // Only first is a writer
@@ -708,8 +709,8 @@ mod tests {
     fn test_pid_tracking_full() {
         let mut pt = PidTracking::new(2);
 
-        pt.add_process(1, 5).unwrap();
-        pt.add_process(2, 5).unwrap();
+        pt.add_process(1, 5).expect("table has capacity");
+        pt.add_process(2, 5).expect("table has capacity");
 
         // Table full
         assert!(pt.add_process(3, 5).is_none());
@@ -752,19 +753,19 @@ mod tests {
         let cb = ShmemControlBlock::new_v5_with_pid_tracking(8);
         assert_eq!(cb.version(), 5);
         assert!(cb.pid_tracking().is_some());
-        assert_eq!(cb.pid_tracking().unwrap().max_slots, 8);
+        assert_eq!(cb.pid_tracking().expect("v5 has pid tracking").max_slots, 8);
     }
 
     #[test]
     fn test_v4_mapped_round_trip() {
-        let mut cb = ShmemControlBlock::new(4).unwrap();
+        let mut cb = ShmemControlBlock::new(4).expect("v4 is a supported version");
         cb.initialize(0x1234);
 
         let size = cb.file_size();
         let mut buf = vec![0u8; size];
         cb.to_mapped(&mut buf);
 
-        let loaded = ShmemControlBlock::from_mapped(&buf).unwrap();
+        let loaded = ShmemControlBlock::from_mapped(&buf).expect("buf contains valid v4 data");
         assert_eq!(loaded.version(), 4);
         assert!(loaded.is_initialized());
         assert_eq!(loaded.data_size(), 0x1234);
@@ -778,20 +779,24 @@ mod tests {
         cb.set_exclusive(true);
 
         // Add some processes
-        cb.pid_tracking_mut().unwrap().add_process(1234, 5);
-        cb.pid_tracking_mut().unwrap().add_process(5678, 2);
+        cb.pid_tracking_mut()
+            .expect("v5 has pid tracking")
+            .add_process(1234, 5);
+        cb.pid_tracking_mut()
+            .expect("v5 has pid tracking")
+            .add_process(5678, 2);
 
         let size = cb.file_size();
         let mut buf = vec![0u8; size];
         cb.to_mapped(&mut buf);
 
-        let loaded = ShmemControlBlock::from_mapped(&buf).unwrap();
+        let loaded = ShmemControlBlock::from_mapped(&buf).expect("buf contains valid v5 data");
         assert_eq!(loaded.version(), 5);
         assert!(loaded.is_initialized());
         assert_eq!(loaded.data_size(), 0xABCD);
         assert!(loaded.is_exclusive());
 
-        let pt = loaded.pid_tracking().unwrap();
+        let pt = loaded.pid_tracking().expect("v5 has pid tracking");
         assert_eq!(pt.total_count, 2);
         assert_eq!(pt.writer_count, 1);
         assert_eq!(pt.pids[0], 1234);

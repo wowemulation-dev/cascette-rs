@@ -683,6 +683,7 @@ mod tests {
         let entry = {
             let index = container.index.read();
             let mut entries: Vec<_> = index.iter_entries().collect();
+            drop(index);
             assert_eq!(entries.len(), 1, "should have exactly one entry");
             entries.pop().expect("entry").1.clone()
         };
@@ -731,9 +732,10 @@ mod tests {
         // Query with the actual encoding key from the index.
         let ekey = {
             let index = container.index.read();
-            let entry = index.iter_entries().next().expect("one entry").1;
+            let entry_key = index.iter_entries().next().expect("one entry").1.key;
+            drop(index);
             let mut k = [0u8; 16];
-            k[..9].copy_from_slice(&entry.key);
+            k[..9].copy_from_slice(&entry_key);
             k
         };
 
@@ -761,9 +763,10 @@ mod tests {
         // Get the encoding key
         let ekey = {
             let index = container.index.read();
-            let entry = index.iter_entries().next().expect("entry").1;
+            let entry_key = index.iter_entries().next().expect("entry").1.key;
+            drop(index);
             let mut k = [0u8; 16];
-            k[..9].copy_from_slice(&entry.key);
+            k[..9].copy_from_slice(&entry_key);
             k
         };
 

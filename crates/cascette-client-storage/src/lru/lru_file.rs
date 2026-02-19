@@ -409,8 +409,10 @@ mod tests {
 
     #[test]
     fn test_deserialize_rejects_bad_version() {
-        let mut header = LruFileHeader::default();
-        header.version = 2; // Invalid
+        let header = LruFileHeader {
+            version: 2, // Invalid
+            ..LruFileHeader::default()
+        };
         let data = serialize(&header, &[]);
         // The serialize will compute a valid hash, but from_bytes rejects version > 1
         assert!(deserialize(&data).is_none());

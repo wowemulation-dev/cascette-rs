@@ -844,7 +844,7 @@ mod tests {
         let dir = tempfile::tempdir().expect("tempdir");
         let db_path = dir.path().join("residency.db");
 
-        let mut db = ResidencyDb::new(db_path.clone());
+        let mut db = ResidencyDb::new(db_path);
 
         let key1 = [0x11; 16];
         let key2 = [0x22; 16];

@@ -671,11 +671,17 @@ mod tests {
         alloc.allocate(1024).expect("alloc");
 
         // Segment 0 starts thawed
-        assert_eq!(alloc.segment(0).unwrap().state, SegmentState::Thawed);
+        assert_eq!(
+            alloc.segment(0).expect("segment 0 exists").state,
+            SegmentState::Thawed
+        );
 
         // Freeze
         assert!(alloc.freeze(0));
-        assert_eq!(alloc.segment(0).unwrap().state, SegmentState::Frozen);
+        assert_eq!(
+            alloc.segment(0).expect("segment 0 exists").state,
+            SegmentState::Frozen
+        );
 
         // Can't allocate in frozen segment
         // But there's space, so allocator creates segment 1
@@ -684,7 +690,10 @@ mod tests {
 
         // Thaw segment 0
         assert!(alloc.thaw(0));
-        assert_eq!(alloc.segment(0).unwrap().state, SegmentState::Thawed);
+        assert_eq!(
+            alloc.segment(0).expect("segment 0 exists").state,
+            SegmentState::Thawed
+        );
     }
 
     #[test]
