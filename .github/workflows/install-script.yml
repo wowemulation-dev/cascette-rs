@@ -1,0 +1,75 @@
+---
+name: Install Script Test
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'install.sh'
+      - 'install.ps1'
+      - '.github/workflows/install-script.yml'
+
+  release:
+    types: [published]
+
+  workflow_dispatch:
+
+jobs:
+  shellcheck:
+    name: ShellCheck
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run ShellCheck on install script
+        uses: ludeeus/action-shellcheck@2.0.0
+        with:
+          scandir: '.'
+          format: gcc
+          severity: warning
+
+  test-install:
+    name: Test Install (${{ matrix.os }})
+    needs: [shellcheck]
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Test install script functionality (PR/manual)
+        if: github.event_name != 'release'
+        shell: bash
+        env:
+          BINARY_NAMES: cascette-ribbit
+          BINARY_DEFAULT: cascette-ribbit
+          REPO: wowemulation-dev/cascette-rs
+          TAG_PREFIX: cascette-ribbit-v
+        run: |
+          chmod +x install.sh
+
+          ./install.sh --help
+
+          bash -c 'source ./install.sh && detect_platform'
+
+          bash -n install.sh
+
+      - name: Test actual installation (release)
+        if: github.event_name == 'release'
+        env:
+          BINARY_DEFAULT: ${{ vars.BINARY_DEFAULT }}
+        shell: bash
+        run: |
+          chmod +x install.sh
+
+          ./install.sh --tag "${{ github.event.release.tag_name }}"
+
+          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+            "$HOME/.local/bin/${BINARY_DEFAULT}.exe" --version
+          else
+            "$HOME/.local/bin/${BINARY_DEFAULT}" --version
+          fi
