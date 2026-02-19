@@ -172,8 +172,8 @@ pub fn bucket_hash(ekey: &[u8], seed: u8) -> u8 {
 /// Generate a 16-byte key for a segment reconstruction header.
 ///
 /// - Start with the 16-byte path hash as base
-/// - Encode segment count in bytes [1] and [2] (big-endian u16)
-/// - Adjust byte [0] (0x00-0xFF) until the first 9 bytes hash to
+/// - Encode segment count in bytes \[1\] and \[2\] (big-endian u16)
+/// - Adjust byte \[0\] (0x00-0xFF) until the first 9 bytes hash to
 ///   the target bucket via `bucket_hash` with seed 1
 ///
 /// Called 16 times per segment (once per bucket) by
@@ -274,11 +274,7 @@ pub struct SegmentAllocator {
 
 impl SegmentAllocator {
     /// Create a new segment allocator.
-    pub fn new(
-        base_path: std::path::PathBuf,
-        path_hash: [u8; 16],
-        max_segments: u16,
-    ) -> Self {
+    pub fn new(base_path: std::path::PathBuf, path_hash: [u8; 16], max_segments: u16) -> Self {
         Self {
             segments: Vec::new(),
             bucket_locks: std::array::from_fn(|_| parking_lot::RwLock::new(())),
@@ -315,18 +311,12 @@ impl SegmentAllocator {
 
             let path = entry.path();
             let metadata = std::fs::metadata(&path).map_err(|e| {
-                crate::StorageError::Archive(format!(
-                    "failed to stat {}: {e}",
-                    path.display()
-                ))
+                crate::StorageError::Archive(format!("failed to stat {}: {e}", path.display()))
             })?;
 
             // Read segment header
             let file_data = std::fs::read(&path).map_err(|e| {
-                crate::StorageError::Archive(format!(
-                    "failed to read {}: {e}",
-                    path.display()
-                ))
+                crate::StorageError::Archive(format!("failed to read {}: {e}", path.display()))
             })?;
 
             let header = if file_data.len() >= SEGMENT_HEADER_SIZE {
@@ -367,18 +357,15 @@ impl SegmentAllocator {
                 return Ok(Allocation {
                     segment_index: info.index,
                     file_offset: u32::try_from(offset).map_err(|_| {
-                        crate::StorageError::Archive(
-                            "segment offset exceeds u32 range".to_string(),
-                        )
+                        crate::StorageError::Archive("segment offset exceeds u32 range".to_string())
                     })?,
                 });
             }
         }
 
         // Create new segment
-        let new_index = u16::try_from(self.segments.len()).map_err(|_| {
-            crate::StorageError::Archive("too many segments".to_string())
-        })?;
+        let new_index = u16::try_from(self.segments.len())
+            .map_err(|_| crate::StorageError::Archive("too many segments".to_string()))?;
 
         if new_index >= self.max_segments {
             return Err(crate::StorageError::Archive(format!(
@@ -409,9 +396,7 @@ impl SegmentAllocator {
         Ok(Allocation {
             segment_index: new_index,
             file_offset: u32::try_from(offset).map_err(|_| {
-                crate::StorageError::Archive(
-                    "segment offset exceeds u32 range".to_string(),
-                )
+                crate::StorageError::Archive("segment offset exceeds u32 range".to_string())
             })?,
         })
     }
@@ -711,7 +696,9 @@ mod tests {
         {
             let mut alloc = SegmentAllocator::new(dir.path().to_path_buf(), path_hash, 10);
             alloc.allocate(1024).expect("alloc0");
-            alloc.allocate(SEGMENT_SIZE - SEGMENT_HEADER_SIZE as u64).expect("fill0");
+            alloc
+                .allocate(SEGMENT_SIZE - SEGMENT_HEADER_SIZE as u64)
+                .expect("fill0");
             alloc.allocate(2048).expect("alloc1");
         }
 
