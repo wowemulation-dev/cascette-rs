@@ -259,8 +259,12 @@ impl UpdatePage {
             let entry_slice = &data[offset..offset + UPDATE_ENTRY_SIZE];
 
             // Check for empty entry slot (hash_guard == 0)
-            let hash_guard =
-                u32::from_le_bytes([entry_slice[0], entry_slice[1], entry_slice[2], entry_slice[3]]);
+            let hash_guard = u32::from_le_bytes([
+                entry_slice[0],
+                entry_slice[1],
+                entry_slice[2],
+                entry_slice[3],
+            ]);
             if hash_guard == 0 {
                 break;
             }
@@ -365,7 +369,8 @@ impl UpdateSection {
     ///
     /// Agent syncs every 8th page (`page_index & 7 == 7`).
     pub fn should_sync(&self) -> bool {
-        !self.pages.is_empty() && (self.pages.len() - 1) % SYNC_PAGE_INTERVAL == (SYNC_PAGE_INTERVAL - 1)
+        !self.pages.is_empty()
+            && (self.pages.len() - 1) % SYNC_PAGE_INTERVAL == (SYNC_PAGE_INTERVAL - 1)
     }
 
     /// Search for a key in the update section (linear scan, newest first).

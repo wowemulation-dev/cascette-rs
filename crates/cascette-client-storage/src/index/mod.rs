@@ -26,7 +26,7 @@ use tokio::fs;
 use tracing::{debug, info, warn};
 
 pub use update::UpdateStatus;
-use update::{UpdateEntry, UpdateSection, UPDATE_SECTION_ALIGNMENT};
+use update::{UPDATE_SECTION_ALIGNMENT, UpdateEntry, UpdateSection};
 
 /// Custom binrw parser for archive location (5 bytes: 1 high + 4 packed)
 fn parse_archive_location<R: std::io::Read + std::io::Seek>(
@@ -472,9 +472,9 @@ impl IndexManager {
                     StorageError::Index(format!("Failed to seek to update section: {e}"))
                 })?;
             let mut update_data = vec![0u8; update_size];
-            reader.read_exact(&mut update_data).map_err(|e| {
-                StorageError::Index(format!("Failed to read update section: {e}"))
-            })?;
+            reader
+                .read_exact(&mut update_data)
+                .map_err(|e| StorageError::Index(format!("Failed to read update section: {e}")))?;
             let section = UpdateSection::from_bytes(&update_data);
             if section.entry_count() > 0 {
                 debug!(
@@ -620,9 +620,10 @@ impl IndexManager {
 
         // Try to append to update section
         {
-            let index = self.indices.get_mut(&index_id).unwrap_or_else(|| {
-                unreachable!("bucket was just created")
-            });
+            let index = self
+                .indices
+                .get_mut(&index_id)
+                .unwrap_or_else(|| unreachable!("bucket was just created"));
             if index.update_section.append(make_entry()) {
                 return Ok(());
             }
@@ -631,9 +632,10 @@ impl IndexManager {
         // Update section full -- flush (merge into sorted), then retry
         self.flush_updates_for_bucket(index_id)?;
 
-        let index = self.indices.get_mut(&index_id).unwrap_or_else(|| {
-            unreachable!("bucket was just flushed")
-        });
+        let index = self
+            .indices
+            .get_mut(&index_id)
+            .unwrap_or_else(|| unreachable!("bucket was just flushed"));
         if !index.update_section.append(make_entry()) {
             return Err(StorageError::Index(
                 "update section full after flush".to_string(),
@@ -782,23 +784,21 @@ impl IndexManager {
                 sorted_end,
                 update_data.as_deref(),
             ) {
-                Ok(()) => {
-                    match std::fs::rename(&temp_path, path) {
-                        Ok(()) => {
-                            debug!(
-                                "Saved index {:02x} with {} sorted + {} update entries (attempt {})",
-                                id,
-                                index.entries.len(),
-                                index.update_section.entry_count(),
-                                attempt + 1
-                            );
-                            return Ok(());
-                        }
-                        Err(e) => {
-                            last_error = Some(format!("Failed to rename temp file: {e}"));
-                        }
+                Ok(()) => match std::fs::rename(&temp_path, path) {
+                    Ok(()) => {
+                        debug!(
+                            "Saved index {:02x} with {} sorted + {} update entries (attempt {})",
+                            id,
+                            index.entries.len(),
+                            index.update_section.entry_count(),
+                            attempt + 1
+                        );
+                        return Ok(());
                     }
-                }
+                    Err(e) => {
+                        last_error = Some(format!("Failed to rename temp file: {e}"));
+                    }
+                },
                 Err(e) => {
                     last_error = Some(format!("Failed to write temp file: {e}"));
                 }
@@ -867,9 +867,9 @@ impl IndexManager {
                     StorageError::Index(format!("Failed to write alignment padding: {e}"))
                 })?;
             }
-            writer.write_all(update_bytes).map_err(|e| {
-                StorageError::Index(format!("Failed to write update section: {e}"))
-            })?;
+            writer
+                .write_all(update_bytes)
+                .map_err(|e| StorageError::Index(format!("Failed to write update section: {e}")))?;
         }
 
         writer
@@ -1029,12 +1029,8 @@ impl IndexManager {
             .copy_from_slice(&key_bytes[..9.min(key_bytes.len())]);
 
         if let Some(index) = self.indices.get_mut(&index_id) {
-            let update = UpdateEntry::new(
-                truncated_key,
-                entry.archive_location,
-                entry.size,
-                status,
-            );
+            let update =
+                UpdateEntry::new(truncated_key, entry.archive_location, entry.size, status);
             return index.update_section.append(update);
         }
 

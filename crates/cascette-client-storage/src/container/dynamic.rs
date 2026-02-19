@@ -215,11 +215,8 @@ impl DynamicContainer {
 
         let index = IndexManager::new(&b.storage_path);
         let archive = ArchiveManager::new(&b.storage_path);
-        let segment_allocator = SegmentAllocator::new(
-            b.storage_path.clone(),
-            b.path_hash,
-            segment_limit,
-        );
+        let segment_allocator =
+            SegmentAllocator::new(b.storage_path.clone(), b.path_hash, segment_limit);
 
         Ok(Self {
             access_mode: b.access_mode,
@@ -457,7 +454,8 @@ impl Container for DynamicContainer {
                 Err(e) => {
                     // Convert archive bounds errors to TruncatedRead to match
                     // CASC behavior (CASC error 3 -> TACT error 7).
-                    if matches!(&e, StorageError::Archive(msg) if msg.contains("beyond archive bounds")) {
+                    if matches!(&e, StorageError::Archive(msg) if msg.contains("beyond archive bounds"))
+                    {
                         warn!(
                             "truncated read for key {}: archive {} too short for entry at offset {:#x} size {}",
                             hex::encode(&key[..9]),

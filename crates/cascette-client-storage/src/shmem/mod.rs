@@ -35,12 +35,12 @@ pub use legacy::*;
 // Platform-specific re-exports
 #[cfg(unix)]
 pub use platform_unix::{
-    is_network_drive, lock_file_path, shmem_file_path, shmem_name_from_path, LockFile,
-    PlatformShmem,
+    LockFile, PlatformShmem, is_network_drive, lock_file_path, shmem_file_path,
+    shmem_name_from_path,
 };
 
 #[cfg(target_os = "windows")]
 pub use platform_windows::{
-    is_network_drive, lock_file_path, shmem_file_path, shmem_name_from_path, LockFile,
-    PlatformShmem,
+    LockFile, PlatformShmem, is_network_drive, lock_file_path, shmem_file_path,
+    shmem_name_from_path,
 };

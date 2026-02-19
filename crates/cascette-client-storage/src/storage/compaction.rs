@@ -167,24 +167,22 @@ impl CompactionFileMover {
         dest_offset: u64,
         length: u64,
     ) -> Result<()> {
-        source.seek(SeekFrom::Start(src_offset)).map_err(|e| {
-            StorageError::Archive(format!("compaction: source seek failed: {e}"))
-        })?;
-        dest.seek(SeekFrom::Start(dest_offset)).map_err(|e| {
-            StorageError::Archive(format!("compaction: dest seek failed: {e}"))
-        })?;
+        source
+            .seek(SeekFrom::Start(src_offset))
+            .map_err(|e| StorageError::Archive(format!("compaction: source seek failed: {e}")))?;
+        dest.seek(SeekFrom::Start(dest_offset))
+            .map_err(|e| StorageError::Archive(format!("compaction: dest seek failed: {e}")))?;
 
         let mut remaining = length;
         while remaining > 0 {
             let chunk = (remaining as usize).min(self.buf_size);
             let buf = &mut self.buffer[..chunk];
 
-            source.read_exact(buf).map_err(|e| {
-                StorageError::Archive(format!("compaction: read failed: {e}"))
-            })?;
-            dest.write_all(buf).map_err(|e| {
-                StorageError::Archive(format!("compaction: write failed: {e}"))
-            })?;
+            source
+                .read_exact(buf)
+                .map_err(|e| StorageError::Archive(format!("compaction: read failed: {e}")))?;
+            dest.write_all(buf)
+                .map_err(|e| StorageError::Archive(format!("compaction: write failed: {e}")))?;
 
             remaining -= chunk as u64;
             self.bytes_moved += chunk as u64;
@@ -213,19 +211,16 @@ impl CompactionFileMover {
             let chunk = (remaining as usize).min(self.buf_size);
             let buf = &mut self.buffer[..chunk];
 
-            file.seek(SeekFrom::Start(src_pos)).map_err(|e| {
-                StorageError::Archive(format!("compaction: seek read failed: {e}"))
-            })?;
-            file.read_exact(buf).map_err(|e| {
-                StorageError::Archive(format!("compaction: read failed: {e}"))
-            })?;
+            file.seek(SeekFrom::Start(src_pos))
+                .map_err(|e| StorageError::Archive(format!("compaction: seek read failed: {e}")))?;
+            file.read_exact(buf)
+                .map_err(|e| StorageError::Archive(format!("compaction: read failed: {e}")))?;
 
             file.seek(SeekFrom::Start(dest_pos)).map_err(|e| {
                 StorageError::Archive(format!("compaction: seek write failed: {e}"))
             })?;
-            file.write_all(buf).map_err(|e| {
-                StorageError::Archive(format!("compaction: write failed: {e}"))
-            })?;
+            file.write_all(buf)
+                .map_err(|e| StorageError::Archive(format!("compaction: write failed: {e}")))?;
 
             remaining -= chunk as u64;
             src_pos += chunk as u64;
@@ -286,9 +281,8 @@ impl ExtractorCompactorBackup {
         })?;
 
         let mut data = Vec::new();
-        file.read_to_end(&mut data).map_err(|e| {
-            StorageError::Archive(format!("failed to read compaction backup: {e}"))
-        })?;
+        file.read_to_end(&mut data)
+            .map_err(|e| StorageError::Archive(format!("failed to read compaction backup: {e}")))?;
 
         if data.len() < BACKUP_HEADER_SIZE {
             warn!("compaction backup too small, ignoring");
@@ -340,9 +334,8 @@ impl ExtractorCompactorBackup {
         })?;
 
         // Header
-        file.write_all(&[BACKUP_VERSION]).map_err(|e| {
-            StorageError::Archive(format!("failed to write backup version: {e}"))
-        })?;
+        file.write_all(&[BACKUP_VERSION])
+            .map_err(|e| StorageError::Archive(format!("failed to write backup version: {e}")))?;
         file.write_all(&BACKUP_MAX_ENTRIES.to_le_bytes())
             .map_err(|e| {
                 StorageError::Archive(format!("failed to write backup max entries: {e}"))
@@ -350,15 +343,13 @@ impl ExtractorCompactorBackup {
 
         // Segment indices
         for &seg in &self.segments {
-            file.write_all(&u32::from(seg).to_le_bytes())
-                .map_err(|e| {
-                    StorageError::Archive(format!("failed to write backup segment: {e}"))
-                })?;
+            file.write_all(&u32::from(seg).to_le_bytes()).map_err(|e| {
+                StorageError::Archive(format!("failed to write backup segment: {e}"))
+            })?;
         }
 
-        file.flush().map_err(|e| {
-            StorageError::Archive(format!("failed to flush backup: {e}"))
-        })?;
+        file.flush()
+            .map_err(|e| StorageError::Archive(format!("failed to flush backup: {e}")))?;
 
         Ok(())
     }
@@ -372,14 +363,12 @@ impl ExtractorCompactorBackup {
             .create(true)
             .append(true)
             .open(&self.path)
-            .map_err(|e| {
-                StorageError::Archive(format!("failed to append to backup: {e}"))
-            })?;
+            .map_err(|e| StorageError::Archive(format!("failed to append to backup: {e}")))?;
 
         // If file is empty, write header first
-        let metadata = file.metadata().map_err(|e| {
-            StorageError::Archive(format!("failed to stat backup: {e}"))
-        })?;
+        let metadata = file
+            .metadata()
+            .map_err(|e| StorageError::Archive(format!("failed to stat backup: {e}")))?;
 
         if metadata.len() == 0 {
             file.write_all(&[BACKUP_VERSION]).map_err(|e| {
@@ -544,9 +533,10 @@ pub fn extract_compact_segment(
     validate_spans(spans)?;
 
     // Get original file size for computing bytes saved
-    let original_size = file.metadata().map_err(|e| {
-        StorageError::Archive(format!("failed to stat file for compaction: {e}"))
-    })?.len();
+    let original_size = file
+        .metadata()
+        .map_err(|e| StorageError::Archive(format!("failed to stat file for compaction: {e}")))?
+        .len();
 
     // Sort by offset (validate_spans already sorts)
     let mut write_pos = 0u64;
@@ -565,7 +555,10 @@ pub fn extract_compact_segment(
         file.set_len(write_pos).map_err(|e| {
             StorageError::Archive(format!("failed to truncate after compaction: {e}"))
         })?;
-        debug!("extract-compact: saved {} bytes, new size {}", bytes_saved, write_pos);
+        debug!(
+            "extract-compact: saved {} bytes, new size {}",
+            bytes_saved, write_pos
+        );
     }
 
     Ok(bytes_saved)

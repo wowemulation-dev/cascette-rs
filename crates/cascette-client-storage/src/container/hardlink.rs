@@ -129,7 +129,13 @@ impl FdCache {
                 e.lru_index = i;
             }
         }
-        self.entries.insert(key, FdCacheEntry { lru_index: 0, exists });
+        self.entries.insert(
+            key,
+            FdCacheEntry {
+                lru_index: 0,
+                exists,
+            },
+        );
     }
 
     /// Invalidate a cache entry.
@@ -780,8 +786,7 @@ mod tests {
         std::fs::create_dir_all(&source).expect("mkdir source");
         std::fs::create_dir_all(&target).expect("mkdir target");
 
-        let mut container =
-            HardLinkContainer::new(AccessMode::ReadWrite, dir.path().to_path_buf());
+        let mut container = HardLinkContainer::new(AccessMode::ReadWrite, dir.path().to_path_buf());
 
         // On most Unix filesystems in tmpdir, hard links are supported
         let supported = container.test_support(&source, &target).expect("test");
@@ -803,8 +808,7 @@ mod tests {
     #[test]
     fn test_zero_key_rejected() {
         let dir = tempdir().expect("tempdir");
-        let mut container =
-            HardLinkContainer::new(AccessMode::ReadWrite, dir.path().to_path_buf());
+        let mut container = HardLinkContainer::new(AccessMode::ReadWrite, dir.path().to_path_buf());
         container.supported = true; // Force support for test
 
         let src = dir.path().join("source_file");
@@ -816,8 +820,7 @@ mod tests {
     #[test]
     fn test_create_and_remove_link() {
         let dir = tempdir().expect("tempdir");
-        let mut container =
-            HardLinkContainer::new(AccessMode::ReadWrite, dir.path().to_path_buf());
+        let mut container = HardLinkContainer::new(AccessMode::ReadWrite, dir.path().to_path_buf());
 
         // Test filesystem support first
         let source_dir = dir.path().join("src");
@@ -861,8 +864,7 @@ mod tests {
     #[test]
     fn test_read_only_rejects_mutations() {
         let dir = tempdir().expect("tempdir");
-        let mut container =
-            HardLinkContainer::new(AccessMode::ReadOnly, dir.path().to_path_buf());
+        let mut container = HardLinkContainer::new(AccessMode::ReadOnly, dir.path().to_path_buf());
         container.supported = true;
 
         let key = [0xDD; 16];
@@ -874,8 +876,7 @@ mod tests {
     #[tokio::test]
     async fn test_initialize_creates_token() {
         let dir = tempdir().expect("tempdir");
-        let mut container =
-            HardLinkContainer::new(AccessMode::ReadWrite, dir.path().to_path_buf());
+        let mut container = HardLinkContainer::new(AccessMode::ReadWrite, dir.path().to_path_buf());
 
         container.initialize().await.expect("init");
         assert!(dir.path().join(TRIE_DIRECTORY_TOKEN).exists());

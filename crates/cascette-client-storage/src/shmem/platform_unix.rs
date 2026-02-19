@@ -192,13 +192,16 @@ impl LockFile {
     /// Retries every 50ms for up to 100 seconds (matching CASC timeout).
     /// Returns `Err` if the timeout expires.
     pub fn acquire(base_path: &Path) -> Result<Self> {
-        let lock_path = base_path.with_extension(
-            base_path
-                .extension()
-                .map_or_else(|| LOCK_FILE_SUFFIX.to_string(), |ext| {
-                    format!("{}.{}", ext.to_string_lossy(), LOCK_FILE_SUFFIX.trim_start_matches('.'))
-                }),
-        );
+        let lock_path = base_path.with_extension(base_path.extension().map_or_else(
+            || LOCK_FILE_SUFFIX.to_string(),
+            |ext| {
+                format!(
+                    "{}.{}",
+                    ext.to_string_lossy(),
+                    LOCK_FILE_SUFFIX.trim_start_matches('.')
+                )
+            },
+        ));
 
         let timeout = Duration::from_secs(LOCK_TIMEOUT_SECS);
         let retry_interval = Duration::from_millis(LOCK_RETRY_MS);

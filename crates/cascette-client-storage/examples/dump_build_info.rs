@@ -51,10 +51,7 @@ async fn main() {
         }
         println!("  Tags:       {}", active.tags().unwrap_or("-"));
         println!("  Armadillo:  {}", active.armadillo().unwrap_or("-"));
-        println!(
-            "  Activated:  {}",
-            active.last_activated().unwrap_or("-")
-        );
+        println!("  Activated:  {}", active.last_activated().unwrap_or("-"));
         println!();
     } else {
         println!("No active entry found.\n");

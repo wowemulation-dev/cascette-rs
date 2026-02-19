@@ -285,11 +285,7 @@ impl LruManager {
     /// Each entry is assumed to represent `avg_entry_size` bytes of
     /// stored data. Returns the number of entries evicted and total
     /// bytes freed.
-    pub fn evict_to_target(
-        &mut self,
-        target_bytes: u64,
-        avg_entry_size: u64,
-    ) -> (usize, u64) {
+    pub fn evict_to_target(&mut self, target_bytes: u64, avg_entry_size: u64) -> (usize, u64) {
         let mut evicted = 0usize;
         let mut freed = 0u64;
 
@@ -320,7 +316,10 @@ impl LruManager {
         let read_dir = match std::fs::read_dir(&self.data_dir) {
             Ok(rd) => rd,
             Err(e) => {
-                warn!("failed to scan LRU directory {}: {e}", self.data_dir.display());
+                warn!(
+                    "failed to scan LRU directory {}: {e}",
+                    self.data_dir.display()
+                );
                 return 0;
             }
         };

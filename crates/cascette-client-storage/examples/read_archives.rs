@@ -40,7 +40,11 @@ async fn main() {
         return;
     }
 
-    println!("Sampling {} of {} entries:\n", 10.min(all_entries.len()), all_entries.len());
+    println!(
+        "Sampling {} of {} entries:\n",
+        10.min(all_entries.len()),
+        all_entries.len()
+    );
 
     // First 5 + last 5 (or fewer if less than 10 total)
     let sample_count = 5.min(all_entries.len());

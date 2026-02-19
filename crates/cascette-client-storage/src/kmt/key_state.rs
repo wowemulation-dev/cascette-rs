@@ -362,8 +362,12 @@ impl ResidencyPage {
         let mut offset = 0;
 
         while offset + RESIDENCY_ENTRY_SIZE <= RESIDENCY_PAGE_SIZE {
-            let hash_flags =
-                u32::from_le_bytes([data[offset], data[offset + 1], data[offset + 2], data[offset + 3]]);
+            let hash_flags = u32::from_le_bytes([
+                data[offset],
+                data[offset + 1],
+                data[offset + 2],
+                data[offset + 3],
+            ]);
             if hash_flags == 0 {
                 break;
             }
@@ -440,9 +444,12 @@ impl ResidencyDb {
             if bucket_id >= RESIDENCY_BUCKET_COUNT {
                 break;
             }
-            let page_count =
-                u32::from_le_bytes([data[offset + 1], data[offset + 2], data[offset + 3], data[offset + 4]])
-                    as usize;
+            let page_count = u32::from_le_bytes([
+                data[offset + 1],
+                data[offset + 2],
+                data[offset + 3],
+                data[offset + 4],
+            ]) as usize;
             offset += 5;
 
             for _ in 0..page_count {
@@ -752,7 +759,10 @@ mod tests {
 
     #[test]
     fn test_residency_entry_round_trip() {
-        let ekey = [0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88];
+        let ekey = [
+            0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66,
+            0x77, 0x88,
+        ];
         let span = ResidencySpan::range(100, 5000);
         let entry = ResidencyEntry::new(ekey, span, ResidencyUpdateType::Set);
 
@@ -793,7 +803,8 @@ mod tests {
         }
         assert!(page.is_full());
 
-        let overflow = ResidencyEntry::new([0xFF; 16], ResidencySpan::full(), ResidencyUpdateType::Set);
+        let overflow =
+            ResidencyEntry::new([0xFF; 16], ResidencySpan::full(), ResidencyUpdateType::Set);
         assert!(!page.push(overflow));
     }
 
@@ -820,8 +831,10 @@ mod tests {
         // All ones
         assert_eq!(ResidencyEntry::bucket_hash(&[0xFF; 16]), 0);
         // Sequential
-        let key = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-                    0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10];
+        let key = [
+            0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E,
+            0x0F, 0x10,
+        ];
         let bucket = ResidencyEntry::bucket_hash(&key);
         assert!(bucket < 16);
     }

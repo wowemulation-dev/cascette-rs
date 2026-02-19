@@ -110,7 +110,11 @@ fn main() {
             println!("  Round-trip: PASS (header {cmp_len} bytes match)");
         } else {
             println!("  Round-trip: FAIL");
-            for (i, (a, b)) in raw[..cmp_len].iter().zip(rt_buf[..cmp_len].iter()).enumerate() {
+            for (i, (a, b)) in raw[..cmp_len]
+                .iter()
+                .zip(rt_buf[..cmp_len].iter())
+                .enumerate()
+            {
                 if a != b {
                     println!(
                         "    first diff at offset {i:#x}: original=0x{a:02x} roundtrip=0x{b:02x}"

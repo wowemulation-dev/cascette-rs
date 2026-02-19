@@ -165,11 +165,9 @@ impl PidTracking {
         let state = u32::from_le_bytes([data[0], data[1], data[2], data[3]]);
         let writer_count = u32::from_le_bytes([data[4], data[5], data[6], data[7]]);
         let total_count = u32::from_le_bytes([data[8], data[9], data[10], data[11]]);
-        let last_modified_slot =
-            u32::from_le_bytes([data[12], data[13], data[14], data[15]]);
+        let last_modified_slot = u32::from_le_bytes([data[12], data[13], data[14], data[15]]);
         let generation = u64::from_le_bytes([
-            data[16], data[17], data[18], data[19], data[20], data[21], data[22],
-            data[23],
+            data[16], data[17], data[18], data[19], data[20], data[21], data[22], data[23],
         ]);
         let max_slots = u32::from_le_bytes([data[24], data[25], data[26], data[27]]);
 
@@ -427,9 +425,7 @@ impl ShmemControlBlock {
 
             // PID tracking if the region is large enough for the extended header
             if data.len() >= V5_EXTENDED_HEADER_SIZE {
-                cb.pid_tracking = Some(PidTracking::from_mapped(
-                    &data[V5_BASE_HEADER_SIZE..],
-                ));
+                cb.pid_tracking = Some(PidTracking::from_mapped(&data[V5_BASE_HEADER_SIZE..]));
             }
         }
 
@@ -462,15 +458,13 @@ impl ShmemControlBlock {
 
         // Data size at DWORD offset 0x43
         let ds_byte_offset = DATA_SIZE_OFFSET * 4;
-        data[ds_byte_offset..ds_byte_offset + 4]
-            .copy_from_slice(&self.data_size.to_le_bytes());
+        data[ds_byte_offset..ds_byte_offset + 4].copy_from_slice(&self.data_size.to_le_bytes());
 
         // V5 fields
         if self.version >= 5 && data.len() >= V5_BASE_HEADER_SIZE {
             let ea_byte_offset = V5_EXCLUSIVE_FLAG_OFFSET * 4;
             let ea_dword: u32 = u32::from(self.exclusive_access);
-            data[ea_byte_offset..ea_byte_offset + 4]
-                .copy_from_slice(&ea_dword.to_le_bytes());
+            data[ea_byte_offset..ea_byte_offset + 4].copy_from_slice(&ea_dword.to_le_bytes());
 
             if let Some(ref pt) = self.pid_tracking
                 && data.len() >= V5_EXTENDED_HEADER_SIZE

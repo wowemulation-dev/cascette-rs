@@ -9,7 +9,7 @@
 mod common;
 
 use cascette_client_storage::storage::{
-    SegmentHeader, parse_data_filename, segment_data_path, SEGMENT_HEADER_SIZE,
+    SEGMENT_HEADER_SIZE, SegmentHeader, parse_data_filename, segment_data_path,
 };
 use std::fs;
 
@@ -58,8 +58,8 @@ fn main() {
         let raw = fs::read(path).expect("failed to read data file");
         let header_bytes = &raw[..SEGMENT_HEADER_SIZE];
 
-        let header = SegmentHeader::from_bytes(header_bytes)
-            .expect("failed to parse segment header");
+        let header =
+            SegmentHeader::from_bytes(header_bytes).expect("failed to parse segment header");
 
         // Print 16 local headers
         for bucket in 0..16u8 {
@@ -89,7 +89,9 @@ fn main() {
             // Show first difference
             for (i, (a, b)) in header_bytes.iter().zip(rt_bytes.iter()).enumerate() {
                 if a != b {
-                    println!("    first diff at offset {i:#x}: original=0x{a:02x} roundtrip=0x{b:02x}");
+                    println!(
+                        "    first diff at offset {i:#x}: original=0x{a:02x} roundtrip=0x{b:02x}"
+                    );
                     break;
                 }
             }

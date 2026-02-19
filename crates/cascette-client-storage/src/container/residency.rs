@@ -169,12 +169,7 @@ impl ResidencyContainer {
     /// Called when a read detects truncated data. Records the non-resident
     /// range so the LRU cache and compactor know which spans need
     /// re-download.
-    pub fn mark_span_non_resident(
-        &self,
-        key: &[u8; 16],
-        offset: i32,
-        length: i32,
-    ) -> Result<()> {
+    pub fn mark_span_non_resident(&self, key: &[u8; 16], offset: i32, length: i32) -> Result<()> {
         if self.read_only {
             return Err(StorageError::AccessDenied(
                 "residency container is read-only".to_string(),
@@ -227,9 +222,10 @@ impl ResidencyContainer {
         if self.read_only {
             return Ok(());
         }
-        self.db.write().save().map_err(|e| {
-            StorageError::Archive(format!("failed to flush residency data: {e}"))
-        })
+        self.db
+            .write()
+            .save()
+            .map_err(|e| StorageError::Archive(format!("failed to flush residency data: {e}")))
     }
 }
 
@@ -453,11 +449,8 @@ mod tests {
         // Reload and verify
         {
             let db_path = storage_path.join("key_state_v8");
-            let container = ResidencyContainer::new(
-                "wow".to_string(),
-                AccessMode::ReadOnly,
-                storage_path,
-            );
+            let container =
+                ResidencyContainer::new("wow".to_string(), AccessMode::ReadOnly, storage_path);
 
             // Load from disk
             *container.db.write() = ResidencyDb::load(&db_path).expect("load");

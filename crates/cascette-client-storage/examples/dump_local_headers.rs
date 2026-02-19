@@ -12,8 +12,7 @@
 mod common;
 
 use cascette_client_storage::storage::{
-    LocalHeader, SEGMENT_HEADER_SIZE, parse_data_filename,
-    local_header::LOCAL_HEADER_SIZE,
+    LocalHeader, SEGMENT_HEADER_SIZE, local_header::LOCAL_HEADER_SIZE, parse_data_filename,
 };
 use std::fs;
 
