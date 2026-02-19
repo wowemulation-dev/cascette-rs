@@ -7,7 +7,8 @@
 //! and should be handled separately where needed (e.g., browse commands).
 
 use crate::{
-    Result, StorageError, archive::ArchiveManager, index::IndexManager, resolver::ContentResolver,
+    Result, StorageError, index::IndexManager, resolver::ContentResolver,
+    storage::archive_file::ArchiveManager,
 };
 use cascette_crypto::{ContentKey, EncodingKey};
 use cascette_formats::CascFormat;
@@ -49,20 +50,19 @@ impl Installation {
             std::fs::create_dir_all(&path)?;
         }
 
-        // Create required subdirectories
-        let indices_path = path.join(crate::INDICES_DIR);
+        // Both .idx and .data files in the same Data/data/
+        // directory. Additional containers use separate subdirectories.
         let data_path = path.join(crate::DATA_DIR);
-        let config_path = path.join(crate::CONFIG_DIR);
+        let indices_path = path.join(crate::INDICES_DIR);
 
-        for dir in [&indices_path, &data_path, &config_path] {
+        for dir in [&data_path, &indices_path] {
             if !dir.exists() {
                 std::fs::create_dir_all(dir)?;
             }
         }
 
         // Initialize managers for local CASC storage
-        // Note: Both .idx (index) and .data (archive) files are in Data/data/ directory
-        // CDN .index files in Data/indices/ are NOT handled here
+        // Both .idx (index) and .data (archive) files live in Data/data/
         let index_manager = Arc::new(AsyncRwLock::new(IndexManager::new(&data_path)));
         let archive_manager = Arc::new(AsyncRwLock::new(ArchiveManager::new(&data_path)));
         let resolver = Arc::new(ContentResolver::new());
@@ -127,8 +127,8 @@ impl Installation {
 
         debug!("Cache miss for content key: {}", cache_key);
 
-        // Step 2: Look up content key directly in local indices
-        // Local .idx files use content keys (not encoding keys)
+        // Step 2: Look up content key in local indices
+        // Note: local .idx files are keyed by encoding keys, not content keys
         let index_entry = {
             let index_manager = self.index_manager.read().await;
             index_manager
@@ -420,7 +420,11 @@ impl Installation {
         results
     }
 
-    /// Write a file to storage
+    /// Write a file to storage.
+    ///
+    /// The data is BLTE-encoded, prepended with a 30-byte local header, and
+    /// written to an archive file. The encoding key is computed as
+    /// `MD5(blte_data)` matching CASC behavior.
     ///
     /// # Errors
     ///
@@ -435,31 +439,27 @@ impl Installation {
         // Calculate content key from uncompressed data
         let content_key = ContentKey::from_data(&data);
 
-        // Write to archive and get location
-        let (archive_id, archive_offset, size) = {
+        // Write to archive: BLTE-encodes, prepends 30-byte local header,
+        // and computes encoding key as MD5(blte_data)
+        let (archive_id, archive_offset, size, encoding_key_bytes) = {
             let mut archive_manager = self.archive_manager.write().await;
-            archive_manager.write_content(data, compress)?
+            archive_manager.write_content(&data, compress)?
         };
 
-        // Create encoding key from compressed data location
-        let mut location_data = Vec::new();
-        location_data.extend_from_slice(&archive_id.to_be_bytes());
-        location_data.extend_from_slice(&archive_offset.to_be_bytes());
-        let encoding_key = EncodingKey::from_data(&location_data);
+        let encoding_key = EncodingKey::from_bytes(encoding_key_bytes);
 
-        // Update indices
+        // Update indices with the content-addressable encoding key
         {
             let mut index_manager = self.index_manager.write().await;
             index_manager.add_entry(&encoding_key, archive_id, archive_offset, size)?;
         }
 
-        // Note: Resolver cache will be updated on next lookup
-
         info!(
-            "Wrote file to archive {} at offset {} (content key: {})",
+            "Wrote file to archive {} at offset {} (content key: {}, encoding key: {})",
             archive_id,
             archive_offset,
-            hex::encode(content_key.as_bytes())
+            hex::encode(content_key.as_bytes()),
+            hex::encode(encoding_key.as_bytes())
         );
 
         Ok(content_key)
@@ -608,7 +608,7 @@ impl Installation {
         let index_manager = self.index_manager.read().await;
         index_manager
             .iter_entries()
-            .map(|(_, entry)| entry.clone())
+            .map(|(_, entry)| entry)
             .collect()
     }
 

@@ -16,6 +16,7 @@ rust-version.workspace = true
 thiserror = { workspace = true }
 binrw = { workspace = true }
 hex = { workspace = true }
+md5 = { workspace = true }
 
 # Internal dependencies
 cascette-formats = { version = "0.2.0", path = "../cascette-formats" }
@@ -68,6 +69,33 @@ proptest = { workspace = true }
 [package.metadata.cargo-machete]
 # These dependencies are used internally or for specific features
 ignored = ["flate2", "serde_json"]
+
+[features]
+local-install = []
+
+[[example]]
+name = "dump_build_info"
+required-features = ["local-install"]
+
+[[example]]
+name = "dump_index"
+required-features = ["local-install"]
+
+[[example]]
+name = "dump_segments"
+required-features = ["local-install"]
+
+[[example]]
+name = "dump_shmem"
+required-features = ["local-install"]
+
+[[example]]
+name = "dump_local_headers"
+required-features = ["local-install"]
+
+[[example]]
+name = "read_archives"
+required-features = ["local-install"]
 
 [lints]
 workspace = true

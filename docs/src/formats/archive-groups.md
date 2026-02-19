@@ -143,8 +143,7 @@ For cascette to be a trustworthy Battle.net replacement:
 1. **Trust**: Users need confidence we produce EXACTLY what Battle.net would
 2. **Compatibility**: Some third-party tools may depend on exact format
 3. **Verification**: Binary matching allows easy validation
-4. **Completeness**: Understanding the full algorithm proves our reverse
-   engineering
+4. **Completeness**: Understanding the full algorithm proves our analysis
 
 ## Footer Structure
 
@@ -223,5 +222,4 @@ The Battle.net client:
 
 - Analysis of WoW Classic installations (1.13.2 through 1.15.2)
 - [wowdev.wiki Archive documentation](https://wowdev.wiki/CASC#Archives)
-- Battle.net client reverse engineering
 - Empirical testing with cascette-py parser

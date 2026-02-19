@@ -1,8 +1,8 @@
 # Agent.exe Comparison
 
 Comparison of cascette-rs against the Battle.net Agent binary
-(TACT 3.13.3, CASC 1.5.9) based on reverse engineering of
-Agent.exe. Issues are organized by severity and category.
+(TACT 3.13.3, CASC 1.5.9). Issues are organized by severity and
+category.
 
 Based on ~829 named functions across 113 TACT and 44 CASC source files.
 
@@ -151,153 +151,156 @@ No open TVFS issues from Agent.exe comparison.
 
 ## Local Storage Issues (cascette-client-storage)
 
-The `cascette-client-storage` crate provides initial local CASC storage
-support. The following issues were identified by comparing against
-Agent.exe (CASC 1.5.9) reverse engineering.
+The `cascette-client-storage` crate provides local CASC storage
+support. Issues identified by comparing against Agent.exe (CASC 1.5.9).
+All 20 issues resolved.
 
-### Write Path Missing Local Header
+### ~~Write Path Missing Local Header~~ (Fixed)
 
-Agent writes a 30-byte (0x1E) local header before each BLTE entry in
-`.data` files:
+Fixed in `881ab60`. The write path now prepends a 30-byte local header
+before each BLTE entry, with reversed encoding key, size-with-header,
+flags, and checksums. Both read and write paths handle the header.
 
-```text
-0x00-0x0F: Encoding key (16 bytes, reversed)
-0x10-0x13: Size including header (4 bytes, BE)
-0x14-0x15: Flags (2 bytes)
-0x16-0x19: ChecksumA (4 bytes)
-0x1A-0x1D: ChecksumB (4 bytes)
-0x1E+:     BLTE data
-```
+### ~~Encoding Key Derivation on Write~~ (Fixed)
 
-The read path (`Installation::decode_blte`) correctly handles this
-header. The write path (`ArchiveManager::write_content`) does not
-write it. Data written by cascette-rs would not be readable by the
-official client.
+Fixed in `881ab60`. Encoding key is now `MD5(blte_encoded_data)`
+matching Agent.exe behavior. The key is a property of the encoded
+content, not the storage location.
 
-### Encoding Key Derivation on Write
+### ~~Index Write Format Incorrect~~ (Fixed)
 
-`Installation::write_file()` computes the encoding key from
-`MD5(archive_id || archive_offset)`. Agent computes encoding keys as
-the MD5 hash of the BLTE-encoded file content. The encoding key is a
-property of the encoded data, not the storage location.
+Fixed in `cc96203`. `save_index()` now writes IDX Journal v7 format
+with guarded block headers (size + Jenkins hash), `IndexHeaderV2`,
+and a second guarded block for entries.
 
-### Index Write Format Incorrect
+### ~~No Jenkins Hash Validation~~ (Fixed)
 
-`IndexManager::save_index()` writes a raw `IndexHeader` struct
-directly to disk. Agent writes the IDX Journal v7 format: guarded
-block header (size + Jenkins hash), then `IndexHeaderV2`, then a
-second guarded block for entries. Index files written by cascette-rs
-would not be readable by the official client.
+Fixed in `cc96203`. Jenkins `hashlittle()` from cascette-crypto is
+used for both read validation and write computation of guarded block
+hashes.
 
-### No Jenkins Hash Validation
+### ~~No Atomic Index Commits~~ (Fixed)
 
-Index guarded blocks use Jenkins hash for integrity validation. The
-read path parses the hash fields but does not verify them. The write
-path does not compute them. Agent validates Jenkins hashes on read and
-computes them on write.
+Fixed in `cc96203`. Index writes use temp file + fsync + rename
+with 3 retries, matching Agent's flush-and-bind pattern.
 
-### No Atomic Index Commits
+### ~~KMT Entry Size Endianness~~ (Fixed)
 
-Agent uses a flush-and-bind pattern with 3-retry atomic commits when
-persisting index files. If a write fails, the previous index version
-remains intact. cascette-rs writes directly to the target file without
-atomicity, risking corruption on interrupted writes.
+Fixed in `498cb2c`. The `IndexEntry.size` field was incorrectly
+serialized as little-endian. Agent.exe and CascLib both use big-endian
+for all 18-byte entry fields (verified via `ConvertBytesToInteger_BE`
+in CascLib).
 
-### Missing Key Mapping Table
+### ~~Incorrect KMT Entry Format~~ (Fixed)
 
-Agent uses a two-tier LSM-tree Key Mapping Table (KMT) as the primary
-on-disk structure for key-to-location resolution. KMT v8 has sorted
-sections (0x20-byte buckets) and update sections (0x400-byte pages
-with 0x19 entries, minimum 0x7800 bytes). Jenkins lookup3 hashes
-distribute keys across buckets.
+Fixed in `498cb2c`. The `KmtEntry` struct was a fabricated 16-byte
+LE format that did not match any Agent.exe structure. Replaced with
+a re-export of `IndexEntry` (18 bytes), since the KMT and IDX are
+the same file format. Documented the KMT = IDX equivalence.
 
-cascette-rs uses in-memory `BTreeMap` indices with no KMT equivalent.
-This limits scalability for large installations and prevents
-interoperability with Agent-managed storage.
+### ~~Missing Segment Header Support~~ (Fixed)
 
-### Missing Container Index
+Fixed in `498cb2c`. Added segment reconstruction header parsing:
+480 bytes = 16 x 30-byte `LocalHeader` entries at the start of each
+`.data` file. Added key generation with bucket hash targeting.
 
-Agent maintains a ContainerIndex with 16 segments, supporting
-frozen/thawed archive management with per-segment tracking (0x40
-bytes per segment). Archives can be frozen (read-only) or thawed
-(writable).
+### ~~Missing KMT Update Section~~ (Fixed)
 
-cascette-rs uses a flat `DashMap<u16, Arc<ArchiveFile>>` with no
-segment concept. The segment limit (configurable up to 0x3FF = 1023)
-is not enforced.
+Fixed in `2e2fea8`. `IndexManager` now has a full LSM-tree L0 update
+section: 24-byte `UpdateEntry` with hash guard and status byte,
+512-byte `UpdatePage` (21 entries max) with 4KB sync every 8th page,
+`UpdateSection` with linear search (newest wins), and merge-sort
+flush to sorted section via atomic file replacement. Lookup searches
+update section first, then sorted section.
 
-### Missing Residency Container
+Reference: `agent-idx-file-format.md`
 
-Agent tracks which content keys are fully downloaded via Residency
-container (0x30 bytes): `.residency` token files, byte-span tracking
-for partial downloads, reserve/mark-resident/remove/query operations,
-and scanner API.
+### ~~Incomplete Container Index~~ (Fixed)
 
-cascette-rs has no residency tracking. All content is assumed fully
-present.
+Fixed in `2e2fea8`. `SegmentAllocator` manages frozen/thawed segments
+with per-bucket `RwLock` array for concurrent KMT access. Allocation
+tries thawed segments first, creates new segments when full, enforces
+MAX_SEGMENTS (0x3FF). `DynamicContainerBuilder` provides a builder
+pattern for configuring containers with segment allocator, residency,
+and LRU without breaking the existing API.
 
-### Missing Hard Link Container
+Reference: `agent-container-storage.md`
 
-Agent uses a TrieDirectory with hard links for content sharing between
-installations: 32-char hex filename validation, LRU file descriptor
-cache, 3-retry delete before hard link creation, filesystem support
-detection via `TestSupport`.
+### ~~Partial Residency Container~~ (Fixed)
 
-cascette-rs has no hard link support.
+Fixed in `2e2fea8`. `ResidencyContainer` now uses file-backed KMT V8
+storage with 40-byte `ResidencyEntry` (16-byte EKey, residency span,
+update type). MurmurHash3 finalizer fast-path for `is_resident()`.
+Two-pass `scan_keys()` across 16 buckets. Batch delete with 10K
+threshold. `mark_span_non_resident(key, offset, length)` for
+truncation tracking. Flush/reload persistence.
 
-### Missing Static Container
+Reference: `agent-container-storage.md`
 
-Agent supports read-only Static containers for shared installations
-with batch key state lookups via `casc::Residency::GetFileState`.
+### ~~Partial Hard Link Container~~ (Fixed)
 
-cascette-rs has only one container type.
+Fixed in `2e2fea8`. `HardLinkContainer` now has `TrieDirectoryStorage`
+with `XX/YY/ZZZZ...ZZZZ` trie path layout, LRU FD cache with
+doubly-linked list eviction, two-phase delete (collect entries with
+nlink <= 1, then remove), `compact_directory()` that validates trie
+at each depth and removes orphans, and `query()` returning actual
+trie lookup results.
 
-### Compaction is a Stub
+Reference: `agent-container-storage.md`
 
-`ArchiveManager::compact()` only truncates files to the write
-position. Agent uses two-phase compaction: archive merge (plan merge
-across segments, MurmurHash3 hash map) then extract-compact (per-segment
-span validation, overlap detection, empty archive deletion). Two
-algorithms: defrag (moves data to fill gaps) and fillholes (estimates
-free space without moves). Async read/write pipeline with 128 KB
-minimum buffer.
+### ~~Partial Static Container~~ (Fixed)
 
-### No LRU Eviction
+`StaticContainer` has `IndexManager` and `ArchiveManager` for
+read-only lookups, including batch `state_lookup()` returning
+`KeyState { has_data, is_resident }`. Matches Agent behavior.
 
-Agent maintains an LRU cache in shared memory with generation-based
-checkpoints and 20-char hex `.lru` filenames. cascette-rs uses
-unbounded `DashMap` caches with no eviction policy, risking
-unbounded memory growth.
+### ~~Compaction is a Stub~~ (Fixed)
 
-### Shared Memory Protocol Mismatch
+Fixed in `2e2fea8`. Two-phase compaction pipeline implemented:
+archive merge (between segments) and extract-compact (in-place).
+`CompactionFileMover` with buffered I/O (`min(total >> 17, 16)`
+buffers, 128 KiB minimum). `ExtractorCompactorBackup` for crash
+recovery (append-only segment list). `validate_spans()` detects
+overlapping data ranges. `plan_archive_merge()` identifies
+low-utilization frozen segments for greedy merge.
 
-Agent uses CASC shared memory protocol versions 4/5 with specific
-layout:
+Reference: `agent-maintenance-operations.md`
 
-- Free space table at offset 0x42 (0x2AB8 bytes)
-- PID tracking with slot array ("PID : name : mode" format)
-- Writer lock via named global mutex (`Global\` prefix)
-- DACL: `D:(A;;GA;;;WD)(A;;GA;;;AN)`
-- `.lock` file with 10-second backoff
+### ~~Partial LRU Cache~~ (Fixed)
 
-cascette-rs defines a new IPC protocol (magic "CASC", version 1,
-custom message types: FileRequest/FileResponse/StatusRequest/
-StatusResponse/KeepAlive/Error). This protocol is not compatible
-with the official Agent. The `CascShmemHeader` struct (32 bytes)
-does not match Agent's shmem layout.
+Fixed in `2e2fea8`. LRU manager now has `evict_to_target()` for
+size-based eviction, `scan_directory()` to remove stale `.lru` files
+from old generations, `for_each_entry()` for size accounting,
+`run_cycle()` and `shutdown()` matching Agent's `LRUManager::Run`
+sequence. `DynamicContainer` touches LRU on `read()` and `write()`.
 
-### Directory Structure Divergence
+Reference: `agent-container-storage.md`
 
-Agent stores both `.idx` and `.data` files in `Data/data/`. There is
-no separate `indices/`, `config/`, or `shmem/` directory at the
-storage root.
+### ~~Partial Shared Memory Protocol~~ (Fixed)
 
-cascette-rs creates four directories (`indices/`, `data/`, `config/`,
-`shmem/`). The `Installation` module correctly points both index and
-archive managers at the `data/` directory, but the top-level `Storage`
-creates the extra directories which do not match the official layout.
+Fixed in `2e2fea8`. Platform shared memory implementations added:
+Unix `shm_open`/`mmap` with owner-only permissions (0600),
+`flock`-based lock files with 100s timeout and 50ms retry, `statfs`
+network drive detection (NFS, SMB, CIFS, CODA, AFS). Windows type
+stubs with path normalization (lowercase, forward slashes, resolve
+`.`/`..`, max 248 bytes). Control block `from_mapped()`/`to_mapped()`
+serialization for v4/v5 with PID tracking serialization.
 
-### Bucket Algorithm Documentation Error
+Reference: `agent-container-storage.md`
+
+### ~~Directory Structure~~ (Fixed)
+
+Agent.exe creates five subdirectories under the storage root:
+`data/` (dynamic container), `indices/` (CDN index cache),
+`residency/` (residency tracking DB), `ecache/` (e-header cache),
+`hardlink/` (hard link container trie).
+
+cascette-rs now matches this layout. Build/CDN configs are stored
+inside the dynamic container. Shared memory uses named kernel
+objects + a temp file in `data/`. The incorrect `config/` and
+`shmem/` directories have been removed.
+
+### ~~Bucket Algorithm Documentation Error~~ (Fixed)
 
 The `local-storage.md` doc previously stated `bucket = key[0] & 0x0F`.
 The actual algorithm (correctly implemented in
@@ -308,26 +311,30 @@ hash = key[0] ^ key[1] ^ ... ^ key[8]
 bucket = (hash & 0x0F) ^ (hash >> 4)
 ```
 
-This has been corrected in the docs.
+Corrected in the docs and verified against Agent.exe behavior.
 
-### No .build.info Handling
+### ~~No .build.info Handling~~ (Fixed)
 
-Agent reads `.build.info` (BPSV format) for installation metadata
-including product code, region, build config hash, and CDN config
-hash. cascette-rs does not parse or generate this file.
+Fixed in `fa741c6`. `BuildInfoFile` parses `.build.info` (BPSV format)
+with typed accessors for product, branch, build key, CDN key, version,
+CDN hosts, CDN servers, install key, tags, and armadillo. Async
+`from_path()` reads from disk; `active_entry()` returns the first row
+with `Active == 1`.
 
-### Content Read Missing Truncation Tracking
+### ~~Partial Truncation Tracking~~ (Fixed)
 
-Agent tracks truncated reads via key state and marks content as
-non-resident when a read returns fewer bytes than expected (CASC
-error 3 → TACT error 7). cascette-rs returns an error on short
-reads but does not update any residency state.
+Fixed in `2e2fea8`. `DynamicContainer::read()` now calls
+`handle_truncated_read()` on archive bounds errors, which marks the
+affected span as non-resident in the `ResidencyContainer` and updates
+the KMT entry status to DATA_NON_RESIDENT (7) via the update section.
+Missing archives trigger key removal from the container index.
+
+Reference: `agent-container-storage.md`
 
 ## Not Implemented
 
 These features exist in Agent.exe but have no cascette-rs
-equivalent. They are documented in the reverse engineering
-docs for future implementation.
+equivalent. They are documented for future implementation.
 
 ### Containerless Mode
 
@@ -343,7 +350,7 @@ Required components:
 - E-header cache for batch CDN downloads
 - File identification via hash comparison
 
-Reference: `agent-containerless-mode.md`
+Reference: `agent-containerless-mode.md` (planned)
 
 ### Garbage Collection
 
@@ -386,7 +393,7 @@ Reference: `agent-maintenance-operations.md`
 File classification values: 0=current, 1=needs download,
 2=needs patch, 5=special, 6=obsolete.
 
-Reference: `agent-build-update-flow.md`
+Reference: `agent-build-update-flow.md` (planned)
 
 ### Patch Operations
 
@@ -396,7 +403,7 @@ Three patch types not implemented:
 - Decryption patching (Op 4): key rotation patches
 - Re-encode patching (Op 5): re-encode content after patch
 
-Reference: `agent-async-state-machines.md`
+Reference: `agent-async-state-machines.md` (planned)
 
 ### Download Telemetry
 

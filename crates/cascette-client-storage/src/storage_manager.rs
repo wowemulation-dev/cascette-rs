@@ -78,21 +78,33 @@ impl Storage {
         &self.config
     }
 
-    /// Validate and create official CASC directory structure
-    /// Based on wowdev.wiki CASC specification: `INSTALL_DIR\Data\data\`
+    /// Validate and create official CASC directory structure.
+    ///
+    /// CASC creates five subdirectories under the storage root:
+    /// - `data/` -- dynamic container (.idx + .data files, shmem temp file)
+    /// - `indices/` -- CDN index cache (.index files)
+    /// - `residency/` -- residency tracking database
+    /// - `ecache/` -- e-header cache (preservation set)
+    /// - `hardlink/` -- hard link container trie directory
+    ///
+    /// Build/CDN config files are stored inside the dynamic container,
+    /// not in a separate `config/` directory. Shared memory uses named
+    /// kernel objects + a temp file in `data/`, not a `shmem/` directory.
     ///
     /// # Errors
     ///
     /// Returns error if directories cannot be created or validated
     fn validate_casc_directory_structure(base_path: &std::path::Path) -> Result<()> {
-        use crate::{CONFIG_DIR, DATA_DIR, INDICES_DIR, SHMEM_DIR};
+        use crate::{DATA_DIR, ECACHE_DIR, HARDLINK_DIR, INDICES_DIR, RESIDENCY_DIR};
 
-        // Create official CASC subdirectories
+        // CASC creates five subdirectories under the storage root.
+        // tact::BuildRepairState::RepairContainers.
         let required_dirs = [
-            ("indices", INDICES_DIR),
             ("data", DATA_DIR),
-            ("config", CONFIG_DIR),
-            ("shmem", SHMEM_DIR),
+            ("indices", INDICES_DIR),
+            ("residency", RESIDENCY_DIR),
+            ("ecache", ECACHE_DIR),
+            ("hardlink", HARDLINK_DIR),
         ];
 
         for (desc, dir_name) in &required_dirs {
@@ -132,23 +144,41 @@ impl Storage {
         Ok(())
     }
 
-    /// Get the indices directory path (for .idx files)
-    pub fn indices_path(&self) -> PathBuf {
-        self.base_path.join(crate::INDICES_DIR)
-    }
-
-    /// Get the data directory path (for .data files)
+    /// Get the data directory path.
+    ///
+    /// CASC stores `.idx`, `.data`, LRU, KMT, and shmem temp files
+    /// all in `Data/data/`.
     pub fn data_path(&self) -> PathBuf {
         self.base_path.join(crate::DATA_DIR)
     }
 
-    /// Get the config directory path (for configuration files)
-    pub fn config_path(&self) -> PathBuf {
-        self.base_path.join(crate::CONFIG_DIR)
+    /// Get the CDN indices directory path.
+    ///
+    /// Downloaded CDN archive indices (`.index` files) are cached here.
+    pub fn indices_path(&self) -> PathBuf {
+        self.base_path.join(crate::INDICES_DIR)
     }
 
-    /// Get the shmem directory path (for shared memory files)
-    pub fn shmem_path(&self) -> PathBuf {
-        self.base_path.join(crate::SHMEM_DIR)
+    /// Get the residency container directory path.
+    pub fn residency_path(&self) -> PathBuf {
+        self.base_path.join(crate::RESIDENCY_DIR)
+    }
+
+    /// Get the e-header cache directory path.
+    pub fn ecache_path(&self) -> PathBuf {
+        self.base_path.join(crate::ECACHE_DIR)
+    }
+
+    /// Get the hard link container directory path.
+    pub fn hardlink_path(&self) -> PathBuf {
+        self.base_path.join(crate::HARDLINK_DIR)
+    }
+
+    /// Get the `.build.info` file path at the installation root.
+    ///
+    /// CASC reads `.build.info` from the top-level installation
+    /// directory to determine product, region, build config, and CDN config.
+    pub fn build_info_path(&self) -> PathBuf {
+        self.base_path.join(crate::BUILD_INFO_FILE)
     }
 }

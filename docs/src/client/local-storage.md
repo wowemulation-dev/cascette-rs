@@ -10,21 +10,24 @@ A typical CASC installation has the following structure:
 
 ```text
 <install-dir>/
-├── .build.info           # Build configuration (BPSV format)
+├── .build.info               # Build configuration (BPSV format)
 ├── Data/
 │   ├── data/
-│   │   ├── 0000000001.idx  # Local index files (16 buckets)
+│   │   ├── 0000000001.idx    # Local index files (16 buckets)
 │   │   ├── 0100000001.idx
 │   │   ├── ...
 │   │   ├── 0f00000001.idx
-│   │   ├── data.000        # Combined archive data
+│   │   ├── data.000          # Combined archive data
 │   │   ├── data.001
-│   │   └── ...
+│   │   ├── ...
+│   │   └── *.shmem           # Shared memory control file (temp)
 │   ├── indices/
-│   │   └── ...             # CDN index files (not local storage)
-│   └── shmem               # Shared memory control file
+│   │   └── ...               # CDN index files (not local storage)
+│   ├── residency/            # Download state tracking tokens
+│   ├── ecache/               # Encoding cache
+│   └── hardlink/             # Hard link trie directory
 └── Cache/
-    └── ADB/                # Hotfix database cache
+    └── ADB/                  # Hotfix database cache
         └── *.bin
 ```
 
@@ -34,7 +37,7 @@ concern from local storage.
 
 ## Container Types
 
-Agent.exe manages four container types for local storage:
+CASC manages four container types for local storage:
 
 | Type | Size | Purpose |
 |------|------|---------|
@@ -96,18 +99,17 @@ index files.
 
 ### Key Mapping Table (KMT)
 
-Below the index files, Agent.exe maintains a Key Mapping Table (KMT) as the
+Below the index files, CASC maintains a Key Mapping Table (KMT) as the
 primary on-disk structure for key-to-location resolution:
 
 - Two-tier LSM-tree: sorted section (0x12-byte entries) + update section
   (0x200-byte pages)
 - Jenkins lookup3 hashes for bucket distribution
 - 9-byte EKey prefix binary search within sorted sections
-- KMT v8 (revision >= 8): sorted section uses 0x20-byte buckets, update
-  section uses 0x400-byte pages with 0x19 entries per page (minimum 0x7800
-  bytes)
+- Update section uses 0x200-byte (512-byte) pages with 0x15 (21) entries
+  per page (minimum 0x7800 bytes)
 
-## Data Files (.data.xxx)
+## Data Files (data.NNN)
 
 Data files contain BLTE-encoded content. Each entry has a 30-byte (0x1E) local
 header before the BLTE data:
@@ -148,9 +150,9 @@ archive management:
 The shmem file provides memory-mapped coordination between the Agent process
 and game clients:
 
-- Protocol versions 4 (base) and 5 (exclusive access flag at +0x54)
-- Free space table at offset 0x42, size 0x2AB8 bytes
-- PID tracking: slot array with "PID : name : mode" formatting
+- Protocol versions 4 (base) and 5 (exclusive access flag at DWORD index 0x54)
+- Free space table format identifier at DWORD index 0x42 (value 0x2AB8)
+- V5 PID tracking: slot array with PID (u32) and mode (u32) per slot
 - Writer lock: named global mutex with `Global\` prefix
 - DACL: `D:(A;;GA;;;WD)(A;;GA;;;AN)` (grant all to Everyone + Anonymous)
 - Retry logic: 10 attempts with `Sleep(0)` between failures

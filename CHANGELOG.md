@@ -2,13 +2,62 @@
 
 All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/)
 and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
 ### Added
+
+- cascette-client-storage: KMT update section for LSM-tree L0 writes
+  - 24-byte `UpdateEntry` with hash guard, status byte, and delete markers
+  - 512-byte `UpdatePage` (21 entries max) with 4KB sync every 8th page
+  - `UpdateSection` with linear search (newest wins), merge-sort flush to
+    sorted section via atomic file replacement
+  - Lookup searches update section first, then sorted section
+- cascette-client-storage: Residency container with KMT V8 file-backed storage
+  - 40-byte `ResidencyEntry` with MurmurHash3 fast-path for `is_resident()`
+  - Two-pass `scan_keys()` (count then populate) across 16 buckets
+  - Batch delete with 10K threshold switching to batch path
+  - `mark_span_non_resident(key, offset, length)` for truncation tracking
+- cascette-client-storage: Hard link container with TrieDirectory and FD cache
+  - `format_content_key_path(ekey)` -> `XX/YY/ZZZZ...ZZZZ` trie path layout
+  - LRU FD cache with doubly-linked list eviction
+  - Two-phase delete (collect entries with nlink <= 1, then remove)
+  - `compact_directory()` validates trie at each depth, removes orphans
+  - `query()` returns actual trie lookup result
+- cascette-client-storage: Segment allocator for write path
+  - Per-bucket `RwLock` array for concurrent KMT access
+  - `allocate(size)` tries thawed segments first, creates new if full
+  - Freeze/thaw state transitions with MAX_SEGMENTS (0x3FF) enforcement
+  - `DynamicContainerBuilder` for configuring containers without breaking API
+- cascette-client-storage: Two-phase compaction pipeline
+  - Archive merge (between segments) and extract-compact (in-place) modes
+  - `CompactionFileMover` with buffered I/O (`min(total >> 17, 16)` buffers)
+  - `ExtractorCompactorBackup` crash recovery file (append-only segment list)
+  - `validate_spans()` detects overlapping data ranges
+  - `plan_archive_merge()` identifies low-utilization frozen segments
+- cascette-client-storage: LRU cache shmem integration and eviction
+  - `evict_to_target(target_bytes)` evicts from tail until target freed
+  - `scan_directory()` removes stale `.lru` files from old generations
+  - `for_each_entry(callback)` walks linked list for size accounting
+  - `run_cycle()` and `shutdown()` matching Agent.exe `LRUManager::Run`
+  - DynamicContainer touches LRU on `read()` and `write()`
+- cascette-client-storage: Platform shared memory implementations
+  - Unix: `shm_open`/`mmap` with owner-only permissions (0600), `flock`-based
+    lock files with 100s timeout, `statfs` network drive detection
+  - Windows: Type stubs with path normalization (lowercase, forward slashes,
+    resolve `.`/`..`, max 248 bytes)
+  - Control block `from_mapped()`/`to_mapped()` serialization for v4/v5
+  - PID tracking serialization with slot management
+- cascette-client-storage: Truncation tracking wired to residency and index
+  - Truncated reads mark affected span non-resident via residency container
+  - KMT entry status updated to DATA_NON_RESIDENT (7) via update section
+  - Missing archive triggers key removal from container index
+- docs: Agent container storage architecture documentation
+- docs: Agent IDX/KMT file format documentation
+- docs: Agent maintenance operations documentation
 
 - cascette-client-storage crate: Local CASC storage for game installations
   - Bucket-based .idx index files with 18-byte entries, big-endian 9-byte
@@ -29,7 +78,7 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Workspace dependencies: parking_lot 0.12, memmap2 0.9
 
 - cascette-formats: Size manifest format parser and builder
-  - Version 1 and 2 support with `SizeManifest`, `SizeManifestHeader`,
+  - Version 1 and 2 support with `SizeManifest`, `SizeManifestHeader`
     `SizeManifestEntry` types
   - Round-trip binary parsing and building via binrw
   - Version 2 adds 40-bit total size field per entry
@@ -37,7 +86,7 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - docs: Added Size manifest documentation (`formats/size-manifest.md`)
 
 - cascette-ribbit crate: Ribbit protocol server
-  - HTTP server (axum) with `/{product}/versions`, `/{product}/cdns`,
+  - HTTP server (axum) with `/{product}/versions`, `/{product}/cdns`
     `/{product}/bgdl` endpoints
   - TCP server with Ribbit v1 (MIME-wrapped with SHA-256 checksums) and v2
     (raw BPSV) protocol support
@@ -51,7 +100,7 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - Integration tests for HTTP, TCP v1, and TCP v2 protocols
   - Throughput benchmarks for BPSV generation
 - docs: Added Ribbit Server documentation page (`protocols/ribbit-server.md`)
-- Workspace dependencies: axum 0.8, tower-http 0.6, axum-server 0.7,
+- Workspace dependencies: axum 0.8, tower-http 0.6, axum-server 0.7
   tokio-rustls 0.26, clap 4.5, anyhow 1.0, tracing-subscriber 0.3
 - README: Added development section with mise tool version management
 - docs: Added `wow_classic_titan` and `wow_anniversary` product codes with
@@ -63,7 +112,7 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - CDN client for content downloads with range requests and progress tracking
   - CDN streaming module behind `streaming` feature flag with BLTE
     decompression, concurrent chunk downloads, connection pooling with health
-    checks, range request optimization, server failover with circuit breakers,
+    checks, range request optimization, server failover with circuit breakers
     and Prometheus metrics
   - Protocol response caching with configurable TTLs
   - V1 MIME format support with PKCS#7 signature verification
@@ -71,16 +120,82 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - Retry policies with exponential backoff and jitter
   - Thread-local buffers and string interning for performance
 
-- cascette-formats: K-way merge for archive group building via `build_merged()`
+- cascette-client-storage: Segment reconstruction header support
+  - 480-byte header parsed as 16 x 30-byte `LocalHeader` entries (one per
+    KMT bucket)
+  - Segment header key generation with bucket hash targeting
+  - `bucket_hash` function: XOR 9 bytes, `((xor>>4)^xor+seed) & 0xF`
+  - Data file path generation (`data.NNN`) and filename parsing
+  - `SegmentInfo` with frozen/thawed state tracking and space accounting
+  - Segment size constant (1 GiB) and max segment count (1023)
+
+- cascette-client-storage: `StaticContainer` read-only archive container
+  - `IndexManager` + `ArchiveManager` for read-only key lookups and data reads
+  - Batch `state_lookup` returning `KeyState { has_data, is_resident }` per key
+  - Zero-key filtering
+
+- cascette-client-storage: `ResidencyContainer` download tracking
+  - In-memory key-level residency tracking (mark/unmark/query/scan)
+  - `.residency` token file creation
+  - Scanner API for iterating resident keys
+  - Empty-product fallback
+
+- cascette-client-storage: `HardLinkContainer` filesystem hard links
+  - `test_support` filesystem probe using `casc_hard_link_test_file`
+  - `create_link` with 3-retry delete
+  - `.trie_directory` token file
+  - Zero-key rejection
+  - Silent success on file-not-found during remove
+
+- cascette-client-storage: `DynamicContainer` read-write CASC archive container
+  - Coordinates `IndexManager` (KMT) and `ArchiveManager` for read/write/remove/query
+  - `open` async method loads indices and opens archive data files
+  - Truncation detection converts archive bounds errors to `TruncatedRead`
+  - `remove_span` with +0x1E offset adjustment
+- cascette-client-storage: `.build.info` parser
+  - BPSV file parser using `cascette-formats::bpsv` for installation metadata
+  - Typed accessors for product, branch, build key, CDN key, version, CDN
+    hosts/servers, install key, tags, and Armadillo key
+  - Active entry detection via `Active` column
+
+- cascette-client-storage: LRU cache with flat-file doubly-linked list
+  - 28-byte header (version, MD5 hash, MRU head/LRU tail indices) and 20-byte
+    entries (prev/next index, 9-byte ekey, flags)
+  - O(1) touch/evict via hash map + doubly-linked list in flat array
+  - Generation-based `.lru` file persistence with MD5 integrity check
+  - File naming: 16 hex chars (big-endian 64-bit generation) + `.lru`
+- cascette-client-storage: Shmem v4/v5 control block protocol
+  - Version 4 (16-byte alignment, 0x150 header) and version 5 (page alignment
+    0x154/0x258 header) layout constants
+  - Free space table format identifier (0x2AB8) and data size validation
+  - PID tracking with state machine (idle/modifying), slot management, recount
+    recovery, and generation counter
+  - `validate_for_bind` with protocol error strings
+- cascette-formats: K-way merge for archive group building via `build_merged`
   - O(N log K) merge of pre-sorted archive indices using binary min-heap
-  - Matches Agent.exe `tact::CdnIndex::BuildMergedIndex` algorithm
+  - Matches the CASC k-way merge algorithm
   - Deduplicates entries across archives, keeping first occurrence
 
 ### Fixed
 
+- cascette-client-storage: Directory structure corrected to match CASC specification.
+  CASC creates five subdirectories: `data/` (dynamic container with
+  .idx, .data, shmem temp, LRU, KMT files), `indices/` (CDN index cache)
+  `residency/` (residency tracking DB), `ecache/` (e-header cache), and
+  `hardlink/` (hard link container trie). Removed incorrect `config/` and
+  `shmem/` directories. Build/CDN configs are stored inside the dynamic
+  container, not in a separate directory. Shared memory uses named kernel
+  objects + a temp file in `data/`, not a `shmem/` directory.
+- cascette-client-storage: `IndexEntry.size` field was serialized as
+  little-endian but the format uses big-endian for all 18-byte
+  entry fields (verified via CascLib `ConvertBytesToInteger_BE`)
+- cascette-client-storage: `KmtEntry` was a fabricated 16-byte LE struct
+  that did not match the format. The KMT file format is identical to IDX
+  v7 (same 18-byte entries, same guarded blocks). `KmtEntry` is now a
+  re-export of `IndexEntry`
 - cascette-formats: Archive group builder wrote entry fields in wrong order
   (key, offset, size instead of key, size, offset), causing round-trip
-  parse failures through `ArchiveGroup::parse()`
+  parse failures through `ArchiveGroup::parse`
 
 ### Changed
 
@@ -133,29 +248,29 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - Certificate fetching native-only (requires TCP for Ribbit protocol)
   - Added `UnsupportedOnWasm` error variant for TCP-only endpoints
 - Added `.cargo/config.toml` WASM target configuration for getrandom
-- Added workspace dependencies: reqwest, url, sha2, digest, rsa, base64, mail-parser,
+- Added workspace dependencies: reqwest, url, sha2, digest, rsa, base64, mail-parser
   cms, der, asn1, x509-cert, wiremock
 - Updated deny.toml to allow ISC, BSD-3-Clause, and CDLA-Permissive-2.0 licenses
   (used by ring, subtle, and webpki-roots respectively)
 
 ### Fixed
 
-- cascette-formats: 6 format issues fixed based on Agent.exe binary comparison
+- cascette-formats: 6 format issues fixed based on CASC binary comparison
   - Encoding entry parsing now uses dynamic key sizes from header
     (`ckey_hash_size`, `ekey_hash_size`) instead of hardcoded 16 bytes
   - TOC hash algorithm corrected to `MD5(toc_keys || block_hashes)[:hash_bytes]`
     (was `MD5(toc_keys)[8:16]`). Per-block MD5 hashes now computed and written.
     Archive group builder fixed to use last key per block (was first)
-  - Archive index builder uses configurable field sizes (`key_size`,
+  - Archive index builder uses configurable field sizes (`key_size`
     `offset_bytes`, `size_bytes`) instead of hardcoded 16/4/4. Binary search
     and TOC validation compute records-per-block from footer fields
   - TVFS container table reads `ekey_size` bytes from header instead of
     hardcoded 9. `ContainerEntry.ekey` changed from `[u8; 9]` to `Vec<u8>`
   - TVFS EST (Encoding Spec Table) now parsed when `TVFS_FLAG_ENCODING_SPEC`
     flag is set. Added `EstTable` type with null-terminated string parsing
-  - Batch encoding lookups added: `batch_find_encodings()`,
-    `batch_find_all_encodings()`, `batch_find_especs()` using sort-and-merge
-    algorithm matching Agent.exe `BatchLookupCKeys`/`BatchLookupEKeys`
+  - Batch encoding lookups added: `batch_find_encodings`
+    `batch_find_all_encodings`, `batch_find_especs` using sort-and-merge
+    algorithm/`BatchLookupEKeys`
 - cascette-formats: ESpec parser gaps fixed to match TACT behavior
   - GDeflate level range corrected from [1,9] to [1,12]
   - Window bits minimum lowered from 9 to 8
@@ -174,32 +289,32 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - cascette-protocol: Wired up `streaming` feature gate for CDN streaming module
   - Moved `cdn_streaming/` to `cdn/streaming/` for correct module path resolution
   - Added `streaming` feature with optional `binrw` dependency
-  - Fixed `ArchiveIndex` API usage (`find_entry` instead of HashMap indexing,
+  - Fixed `ArchiveIndex` API usage (`find_entry` instead of HashMap indexing
     `size` instead of `compressed_size`)
   - Fixed rand 0.10 API (`RngExt` trait instead of `Rng`)
-  - Added crypto provider initialization in `ReqwestHttpClient::new()`
+  - Added crypto provider initialization in `ReqwestHttpClient::new`
   - Fixed CDN server count assertions in config tests
   - Removed ~208 redundant per-item `#[cfg(feature = "streaming")]` annotations
     (module-level gate is sufficient)
-- cascette-formats: Fixed 4 format parser bugs found via Agent.exe comparison
+- cascette-formats: Fixed 4 format parser bugs found via CASC comparison
   - EKey page padding detection uses `espec_index == 0xFFFFFFFF` sentinel
-    matching Agent.exe, with zero-fill fallback for backward compatibility
+    matching CASC, with zero-fill fallback for backward compatibility
   - Root V4 content flags widened to `u64` and parsed with
-    `ContentFlags::read_v4()`/`write_v4()` for 5-byte (40-bit) flags instead
+    `ContentFlags::read_v4`/`write_v4` for 5-byte (40-bit) flags instead
     of truncating to `u32`
   - Root version detection heuristic tightened to check version field against
     known values (2..=4) instead of `< 10`
   - EKey entry proptest size assertion corrected (36 -> 25 bytes), added
     missing `#[test]` annotations to 7 proptest macro functions
-- cascette-formats: Added format validation matching Agent.exe constraints
-  - `EncodingHeader::validate()` checks all 8 header fields (version, unk_11,
+- cascette-formats: Added format validation matching CASC constraints
+  - `EncodingHeader::validate` checks all 8 header fields (version, unk_11
     ckey/ekey hash sizes, page counts, espec block size)
-  - `ESpecTable::parse()` rejects empty strings and unterminated data
+  - `ESpecTable::parse` rejects empty strings and unterminated data
   - Install manifest V2 support with per-entry `file_type` byte
-  - `IndexFooter::validate_file_size()` checks expected vs actual file size
-  - `PatchArchiveHeader` flag bit interpretation with `is_plain_data()` and
-    `has_extended_header()`; rejects unsupported extended header flag
-  - `TvfsFile::parse()` and `load_from_blte()` call `header.validate()`
+  - `IndexFooter::validate_file_size` checks expected vs actual file size
+  - `PatchArchiveHeader` flag bit interpretation with `is_plain_data` and
+    `has_extended_header`; rejects unsupported extended header flag
+  - `TvfsFile::parse` and `load_from_blte` call `header.validate`
 
 ### Infrastructure
 
@@ -222,9 +337,9 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Adopted Rust 1.92.0 language features:
   - Let-chains for cleaner conditional logic
-  - `std::io::Error::other()` for error construction
-  - `.is_multiple_of()` for divisibility checks
-  - `usize::midpoint()` for overflow-safe averaging
+  - `std::io::Error::other` for error construction
+  - `.is_multiple_of` for divisibility checks
+  - `usize::midpoint` for overflow-safe averaging
   - `#[default]` attribute on enum variants
 - Updated code to satisfy new clippy lints in Rust 1.92.0
 

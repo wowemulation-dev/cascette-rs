@@ -404,6 +404,7 @@ dependencies = [
  "futures",
  "hex",
  "libc",
+ "md5",
  "memmap2",
  "parking_lot",
  "proptest",
