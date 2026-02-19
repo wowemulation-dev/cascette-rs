@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1771338162618,
+  "lastUpdate": 1771501786957,
   "repoUrl": "https://github.com/wowemulation-dev/cascette-rs",
   "entries": {
     "Benchmark": [
@@ -587,6 +587,48 @@ window.BENCHMARK_DATA = {
             "name": "bpsv_generation/summary/all",
             "value": 205,
             "range": "± 1",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "daniel@kogito.network",
+            "name": "Daniel S. Reichenbach",
+            "username": "danielsreichenbach"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8ea72ca55d94b06229fd03901dfef1971b305482",
+          "message": "Merge pull request #38 from wowemulation-dev/refactor/client-storage-agent-compat\n\nrefactor: implement Agent.exe-compatible client-storage architecture",
+          "timestamp": "2026-02-19T18:46:34+07:00",
+          "tree_id": "f1909697127c47793e168e76f4cc6db35b0f5f18",
+          "url": "https://github.com/wowemulation-dev/cascette-rs/commit/8ea72ca55d94b06229fd03901dfef1971b305482"
+        },
+        "date": 1771501786634,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "bpsv_generation/versions/wow",
+            "value": 1824,
+            "range": "± 17",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "bpsv_generation/cdns/wow",
+            "value": 1238,
+            "range": "± 9",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "bpsv_generation/summary/all",
+            "value": 212,
+            "range": "± 2",
             "unit": "ns/iter"
           }
         ]
