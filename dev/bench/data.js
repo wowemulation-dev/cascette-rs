@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1771575211040,
+  "lastUpdate": 1771575811556,
   "repoUrl": "https://github.com/wowemulation-dev/cascette-rs",
   "entries": {
     "Benchmark": [
@@ -755,6 +755,48 @@ window.BENCHMARK_DATA = {
             "name": "bpsv_generation/summary/all",
             "value": 209,
             "range": "± 3",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "daniel@kogito.network",
+            "name": "Daniel S. Reichenbach",
+            "username": "danielsreichenbach"
+          },
+          "committer": {
+            "email": "daniel@kogito.network",
+            "name": "Daniel S. Reichenbach",
+            "username": "danielsreichenbach"
+          },
+          "distinct": true,
+          "id": "c34b418f73d37d14e1553b8277b4236173db9740",
+          "message": "chore: sync license files from org and remove outdated CoC\n\nCopy LICENSE-APACHE and LICENSE-MIT from org repo with correct copyright.\nRemove CODE_OF_CONDUCT.md (v1.3.0); org-level v2.1 applies via fallthrough.",
+          "timestamp": "2026-02-20T15:20:51+07:00",
+          "tree_id": "e8b93c9da77acbba8ae54a6345a8fb774075fadd",
+          "url": "https://github.com/wowemulation-dev/cascette-rs/commit/c34b418f73d37d14e1553b8277b4236173db9740"
+        },
+        "date": 1771575810645,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "bpsv_generation/versions/wow",
+            "value": 1807,
+            "range": "± 11",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "bpsv_generation/cdns/wow",
+            "value": 1179,
+            "range": "± 17",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "bpsv_generation/summary/all",
+            "value": 206,
+            "range": "± 0",
             "unit": "ns/iter"
           }
         ]
