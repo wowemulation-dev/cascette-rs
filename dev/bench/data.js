@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1771502653298,
+  "lastUpdate": 1771571801700,
   "repoUrl": "https://github.com/wowemulation-dev/cascette-rs",
   "entries": {
     "Benchmark": [
@@ -670,6 +670,48 @@ window.BENCHMARK_DATA = {
           {
             "name": "bpsv_generation/summary/all",
             "value": 207,
+            "range": "± 1",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "daniel@kogito.network",
+            "name": "Daniel S. Reichenbach",
+            "username": "danielsreichenbach"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4921cb04058b67775904d08f5dd2498b2fcbcba5",
+          "message": "Merge pull request #41 from wowemulation-dev/fix/install-tag-bit-ordering\n\nfix: correct install tag bit mask to MSB-first ordering",
+          "timestamp": "2026-02-20T14:14:43+07:00",
+          "tree_id": "ec02acd315aaf514be3d47a586bd27275feb14b6",
+          "url": "https://github.com/wowemulation-dev/cascette-rs/commit/4921cb04058b67775904d08f5dd2498b2fcbcba5"
+        },
+        "date": 1771571800781,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "bpsv_generation/versions/wow",
+            "value": 1834,
+            "range": "± 36",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "bpsv_generation/cdns/wow",
+            "value": 1198,
+            "range": "± 25",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "bpsv_generation/summary/all",
+            "value": 206,
             "range": "± 1",
             "unit": "ns/iter"
           }
