@@ -6,9 +6,11 @@ Rust implementation of Blizzard's NGDP content distribution system.
 
 [![Discord](https://img.shields.io/discord/1394228766414471219?logo=discord&style=flat-square)](https://discord.gg/Q44pPMvGEd)
 [![Sponsor](https://img.shields.io/github/sponsors/wowemulation-dev?logo=github&style=flat-square)](https://github.com/sponsors/wowemulation-dev)
+[![CI Status](https://github.com/wowemulation-dev/cascette-rs/workflows/CI/badge.svg)](https://github.com/wowemulation-dev/cascette-rs/actions)
+[![WASM](https://img.shields.io/badge/WASM-compatible-blueviolet.svg)](https://webassembly.org/)
+[![Rust Version](https://img.shields.io/badge/rust-1.92+-orange.svg)](https://www.rust-lang.org)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE-APACHE)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE-MIT)
-[![WASM](https://img.shields.io/badge/WASM-compatible-blueviolet.svg)](https://webassembly.org/)
 
 </div>
 
