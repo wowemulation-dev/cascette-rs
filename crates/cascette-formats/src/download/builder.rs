@@ -488,26 +488,26 @@ impl DownloadManifestBuilder {
                         let old_byte = original_index / 8;
                         let old_bit = original_index % 8;
                         if old_byte < tag.bit_mask.len() {
-                            let has_bit = (tag.bit_mask[old_byte] & (1 << old_bit)) != 0;
+                            let has_bit = (tag.bit_mask[old_byte] & (0x80 >> old_bit)) != 0;
                             if has_bit {
                                 let new_byte_idx = bit_index / 8;
                                 let new_bit_idx = bit_index % 8;
                                 while new_mask.len() <= new_byte_idx {
                                     new_mask.push(0u8);
                                 }
-                                new_mask[new_byte_idx] |= 1 << new_bit_idx;
+                                new_mask[new_byte_idx] |= 0x80 >> new_bit_idx;
                             }
                         }
                     } else {
                         // Keep bits before removed file
-                        let has_bit = (tag.bit_mask[byte_index] & (1 << bit_in_byte)) != 0;
+                        let has_bit = (tag.bit_mask[byte_index] & (0x80 >> bit_in_byte)) != 0;
                         if has_bit {
                             let new_byte_idx = bit_index / 8;
                             let new_bit_idx = bit_index % 8;
                             while new_mask.len() <= new_byte_idx {
                                 new_mask.push(0u8);
                             }
-                            new_mask[new_byte_idx] |= 1 << new_bit_idx;
+                            new_mask[new_byte_idx] |= 0x80 >> new_bit_idx;
                         }
                     }
                     bit_index += 1;

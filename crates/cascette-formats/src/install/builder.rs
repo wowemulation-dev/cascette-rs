@@ -335,9 +335,9 @@ impl InstallManifestBuilder {
                         let old_bit_idx = old_mapped_idx % 8;
 
                         if old_byte_idx < tag.bit_mask.len()
-                            && (tag.bit_mask[old_byte_idx] & (1 << old_bit_idx)) != 0
+                            && (tag.bit_mask[old_byte_idx] & (0x80 >> old_bit_idx)) != 0
                         {
-                            new_byte |= 1 << bit_idx;
+                            new_byte |= 0x80 >> bit_idx;
                         }
                     }
                 }
