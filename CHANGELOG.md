@@ -196,6 +196,10 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - cascette-formats: Archive group builder wrote entry fields in wrong order
   (key, offset, size instead of key, size, offset), causing round-trip
   parse failures through `ArchiveGroup::parse`
+- cascette-formats: Install tag bit mask used LSB-first bit ordering
+  (`1 << offset`) instead of MSB-first (`0x80 >> offset`). This caused
+  incorrect file-to-tag associations when parsing real install manifests.
+  Verified against WoW Classic agent manifest data
 
 ### Changed
 
