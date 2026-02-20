@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1771571801700,
+  "lastUpdate": 1771575211040,
   "repoUrl": "https://github.com/wowemulation-dev/cascette-rs",
   "entries": {
     "Benchmark": [
@@ -713,6 +713,48 @@ window.BENCHMARK_DATA = {
             "name": "bpsv_generation/summary/all",
             "value": 206,
             "range": "± 1",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "daniel@kogito.network",
+            "name": "Daniel S. Reichenbach",
+            "username": "danielsreichenbach"
+          },
+          "committer": {
+            "email": "daniel@kogito.network",
+            "name": "Daniel S. Reichenbach",
+            "username": "danielsreichenbach"
+          },
+          "distinct": true,
+          "id": "727f21df2f17f633c322246d0e16721e7c22acf3",
+          "message": "docs: standardize README badges\n\nReorder badges: chat, sponsor, CI, WASM, MSRV, licenses.\nAdd CI status and MSRV badges.",
+          "timestamp": "2026-02-20T15:11:14+07:00",
+          "tree_id": "027bd3f243cb1c61cab3a4b939309dd06123aaf0",
+          "url": "https://github.com/wowemulation-dev/cascette-rs/commit/727f21df2f17f633c322246d0e16721e7c22acf3"
+        },
+        "date": 1771575210156,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "bpsv_generation/versions/wow",
+            "value": 1817,
+            "range": "± 44",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "bpsv_generation/cdns/wow",
+            "value": 1193,
+            "range": "± 9",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "bpsv_generation/summary/all",
+            "value": 209,
+            "range": "± 3",
             "unit": "ns/iter"
           }
         ]
