@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1771575811556,
+  "lastUpdate": 1771576626134,
   "repoUrl": "https://github.com/wowemulation-dev/cascette-rs",
   "entries": {
     "Benchmark": [
@@ -797,6 +797,48 @@ window.BENCHMARK_DATA = {
             "name": "bpsv_generation/summary/all",
             "value": 206,
             "range": "± 0",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "daniel@kogito.network",
+            "name": "Daniel S. Reichenbach",
+            "username": "danielsreichenbach"
+          },
+          "committer": {
+            "email": "daniel@kogito.network",
+            "name": "Daniel S. Reichenbach",
+            "username": "danielsreichenbach"
+          },
+          "distinct": true,
+          "id": "3cc9139b0abf94212cc8a2d464c8f0899baef81b",
+          "message": "docs: update sponsor link and tailor .editorconfig\n\n- Update sponsor link to danielsreichenbach\n- Tailor .editorconfig to repo file types",
+          "timestamp": "2026-02-20T15:34:53+07:00",
+          "tree_id": "44d21dfe094480e51b944890027f70f6e7f102ab",
+          "url": "https://github.com/wowemulation-dev/cascette-rs/commit/3cc9139b0abf94212cc8a2d464c8f0899baef81b"
+        },
+        "date": 1771576625192,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "bpsv_generation/versions/wow",
+            "value": 1821,
+            "range": "± 14",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "bpsv_generation/cdns/wow",
+            "value": 1179,
+            "range": "± 4",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "bpsv_generation/summary/all",
+            "value": 205,
+            "range": "± 1",
             "unit": "ns/iter"
           }
         ]
