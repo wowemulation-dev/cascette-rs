@@ -5,7 +5,7 @@ Rust implementation of Blizzard's NGDP content distribution system.
 <div align="center">
 
 [![Discord](https://img.shields.io/discord/1394228766414471219?logo=discord&style=flat-square)](https://discord.gg/Q44pPMvGEd)
-[![Sponsor](https://img.shields.io/github/sponsors/wowemulation-dev?logo=github&style=flat-square)](https://github.com/sponsors/wowemulation-dev)
+[![Sponsor](https://img.shields.io/github/sponsors/danielsreichenbach?logo=github&style=flat-square)](https://github.com/sponsors/danielsreichenbach)
 [![CI Status](https://github.com/wowemulation-dev/cascette-rs/workflows/CI/badge.svg)](https://github.com/wowemulation-dev/cascette-rs/actions)
 [![WASM](https://img.shields.io/badge/WASM-compatible-blueviolet.svg)](https://webassembly.org/)
 [![Rust Version](https://img.shields.io/badge/rust-1.92+-orange.svg)](https://www.rust-lang.org)
@@ -14,7 +14,7 @@ Rust implementation of Blizzard's NGDP content distribution system.
 
 </div>
 
-## What is NGDP?
+## Overview
 
 NGDP (Next Generation Distribution Pipeline) is the system Blizzard uses to
 distribute and update all modern games including World of Warcraft, Diablo IV,
@@ -29,7 +29,7 @@ patching, verification, and deduplication.
 cascette-rs focuses on World of Warcraft and Battle.net products. Contributions
 adding support for other Blizzard products are welcome.
 
-## What does cascette-rs provide?
+## Features
 
 ### CLI Tools
 
@@ -71,28 +71,6 @@ parsing code uses pure Rust implementations with no C dependencies.
 
 Under active development. See [CHANGELOG.md](CHANGELOG.md) for progress.
 
-## Community
-
-cascette-rs is developed in the open with the emulation, archival, and modding
-communities in mind. Our Discord brings together modders, developers of tools
-for modern WoW, and developers of tools for WoW 3.3.5a.
-
-**This project is and will always be open source.**
-
-[Join the Discord](https://discord.gg/Q44pPMvGEd)
-
-## Support the Project
-
-If you find cascette-rs useful, please consider [sponsoring the project](https://github.com/sponsors/wowemulation-dev).
-
-cascette-rs is currently a nights-and-weekends effort by one person. Funding
-goals:
-
-- **20 hours/week** - Sustained funding to dedicate real development time to
-  the project instead of squeezing it into spare hours
-- **Public CDN mirror** - Host a community mirror for World of Warcraft builds,
-  ensuring long-term availability of historical game data
-
 ## Related Projects
 
 ### [cascette-py](https://github.com/wowemulation-dev/cascette-py)
@@ -111,17 +89,37 @@ mise install
 This reads `.mise.toml` from the project root and installs the pinned tool
 versions.
 
+## Support the Project
+
+If you find this project useful, please consider
+[sponsoring the project](https://github.com/sponsors/danielsreichenbach).
+
+This is currently a nights-and-weekends effort by one person. Funding goals:
+
+- **20 hours/week** - Sustained funding to dedicate real development time
+  instead of squeezing it into spare hours
+- **Public CDN mirror** - Host a community mirror for World of Warcraft builds,
+  ensuring long-term availability of historical game data
+
 ## Contributing
 
-- [CONTRIBUTING.md](CONTRIBUTING.md) - Contribution guidelines
-- [CONTRIBUTORS.md](CONTRIBUTORS.md) - Contributors list
+See the [Contributing Guide](CONTRIBUTING.md) for development setup and
+guidelines. Thanks to all [contributors](CONTRIBUTORS.md).
 
 ## License
 
-Dual-licensed under MIT or Apache 2.0 at your option.
+This project is dual-licensed under either:
 
-- [LICENSE-MIT](LICENSE-MIT)
-- [LICENSE-APACHE](LICENSE-APACHE)
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0>)
+- MIT license ([LICENSE-MIT](LICENSE-MIT) or <http://opensource.org/licenses/MIT>)
+
+You may choose to use either license at your option.
+
+### Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in the work by you, as defined in the Apache-2.0 license, shall
+be dual licensed as above, without any additional terms or conditions.
 
 ---
 
