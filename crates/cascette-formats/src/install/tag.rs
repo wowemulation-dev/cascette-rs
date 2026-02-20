@@ -79,7 +79,7 @@ pub struct InstallTag {
     pub tag_type: TagType,
     /// Bit mask indicating which files are associated with this tag
     /// Each bit corresponds to a file index (bit 0 = file 0, etc.)
-    /// Uses little-endian bit ordering within bytes
+    /// Uses big-endian (MSB-first) bit ordering within bytes
     pub bit_mask: Vec<u8>,
 }
 
@@ -103,8 +103,8 @@ impl InstallTag {
             return false;
         }
 
-        // Little-endian bit ordering within bytes: bit 0 = LSB
-        (self.bit_mask[byte_index] & (1 << bit_offset)) != 0
+        // Big-endian (MSB-first) bit ordering within bytes: bit 0 = MSB
+        (self.bit_mask[byte_index] & (0x80 >> bit_offset)) != 0
     }
 
     /// Associate a file at the given index with this tag
@@ -117,8 +117,8 @@ impl InstallTag {
             self.bit_mask.resize(byte_index + 1, 0);
         }
 
-        // Set bit using little-endian ordering
-        self.bit_mask[byte_index] |= 1 << bit_offset;
+        // Set bit using big-endian (MSB-first) ordering
+        self.bit_mask[byte_index] |= 0x80 >> bit_offset;
     }
 
     /// Remove file association at the given index
@@ -130,8 +130,8 @@ impl InstallTag {
             return;
         }
 
-        // Clear bit using little-endian ordering
-        self.bit_mask[byte_index] &= !(1 << bit_offset);
+        // Clear bit using big-endian (MSB-first) ordering
+        self.bit_mask[byte_index] &= !(0x80 >> bit_offset);
     }
 
     /// Count the total number of files associated with this tag
@@ -312,9 +312,9 @@ mod tests {
         tag.add_file(1);
         tag.add_file(9);
 
-        // Check bit patterns (little-endian bit ordering)
-        assert_eq!(tag.bit_mask[0], 0b0000_0011); // Files 0 and 1
-        assert_eq!(tag.bit_mask[1], 0b0000_0010); // File 9 (bit 1 of byte 1)
+        // Check bit patterns (big-endian/MSB-first bit ordering)
+        assert_eq!(tag.bit_mask[0], 0b1100_0000); // Files 0 and 1 (bits 7, 6)
+        assert_eq!(tag.bit_mask[1], 0b0100_0000); // File 9 (byte 1, bit 6)
 
         // Verify file associations
         assert!(tag.has_file(0));
@@ -333,7 +333,7 @@ mod tests {
         tag.remove_file(1);
         assert!(!tag.has_file(1));
         assert_eq!(tag.file_count(), 2);
-        assert_eq!(tag.bit_mask[0], 0b0000_0001); // Only file 0
+        assert_eq!(tag.bit_mask[0], 0b1000_0000); // Only file 0 (bit 7)
     }
 
     #[test]
@@ -367,11 +367,11 @@ mod tests {
 
         let intersection = tag1.intersect(&tag2);
         // Files 1 and 2 are in both tags
-        assert_eq!(intersection[0], 0b0000_0110); // Bits 1 and 2 set
+        assert_eq!(intersection[0], 0b0110_0000); // Bits 6 and 5 set (files 1, 2)
 
         let union = tag1.union(&tag2);
         // Files 0, 1, 2, 3 are in either tag
-        assert_eq!(union[0], 0b0000_1111); // Bits 0, 1, 2, 3 set
+        assert_eq!(union[0], 0b1111_0000); // Bits 7, 6, 5, 4 set (files 0-3)
     }
 
     #[test]
@@ -402,15 +402,16 @@ mod tests {
         assert_eq!(tag.tag_type, TagType::Platform);
         assert_eq!(tag.bit_mask, vec![0b1010_1010]);
 
-        // Check file associations (little-endian bit ordering)
-        assert!(!tag.has_file(0)); // Bit 0 not set
-        assert!(tag.has_file(1)); // Bit 1 set
-        assert!(!tag.has_file(2)); // Bit 2 not set
-        assert!(tag.has_file(3)); // Bit 3 set
-        assert!(!tag.has_file(4)); // Bit 4 not set
-        assert!(tag.has_file(5)); // Bit 5 set
-        assert!(!tag.has_file(6)); // Bit 6 not set
-        assert!(tag.has_file(7)); // Bit 7 set
+        // Check file associations (big-endian/MSB-first bit ordering)
+        // 0b1010_1010 = bits 7,5,3,1 set = files 0,2,4,6
+        assert!(tag.has_file(0)); // Bit 7 set
+        assert!(!tag.has_file(1)); // Bit 6 not set
+        assert!(tag.has_file(2)); // Bit 5 set
+        assert!(!tag.has_file(3)); // Bit 4 not set
+        assert!(tag.has_file(4)); // Bit 3 set
+        assert!(!tag.has_file(5)); // Bit 2 not set
+        assert!(tag.has_file(6)); // Bit 1 set
+        assert!(!tag.has_file(7)); // Bit 0 not set
 
         assert_eq!(tag.file_count(), 4);
     }
@@ -513,5 +514,101 @@ mod tests {
 
         assert_eq!(tag.file_count(), 4);
         assert_eq!(tag.bit_mask.len(), 125); // (1000 + 7) / 8 = 125
+    }
+
+    /// Integration test using real manifest data extracted from
+    /// 314436cc1adeed58d203bf32402cc1bc.install.dec (WoW Classic agent manifest)
+    ///
+    /// This test validates the MSB-first bit ordering against known-good data
+    /// from Battle.net agent's install manifest format.
+    #[test]
+    fn test_real_manifest_windows_tag() {
+        // Real "Windows" tag from WoW Classic manifest
+        // Extracted from: 314436cc1adeed58d203bf32402cc1bc.install.dec
+        // Manifest has 111 entries, so bitmap is 14 bytes
+        let windows_bitmap: [u8; 14] = [
+            0xff, 0xff, 0xff, 0xfe, // Bytes 0-3: files 0-30 set, file 31 clear
+            0x00, 0x00, 0x00, 0x00, // Bytes 4-7: no files
+            0x00, 0x00, 0x00, 0x00, // Bytes 8-11: no files
+            0x00, 0x01, // Bytes 12-13: file 111 set
+        ];
+
+        let mut tag = InstallTag::new("Windows".to_string(), TagType::Platform, 111);
+        tag.bit_mask = windows_bitmap.to_vec();
+
+        // Verify tag metadata
+        assert_eq!(tag.name, "Windows");
+        assert_eq!(tag.tag_type, TagType::Platform);
+
+        // Verify files 0-30 are set (first 31 files)
+        for i in 0..=30 {
+            assert!(tag.has_file(i), "File {} should be set", i);
+        }
+
+        // Verify file 31 is NOT set (0xfe has bit 0 clear in MSB ordering)
+        assert!(!tag.has_file(31), "File 31 should not be set");
+
+        // Verify files 32-110 are NOT set
+        for i in 32..111 {
+            assert!(!tag.has_file(i), "File {} should not be set", i);
+        }
+
+        // Verify file 111 is set (last bit in 0x01 with MSB ordering)
+        assert!(tag.has_file(111), "File 111 should be set");
+
+        // Total should be 32 files: 31 from bytes 0-3 plus 1 from byte 13
+        assert_eq!(tag.file_count(), 32);
+    }
+
+    /// Integration test for OSX tag from same manifest
+    /// Demonstrates different bit pattern with sparse file distribution
+    #[test]
+    fn test_real_manifest_osx_tag() {
+        // Real "OSX" tag from WoW Classic manifest
+        // Files 31-110 are set (80 files), file 111 is set
+        let osx_bitmap: [u8; 14] = [
+            0x00, 0x00, 0x00, 0x01, // Bytes 0-3: only file 31 set
+            0xff, 0xff, 0xff, 0xff, // Bytes 4-7: files 32-63 set
+            0xff, 0xff, 0xff, 0xff, // Bytes 8-11: files 64-95 set
+            0xff, 0xff, // Bytes 12-13: files 96-111 set
+        ];
+
+        let mut tag = InstallTag::new("OSX".to_string(), TagType::Platform, 111);
+        tag.bit_mask = osx_bitmap.to_vec();
+
+        // Verify files 0-30 are NOT set
+        for i in 0..=30 {
+            assert!(!tag.has_file(i), "File {} should not be set", i);
+        }
+
+        // Verify file 31 IS set (0x01 in byte 3 = bit 7 in MSB = file 31)
+        assert!(tag.has_file(31), "File 31 should be set");
+
+        // Verify files 32-111 are set
+        for i in 32..=111 {
+            assert!(tag.has_file(i), "File {} should be set", i);
+        }
+
+        // Total: 1 (file 31) + 80 (files 32-111) = 81 files
+        assert_eq!(tag.file_count(), 81);
+    }
+
+    /// Integration test for x86_64 tag demonstrating full coverage
+    #[test]
+    fn test_real_manifest_x86_64_tag() {
+        // Real "x86_64" tag - all files set (full 0xff bitmap)
+        let x86_64_bitmap: [u8; 14] = [
+            0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+        ];
+
+        let mut tag = InstallTag::new("x86_64".to_string(), TagType::Architecture, 111);
+        tag.bit_mask = x86_64_bitmap.to_vec();
+
+        // All 111 files should be set
+        for i in 0..=110 {
+            assert!(tag.has_file(i), "File {} should be set", i);
+        }
+        // File 111 is beyond entry_count, shouldn't be counted
+        assert_eq!(tag.file_count(), 112); // 14 bytes * 8 bits = 112
     }
 }

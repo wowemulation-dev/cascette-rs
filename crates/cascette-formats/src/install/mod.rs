@@ -659,9 +659,9 @@ mod tests {
         tag.add_file(1);
         tag.add_file(9);
 
-        // Check bit patterns (little-endian bit ordering)
-        assert_eq!(tag.bit_mask[0], 0b0000_0011); // Files 0 and 1
-        assert_eq!(tag.bit_mask[1], 0b0000_0010); // File 9 (bit 1 of byte 1)
+        // Check bit patterns (big-endian/MSB-first bit ordering)
+        assert_eq!(tag.bit_mask[0], 0b1100_0000); // Files 0 and 1 (bits 7, 6)
+        assert_eq!(tag.bit_mask[1], 0b0100_0000); // File 9 (byte 1, bit 6)
 
         // Verify file associations
         assert!(tag.has_file(0));
