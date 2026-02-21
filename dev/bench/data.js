@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1771576626134,
+  "lastUpdate": 1771636149224,
   "repoUrl": "https://github.com/wowemulation-dev/cascette-rs",
   "entries": {
     "Benchmark": [
@@ -838,6 +838,48 @@ window.BENCHMARK_DATA = {
           {
             "name": "bpsv_generation/summary/all",
             "value": 205,
+            "range": "± 1",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "daniel@kogito.network",
+            "name": "Daniel S. Reichenbach",
+            "username": "danielsreichenbach"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a7af0dda53ceded2572f0e43547e1aa38c6fabce",
+          "message": "Merge pull request #43 from wowemulation-dev/fix/macos-variadic-mode-t-cast\n\nfix: cast mode_t to c_uint for variadic shm_open on macOS",
+          "timestamp": "2026-02-21T08:07:01+07:00",
+          "tree_id": "45d1fbf5aac548006591f7ded4437734791017f3",
+          "url": "https://github.com/wowemulation-dev/cascette-rs/commit/a7af0dda53ceded2572f0e43547e1aa38c6fabce"
+        },
+        "date": 1771636148235,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "bpsv_generation/versions/wow",
+            "value": 1514,
+            "range": "± 17",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "bpsv_generation/cdns/wow",
+            "value": 1140,
+            "range": "± 2",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "bpsv_generation/summary/all",
+            "value": 206,
             "range": "± 1",
             "unit": "ns/iter"
           }
