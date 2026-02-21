@@ -66,7 +66,7 @@ impl PlatformShmem {
             shm_open(
                 c_name.as_ptr(),
                 O_CREAT | O_RDWR,
-                (S_IRUSR | S_IWUSR) as mode_t as c_uint,
+                c_uint::from((S_IRUSR | S_IWUSR) as mode_t),
             )
         };
 
