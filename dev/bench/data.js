@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1771636149224,
+  "lastUpdate": 1771651860518,
   "repoUrl": "https://github.com/wowemulation-dev/cascette-rs",
   "entries": {
     "Benchmark": [
@@ -875,6 +875,48 @@ window.BENCHMARK_DATA = {
             "name": "bpsv_generation/cdns/wow",
             "value": 1140,
             "range": "± 2",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "bpsv_generation/summary/all",
+            "value": 206,
+            "range": "± 1",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "daniel@kogito.network",
+            "name": "Daniel S. Reichenbach",
+            "username": "danielsreichenbach"
+          },
+          "committer": {
+            "email": "daniel@kogito.network",
+            "name": "Daniel S. Reichenbach",
+            "username": "danielsreichenbach"
+          },
+          "distinct": true,
+          "id": "ab4f4e1e7a294947eda5fcbeaf150049ea3e3783",
+          "message": "chore: add trailing newline to .gitignore",
+          "timestamp": "2026-02-21T12:28:28+07:00",
+          "tree_id": "32260937164b1bd7a418d8f9102156746cfe0eb7",
+          "url": "https://github.com/wowemulation-dev/cascette-rs/commit/ab4f4e1e7a294947eda5fcbeaf150049ea3e3783"
+        },
+        "date": 1771651859663,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "bpsv_generation/versions/wow",
+            "value": 1849,
+            "range": "± 38",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "bpsv_generation/cdns/wow",
+            "value": 1129,
+            "range": "± 11",
             "unit": "ns/iter"
           },
           {
