@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1771652536680,
+  "lastUpdate": 1771687554868,
   "repoUrl": "https://github.com/wowemulation-dev/cascette-rs",
   "entries": {
     "Benchmark": [
@@ -965,6 +965,48 @@ window.BENCHMARK_DATA = {
             "name": "bpsv_generation/summary/all",
             "value": 207,
             "range": "± 2",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "daniel@kogito.network",
+            "name": "Daniel S. Reichenbach",
+            "username": "danielsreichenbach"
+          },
+          "committer": {
+            "email": "daniel@kogito.network",
+            "name": "Daniel S. Reichenbach",
+            "username": "danielsreichenbach"
+          },
+          "distinct": true,
+          "id": "7d6e4fbb49ba1796f4ec07699df7c4bbe861e169",
+          "message": "chore: update mise tools and readthedocs build configuration\n\nAdd mdbook-mermaid, cross-compilation, profiling, and Node.js tooling\nto mise. Fix readthedocs build to install mdbook-mermaid and use a\nportable install path that works with asdf-managed Rust.",
+          "timestamp": "2026-02-21T22:23:48+07:00",
+          "tree_id": "c59d4005b7968d6c8d062ed453b7e5f72739b06d",
+          "url": "https://github.com/wowemulation-dev/cascette-rs/commit/7d6e4fbb49ba1796f4ec07699df7c4bbe861e169"
+        },
+        "date": 1771687553977,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "bpsv_generation/versions/wow",
+            "value": 1858,
+            "range": "± 15",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "bpsv_generation/cdns/wow",
+            "value": 1240,
+            "range": "± 30",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "bpsv_generation/summary/all",
+            "value": 209,
+            "range": "± 4",
             "unit": "ns/iter"
           }
         ]
