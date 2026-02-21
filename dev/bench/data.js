@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1771651860518,
+  "lastUpdate": 1771652536680,
   "repoUrl": "https://github.com/wowemulation-dev/cascette-rs",
   "entries": {
     "Benchmark": [
@@ -923,6 +923,48 @@ window.BENCHMARK_DATA = {
             "name": "bpsv_generation/summary/all",
             "value": 206,
             "range": "± 1",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "daniel@kogito.network",
+            "name": "Daniel S. Reichenbach",
+            "username": "danielsreichenbach"
+          },
+          "committer": {
+            "email": "daniel@kogito.network",
+            "name": "Daniel S. Reichenbach",
+            "username": "danielsreichenbach"
+          },
+          "distinct": true,
+          "id": "d43f377dc4bde40f556df728e3cf5bf3f29d9e2f",
+          "message": "fix: use absolute path for mdbook in readthedocs build\n\nThe cargo install directory may not be in PATH during the build step.",
+          "timestamp": "2026-02-21T12:40:22+07:00",
+          "tree_id": "bad157161d29125742ce8066f40be1734fece22e",
+          "url": "https://github.com/wowemulation-dev/cascette-rs/commit/d43f377dc4bde40f556df728e3cf5bf3f29d9e2f"
+        },
+        "date": 1771652536351,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "bpsv_generation/versions/wow",
+            "value": 1790,
+            "range": "± 49",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "bpsv_generation/cdns/wow",
+            "value": 1209,
+            "range": "± 6",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "bpsv_generation/summary/all",
+            "value": 207,
+            "range": "± 2",
             "unit": "ns/iter"
           }
         ]
