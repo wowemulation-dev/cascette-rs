@@ -1284,7 +1284,7 @@ mod unix {
     use std::slice;
 
     use libc::{MAP_SHARED, O_CREAT, O_RDWR, PROT_READ, PROT_WRITE, S_IRUSR, S_IWUSR};
-    use libc::{c_void, mode_t, off_t, size_t};
+    use libc::{c_uint, c_void, mode_t, off_t, size_t};
     use libc::{close, ftruncate, mmap, munmap, shm_open, shm_unlink};
 
     use crate::{Result, StorageError};
@@ -1311,7 +1311,7 @@ mod unix {
                 shm_open(
                     c_name.as_ptr(),
                     O_CREAT | O_RDWR,
-                    (S_IRUSR | S_IWUSR) as mode_t,
+                    (S_IRUSR | S_IWUSR) as mode_t as c_uint,
                 )
             };
 
