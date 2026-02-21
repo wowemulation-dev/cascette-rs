@@ -5,45 +5,14 @@
 !.gitignore
 !.gitattributes
 
-# Project files
-/.cache/
-/.fleet/
-/.idea/
-/.vscode/
-
-# OS specific temporary files
-.DS_Store
-Thumbs.db
-
 # Added by cargo
-/target/
-**/*.rs.bk
-*.pdb
+/target
 
 # Flamegraph output (subdirectory of target/ listed above)
 /target/flamegraphs/
 
 # Profiling data files
-perf.data
-perf.data.old
-perf.data.tmp
-
-# Private reference documentation
-/docs-internal/
+perf.data*
 
 # mdBook build output
 /docs/book/
-
-# Mirror test outputs
-/mirror/
-/test-*/
-
-# Agent service artifacts
-*.db
-*.db-shm
-*.db-wal
-*.log
-*.log.*
-agent.toml
-.env
-.env.*
