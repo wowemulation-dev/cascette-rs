@@ -164,6 +164,16 @@ The Size manifest is one of six manifest types in TACT:
 | `patch` | `PA` | Patch manifest for delta updates |
 | `size` | `DS` | Size manifest (this format) |
 
+## Validation
+
+The parser validates manifests at parse time and via an explicit `validate()`
+method:
+
+- Entry count matches the header's `entry_count` field
+- Sum of all entry esize values matches the header's `total_size` field
+- `key_size_bits` must be > 0
+- Key hash sentinel values (0x0000, 0xFFFF) are rejected
+
 ## Error Messages
 
 | Condition | Message |
@@ -172,6 +182,10 @@ The Size manifest is one of six manifest types in TACT:
 | Bad magic | "Invalid magic string in size manifest." |
 | Bad version | "Unsupported size manifest version: %u. This client only supports non-zero versions <= %u" |
 | Bad esize width | "Invalid eSize byte count '%u' in size manifest header." |
+| Zero key size | "Invalid key size: key_size_bits must be > 0" |
+| Bad key hash | "Invalid key hash sentinel value: 0x{value:04X}" |
+| Entry count mismatch | "Entry count mismatch: header says {expected}, found {actual}" |
+| Total size mismatch | "Total size mismatch: header says {expected}, sum of esizes is {actual}" |
 
 ## Implementation Status
 

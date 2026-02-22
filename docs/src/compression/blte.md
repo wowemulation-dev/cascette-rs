@@ -267,9 +267,9 @@ for chunk_info in chunks {
     // Read chunk data
     let chunk_data = &data[offset..offset + chunk_info.compressed_size];
 
-    // Verify MD5 checksum
-    let hash = md5::compute(chunk_data);
-    assert_eq!(hash.0, chunk_info.checksum);
+    // Optionally verify MD5 checksum (not done automatically during parsing)
+    // let hash = md5::compute(chunk_data);
+    // assert_eq!(hash.0, chunk_info.checksum);
 
     // Decompress based on encoding type
     let decompressed = decompress_chunk(chunk_data);
@@ -406,16 +406,20 @@ Critical checks:
 1. Verify BLTE magic number
 2. Validate flags == 0x0F for extended headers
 3. Check chunk count > 0 when header_size > 0
-4. Verify MD5 checksums match
+4. MD5 checksums are available via `verify_checksum()` on each chunk (not
+   verified automatically during parsing)
 5. Handle unknown encoding types gracefully
 6. Ensure decompressed size matches expected
+7. Enforce maximum decompression size (1 GB) to prevent decompression bombs
 
 ## Implementation Considerations
 
 - Process chunks incrementally rather than loading entire files into memory
 - Decompress chunks in parallel where possible
-- Verify MD5 checksums before decompression
-- Validate sizes before allocation to prevent decompression bombs
+- Checksum verification is a separate step from parsing (call
+  `verify_checksum()` on chunk data)
+- Maximum decompression size is 1 GB (`MAX_DECOMPRESSION_SIZE`). Chunks
+  claiming a larger decompressed size are rejected
 
 ## Integration with NGDP
 

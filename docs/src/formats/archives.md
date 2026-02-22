@@ -153,10 +153,10 @@ Archive Index files use a 28-byte footer at the end of the file:
 ```c
 struct ArchiveIndexFooter {  // 28 bytes total
     uint8_t  toc_hash[8];     // MD5(toc_keys || block_hashes)[:footer_hash_bytes]
-    uint8_t  version;         // Must be <= 1 (0 or 1)
+    uint8_t  version;         // Must be 0 or 1
     uint8_t  reserved[2];     // Must be [0, 0]
     uint8_t  page_size_kb;    // Must be 4 (4KB pages)
-    uint8_t  offset_bytes;    // Archive offset field size (4 for archives)
+    uint8_t  offset_bytes;    // Archive offset field size (4, 5, or 6)
     uint8_t  size_bytes;      // Compressed size field size (always 4)
     uint8_t  ekey_length;     // EKey length in bytes (16 for full MD5)
     uint8_t  footer_hash_bytes; // Footer hash length (always 8)
@@ -167,7 +167,10 @@ struct ArchiveIndexFooter {  // 28 bytes total
 
 **Verified Footer Properties**:
 
-- Standard values: offset_bytes=4, size_bytes=4, ekey_length=16
+- Standard values: offset_bytes=4, size_bytes=4, ekey_length=16 (9-16 valid)
+
+- offset_bytes can be 4 (regular archives), 5 (archives >4GB), or 6
+  (archive-groups: 2-byte archive index + 4-byte offset)
 
 - Page/chunk size consistently 4096 bytes
 
@@ -181,7 +184,10 @@ struct ArchiveIndexFooter {  // 28 bytes total
 
   multi-byte fields are big-endian
 
-- TOC hash validates the table of contents integrity separately from footer hash
+- TOC hash field is present but not validated in practice. No known reference
+  implementation (CascLib, TACT.Net, rustycasc) validates this field. Testing
+  against real files shows the stored values do not match any standard hash
+  algorithm applied to the TOC data
 
 **Implementation Notes**:
 

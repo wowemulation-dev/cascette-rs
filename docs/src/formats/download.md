@@ -95,12 +95,13 @@ final_priority = entry.priority - header.base_priority
 
 Lower values indicate higher priority:
 
-| Priority | Description | Typical Content |
-|----------|-------------|-----------------|
-| 0 | Essential | Required to start game |
-| 1 | Critical | Core gameplay files |
-| 2 | Standard | Common game content |
-| 3+ | Optional | Downloaded as needed |
+| Priority | Category | Typical Content |
+|----------|----------|-----------------|
+| < 0 | Critical | Must download before game starts |
+| 0 | Essential | Required for basic gameplay |
+| 1-2 | High | Important for full experience |
+| 3-5 | Normal | Standard content |
+| > 5 | Low | Optional/deferred content |
 
 ### Priority-Based Download
 
@@ -167,13 +168,22 @@ impl DownloadManager {
 
 ### Platform-Specific Downloads
 
+Tags are stored separately from entries. Each tag contains a bitmap indicating
+which entries it applies to. To filter by tag, find the tag by name and check
+its bitmap:
+
 ```rust
-fn filter_by_platform(
-    entries: &[DownloadFileEntry],
-    platform_tags: u16
-) -> Vec<&DownloadFileEntry> {
-    entries.iter()
-        .filter(|e| (e.tag_mask & platform_tags) != 0)
+fn filter_by_tag<'a>(
+    manifest: &'a DownloadManifest,
+    tag_name: &str,
+) -> Vec<(usize, &'a DownloadFileEntry)> {
+    let tag = match manifest.tags.iter().find(|t| t.name == tag_name) {
+        Some(t) => t,
+        None => return Vec::new(),
+    };
+
+    manifest.entries.iter().enumerate()
+        .filter(|(index, _)| tag.has_file(*index))
         .collect()
 }
 ```
@@ -181,16 +191,18 @@ fn filter_by_platform(
 ### Language Packs
 
 ```rust
-fn get_language_pack(
-    download_file: &DownloadFile,
-    locale: &str
-) -> Vec<DownloadFileEntry> {
-    let locale_tag = download_file.get_tag_id(locale);
+fn get_language_pack<'a>(
+    manifest: &'a DownloadManifest,
+    locale: &str,
+) -> Vec<&'a DownloadFileEntry> {
+    let tag = match manifest.tags.iter().find(|t| t.name == locale) {
+        Some(t) => t,
+        None => return Vec::new(),
+    };
 
-    download_file.entries
-        .iter()
-        .filter(|e| (e.tag_mask & (1 << locale_tag)) != 0)
-        .cloned()
+    manifest.entries.iter().enumerate()
+        .filter(|(index, _)| tag.has_file(*index))
+        .map(|(_, entry)| entry)
         .collect()
 }
 ```

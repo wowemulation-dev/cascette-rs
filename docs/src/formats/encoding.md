@@ -120,9 +120,15 @@ Maps encoding keys to ESpec entries:
 struct EKeyEntry {
     uint8_t  ekey[ekey_size];     // Encoding key
     uint32_t espec_index;          // Index into ESpec table (BE)
-    uint8_t  compressed_size[5];   // Compressed size (40-bit BE)
+    uint8_t  file_size[5];         // Encoded file size (40-bit BE)
 };
 ```
+
+**Padding Detection**: EKey pages may contain padding entries that must be
+skipped. Two sentinel patterns indicate padding:
+
+1. `espec_index == 0xFFFFFFFF` (Agent.exe sentinel)
+2. `espec_index == 0` with all key bytes `0x00` (zero-fill padding)
 
 ## Content Resolution Process
 
@@ -436,7 +442,9 @@ structure using the same ESpec format as all other files.
 1. **Page Boundary Errors**: Entries can span pages
 2. **Endianness**: All multi-byte values are big-endian
 3. **ESpec Index**: Zero-based into string table
-4. **Empty Pages**: Skip entries with ekey_count = 0
+4. **CKey Padding**: Entries with `ekey_count = 0` indicate end of page data
+5. **EKey Padding**: Entries with `espec_index = 0xFFFFFFFF` or all-zero keys
+   indicate padding (see Padding Detection above)
 5. **File Size**: Remember to account for the file's own ESpec at the end
 
 ## Real-World Example

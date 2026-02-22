@@ -73,19 +73,27 @@ Components:
 
 ```text
 plain := "n"
-zlib := "z" [ ":" "{" level [ "," variant ] [ "," window_bits ] "}" ]
+zlib := "z" [ ":" ( level | "{" zlib_params "}" ) ]
+zlib_params := ( level | variant ) [ "," ( variant | window_bits ) ] [ "," window_bits ]
 encryption := "e" ":" "{" key "," iv "," content_encoding "}"
 ```
+
+Zlib supports multiple syntax forms: `z`, `z:9`, `z:{9}`, `z:{9,mpq}`,
+`z:{9,15}`, `z:{9,mpq,15}`, `z:{mpq}`, `z:{mpq,15}`. The second parameter
+can be either a variant name or a numeric window_bits value.
 
 ### Block Encoding
 
 ```text
-block := "b" ":" "{" block_spec "}"
+block := "b" ":" ( "{" block_spec { "," block_spec } "}" | encoding )
 block_spec := size [ "*" count ] "=" encoding
 size := number [ unit ]
 unit := "K" | "M"
 count := number | "*"
 ```
+
+A block table can omit braces when it contains a single encoding with no size
+specification: `b:z` is equivalent to a single block with no explicit size.
 
 ### Complex Encodings
 
@@ -226,29 +234,24 @@ e:{key,iv,content_encoding}
 
 - **content_encoding**: Encoding applied before encryption
 
-### Key Types
+### Key Format
 
-Keys can be specified as:
-
-- Literal hex values: `0123456789abcdef`
-
-- Key identifiers: `key_name`
-
-- Key indices: `key[0]`
-
-### Example Encryption
+Keys must be exactly 16 hex characters (8 bytes):
 
 ```text
-e:{0123456789abcdef,fedcba9876543210,z}
+e:{0123456789abcdef,fedcba98,z}
 ```
 
 This specifies:
 
-- Encryption key: `0123456789abcdef`
+- Encryption key: `0123456789abcdef` (16 hex chars, 8 bytes)
 
-- IV: `fedcba9876543210`
+- IV: `fedcba98` (8 hex chars, 4 bytes)
 
 - Content: zlib compressed before encryption
+
+The parser rejects keys that are not exactly 16 hex characters. The IV must
+be exactly 8 hex characters (4 bytes).
 
 ## BCPack Compression
 

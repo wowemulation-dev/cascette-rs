@@ -55,14 +55,14 @@ struct InstallTag {
 };
 ```
 
-**Important**: The bit mask uses **little-endian bit ordering** within each
-byte:
+**Important**: The bit mask uses **big-endian (MSB-first) bit ordering** within
+each byte:
 
-- Bit 0 (LSB) corresponds to file index `byte_index * 8 + 0`
+- Bit 7 (MSB) corresponds to file index `byte_index * 8 + 0`
 
-- Bit 7 (MSB) corresponds to file index `byte_index * 8 + 7`
+- Bit 0 (LSB) corresponds to file index `byte_index * 8 + 7`
 
-- No bit reversal is needed (contrary to some community documentation)
+- The mask for a given file index is `0x80 >> (file_index % 8)`
 
 ### File Entry
 
@@ -88,7 +88,19 @@ Tag associations are determined by bit positions in each tag's bit mask.
 | Architecture | 0x0002 | CPU architecture tags | x86_32, x86_64, arm64 |
 | Locale | 0x0003 | Language/region tags | enUS, deDE, frFR |
 | Category | 0x0004 | Content category tags | speech, text |
+| Unknown | 0x0005 | Unknown tag type | (seen in manifests) |
+| Component | 0x0010 | Component tags | game, launcher |
+| Version | 0x0020 | Version tags | live, ptr, beta |
+| Optimization | 0x0040 | Optimization tags | retail, debug |
+| Region | 0x0080 | Region tags | US, EU, KR |
+| Device | 0x0100 | Device tags | desktop, mobile |
+| Mode | 0x0200 | Mode tags | online, offline |
+| Branch | 0x0400 | Branch tags | main, experimental |
+| Content | 0x0800 | Content tags | cinematics, audio |
+| Feature | 0x1000 | Feature tags | graphics, physics |
+| Expansion | 0x2000 | Expansion tags | base, expansion1 |
 | Alternate | 0x4000 | Alternate content | Alternate, HighRes |
+| Option | 0x8000 | Option tags | (optional features) |
 
 ### Common Tags
 
@@ -132,8 +144,8 @@ fn should_install(
         return false;
     }
 
-    // Little-endian bit ordering: bit 0 = LSB
-    let has_tag = (tag.bit_mask[byte_index] & (1 << bit_offset)) != 0;
+    // Big-endian (MSB-first) bit ordering within bytes: bit 0 = MSB
+    let has_tag = (tag.bit_mask[byte_index] & (0x80 >> bit_offset)) != 0;
     has_tag && selected
 }
 ```
@@ -401,7 +413,7 @@ struct UninstallManifest {
 
 - Version 1 header parsing with IN magic detection
 
-- Tag extraction with proper little-endian bit ordering
+- Tag extraction with big-endian (MSB-first) bit ordering
 
 - Platform/architecture/locale tag type classification
 
@@ -438,8 +450,8 @@ The Install manifest format has two versions:
   - Tag-based selective installation
   - Platform/architecture/locale filtering
   - Bit mask system for tag associations
-  - Little-endian bit ordering in tag masks
-  - Tag type classification (Platform, Architecture, Locale, Category, Alternate)
+  - Big-endian (MSB-first) bit ordering in tag masks
+  - Tag type classification (17 types from Platform through Option)
 
 ### Version 2
 

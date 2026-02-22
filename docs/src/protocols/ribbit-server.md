@@ -148,9 +148,9 @@ us|tpr/wow|cdn.arctium.tools|https://cdn.arctium.tools/?maxhosts=4|tpr/wow/confi
 One row per product:
 
 ```text
-Product!STRING:0|Flags!STRING:0|Seqn!DEC:4
-wow|cdn|1730534400
-wowt|cdn|1730534400
+Product!STRING:0|Seqn!DEC:4
+wow|1730534400
+wowt|1730534400
 ## seqn = 1730534400
 ```
 

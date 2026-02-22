@@ -74,8 +74,10 @@ struct RootHeaderV3 {
 **Note**: Version 3 also uses TSFM magic in observed builds, maintaining
 consistency with Version 2.
 
-**Version Detection Heuristic**: If total_file_count < 1000 after reading
-8 bytes past MFST, it's likely v3+ (rewind and read header_size/version).
+**Version Detection Heuristic**: After reading the magic, check the next two
+u32 values. If the first value (header_size) is in range [16, 100) and the
+second value (version) is 2, 3, or 4, the file is v3+. Otherwise treat the
+first value as total_file_count (v2).
 
 ### Block Structure
 
@@ -133,12 +135,15 @@ unk2, unk3`.
 
 #### V4 Extended Content Flags
 
-V4 (Build 58221+) extends content flags to 40 bits while maintaining the
-17-byte block header structure. The additional bits are encoded in the
-`content_flags` and `unk2` fields:
+V4 (Build 58221+) extends content flags to 40 bits, increasing the block
+header to **18 bytes** (the content_flags field grows from 4 to 5 bytes).
+The 40-bit value is read as a `u32` (4 bytes) plus a `u8` (1 byte):
 
-- Bits 0-31: content_flags (standard 32-bit flags)
-- Bits 32-39: Upper bits from unk3 field via bit-shift operations
+```c
+uint32_t content_flags_low;   // Bits 0-31
+uint8_t  content_flags_high;  // Bits 32-39
+// Combined: content_flags = content_flags_low | (content_flags_high << 32)
+```
 
 ### Record Formats
 
@@ -184,13 +189,11 @@ Content flags specify platform, architecture, and file attributes:
 
 ### 40-bit Flags (v4+)
 
-Build 58221+ extends to 40 bits:
+Build 58221+ extends to 40 bits, stored as `u32` + `u8`:
 
-- Bits 0-31: ContentFlags1 (as above)
+- Bits 0-31: Standard content flags (same as v2/v3)
 
-- Bits 32-39: ContentFlags2 (additional flags)
-
-- Bit 40: ContentFlags3 (single byte extension)
+- Bits 32-39: Extended flags (single byte, shifted left by 32)
 
 Common combinations:
 
@@ -271,22 +274,24 @@ For named files, Jenkins96 hash (hashlittle2) is used:
 
 ```rust
 fn jenkins96_hash(filename: &str) -> u64 {
-    // Normalize path: uppercase and forward slashes to backslashes
-    let normalized = filename.to_uppercase().replace('/', '\\');
+    // Normalize path: uppercase and backslashes to forward slashes
+    let normalized = filename.to_uppercase().replace('\\', "/");
     let bytes = normalized.as_bytes();
 
     // Jenkins hashlittle2 with 0xDEADBEEF seed
     // Initial values: pc = 0, pb = 0 (passed by reference)
     let (pc, pb) = hashlittle2(bytes, 0, 0);
 
-    // Combine into 64-bit hash (pc is high 32 bits)
-    ((pc as u64) << 32) | (pb as u64)
+    // WoW swaps the high/low 32-bit halves
+    let high = (hash64 >> 32) as u32;
+    let low = (hash64 & 0xFFFF_FFFF) as u32;
+    (u64::from(low) << 32) | u64::from(high)
 }
 ```
 
 **Important Jenkins96 Details**:
 
-- Paths are normalized to uppercase with backslashes
+- Paths are normalized to uppercase with forward slashes
 
 - The hash is 64-bit (8 bytes) not 96-bit despite the name
 
@@ -351,8 +356,8 @@ impl RootFile {
   - Same 17-byte block header format as V2
 
 - **Build 58221 (11.1.0)**: Extended content flags to 40 bits (V4)
-  - Same 17-byte block header format
-  - Additional content flag bits via unk2/unk3 fields
+  - **18-byte block header** (content_flags grows from 4 to 5 bytes)
+  - 40-bit content flags stored as `u32` + `u8`
 
 ### Version Detection Code
 
@@ -368,15 +373,20 @@ fn detect_root_version(data: &[u8]) -> RootVersion {
         return RootVersion::V1; // Pre-30080, no magic
     }
 
-    // Read potential file counts
-    let count1 = u32::from_le_bytes(data[4..8].try_into().unwrap());
-    let count2 = u32::from_le_bytes(data[8..12].try_into().unwrap());
+    // Read the two u32 values after magic
+    let value1 = u32::from_le_bytes(data[4..8].try_into().unwrap());
+    let value2 = u32::from_le_bytes(data[8..12].try_into().unwrap());
 
-    // Heuristic: if first value < 1000, likely v3+ with header_size
-    if count1 < 1000 {
-        RootVersion::V3 // 50893+
+    // Heuristic: header_size in [16, 100) and version in [2, 4]
+    // indicates v3+ with explicit header_size/version fields
+    if (16..100).contains(&value1) && matches!(value2, 2..=4) {
+        // Version field at offset 8 distinguishes v3 and v4
+        match value2 {
+            4 => RootVersion::V4,
+            _ => RootVersion::V3,
+        }
     } else {
-        RootVersion::V2 // 30080+
+        RootVersion::V2 // 30080+, value1 is total_file_count
     }
 }
 ```
