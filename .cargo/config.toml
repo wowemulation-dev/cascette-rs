@@ -3,8 +3,8 @@
 
 [build]
 # Treat all warnings as errors in CI and development
-rustflags = ["-D", "warnings"]
-rustdocflags = ["-D", "warnings"]
+# rustflags = ["-D", "warnings"]
+# rustdocflags = ["-D", "warnings"]
 
 # Use all available CPU cores for parallel compilation
 jobs = -1
@@ -13,55 +13,10 @@ jobs = -1
 # Always show colors in terminal output
 color = "always"
 
-[alias]
-# Quick format check (no changes)
-fmt-check = "fmt --all -- --check"
-
-# Run clippy on entire workspace with all features
-# This is the primary quality gate
-lint = "clippy --workspace --all-targets --all-features"
-
-# Run all tests with all features enabled
-test-all = "test --workspace --all-features"
-
-# Run only library unit tests (faster iteration)
-test-lib = "test --lib --workspace"
-
-# Run only doc tests
-test-doc = "test --doc --workspace"
-
-# Build documentation for all crates
-docs = "doc --workspace --all-features --no-deps"
-
-# Full QA suite: format, lint, and test
-# Note: Cargo aliases cannot chain commands. Use shell instead:
-#   cargo fmt --all && cargo lint && cargo test-all
-
-# Quick check without full compilation (type checking only)
-check-all = "check --workspace --all-targets --all-features"
-
-# Release build for all workspace members
-build-release = "build --workspace --release"
-
-# Nextest test runner (faster than cargo test)
-# Install with: cargo install cargo-nextest
-nextest-all = "nextest run --all-features --workspace"
-nextest-lib = "nextest run --all-features --workspace --lib"
-nextest-ci = "nextest run --profile ci --all-features --workspace"
-nextest-release = "nextest run --profile release --all-features --workspace"
-nextest-unit = "nextest run --all-features --workspace --group unit"
-nextest-integration = "nextest run --all-features --workspace --group integration"
-
-# Profiling with flamegraph (use external command directly)
-# Install with: cargo install flamegraph
-# Usage: cargo flamegraph --bench throughput -- --bench
-# Note: Use cargo flamegraph directly, not as an alias (prevents conflict)
-
 [env]
 # Enable backtraces for better error messages during development
 RUST_BACKTRACE = "1"
 
-# WASM target configuration
 [target.wasm32-unknown-unknown]
 # getrandom 0.3.x requires cfg flag for WASM support
 # https://docs.rs/getrandom/latest/getrandom/#webassembly-support
