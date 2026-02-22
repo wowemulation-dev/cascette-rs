@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1771728789835,
+  "lastUpdate": 1771729623513,
   "repoUrl": "https://github.com/wowemulation-dev/cascette-rs",
   "entries": {
     "Benchmark": [
@@ -1049,6 +1049,48 @@ window.BENCHMARK_DATA = {
             "name": "bpsv_generation/summary/all",
             "value": 208,
             "range": "± 6",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "daniel@kogito.network",
+            "name": "Daniel S. Reichenbach",
+            "username": "danielsreichenbach"
+          },
+          "committer": {
+            "email": "daniel@kogito.network",
+            "name": "Daniel S. Reichenbach",
+            "username": "danielsreichenbach"
+          },
+          "distinct": true,
+          "id": "273024ec891e168d4dc9a4be90afc15b31b63779",
+          "message": "docs: remove banned words and redundant prose from docs and comments\n\nRemove writing guideline violations across documentation and code\ncomments: \"comprehensive\" (21 occurrences), \"very\" (12), \"production-ready\"\n(2), \"seamlessly\" (2), \"full/complete\" overstatements (8), filler\nparagraphs, and synonym lists. Trim redundant doc comments from\ncascette-cache and cascette-client-storage. Remove filler sections from\nmdBook docs (blte, cdn, archives, mirroring, salsa20, format-transitions).",
+          "timestamp": "2026-02-22T10:04:58+07:00",
+          "tree_id": "cee3649df7b416fd9d7b132762845276b5da8fc1",
+          "url": "https://github.com/wowemulation-dev/cascette-rs/commit/273024ec891e168d4dc9a4be90afc15b31b63779"
+        },
+        "date": 1771729623170,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "bpsv_generation/versions/wow",
+            "value": 1905,
+            "range": "± 8",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "bpsv_generation/cdns/wow",
+            "value": 1206,
+            "range": "± 9",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "bpsv_generation/summary/all",
+            "value": 208,
+            "range": "± 1",
             "unit": "ns/iter"
           }
         ]
