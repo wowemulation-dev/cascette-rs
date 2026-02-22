@@ -281,7 +281,7 @@ impl<K: CacheKey + 'static> MultiLayerCacheImpl<K> {
         }
     }
 
-    /// Get comprehensive multi-layer statistics including validation metrics
+    /// Get multi-layer statistics including validation metrics
     pub async fn multi_layer_stats(&self) -> CacheResult<MultiLayerStats> {
         let mut layer_stats = Vec::new();
 
@@ -1033,7 +1033,7 @@ pub struct LayerStats {
     pub hit_rate: f64,
 }
 
-/// Comprehensive multi-layer cache statistics
+/// Multi-layer cache statistics
 #[derive(Debug, Clone)]
 pub struct MultiLayerStats {
     pub layer_stats: Vec<LayerStats>,

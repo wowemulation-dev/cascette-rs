@@ -288,7 +288,7 @@ field.
 
 ### Rust Implementation (cascette-formats)
 
-Complete BPSV parser and builder with full format support:
+BPSV parser and builder:
 
 - **Schema parsing** - Field name, type, and size validation (complete)
 
@@ -305,16 +305,15 @@ Complete BPSV parser and builder with full format support:
 
 **Validation Status:**
 
-- Perfect byte-for-byte round-trip validation
+- Byte-for-byte round-trip validation
 
 - Integration tests with real Ribbit API responses
 
 - Handles empty values, comments, and sequence numbers
 
-- Full compatibility with Battle.net BPSV files
+- Validated against real Battle.net BPSV files
 
 ### Analysis and Usage
 
 BPSV format is used throughout the NGDP system for configuration and version
-data. The Rust implementation provides the foundation for parsing all
-configuration files served by the Ribbit API.
+data.

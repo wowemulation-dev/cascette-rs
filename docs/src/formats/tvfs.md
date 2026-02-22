@@ -29,17 +29,9 @@ combinations.
 
 ## Overview
 
-TVFS provides:
-
-- Virtual file system abstraction
-
-- Multi-product content management
-
-- Namespace-based file organization
-
-- Build-agnostic file references
-
-- Content deduplication across products
+TVFS organizes content into namespaces rather than per-build file trees. This
+allows multiple products and regions to share common assets through a single
+content-addressed storage layer, with deduplication across products.
 
 ## Architecture
 

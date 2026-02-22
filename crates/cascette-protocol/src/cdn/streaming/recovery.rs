@@ -1,6 +1,6 @@
 //! Advanced error recovery system for CDN streaming
 //!
-//! This module provides comprehensive error recovery capabilities including:
+//! This module provides error recovery capabilities including:
 //! - Automatic retry with exponential backoff and jitter
 //! - CDN server failover with intelligent selection
 //! - Partial content recovery and resume capabilities
@@ -1107,7 +1107,7 @@ impl<T: HttpClient> ErrorRecoverySystem<T> {
     }
 }
 
-/// Comprehensive recovery statistics
+/// Recovery statistics
 #[derive(Debug, Clone)]
 pub struct RecoveryStatistics {
     /// Total number of retry attempts

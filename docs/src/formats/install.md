@@ -6,17 +6,9 @@ user preferences.
 
 ## Overview
 
-The Install manifest provides:
-
-- Mapping of files to installation paths
-
-- Tag-based file categorization
-
-- Selective installation support
-
-- Platform-specific file filtering
-
-- Size tracking for installation planning
+The Install manifest maps content keys to installation paths and uses a tag
+bitmap system for selective installation based on platform, architecture, and
+locale. File sizes in entries support installation size estimation.
 
 ## File Structure
 

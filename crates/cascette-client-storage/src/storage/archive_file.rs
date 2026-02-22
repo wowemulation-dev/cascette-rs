@@ -47,12 +47,12 @@ struct ArchiveFile {
 }
 
 impl ArchiveManager {
-    /// Create new archive manager
+    /// Creates an archive manager with no compression (pass-through).
     pub fn new(base_path: impl AsRef<Path>) -> Self {
         Self::with_compression(base_path, CompressionMode::None)
     }
 
-    /// Create new archive manager with specific compression mode
+    /// Creates an archive manager that applies `compression` to new writes.
     pub fn with_compression(base_path: impl AsRef<Path>, compression: CompressionMode) -> Self {
         Self {
             archives: DashMap::new(),
@@ -62,12 +62,12 @@ impl ArchiveManager {
         }
     }
 
-    /// Set the default compression mode
+    /// Changes the compression applied to subsequent writes.
     pub const fn set_compression_mode(&mut self, mode: CompressionMode) {
         self.default_compression = mode;
     }
 
-    /// Get the current default compression mode
+    /// Compression mode applied to new writes.
     pub const fn compression_mode(&self) -> CompressionMode {
         self.default_compression
     }

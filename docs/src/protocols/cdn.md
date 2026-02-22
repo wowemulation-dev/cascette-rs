@@ -118,19 +118,6 @@ response**
 
 - **full_hash**: Complete content hash
 
-### Path Field Extraction
-
-The `cdn_path` MUST be obtained from the CDN configuration response:
-
-```python
-# CORRECT: Extract Path from CDN response
-cdn_response = query_ribbit("v2/products/wow_classic/cdns")
-cdn_path = cdn_response["Path"]  # Returns "tpr/wow"
-
-# WRONG: Assuming path from product name
-cdn_path = f"tpr/{product_name}"  # DO NOT DO THIS
-```
-
 ### Path vs ProductPath Distinction
 
 **IMPORTANT**: The CDN response contains two path fields that serve different
@@ -156,16 +143,9 @@ configuration.
 
 ### Directory Sharding
 
-The two-level directory structure (`hash[0:2]`/`hash[2:4]`) serves multiple
-purposes:
-
-- Distributes files across filesystem directories
-
-- Reduces directory listing overhead
-
-- Enables efficient cache invalidation
-
-- Supports CDN edge server optimization
+The two-level directory structure (`hash[0:2]`/`hash[2:4]`) distributes files
+across 65,536 directories, keeping per-directory file counts low for filesystem
+and CDN edge server performance.
 
 ### Example URLs
 
@@ -217,129 +197,16 @@ Note the different path structures:
 
 ## Configuration Files
 
-### BuildConfig
+### BuildConfig, CDNConfig, PatchConfig
 
-BuildConfig contains build-specific references to system files.
+See [Configuration File Formats](../formats/config-formats.md) for the
+authoritative documentation of BuildConfig, CDNConfig, and PatchConfig fields,
+formats, and examples.
 
-#### Modern BuildConfig Fields
-
-**CRITICAL**: Most fields contain pairs of values: `<content-key>
-<encoding-key>`
-
-- The first hash is the content key (unencoded)
-
-- The second hash is the encoding key (used for CDN fetches)
-- **root**: Content key for the root file (lookup encoding key via encoding
-file)
-
-- **install**: Content key and encoding key pairs for install manifest
-
-- **download**: Content key and encoding key pairs for download manifest
-
-- **encoding**: Content key and **encoding key for the encoding file itself**
-
-- **size**: Content key and encoding key pairs for size file
-
-**Important**: To fetch any file except the encoding file:
-
-1. First fetch the encoding file using its encoding key (second hash)
-2. Parse the encoding file to find the target file's encoding key
-3. Use that encoding key to fetch the actual file from CDN
-
-Additional size variations:
-
-- **size-download**: Download-specific size information
-
-- **size-install**: Install-specific size information
-
-#### Historical BuildConfig Fields
-
-- **patch**: Reference to patch configuration
-
-- **patch-config**: Patch-specific configuration
-
-- **build-name**: Human-readable build name
-
-- **build-uid**: Unique build identifier
-
-- **build-product**: Product identifier
-
-- **build-playbuild-installer**: Installer build reference
-
-#### Example BuildConfig
-
-```text
-# Build configuration
-root = 1234567890abcdef1234567890abcdef
-encoding = abcdef1234567890abcdef1234567890
-install = 567890abcdef1234567890abcdef123456
-download = 90abcdef1234567890abcdef1234567890
-size = def1234567890abcdef1234567890abcdef
-build-name = 11.0.2.56421
-build-product = wow
-build-uid = wow_x86_64
-```
-
-### CDNConfig
-
-CDNConfig specifies CDN server configuration and content archives.
-
-#### Modern CDNConfig Fields
-
-- **archives**: List of archive file content keys
-
-#### Historical CDNConfig Fields
-
-- **archives-index-size**: Size of archive index files
-
-- **archive-group**: Archive grouping configuration
-
-- **patch-archives**: Archives containing patch data
-
-- **file-index**: File index references
-
-- **file-index-size**: File index sizes
-
-- **patch-file-index**: Patch-specific file indices
-
-- **patch-file-index-size**: Patch file index sizes
-
-#### Example CDNConfig
-
-```text
-# CDN configuration
-archives = 1234567890abcdef1234567890abcdef abcdef1234567890abcdef1234567890
-567890abcdef1234567890abcdef123456
-archives-index-size = 1048576 2097152 4194304
-```
-
-### PatchConfig (Historical)
-
-PatchConfig defines differential patches using ESpec encoding instructions.
-
-#### Patch Entry Format
-
-```text
-patch-entry = {source_hash} {target_hash} {size} {espec}
-```
-
-- **source_hash**: Content key of source file
-
-- **target_hash**: Content key of target file
-
-- **size**: Size of resulting patch data
-
-- **espec**: Encoding specification (see [ESpec Documentation](espec.md))
-
-#### Example PatchConfig
-
-```text
-# Patch configuration
-patch-entry = 1234567890abcdef1234567890abcdef abcdef1234567890abcdef1234567890
-524288 b:{16K*=z}
-patch-entry = 567890abcdef1234567890abcdef123456
-90abcdef1234567890abcdef1234567890 1048576 b:{32K*=z:{6}}
-```
+The key point for CDN access: most BuildConfig fields contain `<content-key>
+<encoding-key>` pairs. Use the encoding key (second hash) for CDN fetches.
+The encoding file must be fetched first to resolve encoding keys for other
+files.
 
 ## CDN Response Structure
 
@@ -406,36 +273,9 @@ Both BuildConfig AND CDNConfig are required for proper NGDP operation:
 
 ### CDN Path Resolution
 
-**NEVER hardcode CDN paths**. Always follow this process:
-
-1. Query `v2/products/{product}/cdns` endpoint
-2. Parse BPSV response to extract `Path` field
-3. Use extracted path for all URL construction
-4. Cache path per product for session duration
-
-```rust
-// Example implementation requirement
-struct CdnClient {
-    // Cache paths discovered from CDN responses
-    path_cache: HashMap<String, String>,
-}
-
-impl CdnClient {
-    async fn get_cdn_path(&mut self, product: &str) -> Result<String> {
-        if let Some(cached) = self.path_cache.get(product) {
-            return Ok(cached.clone());
-        }
-
-        // Query CDN endpoint
-        let response = query_ribbit(&format!("v2/products/{}/cdns", product)).await?;
-        let path = response.get_field("Path")?;
-
-        // Cache for future use
-        self.path_cache.insert(product.to_string(), path.clone());
-        Ok(path)
-    }
-}
-```
+Extract the `Path` field from CDN responses as described in the
+[Configuration Retrieval Process](#configuration-retrieval-process) section.
+Cache the path per product for the session duration.
 
 ### Fallback Logic
 
@@ -850,35 +690,9 @@ Implement efficient caching:
 
 ## Security Considerations
 
-### HTTPS Usage
-
-- Use HTTPS for all content delivery
-
-- Validate TLS certificates
-
-- Use appropriate cipher suites
-
-- Handle certificate pinning if required
-
-### Content Integrity
-
-- Verify all content hashes
-
-- Reject content with mismatched hashes
-
-- Implement checksum validation
-
-- Handle corrupted content gracefully
-
-### Key Management
-
-For encrypted content:
-
-- Securely store encryption keys
-
-- Implement key rotation support
-
-- Handle key expiration
-
-- Protect keys from unauthorized access
+- **Transport**: Use HTTPS with certificate validation for all CDN requests
+- **Content Integrity**: Verify MD5 content hashes after download; reject
+  mismatches and retry from an alternate CDN
+- **Encryption Keys**: CASC uses static community-maintained keys; see
+  [Salsa20 Encryption](../encryption/salsa20.md) for key management details
 

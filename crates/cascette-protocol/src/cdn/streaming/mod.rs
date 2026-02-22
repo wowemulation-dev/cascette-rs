@@ -10,7 +10,7 @@
 //!
 //! - **HTTP Client Abstraction**: Trait-based HTTP client supporting range requests
 //! - **Range Request Management**: Efficient handling and coalescing of byte ranges
-//! - **Streaming Configuration**: Comprehensive tuning for performance and reliability
+//! - **Streaming Configuration**: Tunable options for performance and reliability
 //! - **Error Handling**: Detailed error context with recovery suggestions
 //!
 //! # Usage Examples
@@ -194,7 +194,7 @@
 //! - **Bandwidth Monitoring**: Adaptive optimization based on network conditions
 //! - **Priority Queuing**: Request prioritization with backpressure control
 //! - **Advanced Error Recovery**: Exponential backoff with intelligent failover
-//! - **Comprehensive Metrics**: Production-ready monitoring with Prometheus export
+//! - **Metrics**: Prometheus export for monitoring
 //! - **Zero-Copy Optimizations**: Buffer pooling and memory-efficient streaming
 //! - **Network Condition Adaptation**: Dynamic adjustment to network quality
 //!

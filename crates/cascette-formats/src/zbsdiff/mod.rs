@@ -78,7 +78,7 @@
 //! - ✅ Memory-based patch application
 //! - ✅ Streaming patch application for large files
 //! - ✅ Basic patch creation (non-optimized)
-//! - ✅ Comprehensive error handling
+//! - ✅ Error handling
 //! - ✅ Round-trip validation
 
 mod builder;

@@ -416,7 +416,7 @@ mod tests {
 
     #[test]
     fn test_error_with_very_long_strings() {
-        // Test with very long strings that might occur with large NGDP keys
+        // Test with long strings that might occur with large NGDP keys
         let long_key = "a".repeat(10000);
         let error = CacheError::KeyNotFound(long_key.clone());
         let error_str = error.to_string();

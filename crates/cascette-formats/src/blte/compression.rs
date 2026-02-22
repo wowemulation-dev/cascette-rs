@@ -18,12 +18,8 @@ pub const MAX_DECOMPRESSION_SIZE: usize = 1024 * 1024 * 1024;
 /// Compress data using specified mode
 pub fn compress_chunk(data: &[u8], mode: CompressionMode) -> BlteResult<Vec<u8>> {
     match mode {
-        CompressionMode::None => {
-            // No compression - return as-is
-            Ok(data.to_vec())
-        }
+        CompressionMode::None => Ok(data.to_vec()),
         CompressionMode::ZLib => {
-            // Use ZLib compression with default level
             let mut encoder = ZlibEncoder::new(data, Compression::default());
             let mut compressed = Vec::new();
             encoder.read_to_end(&mut compressed).map_err(|e| {
@@ -40,10 +36,8 @@ pub fn compress_chunk(data: &[u8], mode: CompressionMode) -> BlteResult<Vec<u8>>
             let max_compressed_size = lz4_flex::block::get_maximum_output_size(data.len());
             let mut result = vec![0u8; 8 + max_compressed_size];
 
-            // Write decompressed size header
             result[0..8].copy_from_slice(&decompressed_size.to_le_bytes());
 
-            // Compress directly into the result buffer (after the 8-byte header)
             let compressed_len = lz4_flex::block::compress_into(data, &mut result[8..])
                 .map_err(|e| BlteError::CompressionError(format!("LZ4 compression failed: {e}")))?;
 
@@ -67,12 +61,8 @@ pub fn compress_chunk(data: &[u8], mode: CompressionMode) -> BlteResult<Vec<u8>>
 /// Decompress chunk data
 pub fn decompress_chunk(data: &[u8], mode: CompressionMode) -> BlteResult<Vec<u8>> {
     match mode {
-        CompressionMode::None => {
-            // No compression - return as-is
-            Ok(data.to_vec())
-        }
+        CompressionMode::None => Ok(data.to_vec()),
         CompressionMode::ZLib => {
-            // Use ZLib decompression with size limit
             let mut decoder = ZlibDecoder::new(data);
             let mut decompressed = Vec::new();
 
@@ -108,7 +98,6 @@ pub fn decompress_chunk(data: &[u8], mode: CompressionMode) -> BlteResult<Vec<u8
                 ));
             }
 
-            // Read decompressed size (64-bit little-endian)
             let size_header = u64::from_le_bytes(
                 data[0..8]
                     .try_into()

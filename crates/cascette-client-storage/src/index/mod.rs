@@ -188,12 +188,12 @@ impl IndexEntry {
         }
     }
 
-    /// Get archive ID from location
+    /// Archive file number (data.XXX) from the packed location.
     pub const fn archive_id(&self) -> u16 {
         self.archive_location.archive_id
     }
 
-    /// Get archive offset from location
+    /// Byte offset within the archive file.
     pub const fn archive_offset(&self) -> u32 {
         self.archive_location.archive_offset
     }

@@ -610,7 +610,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_advanced_range_coalescer() {
-        // Set a very high threshold to ensure coalescing happens
+        // Set a high threshold to ensure coalescing happens
         let config = StreamingConfig {
             range_coalesce_threshold: 1024 * 1024, // 1MB
             ..Default::default()

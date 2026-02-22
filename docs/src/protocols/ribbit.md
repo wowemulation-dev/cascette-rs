@@ -18,7 +18,7 @@ checksums
 
 - **V2 Protocol**: Raw BPSV responses without metadata
 
-- **Full endpoint support**: Includes summary, products, certificates, and OCSP
+- **Endpoints**: summary, products, certificates, and OCSP
 
 ### HTTP TACT v1
 

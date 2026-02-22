@@ -4,23 +4,23 @@
 //! NGDP/CASC system. Each key type is designed for specific use cases and
 //! provides efficient serialization, hashing, and comparison.
 
+#![allow(missing_docs)]
+
 use cascette_crypto::{ContentKey, EncodingKey, Jenkins96};
 use serde::{Deserialize, Serialize};
 use std::fmt::{self, Write};
 use std::sync::OnceLock;
 
-/// Pre-computed hash for fast cache key lookups
-/// Optimized for NGDP workloads with hot path caching
+/// Pre-computed hash for fast cache key lookups.
+/// Uses Jenkins96, optimized for NGDP workloads with hot path caching.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct FastHash {
-    /// Jenkins96 hash value
     pub hash64: u64,
-    /// 32-bit hash for faster comparisons
+    /// Truncated for faster initial comparisons
     pub hash32: u32,
 }
 
 impl FastHash {
-    /// Create a new fast hash from data
     #[inline]
     pub fn from_bytes(data: &[u8]) -> Self {
         let jenkins = Jenkins96::hash(data);
@@ -30,34 +30,30 @@ impl FastHash {
         }
     }
 
-    /// Create from string data with optimized path
     #[inline]
     pub fn from_string(data: &str) -> Self {
         Self::from_bytes(data.as_bytes())
     }
 
-    /// Fast equality check using 32-bit hash first
+    /// Checks 32-bit hash first for early rejection
     #[inline]
     pub fn fast_eq(&self, other: &Self) -> bool {
         self.hash32 == other.hash32 && self.hash64 == other.hash64
     }
 }
 
-/// Optimized string buffer for cache keys
 /// Reduces allocations for NGDP-specific key patterns
 struct CacheKeyBuffer {
     buffer: String,
 }
 
 impl CacheKeyBuffer {
-    /// Create buffer with capacity for typical NGDP keys
     fn new() -> Self {
         Self {
             buffer: String::with_capacity(128), // Most keys < 128 bytes
         }
     }
 
-    /// Format key with pre-allocated buffer
     fn format_ribbit(&mut self, region: &str, endpoint: &str, product: Option<&str>) -> &str {
         self.buffer.clear();
         self.buffer.push_str("ribbit:");
@@ -71,7 +67,6 @@ impl CacheKeyBuffer {
         &self.buffer
     }
 
-    /// Format config key with pre-allocated buffer
     fn format_config(&mut self, config_type: &str, hash: &str) -> &str {
         self.buffer.clear();
         self.buffer.push_str("config:");
@@ -81,7 +76,6 @@ impl CacheKeyBuffer {
         &self.buffer
     }
 
-    /// Format BLTE key with pre-allocated buffer
     fn format_blte(&mut self, encoding_key: &EncodingKey, block_index: Option<u32>) -> &str {
         self.buffer.clear();
         self.buffer.push_str("blte:");
@@ -98,22 +92,18 @@ thread_local! {
     static KEY_BUFFER: std::cell::RefCell<CacheKeyBuffer> = std::cell::RefCell::new(CacheKeyBuffer::new());
 }
 
-/// Key for Ribbit service discovery cache
-///
+/// Key for Ribbit service discovery cache.
 /// Caches responses from Ribbit endpoints for service discovery and version information.
-/// Optimized for high-frequency access patterns in NGDP systems.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RibbitKey {
-    /// Ribbit endpoint (e.g., "summary", "products/wow")
+    /// e.g., "summary", "products/wow"
     pub endpoint: String,
-    /// Region code (e.g., "us", "eu", "cn")
+    /// e.g., "us", "eu", "cn"
     pub region: String,
-    /// Product identifier (e.g., "wow", "d3")
+    /// e.g., "wow", "d3"
     pub product: Option<String>,
-    /// Pre-computed cache key for performance
     #[serde(skip)]
     cached_key: OnceLock<String>,
-    /// Pre-computed hash for fast lookups
     #[serde(skip)]
     cached_hash: OnceLock<FastHash>,
 }
@@ -138,7 +128,6 @@ impl std::hash::Hash for RibbitKey {
 }
 
 impl RibbitKey {
-    /// Create a new Ribbit cache key
     pub fn new(endpoint: impl Into<String>, region: impl Into<String>) -> Self {
         Self {
             endpoint: endpoint.into(),
@@ -149,7 +138,6 @@ impl RibbitKey {
         }
     }
 
-    /// Create a new Ribbit cache key with product
     pub fn with_product(
         endpoint: impl Into<String>,
         region: impl Into<String>,
@@ -164,7 +152,6 @@ impl RibbitKey {
         }
     }
 
-    /// Get string representation for cache storage (cached)
     pub fn as_cache_key(&self) -> &str {
         self.cached_key.get_or_init(|| {
             KEY_BUFFER.with(|buf| {
@@ -176,7 +163,6 @@ impl RibbitKey {
         })
     }
 
-    /// Get fast hash for efficient lookups
     pub fn fast_hash(&self) -> FastHash {
         *self
             .cached_hash
@@ -190,20 +176,15 @@ impl fmt::Display for RibbitKey {
     }
 }
 
-/// Key for configuration file cache
-///
-/// Caches build configs, CDN configs, and patch configs.
-/// Optimized for NGDP configuration file access patterns.
+/// Key for configuration file cache (build configs, CDN configs, patch configs).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConfigKey {
-    /// Configuration type ("buildconfig", "cdnconfig", "patchconfig")
+    /// "buildconfig", "cdnconfig", "patchconfig"
     pub config_type: String,
-    /// Configuration hash (usually MD5)
+    /// Usually MD5
     pub hash: String,
-    /// Pre-computed cache key for performance
     #[serde(skip)]
     cached_key: OnceLock<String>,
-    /// Pre-computed hash for fast lookups
     #[serde(skip)]
     cached_hash: OnceLock<FastHash>,
 }
@@ -224,7 +205,6 @@ impl std::hash::Hash for ConfigKey {
 }
 
 impl ConfigKey {
-    /// Create a new config cache key
     pub fn new(config_type: impl Into<String>, hash: impl Into<String>) -> Self {
         Self {
             config_type: config_type.into(),
@@ -234,7 +214,6 @@ impl ConfigKey {
         }
     }
 
-    /// Get string representation for cache storage (cached)
     pub fn as_cache_key(&self) -> &str {
         self.cached_key.get_or_init(|| {
             KEY_BUFFER.with(|buf| {
@@ -246,7 +225,6 @@ impl ConfigKey {
         })
     }
 
-    /// Get fast hash for efficient lookups
     pub fn fast_hash(&self) -> FastHash {
         *self
             .cached_hash
@@ -260,19 +238,12 @@ impl fmt::Display for ConfigKey {
     }
 }
 
-/// Key for BLTE content cache
-///
-/// Caches compressed and encrypted BLTE blocks.
-/// Optimized for large NGDP file access with block-level granularity.
+/// Key for BLTE content cache with block-level granularity.
 #[derive(Debug, Clone)]
 pub struct BlteKey {
-    /// Encoding key that identifies the BLTE data
     pub encoding_key: EncodingKey,
-    /// Optional block index for chunked content
     pub block_index: Option<u32>,
-    /// Pre-computed cache key for performance
     cached_key: OnceLock<String>,
-    /// Pre-computed hash for fast lookups
     cached_hash: OnceLock<FastHash>,
 }
 
@@ -292,7 +263,6 @@ impl std::hash::Hash for BlteKey {
 }
 
 impl BlteKey {
-    /// Create a new BLTE cache key
     pub fn new(encoding_key: EncodingKey) -> Self {
         Self {
             encoding_key,
@@ -302,7 +272,6 @@ impl BlteKey {
         }
     }
 
-    /// Create a new BLTE cache key for a specific block
     pub fn with_block(encoding_key: EncodingKey, block_index: u32) -> Self {
         Self {
             encoding_key,
@@ -312,7 +281,6 @@ impl BlteKey {
         }
     }
 
-    /// Get string representation for cache storage (cached)
     pub fn as_cache_key(&self) -> &str {
         self.cached_key.get_or_init(|| {
             KEY_BUFFER.with(|buf| {
@@ -324,7 +292,6 @@ impl BlteKey {
         })
     }
 
-    /// Get fast hash for efficient lookups
     pub fn fast_hash(&self) -> FastHash {
         *self
             .cached_hash
@@ -338,17 +305,11 @@ impl fmt::Display for BlteKey {
     }
 }
 
-/// Key for content data cache
-///
-/// Caches decompressed content data by content key.
-/// Optimized for large decompressed NGDP content access.
+/// Key for decompressed content data cache.
 #[derive(Debug, Clone)]
 pub struct ContentCacheKey {
-    /// Content key that identifies the data
     pub content_key: ContentKey,
-    /// Pre-computed cache key for performance
     cached_key: OnceLock<String>,
-    /// Pre-computed hash for fast lookups
     cached_hash: OnceLock<FastHash>,
 }
 
@@ -367,7 +328,6 @@ impl std::hash::Hash for ContentCacheKey {
 }
 
 impl ContentCacheKey {
-    /// Create a new content cache key
     pub fn new(content_key: ContentKey) -> Self {
         Self {
             content_key,
@@ -376,13 +336,11 @@ impl ContentCacheKey {
         }
     }
 
-    /// Get string representation for cache storage (cached)
     pub fn as_cache_key(&self) -> &str {
         self.cached_key
             .get_or_init(|| format!("content:{}", self.content_key))
     }
 
-    /// Get fast hash for efficient lookups
     pub fn fast_hash(&self) -> FastHash {
         *self
             .cached_hash
@@ -396,20 +354,14 @@ impl fmt::Display for ContentCacheKey {
     }
 }
 
-/// Key for archive index cache
-///
-/// Caches parsed archive index data.
-/// Optimized for NGDP archive index access patterns.
+/// Key for parsed archive index data cache.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ArchiveIndexKey {
-    /// Archive name (e.g., "data.000")
+    /// e.g., "data.000"
     pub archive_name: String,
-    /// Index hash for validation
     pub index_hash: String,
-    /// Pre-computed cache key for performance
     #[serde(skip)]
     cached_key: OnceLock<String>,
-    /// Pre-computed hash for fast lookups
     #[serde(skip)]
     cached_hash: OnceLock<FastHash>,
 }
@@ -430,7 +382,6 @@ impl std::hash::Hash for ArchiveIndexKey {
 }
 
 impl ArchiveIndexKey {
-    /// Create a new archive index cache key
     pub fn new(archive_name: impl Into<String>, index_hash: impl Into<String>) -> Self {
         Self {
             archive_name: archive_name.into(),
@@ -440,13 +391,11 @@ impl ArchiveIndexKey {
         }
     }
 
-    /// Get string representation for cache storage (cached)
     pub fn as_cache_key(&self) -> &str {
         self.cached_key
             .get_or_init(|| format!("index:{}:{}", self.archive_name, self.index_hash))
     }
 
-    /// Get fast hash for efficient lookups
     pub fn fast_hash(&self) -> FastHash {
         *self
             .cached_hash
@@ -460,21 +409,14 @@ impl fmt::Display for ArchiveIndexKey {
     }
 }
 
-/// Key for manifest cache
-///
-/// Caches root files, encoding files, install manifests, and download manifests.
-/// Optimized for large NGDP manifest file access.
+/// Key for manifest cache (root, encoding, install, download manifests).
 #[derive(Debug, Clone)]
 pub struct ManifestKey {
-    /// Manifest type ("root", "encoding", "install", "download")
+    /// "root", "encoding", "install", "download"
     pub manifest_type: String,
-    /// Content key of the manifest
     pub content_key: ContentKey,
-    /// Optional version for additional specificity
     pub version: Option<String>,
-    /// Pre-computed cache key for performance
     cached_key: OnceLock<String>,
-    /// Pre-computed hash for fast lookups
     cached_hash: OnceLock<FastHash>,
 }
 
@@ -497,7 +439,6 @@ impl std::hash::Hash for ManifestKey {
 }
 
 impl ManifestKey {
-    /// Create a new manifest cache key
     pub fn new(manifest_type: impl Into<String>, content_key: ContentKey) -> Self {
         Self {
             manifest_type: manifest_type.into(),
@@ -508,7 +449,6 @@ impl ManifestKey {
         }
     }
 
-    /// Create a new manifest cache key with version
     pub fn with_version(
         manifest_type: impl Into<String>,
         content_key: ContentKey,
@@ -523,7 +463,6 @@ impl ManifestKey {
         }
     }
 
-    /// Get string representation for cache storage (cached)
     pub fn as_cache_key(&self) -> &str {
         self.cached_key.get_or_init(|| match &self.version {
             Some(version) => format!(
@@ -534,7 +473,6 @@ impl ManifestKey {
         })
     }
 
-    /// Get fast hash for efficient lookups
     pub fn fast_hash(&self) -> FastHash {
         *self
             .cached_hash
@@ -548,19 +486,13 @@ impl fmt::Display for ManifestKey {
     }
 }
 
-/// Root file cache key for raw and parsed root files
-/// Optimized for NGDP root file caching with version tracking.
+/// Root file cache key for raw and parsed root files with version tracking.
 #[derive(Debug, Clone)]
 pub struct RootFileKey {
-    /// Root file content key
     pub content_key: ContentKey,
-    /// Whether this is parsed (true) or raw (false) content
     pub is_parsed: bool,
-    /// Optional root file version for specificity
     pub version: Option<u8>,
-    /// Pre-computed cache key for performance
     cached_key: OnceLock<String>,
-    /// Pre-computed hash for fast lookups
     cached_hash: OnceLock<FastHash>,
 }
 
@@ -583,7 +515,6 @@ impl std::hash::Hash for RootFileKey {
 }
 
 impl RootFileKey {
-    /// Create a new raw root file cache key
     pub fn new_raw(content_key: ContentKey) -> Self {
         Self {
             content_key,
@@ -594,7 +525,6 @@ impl RootFileKey {
         }
     }
 
-    /// Create a new parsed root file cache key
     pub fn new_parsed(content_key: ContentKey) -> Self {
         Self {
             content_key,
@@ -605,7 +535,6 @@ impl RootFileKey {
         }
     }
 
-    /// Create a versioned root file cache key
     pub fn with_version(content_key: ContentKey, is_parsed: bool, version: u8) -> Self {
         Self {
             content_key,
@@ -616,7 +545,6 @@ impl RootFileKey {
         }
     }
 
-    /// Get string representation for cache storage (cached)
     pub fn as_cache_key(&self) -> &str {
         self.cached_key.get_or_init(|| {
             let content_type = if self.is_parsed { "parsed" } else { "raw" };
@@ -627,7 +555,6 @@ impl RootFileKey {
         })
     }
 
-    /// Get fast hash for efficient lookups
     pub fn fast_hash(&self) -> FastHash {
         *self
             .cached_hash
@@ -641,19 +568,14 @@ impl fmt::Display for RootFileKey {
     }
 }
 
-/// Encoding file cache key for NGDP encoding files
-/// Supports both complete and partial encoding file caching.
+/// Encoding file cache key, supports both complete and paged caching.
 #[derive(Debug, Clone)]
 pub struct EncodingFileKey {
-    /// Encoding file key
     pub encoding_key: EncodingKey,
-    /// Optional page number for streaming large encoding files
+    /// For streaming large encoding files
     pub page: Option<u32>,
-    /// Whether this is parsed (true) or raw (false) content
     pub is_parsed: bool,
-    /// Pre-computed cache key for performance
     cached_key: OnceLock<String>,
-    /// Pre-computed hash for fast lookups
     cached_hash: OnceLock<FastHash>,
 }
 
@@ -676,7 +598,6 @@ impl std::hash::Hash for EncodingFileKey {
 }
 
 impl EncodingFileKey {
-    /// Create a new raw encoding file cache key
     pub fn new_raw(encoding_key: EncodingKey) -> Self {
         Self {
             encoding_key,
@@ -687,7 +608,6 @@ impl EncodingFileKey {
         }
     }
 
-    /// Create a new parsed encoding file cache key
     pub fn new_parsed(encoding_key: EncodingKey) -> Self {
         Self {
             encoding_key,
@@ -698,7 +618,6 @@ impl EncodingFileKey {
         }
     }
 
-    /// Create a paged encoding file cache key for streaming
     pub fn with_page(encoding_key: EncodingKey, page: u32, is_parsed: bool) -> Self {
         Self {
             encoding_key,
@@ -709,7 +628,6 @@ impl EncodingFileKey {
         }
     }
 
-    /// Get string representation for cache storage (cached)
     pub fn as_cache_key(&self) -> &str {
         self.cached_key.get_or_init(|| {
             let content_type = if self.is_parsed { "parsed" } else { "raw" };
@@ -720,7 +638,6 @@ impl EncodingFileKey {
         })
     }
 
-    /// Get fast hash for efficient lookups
     pub fn fast_hash(&self) -> FastHash {
         *self
             .cached_hash
@@ -734,19 +651,13 @@ impl fmt::Display for EncodingFileKey {
     }
 }
 
-/// Archive range cache key for partial archive access
-/// Optimized for CASC archive range requests and BLTE block caching.
+/// Archive range cache key for partial archive access and BLTE block caching.
 #[derive(Debug, Clone)]
 pub struct ArchiveRangeKey {
-    /// Archive name/identifier
     pub archive_id: String,
-    /// Start offset within the archive
     pub start_offset: u64,
-    /// Length of the range
     pub length: u32,
-    /// Pre-computed cache key for performance
     cached_key: OnceLock<String>,
-    /// Pre-computed hash for fast lookups
     cached_hash: OnceLock<FastHash>,
 }
 
@@ -769,7 +680,6 @@ impl std::hash::Hash for ArchiveRangeKey {
 }
 
 impl ArchiveRangeKey {
-    /// Create a new archive range cache key
     pub fn new(archive_id: impl Into<String>, start_offset: u64, length: u32) -> Self {
         Self {
             archive_id: archive_id.into(),
@@ -780,7 +690,6 @@ impl ArchiveRangeKey {
         }
     }
 
-    /// Get string representation for cache storage (cached)
     pub fn as_cache_key(&self) -> &str {
         self.cached_key.get_or_init(|| {
             format!(
@@ -790,7 +699,6 @@ impl ArchiveRangeKey {
         })
     }
 
-    /// Get fast hash for efficient lookups
     pub fn fast_hash(&self) -> FastHash {
         *self
             .cached_hash
@@ -804,19 +712,13 @@ impl fmt::Display for ArchiveRangeKey {
     }
 }
 
-/// BLTE block cache key for individual BLTE blocks
-/// Enables granular caching of compressed/encrypted content blocks.
+/// BLTE block cache key for granular caching of individual content blocks.
 #[derive(Debug, Clone)]
 pub struct BlteBlockKey {
-    /// Content key that contains this block
     pub content_key: ContentKey,
-    /// Block index within the BLTE structure
     pub block_index: u32,
-    /// Whether this is decompressed (true) or raw (false) content
     pub is_decompressed: bool,
-    /// Pre-computed cache key for performance
     cached_key: OnceLock<String>,
-    /// Pre-computed hash for fast lookups
     cached_hash: OnceLock<FastHash>,
 }
 
@@ -839,7 +741,6 @@ impl std::hash::Hash for BlteBlockKey {
 }
 
 impl BlteBlockKey {
-    /// Create a new raw BLTE block cache key
     pub fn new_raw(content_key: ContentKey, block_index: u32) -> Self {
         Self {
             content_key,
@@ -850,7 +751,6 @@ impl BlteBlockKey {
         }
     }
 
-    /// Create a new decompressed BLTE block cache key
     pub fn new_decompressed(content_key: ContentKey, block_index: u32) -> Self {
         Self {
             content_key,
@@ -861,7 +761,6 @@ impl BlteBlockKey {
         }
     }
 
-    /// Get string representation for cache storage (cached)
     pub fn as_cache_key(&self) -> &str {
         self.cached_key.get_or_init(|| {
             let block_type = if self.is_decompressed {
@@ -876,7 +775,6 @@ impl BlteBlockKey {
         })
     }
 
-    /// Get fast hash for efficient lookups
     pub fn fast_hash(&self) -> FastHash {
         *self
             .cached_hash
@@ -890,20 +788,15 @@ impl fmt::Display for BlteBlockKey {
     }
 }
 
-/// Generic cache key trait
-///
-/// Provides a common interface for all cache key types.
-/// Optimized for NGDP workload patterns with fast hashing.
+/// Common interface for all cache key types.
 pub trait CacheKey: fmt::Debug + Clone + PartialEq + Eq + std::hash::Hash + Send + Sync {
-    /// Get string representation for cache storage
     fn as_cache_key(&self) -> &str;
 
-    /// Get Jenkins96 hash for efficient lookups (legacy compatibility)
+    /// Jenkins96 hash (legacy compatibility)
     fn hash_key(&self) -> Jenkins96 {
         Jenkins96::hash(self.as_cache_key().as_bytes())
     }
 
-    /// Get fast hash for optimized lookups
     fn fast_hash(&self) -> FastHash {
         FastHash::from_string(self.as_cache_key())
     }

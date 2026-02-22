@@ -221,7 +221,7 @@ Based on verified format evolution across retail and Classic:
    - **Early Builds**: 13-17 fields (simple key=value)
    - **VFS Era**: 756-1,716 fields (massive vfs-* expansion)
    - **Feature Support**: Handle `feature-placeholder` and VFS fields
-   - **Backwards Compatibility**: Support both formats seamlessly
+   - **Backwards Compatibility**: Support both v1 (legacy) and v3 (modern) formats
 
 3. **Product-Specific Logic**:
    - **wow_classic_era**: Always modern format (v3, TSFM)
@@ -262,20 +262,12 @@ Based on verified format evolution across retail and Classic:
 
 ## Future Analysis
 
-### Pending Investigations
+Formats not yet tracked for transitions:
 
-1. **Encoding File Evolution**: Track changes in encoding table structure
-2. **Install/Download Format Changes**: Verify tag system evolution
-3. **Archive Index Evolution**: Examine index file format stability
-4. **Patch File Introduction**: When and how patch files were added
-
-### Recommended Verification
-
-1. **Extended Build Range**: Analyze builds from 6.0.0 through current
-2. **Beta/PTR Analysis**: Examine test realm formats for early change detection
-3. **Cross-Region Validation**: Verify format consistency across different
-locales
-4. **Edge Case Testing**: Test format boundaries and error conditions
+- Encoding file table structure changes
+- Install/Download tag system evolution
+- Archive index format stability
+- Patch file introduction timeline
 
 ## References
 

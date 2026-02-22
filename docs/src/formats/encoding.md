@@ -308,13 +308,7 @@ struct CKeyEntry {
 }
 ```
 
-Use cases:
-
-- Different regional encryption
-
-- Progressive quality levels
-
-- Platform-specific optimizations
+Use cases include different regional encryption and progressive quality levels.
 
 ## Performance Considerations
 
@@ -502,7 +496,7 @@ let final_data = decompress_with_espec(file_data, result.espec)?;
 
 ### Rust Implementation (cascette-formats)
 
-Complete Encoding file parser and builder with full format support:
+Encoding file parser and builder:
 
 - **Header parsing** - Magic bytes, version, page sizes (complete)
 
@@ -527,7 +521,7 @@ instead of hardcoded 16 bytes (complete)
 
 **Validation Status:**
 
-- Perfect byte-for-byte round-trip validation with real WoW encoding files
+- Byte-for-byte round-trip validation with real WoW encoding files
 
 - Successfully processes WoW Classic Era encoding files
 

@@ -11,33 +11,13 @@ using NGDP/CASC.
 
 ## Rationale for Mirroring
 
-### Historical Preservation
+Blizzard removes older builds from CDN within days to weeks of new patches
+(see [Archival Urgency](#archival-urgency) below). Mirroring preserves builds
+that would otherwise be lost, enabling:
 
-- **Build Preservation**: Older builds are removed from CDN after patches
-
-- **Version Research**: Study game evolution and mechanics changes
-
-- **Asset Recovery**: Access to removed or modified content
-
-- **Private Servers**: Support for specific game versions
-
-### Technical Benefits
-
-- **Offline Access**: Work without internet connectivity
-
-- **Faster Access**: Local network speeds vs internet bandwidth
-
-- **Reduced CDN Load**: Minimize requests to Blizzard servers
-
-- **Development**: Test CASC implementations against known data
-
-### Risk Mitigation
-
-- **Service Discontinuation**: Protect against CDN shutdowns
-
-- **Content Removal**: Preserve intentionally removed content
-
-- **Region Restrictions**: Access content across geographic boundaries
+- **Preservation**: Maintain access to historical builds after CDN removal
+- **Development**: Test CASC implementations against known data offline
+- **Performance**: Local access avoids CDN latency and bandwidth limits
 
 ## Target Products
 
@@ -416,8 +396,8 @@ Key implementations examined:
 
 - **TACTSharp**: .NET extraction library with memory-mapped files
 
-These implementations demonstrate proven patterns for CDN interaction, content
-resolution, and monitoring strategies that inform cascette-rs design.
+These implementations informed cascette-rs design for CDN interaction and content
+resolution.
 
 ## Implementation Examples
 
@@ -529,29 +509,9 @@ python rebuild_metadata.py /mirror
 
 ## Future Considerations
 
-### Automation
-
-- Automated discovery and archival
-
-- Smart prioritization based on rarity
-
-- Predictive downloading before removal
-
-### Optimization
-
-- Differential compression between builds
-
-- Peer-to-peer distribution network
-
-- Cloud-native storage backends
-
-### Long-term Preservation
-
-- Multiple geographic replicas
-
-- Format migration strategies
-
-- Documentation preservation
+- Automated build discovery with predictive downloading before CDN removal
+- Differential compression between builds to reduce storage
+- Geographic replication for redundancy
 
 ## Tools and Resources
 
@@ -579,16 +539,5 @@ python rebuild_metadata.py /mirror
 
 - **Forums**: Technical discussions
 
-## Conclusion
-
-CDN mirroring requires:
-
-1. **Continuous monitoring** for new builds
-2. **Rapid archival** within retention windows
-3. **Verification** of data integrity
-4. **Efficient storage** with deduplication
-5. **Community coordination** for completeness
-
 The 14-15 day retention window for retail WoW makes automated monitoring and
-archival essential. Implement incremental updates and verification to maintain
-archive integrity while minimizing bandwidth usage.
+archival essential.

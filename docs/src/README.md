@@ -16,14 +16,12 @@ client from 2008. While functional, this approach has limitations:
 - **Fragmented tooling**: Many tools exist only as abandoned Windows binaries
 - **Limited modding**: Technical constraints restrict what can be modified
 
-Modern Classic clients offer significant advantages:
+Modern Classic clients differ from 3.3.5a:
 
 - **Active development**: Blizzard continues updating these clients
 - **Better architecture**: NGDP/CASC enables content addressing and streaming
 - **Cross-platform**: Same content format works on Windows, macOS, and Linux
 - **Preservation**: Community CDN mirrors ensure historical builds remain available
-
-cascette-rs provides the foundation for working with these modern clients.
 
 ## What You Can Do with cascette-rs
 
@@ -98,32 +96,23 @@ archives
 
 - **Parallel Downloads**: Multiple files retrieved simultaneously
 
-- **Pre-release Distribution**: Encrypted content can be distributed before
-launch
+- **Pre-release Distribution**: Encrypted content can be distributed before launch
 
 ### For Development
 
-- **Content Deduplication**: Identical files stored once
-
-- **Version Management**: Multiple game versions share common assets
+- **Content Deduplication**: Identical files stored once across versions
 
 - **Stream Installation**: Games playable before download completes
 
 - **Platform Independence**: Same content system across operating systems
 
-- **Content Protection**: Encryption prevents early access to unreleased content
-
 ## Core Concepts
 
 ### Content Addressing
 
-Files are identified by cryptographic hashes of their content. This enables:
-
-- Automatic deduplication
-
-- Integrity verification
-
-- Cache efficiency
+Files are identified by MD5 hashes of their content. Identical content
+produces identical hashes, enabling deduplication, integrity verification,
+and cache efficiency.
 
 ### System Files
 
@@ -151,13 +140,9 @@ BLTE (Block Table Encoded) is the container format for game data. It supports:
 
 ### Content Encryption
 
-NGDP supports encryption for:
-
-- Pre-release content distribution
-
-- Protecting unreleased game data
-
-- Secure content delivery before activation
+NGDP supports Salsa20 encryption for distributing content before its release
+date. Files can be pre-positioned on CDN while remaining inaccessible until
+decryption keys are provided.
 
 ## Technical Specifications
 

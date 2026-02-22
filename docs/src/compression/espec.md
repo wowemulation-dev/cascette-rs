@@ -626,7 +626,7 @@ fn parse_zlib(input: &str) -> IResult<&str, ESpec> {
 
 ### Rust Implementation (cascette-formats)
 
-ESpec parser with full specification support:
+ESpec parser:
 
 - **Plain (n)** - Uncompressed content
 - **ZLib compression (z)** - Level [1,9], variant (mpq/zlib/lz4hc), window bits [8,15]; all optional, 3-param syntax supported

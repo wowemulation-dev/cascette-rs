@@ -45,7 +45,7 @@ We welcome contributions from the community! Here are some ways you can help:
 
 - **Suggest features**: Open an issue with your enhancement proposal
 
-- **Improve documentation**: Help make our docs clearer and more comprehensive
+- **Improve documentation**: Help make our docs clearer and more complete
 
 - **Add examples**: Create examples showing different use cases
 

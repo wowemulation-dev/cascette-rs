@@ -6,15 +6,9 @@ maintaining streaming capabilities.
 
 ## Overview
 
-Salsa20 in CASC provides:
-
-- Stream cipher encryption for efficient processing
-
-- Per-file key management
-
-- Initialization vector (IV) support
-
-- 128-bit (16-byte) keys with tau constants
+CASC uses Salsa20 with 128-bit (16-byte) keys and the tau ("expand 16-byte k")
+constants. Each encrypted BLTE block specifies a 64-bit key name for key store
+lookup and a 4-byte IV that is extended to 8 bytes by zero-padding.
 
 ## Algorithm Details
 
@@ -360,11 +354,11 @@ impl BufferedSalsa20 {
 
 ## Security Considerations
 
-1. **Key Management**: Never store keys in source code
-2. **IV Uniqueness**: Ensure IVs are never reused with same key
-3. **Side Channels**: Use constant-time operations
-4. **Key Rotation**: Regularly update encryption keys
-5. **Secure Storage**: Protect key storage locations
+1. **IV Uniqueness**: IVs must not be reused with the same key (CASC handles
+   this via chunk index XOR)
+2. **Side Channels**: Use constant-time operations for key comparison
+3. **Key Storage**: CASC encryption keys are static and community-maintained;
+   the `TactKeyStore` keeps them in memory with redacted debug output
 
 ## Testing
 
@@ -525,21 +519,8 @@ state[15] = 0x6b206574; // "te k"
 
 ### IV Extension
 
-The IV (1-8 bytes, typically 4) is zero-padded to 8 bytes for the Salsa20
-nonce. The block index is XORed into the first 4 bytes before extension:
-
-```rust
-// XOR block index with first 4 IV bytes (for multi-chunk BLTE)
-let block_bytes = (block_index as u32).to_le_bytes();
-for i in 0..std::cmp::min(4, iv.len()) {
-    iv[i] ^= block_bytes[i];
-}
-
-// Zero-pad IV to 8 bytes (NOT duplicated)
-let mut nonce = [0u8; 8];
-nonce[..iv.len()].copy_from_slice(&iv);
-// Bytes iv.len()..8 remain zero
-```
+The IV modification and zero-padding algorithm is documented in the
+[CASC Implementation](#iv-modification-for-chunks) section above.
 
 ## Validation Status
 

@@ -1,6 +1,6 @@
 //! Error types for ZBSDIFF1 format operations
 //!
-//! This module provides comprehensive error handling for all ZBSDIFF1 operations
+//! This module provides error handling for all ZBSDIFF1 operations
 //! including parsing, validation, compression, and patch application.
 
 use thiserror::Error;

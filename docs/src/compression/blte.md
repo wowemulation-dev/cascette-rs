@@ -396,15 +396,8 @@ Some chunks may have:
 
 ### Large Files
 
-Benefits of multi-chunk structure:
-
-- Parallel decompression
-
-- Streaming installation
-
-- Partial downloads
-
-- Resume capability
+Multi-chunk structure enables parallel decompression and partial/resumable
+downloads, allowing streaming installation of large files.
 
 ## Error Handling
 
@@ -419,31 +412,10 @@ Critical checks:
 
 ## Implementation Considerations
 
-### Memory Efficiency
-
-- Stream processing for large files
-
-- Don't load entire file into memory
-
-- Process chunks incrementally
-
-### Performance Optimization
-
-- Parallel chunk decompression
-
-- Cache decompressed data
-
-- Reuse decompression contexts
-
-### Security
-
-- Always verify checksums
-
-- Validate sizes before allocation
-
-- Handle encryption keys securely
-
-- Prevent decompression bombs
+- Process chunks incrementally rather than loading entire files into memory
+- Decompress chunks in parallel where possible
+- Verify MD5 checksums before decompression
+- Validate sizes before allocation to prevent decompression bombs
 
 ## Integration with NGDP
 
@@ -479,7 +451,7 @@ xxd -s 4 -l 4 -e file.bin
 
 ### Rust Implementation (cascette-formats)
 
-Complete BLTE parser and builder with full format support:
+BLTE parser and builder:
 
 - **None (N)** - Uncompressed passthrough (complete)
 
@@ -497,7 +469,7 @@ Complete BLTE parser and builder with full format support:
 
 **Validation Status:**
 
-- Byte-perfect round-trip validation with real WoW files
+- Byte-for-byte round-trip validation with real WoW files
 
 - Successfully processes encoding, root, install, and download files
 
@@ -521,10 +493,6 @@ See <https://github.com/wowemulation-dev/cascette-py> for the Python
 implementation.
 ## References
 
-- BLTE is specific to Blizzard's NGDP system
-
-- Replaces older MPQ compression schemes
-
-- Designed for CDN delivery and streaming installation
-
-- Supports future compression algorithms through encoding type system
+- [wowdev.wiki BLTE documentation](https://wowdev.wiki/CASC#BLTE)
+- See [ESpec Format](espec.md) for encoding specification strings
+- See [Salsa20 Encryption](salsa20.md) for encrypted block details

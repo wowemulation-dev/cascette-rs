@@ -7,7 +7,7 @@ use thiserror::Error;
 
 use tracing::debug;
 
-/// Comprehensive error type for streaming operations
+/// Error type for streaming operations
 ///
 /// Provides detailed context about streaming failures including network errors,
 /// protocol violations, and resource constraints. Each error variant includes

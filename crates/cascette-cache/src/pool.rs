@@ -342,7 +342,7 @@ impl Default for NgdpMemoryPool {
     }
 }
 
-/// Comprehensive statistics for the NGDP memory pool
+/// Statistics for the NGDP memory pool
 #[derive(Debug, Clone)]
 pub struct NgdpPoolStats {
     /// Total allocations across all size classes

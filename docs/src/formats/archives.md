@@ -257,14 +257,8 @@ providing a unique identifier that validates the index contents.
 **Key Length**: ALWAYS 9 bytes (truncated for space efficiency in local storage)
 **Implementation**: `cascette-client-storage/src/index.rs`
 
-### ⚠️ CRITICAL DIFFERENCES FROM CDN INDEX
-
-- Uses content keys (MD5), NOT encoding keys
-- ALWAYS uses 9-byte truncated keys (never variable)
-- Bucket-based structure, NOT sequential chunks
-- Header at start, NOT footer at end
-- Different entry format (5 bytes vs variable)
-- Different validation (Jenkins hash vs MD5)
+See the [comparison table](#key-differences-between-index-systems) at the end
+of this document for a full side-by-side comparison.
 
 ## IDX Journal Files (.idx) - CASC Local Storage
 
@@ -444,40 +438,13 @@ if decompressed.len() != expected_size as usize {
 
 ## Archive Groups
 
-Archive Groups are **locally generated mega-indices** that combine multiple CDN archive
-indices into a single unified lookup structure. They are always created client-side
-by merging downloaded archive index files, never downloaded directly from the CDN.
-They improve content retrieval performance by reducing the number of index files
-that must be searched.
+Archive Groups are client-generated mega-indices that combine multiple CDN archive
+indices into a single lookup structure, reducing search time from scanning hundreds
+of individual `.index` files to a single binary search. They use 6-byte offset
+fields (2-byte archive index + 4-byte offset) and are identified by `archive-group`
+and `patch-archive-group` fields in CDN config.
 
-### Purpose
-
-Without Archive Groups:
-
-- Content lookup requires searching many individual `.index` files
-- Each lookup performs multiple binary searches across hundreds of indices
-
-With Archive Groups:
-
-- Content lookup uses a single combined index structure
-- Dramatically reduces search time from O(n) to O(1) in most cases
-
-### Key Characteristics
-
-- **Always client-generated**: Created locally by merging downloaded CDN index
-  files
-- **Never downloaded**: Archive groups are generated client-side, not fetched
-  from CDN
-- **Hash-based assignment**: Uses deterministic
-  `hash(encoding_key) % 65536` algorithm
-- **Performance focused**: Reduces lookup latency for frequently accessed content
-- **Referenced in configs**: Identified by `archive-group` and
-  `patch-archive-group` fields
-- **Binary format**: Uses 6-byte offset fields (2-byte archive index + 4-byte offset)
-
-Archive Groups are critical implementation details for Battle.net compatibility that
-significantly improve the performance of CASC content access through local generation
-and unified lookup structures.
+See [Archive-Groups](archive-groups.md) for the full format specification.
 
 ## File Organization
 
@@ -497,48 +464,6 @@ data/
 │   └── ...
 └── patch/           # Patch archives
 ```
-
-## ⚠️ NEVER CONFUSE THESE FORMATS - SUMMARY
-
-### CDN Archive Index (.index files)
-
-- **File Extension**: `.index`
-- **Protocol**: TACT (Network)
-- **Location**: Downloaded from CDN
-- **Key Type**: Encoding keys (from Encoding file)
-- **Key Length**: Variable (footer's `ekey_length`, typically 16 bytes)
-- **Structure**: Sequential chunks with 28-byte footer
-- **Entry Size**: Variable (`ekey_length + size_bytes + offset_bytes`)
-- **Validation**: MD5 footer hash
-- **Implementation**: `cascette-formats/src/archive/index.rs`
-
-### Local Storage Index (.idx files)
-
-- **File Extension**: `.idx`
-- **Protocol**: CASC (Local storage)
-- **Location**: Client `Data/data/` directory
-- **Key Type**: Content keys (from Root file)
-- **Key Length**: ALWAYS 9 bytes (truncated)
-- **Structure**: Bucket algorithm with header
-- **Entry Size**: 5 bytes (1 archive ID + 4 offset)
-- **Validation**: Jenkins hash
-- **Implementation**: `cascette-client-storage/src/index.rs`
-
-### Content Resolution Paths
-
-**CDN Download Path:**
-
-```text
-File Path → Root → Content Key → Encoding → Encoding Key → CDN Index (.index) → CDN Archive
-```
-
-**Local Retrieval Path:**
-
-```text
-File Path → Root → Content Key → Local Index (.idx) → Local Data (.data)
-```
-
-**NEVER mix these two systems or their key types.**
 
 ## Version History
 

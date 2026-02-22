@@ -6,17 +6,10 @@ and their download order.
 
 ## Overview
 
-The Download manifest enables:
-
-- Playable game state before full download
-
-- Priority-based content streaming
-
-- Download size estimation
-
-- Bandwidth optimization
-
-- Progressive installation
+The Download manifest assigns a priority to each file entry so the client can
+download essential content first (enabling play before full download) and
+stream remaining content in the background. Tag bitmaps enable per-platform
+and per-locale filtering. File sizes in entries support progress estimation.
 
 ## File Structure
 

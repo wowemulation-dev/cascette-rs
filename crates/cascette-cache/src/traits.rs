@@ -6,6 +6,11 @@
 //!
 //! # Platform Support
 //!
+//! Trait method names and signatures are self-documenting; see per-method
+//! doc comments for behavioral notes only.
+
+#![allow(missing_docs)]
+//!
 //! On native platforms, cache implementations must be `Send + Sync` for
 //! concurrent access across threads.
 //!
@@ -27,47 +32,30 @@ use std::time::Instant;
 // ============================================================================
 
 /// Core async cache trait
-///
-/// Provides the fundamental operations for all cache implementations.
-/// Implementations should be thread-safe and support concurrent access.
 #[cfg(not(target_arch = "wasm32"))]
 #[async_trait]
 pub trait AsyncCache<K: CacheKey>: Send + Sync {
-    /// Get a value from the cache
-    ///
-    /// Returns `None` if the key doesn't exist or has expired.
+    /// Returns None if expired.
     async fn get(&self, key: &K) -> CacheResult<Option<Bytes>>;
 
-    /// Put a value into the cache
-    ///
-    /// The value will be stored with the default TTL configured for the cache.
+    /// Uses the default TTL configured for the cache.
     async fn put(&self, key: K, value: Bytes) -> CacheResult<()>;
 
-    /// Put a value into the cache with a specific TTL
-    ///
-    /// The value will expire after the specified duration.
     async fn put_with_ttl(&self, key: K, value: Bytes, ttl: Duration) -> CacheResult<()>;
 
-    /// Check if a key exists in the cache
-    ///
-    /// Returns `true` if the key exists and has not expired.
+    /// Returns false for expired entries.
     async fn contains(&self, key: &K) -> CacheResult<bool>;
 
-    /// Remove a key from the cache
-    ///
-    /// Returns `true` if the key was present and removed.
+    /// Returns true if the key was present and removed.
     async fn remove(&self, key: &K) -> CacheResult<bool>;
 
-    /// Clear all entries from the cache
     async fn clear(&self) -> CacheResult<()>;
 
-    /// Get cache statistics
     async fn stats(&self) -> CacheResult<CacheStats>;
 
-    /// Get the current size of the cache (number of entries)
+    /// Entry count, not byte size.
     async fn size(&self) -> CacheResult<usize>;
 
-    /// Check if the cache is empty
     async fn is_empty(&self) -> CacheResult<bool> {
         Ok(self.size().await? == 0)
     }
@@ -77,48 +65,31 @@ pub trait AsyncCache<K: CacheKey>: Send + Sync {
 // WASM platform AsyncCache trait (single-threaded, no Send required)
 // ============================================================================
 
-/// Core async cache trait for WASM
-///
-/// Provides the fundamental operations for browser-based cache implementations.
-/// WASM caches are single-threaded and don't require Send/Sync bounds.
+/// Core async cache trait for WASM (single-threaded, no Send/Sync).
 #[cfg(target_arch = "wasm32")]
 #[async_trait(?Send)]
 pub trait AsyncCache<K: CacheKey> {
-    /// Get a value from the cache
-    ///
-    /// Returns `None` if the key doesn't exist or has expired.
+    /// Returns None if expired.
     async fn get(&self, key: &K) -> CacheResult<Option<Bytes>>;
 
-    /// Put a value into the cache
-    ///
-    /// The value will be stored with the default TTL configured for the cache.
+    /// Uses the default TTL configured for the cache.
     async fn put(&self, key: K, value: Bytes) -> CacheResult<()>;
 
-    /// Put a value into the cache with a specific TTL
-    ///
-    /// The value will expire after the specified duration.
     async fn put_with_ttl(&self, key: K, value: Bytes, ttl: Duration) -> CacheResult<()>;
 
-    /// Check if a key exists in the cache
-    ///
-    /// Returns `true` if the key exists and has not expired.
+    /// Returns false for expired entries.
     async fn contains(&self, key: &K) -> CacheResult<bool>;
 
-    /// Remove a key from the cache
-    ///
-    /// Returns `true` if the key was present and removed.
+    /// Returns true if the key was present and removed.
     async fn remove(&self, key: &K) -> CacheResult<bool>;
 
-    /// Clear all entries from the cache
     async fn clear(&self) -> CacheResult<()>;
 
-    /// Get cache statistics
     async fn stats(&self) -> CacheResult<CacheStats>;
 
-    /// Get the current size of the cache (number of entries)
+    /// Entry count, not byte size.
     async fn size(&self) -> CacheResult<usize>;
 
-    /// Check if the cache is empty
     async fn is_empty(&self) -> CacheResult<bool> {
         Ok(self.size().await? == 0)
     }
@@ -128,26 +99,19 @@ pub trait AsyncCache<K: CacheKey> {
 // CacheEntry - Native only (uses std::time::Instant)
 // ============================================================================
 
-/// Cache entry metadata
-///
-/// Contains information about when an entry was created and when it expires.
-/// Only available on native platforms (uses std::time::Instant).
+/// Cache entry metadata. Native only (uses `std::time::Instant`).
 #[cfg(not(target_arch = "wasm32"))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CacheEntry<V> {
-    /// The cached value
     pub value: V,
-    /// When the entry was created
     pub created_at: Instant,
-    /// When the entry expires (None for no expiration)
+    /// None for no expiration
     pub expires_at: Option<Instant>,
-    /// Size of the entry in bytes
     pub size_bytes: usize,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 impl<V> CacheEntry<V> {
-    /// Create a new cache entry
     pub fn new(value: V, size_bytes: usize) -> Self {
         Self {
             value,
@@ -157,7 +121,6 @@ impl<V> CacheEntry<V> {
         }
     }
 
-    /// Create a new cache entry with TTL
     pub fn with_ttl(value: V, size_bytes: usize, ttl: Duration) -> Self {
         let now = Instant::now();
         Self {
@@ -168,20 +131,16 @@ impl<V> CacheEntry<V> {
         }
     }
 
-    /// Check if the entry has expired
     pub fn is_expired(&self) -> bool {
         self.expires_at
             .is_some_and(|expires| Instant::now() >= expires)
     }
 
-    /// Get the age of the entry
     pub fn age(&self) -> Duration {
         Instant::now() - self.created_at
     }
 
-    /// Get time remaining until expiration
-    /// Returns None if the entry doesn't expire, or Some(duration) where
-    /// duration may be zero if already expired
+    /// Returns None if no expiration set; zero duration if already expired.
     pub fn time_to_live(&self) -> Option<Duration> {
         self.expires_at
             .map(|expires| expires.saturating_duration_since(Instant::now()))
@@ -193,35 +152,22 @@ impl<V> CacheEntry<V> {
 // ============================================================================
 
 /// Invalidation strategy for cache entries
-///
-/// Defines when and how cache entries should be invalidated.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum InvalidationStrategy {
-    /// No automatic invalidation
     Never,
-    /// Time-based invalidation with TTL
     Ttl(Duration),
-    /// Least Recently Used eviction
     Lru,
-    /// Least Frequently Used eviction
     Lfu,
-    /// Size-based eviction when cache grows too large
-    Size {
-        /// Maximum number of entries
-        max_entries: usize,
-    },
-    /// Memory-based eviction when cache uses too much memory
+    Size { max_entries: usize },
     Memory {
-        /// Maximum memory usage in bytes
+        /// Bytes
         max_bytes: usize,
     },
-    /// Combined strategy using multiple criteria
     Combined(Vec<InvalidationStrategy>),
 }
 
 impl InvalidationStrategy {
-    /// Check if an entry should be invalidated based on this strategy
-    /// Only available on native platforms (requires CacheEntry with Instant).
+    /// Lru and Lfu are handled by the cache implementation, not here.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn should_invalidate<V>(
         &self,
@@ -240,7 +186,6 @@ impl InvalidationStrategy {
         }
     }
 
-    /// Get the TTL for this strategy, if applicable
     pub fn get_ttl(&self) -> Option<Duration> {
         match self {
             Self::Ttl(duration) => Some(*duration),
@@ -257,20 +202,13 @@ impl Default for InvalidationStrategy {
 }
 
 /// Cache eviction policy
-///
-/// Determines which entries to remove when the cache needs space.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum EvictionPolicy {
-    /// Least Recently Used
     #[default]
     Lru,
-    /// Least Frequently Used
     Lfu,
-    /// First In, First Out
     Fifo,
-    /// Random eviction
     Random,
-    /// Time-based (oldest first)
     Ttl,
 }
 
@@ -278,111 +216,65 @@ pub enum EvictionPolicy {
 // Advanced cache traits - Native only (require Send + Sync)
 // ============================================================================
 
-/// Cache warming trait
-///
-/// Allows caches to be pre-populated with data to improve initial performance.
-/// Only available on native platforms.
+/// Pre-populate cache from the underlying data source. Native only.
 #[cfg(not(target_arch = "wasm32"))]
 #[async_trait]
 pub trait CacheWarming<K: CacheKey> {
-    /// Warm the cache with a set of keys
-    ///
-    /// The cache should attempt to load data for these keys from the
-    /// underlying data source.
+    /// Returns the number of entries loaded.
     async fn warm(&self, keys: Vec<K>) -> CacheResult<usize>;
 
-    /// Check if the cache supports warming
     fn supports_warming(&self) -> bool {
         true
     }
 }
 
-/// Cache persistence trait
-///
-/// Allows caches to persist data to disk for durability across restarts.
-/// Only available on native platforms.
+/// Persist cache to disk across restarts. Native only.
 #[cfg(not(target_arch = "wasm32"))]
 #[async_trait]
 pub trait CachePersistence {
-    /// Save cache state to persistent storage
     async fn save(&self) -> CacheResult<()>;
-
-    /// Load cache state from persistent storage
     async fn load(&self) -> CacheResult<()>;
-
-    /// Check if persistence is enabled
     fn is_persistence_enabled(&self) -> bool;
 }
 
-/// Multi-layer cache trait
-///
-/// Supports hierarchical caching with multiple layers (L1, L2, etc.).
-/// Only available on native platforms.
+/// Hierarchical cache with multiple layers (L1, L2, etc.). Native only.
 #[cfg(not(target_arch = "wasm32"))]
 #[async_trait]
 pub trait MultiLayerCache<K: CacheKey>: AsyncCache<K> {
-    /// Get the number of cache layers
     fn layer_count(&self) -> usize;
-
-    /// Get a value from a specific cache layer
     async fn get_from_layer(&self, key: &K, layer: usize) -> CacheResult<Option<Bytes>>;
-
-    /// Put a value into a specific cache layer
     async fn put_to_layer(&self, key: K, value: Bytes, layer: usize) -> CacheResult<()>;
-
-    /// Promote a value from a lower layer to a higher layer
     async fn promote(&self, key: &K, from_layer: usize, to_layer: usize) -> CacheResult<bool>;
-
-    /// Get statistics for a specific layer
     async fn layer_stats(&self, layer: usize) -> CacheResult<CacheStats>;
 }
 
-/// Cache listener trait
-///
-/// Allows external code to be notified of cache events.
-/// Only available on native platforms.
+/// Cache event notifications. Native only.
 #[cfg(not(target_arch = "wasm32"))]
 #[async_trait]
 pub trait CacheListener<K: CacheKey> {
-    /// Called when an entry is added to the cache
     async fn on_put(&self, key: &K, size_bytes: usize);
-
-    /// Called when an entry is retrieved from the cache
     async fn on_get(&self, key: &K, hit: bool);
-
-    /// Called when an entry is removed from the cache
     async fn on_remove(&self, key: &K, size_bytes: usize);
-
-    /// Called when an entry expires
     async fn on_expire(&self, key: &K, size_bytes: usize);
-
-    /// Called when the cache is cleared
     async fn on_clear(&self);
 }
 
-/// Cache metrics trait
-///
-/// Provides detailed metrics for monitoring and debugging.
-/// Only available on native platforms.
+/// Cache metrics for monitoring. Native only.
 #[cfg(not(target_arch = "wasm32"))]
 #[async_trait]
 pub trait CacheMetrics {
-    /// Get hit rate (hits / total requests)
     async fn hit_rate(&self) -> f64;
 
-    /// Get miss rate (misses / total requests)
     async fn miss_rate(&self) -> f64 {
         1.0 - self.hit_rate().await
     }
 
-    /// Get average response time for cache operations
     async fn avg_response_time(&self) -> Duration;
 
-    /// Get cache utilization (used space / total space)
-    /// Returns a value between 0.0 and 1.0
+    /// 0.0 to 1.0
     async fn utilization(&self) -> f64;
 
-    /// Get eviction rate (evictions per second)
+    /// Evictions per second
     async fn eviction_rate(&self) -> f64;
 }
 
@@ -595,7 +487,7 @@ mod tests {
         let entry = CacheEntry::new("aging test".to_string(), 20);
         let initial_age = entry.age();
 
-        // Age should be very small initially
+        // Age should be small initially
         assert!(initial_age < Duration::from_millis(100));
 
         // Wait and check age progression
@@ -607,7 +499,7 @@ mod tests {
 
     #[test]
     fn test_invalidation_strategy_ttl_edge_cases() {
-        // Test with very short TTL
+        // Test with short TTL
         let short_ttl = Duration::from_millis(1);
         let strategy = InvalidationStrategy::Ttl(short_ttl);
         let entry = CacheEntry::with_ttl("short lived".to_string(), 10, short_ttl);

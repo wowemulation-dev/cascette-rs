@@ -1,6 +1,6 @@
 //! # cascette-protocol - High-Performance NGDP/CASC Network Protocol Implementation
 //!
-//! This crate provides a production-ready networking layer for NGDP (Next Generation Distribution
+//! This crate provides a networking layer for NGDP (Next Generation Distribution
 //! Pipeline) and CASC (Content Addressable Storage Container) operations used by Blizzard Entertainment
 //! games like World of Warcraft.
 //!
@@ -257,7 +257,7 @@
 //!
 //! ## Error Handling
 //!
-//! The library provides comprehensive error handling with automatic retries:
+//! The library provides error handling with automatic retries:
 //!
 //! ```rust,no_run
 //! use cascette_protocol::{RibbitTactClient, ProtocolError, ClientConfig};
@@ -321,7 +321,7 @@
 //!
 //! ## Integration with Other Crates
 //!
-//! This crate is designed to work seamlessly with other cascette-rs crates:
+//! This crate integrates with other cascette-rs crates:
 //!
 //! - `cascette-formats`: Parse BPSV responses and CASC data formats
 //! - `cascette-cache`: Advanced caching with persistent storage

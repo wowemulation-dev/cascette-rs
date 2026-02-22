@@ -5,7 +5,7 @@ use thiserror::Error;
 /// Archive operation result type
 pub type ArchiveResult<T> = Result<T, ArchiveError>;
 
-/// Comprehensive error types for archive operations
+/// Error types for archive operations
 #[derive(Debug, Error)]
 pub enum ArchiveError {
     /// Archive file not found

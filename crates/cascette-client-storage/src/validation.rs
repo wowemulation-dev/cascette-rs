@@ -1,4 +1,4 @@
-//! Comprehensive round-trip validation framework for binary formats
+//! Round-trip validation framework for binary formats
 //!
 //! This module provides validation traits and testing utilities to ensure that
 //! parse(build(data)) == data for all binary formats in the cascette-client-storage crate.
@@ -198,7 +198,7 @@ impl ValidationStats {
     }
 }
 
-/// Comprehensive validation runner for a specific binary format
+/// Validation runner for a specific binary format
 pub struct FormatValidator<T: BinaryFormatValidator> {
     /// Validation statistics
     pub stats: ValidationStats,
@@ -218,7 +218,7 @@ impl<T: BinaryFormatValidator> FormatValidator<T> {
         }
     }
 
-    /// Run comprehensive validation suite
+    /// Run the validation suite
     ///
     /// # Errors
     ///

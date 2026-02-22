@@ -60,7 +60,7 @@ impl Storage {
         Ok(installation)
     }
 
-    /// List all available installations
+    /// Returns names of all currently open installations.
     pub fn list_installations(&self) -> Vec<String> {
         self.installations
             .iter()
@@ -68,12 +68,12 @@ impl Storage {
             .collect()
     }
 
-    /// Get the base storage path
+    /// Base directory for CASC storage.
     pub const fn base_path(&self) -> &PathBuf {
         &self.base_path
     }
 
-    /// Get the storage configuration
+    /// Storage configuration used at creation time.
     pub const fn config(&self) -> &StorageConfig {
         &self.config
     }

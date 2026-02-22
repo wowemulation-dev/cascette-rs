@@ -379,7 +379,7 @@ mod tests {
 
     #[test]
     fn test_long_path() {
-        // Test with a very long path to ensure no buffer overflow issues
+        // Test with a long path to ensure no buffer overflow issues
         let long_path = "a/".repeat(500) + "file.txt";
         let entry = InstallFileEntry::new(
             long_path.clone(),

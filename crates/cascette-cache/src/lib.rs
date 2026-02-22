@@ -1,7 +1,7 @@
 #![allow(clippy::literal_string_with_formatting_args)]
 //! High-performance multi-layer caching for NGDP and CASC content distribution systems
 //!
-//! This crate provides a comprehensive caching solution designed specifically for
+//! This crate provides a caching solution designed specifically for
 //! NGDP (Next Generation Distribution Pipeline) and CASC (Content Addressable Storage Container)
 //! systems. It supports multiple cache layers, different eviction policies, and
 //! provides detailed metrics for performance monitoring.
@@ -12,7 +12,7 @@
 //! - **Type-Safe Keys**: Strongly-typed cache keys for different data types
 //! - **Async Operations**: Full async/await support for non-blocking cache operations
 //! - **Flexible Eviction**: Multiple eviction policies (LRU, LFU, TTL, size-based)
-//! - **Comprehensive Metrics**: Detailed performance and usage statistics
+//! - **Metrics**: Detailed performance and usage statistics
 //! - **Memory Pooling**: Optimized memory allocation for NGDP file patterns
 //! - **Thread-Safe**: Designed for high-concurrency NGDP server environments
 //! - **Configurable**: Extensive configuration options with sensible defaults

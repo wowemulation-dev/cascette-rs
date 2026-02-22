@@ -1,6 +1,6 @@
 //! Configuration structures for CDN streaming operations
 //!
-//! Provides comprehensive configuration options for tuning streaming behavior,
+//! Provides configuration options for tuning streaming behavior,
 //! connection management, retry policies, and buffer sizing.
 
 use std::time::Duration;

@@ -1,4 +1,4 @@
-//! Comprehensive metrics and monitoring for streaming CDN operations
+//! Metrics and monitoring for streaming CDN operations
 //!
 //! This module provides detailed metrics collection for monitoring CDN streaming
 //! performance, connection health, and system behavior in production environments.

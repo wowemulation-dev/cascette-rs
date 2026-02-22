@@ -195,12 +195,12 @@ impl<K: CacheKey + 'static> DiskCache<K> {
                     let current_disk_usage: u64 =
                         index_guard.values().map(|e| e.size_bytes as u64).sum();
 
-                    // Find expired entries and very old entries
+                    // Find expired entries and old entries
                     for (key, entry) in index_guard.iter() {
                         if entry.is_expired() {
                             entries_to_remove.push(key.clone());
                         } else if entry.age() > Duration::from_secs(24 * 60 * 60) {
-                            // Also clean up very old entries (older than 24 hours)
+                            // Also clean up entries older than 24 hours
                             // This uses the created_at field via the age() method
                             entries_to_remove.push(key.clone());
                         }

@@ -4,28 +4,23 @@
 //! different cache implementations. Each cache type has its own configuration
 //! with sensible defaults and validation.
 
+#![allow(missing_docs)]
+
 use crate::traits::{EvictionPolicy, InvalidationStrategy};
 use serde::{Deserialize, Serialize};
 use std::{path::PathBuf, time::Duration};
 
 /// Memory cache configuration
-///
-/// Configuration for in-memory cache implementations like LRU or HashMap-based caches.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MemoryCacheConfig {
-    /// Maximum number of entries in the cache
     pub max_entries: usize,
-    /// Maximum memory usage in bytes (None for unlimited)
+    /// Bytes; None for unlimited
     pub max_memory_bytes: Option<usize>,
-    /// Default TTL for entries (None for no expiration)
+    /// None for no expiration
     pub default_ttl: Option<Duration>,
-    /// Eviction policy when cache is full
     pub eviction_policy: EvictionPolicy,
-    /// Invalidation strategy
     pub invalidation_strategy: InvalidationStrategy,
-    /// Enable metrics collection
     pub enable_metrics: bool,
-    /// Cleanup interval for expired entries
     pub cleanup_interval: Duration,
 }
 
@@ -44,36 +39,30 @@ impl Default for MemoryCacheConfig {
 }
 
 impl MemoryCacheConfig {
-    /// Create a new memory cache configuration
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Set maximum number of entries
     pub fn with_max_entries(mut self, max_entries: usize) -> Self {
         self.max_entries = max_entries;
         self
     }
 
-    /// Set maximum memory usage
     pub fn with_max_memory(mut self, max_bytes: usize) -> Self {
         self.max_memory_bytes = Some(max_bytes);
         self
     }
 
-    /// Set default TTL
     pub fn with_default_ttl(mut self, ttl: Duration) -> Self {
         self.default_ttl = Some(ttl);
         self
     }
 
-    /// Set eviction policy
     pub fn with_eviction_policy(mut self, policy: EvictionPolicy) -> Self {
         self.eviction_policy = policy;
         self
     }
 
-    /// Validate the configuration
     pub fn validate(&self) -> Result<(), String> {
         if self.max_entries == 0 {
             return Err("max_entries must be greater than 0".to_string());
@@ -94,31 +83,21 @@ impl MemoryCacheConfig {
 }
 
 /// Disk cache configuration
-///
-/// Configuration for persistent disk-based cache implementations.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DiskCacheConfig {
-    /// Base directory for cache storage
     pub cache_dir: PathBuf,
-    /// Maximum number of files in the cache
     pub max_files: usize,
-    /// Maximum disk usage in bytes (None for unlimited)
+    /// Bytes; None for unlimited
     pub max_disk_bytes: Option<usize>,
-    /// Default TTL for entries (None for no expiration)
+    /// None for no expiration
     pub default_ttl: Option<Duration>,
-    /// Eviction policy when cache is full
     pub eviction_policy: EvictionPolicy,
-    /// Invalidation strategy
     pub invalidation_strategy: InvalidationStrategy,
-    /// Enable metrics collection
     pub enable_metrics: bool,
-    /// Cleanup interval for expired entries
     pub cleanup_interval: Duration,
-    /// Sync interval for flushing data to disk
     pub sync_interval: Duration,
-    /// Use subdirectories to avoid too many files in one directory
+    /// Avoids too many files in one directory
     pub use_subdirectories: bool,
-    /// Number of subdirectory levels (if use_subdirectories is true)
     pub subdirectory_levels: usize,
 }
 
@@ -141,7 +120,6 @@ impl Default for DiskCacheConfig {
 }
 
 impl DiskCacheConfig {
-    /// Create a new disk cache configuration
     pub fn new<P: Into<PathBuf>>(cache_dir: P) -> Self {
         Self {
             cache_dir: cache_dir.into(),
@@ -149,32 +127,27 @@ impl DiskCacheConfig {
         }
     }
 
-    /// Set maximum number of files
     pub fn with_max_files(mut self, max_files: usize) -> Self {
         self.max_files = max_files;
         self
     }
 
-    /// Set maximum disk usage
     pub fn with_max_disk_usage(mut self, max_bytes: usize) -> Self {
         self.max_disk_bytes = Some(max_bytes);
         self
     }
 
-    /// Set default TTL
     pub fn with_default_ttl(mut self, ttl: Duration) -> Self {
         self.default_ttl = Some(ttl);
         self
     }
 
-    /// Enable or disable subdirectories
     pub fn with_subdirectories(mut self, enable: bool, levels: usize) -> Self {
         self.use_subdirectories = enable;
         self.subdirectory_levels = levels;
         self
     }
 
-    /// Validate the configuration
     pub fn validate(&self) -> Result<(), String> {
         if self.max_files == 0 {
             return Err("max_files must be greater than 0".to_string());
@@ -205,20 +178,14 @@ impl DiskCacheConfig {
 }
 
 /// Multi-layer cache configuration
-///
-/// Configuration for hierarchical cache implementations with multiple layers.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MultiLayerCacheConfig {
-    /// Layer configurations (L1, L2, L3, etc.)
     pub layers: Vec<LayerConfig>,
-    /// Promotion strategy between layers
     pub promotion_strategy: PromotionStrategy,
-    /// Enable cross-layer statistics
     pub enable_cross_layer_stats: bool,
 }
 
 impl MultiLayerCacheConfig {
-    /// Create a new multi-layer cache configuration
     pub fn new() -> Self {
         Self {
             layers: Vec::new(),
@@ -227,25 +194,21 @@ impl MultiLayerCacheConfig {
         }
     }
 
-    /// Add a memory cache layer
     pub fn add_memory_layer(mut self, config: MemoryCacheConfig) -> Self {
         self.layers.push(LayerConfig::Memory(config));
         self
     }
 
-    /// Add a disk cache layer
     pub fn add_disk_layer(mut self, config: DiskCacheConfig) -> Self {
         self.layers.push(LayerConfig::Disk(config));
         self
     }
 
-    /// Set promotion strategy
     pub fn with_promotion_strategy(mut self, strategy: PromotionStrategy) -> Self {
         self.promotion_strategy = strategy;
         self
     }
 
-    /// Validate the configuration
     pub fn validate(&self) -> Result<(), String> {
         if self.layers.is_empty() {
             return Err("At least one layer must be configured".to_string());
@@ -265,17 +228,13 @@ impl Default for MultiLayerCacheConfig {
     }
 }
 
-/// Individual layer configuration
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum LayerConfig {
-    /// Memory cache layer
     Memory(MemoryCacheConfig),
-    /// Disk cache layer
     Disk(DiskCacheConfig),
 }
 
 impl LayerConfig {
-    /// Validate the layer configuration
     pub fn validate(&self) -> Result<(), String> {
         match self {
             LayerConfig::Memory(config) => config.validate(),
@@ -283,7 +242,6 @@ impl LayerConfig {
         }
     }
 
-    /// Get the invalidation strategy for this layer
     pub fn invalidation_strategy(&self) -> &InvalidationStrategy {
         match self {
             LayerConfig::Memory(config) => &config.invalidation_strategy,
@@ -291,7 +249,6 @@ impl LayerConfig {
         }
     }
 
-    /// Check if metrics are enabled for this layer
     pub fn metrics_enabled(&self) -> bool {
         match self {
             LayerConfig::Memory(config) => config.enable_metrics,
@@ -300,25 +257,13 @@ impl LayerConfig {
     }
 }
 
-/// Promotion strategy for multi-layer caches
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub enum PromotionStrategy {
-    /// Promote on any cache hit
     #[default]
     OnHit,
-    /// Promote after N hits
     AfterNHits(u32),
-    /// Promote based on access frequency
-    FrequencyBased {
-        /// Frequency threshold for promotion
-        threshold: f64,
-    },
-    /// Promote based on entry age
-    AgeBased {
-        /// Minimum age before promotion
-        min_age: Duration,
-    },
-    /// No automatic promotion
+    FrequencyBased { threshold: f64 },
+    AgeBased { min_age: Duration },
     Manual,
 }
 
@@ -336,18 +281,12 @@ impl PartialEq for PromotionStrategy {
     }
 }
 
-/// Cache warming configuration
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CacheWarmingConfig {
-    /// Enable cache warming on startup
     pub enabled: bool,
-    /// Maximum number of entries to warm
     pub max_entries: usize,
-    /// Timeout for warming operation
     pub timeout: Duration,
-    /// Concurrency level for warming
     pub concurrency: usize,
-    /// Predefined keys to warm
     pub predefined_keys: Vec<String>,
 }
 
@@ -363,22 +302,14 @@ impl Default for CacheWarmingConfig {
     }
 }
 
-/// Complete cache configuration
-///
-/// Top-level configuration that combines all cache settings.
+/// Top-level cache configuration combining all settings.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CacheConfig {
-    /// Memory cache configuration
     pub memory: MemoryCacheConfig,
-    /// Disk cache configuration
     pub disk: Option<DiskCacheConfig>,
-    /// Multi-layer cache configuration
     pub multi_layer: Option<MultiLayerCacheConfig>,
-    /// Cache warming configuration
     pub warming: CacheWarmingConfig,
-    /// Global metrics configuration
     pub metrics_enabled: bool,
-    /// Global tracing configuration
     pub tracing_enabled: bool,
 }
 
@@ -396,12 +327,10 @@ impl Default for CacheConfig {
 }
 
 impl CacheConfig {
-    /// Create a new cache configuration with memory caching only
     pub fn memory_only() -> Self {
         Self::default()
     }
 
-    /// Create a new cache configuration with memory and disk caching
     pub fn with_disk<P: Into<PathBuf>>(cache_dir: P) -> Self {
         Self {
             disk: Some(DiskCacheConfig::new(cache_dir)),
@@ -409,7 +338,6 @@ impl CacheConfig {
         }
     }
 
-    /// Create a multi-layer cache configuration
     pub fn multi_layer(config: MultiLayerCacheConfig) -> Self {
         Self {
             multi_layer: Some(config),
@@ -417,25 +345,21 @@ impl CacheConfig {
         }
     }
 
-    /// Enable cache warming
     pub fn with_warming(mut self, config: CacheWarmingConfig) -> Self {
         self.warming = config;
         self
     }
 
-    /// Enable or disable metrics
     pub fn with_metrics(mut self, enabled: bool) -> Self {
         self.metrics_enabled = enabled;
         self
     }
 
-    /// Enable or disable tracing
     pub fn with_tracing(mut self, enabled: bool) -> Self {
         self.tracing_enabled = enabled;
         self
     }
 
-    /// Validate the entire configuration
     pub fn validate(&self) -> Result<(), String> {
         self.memory.validate()?;
 
@@ -584,7 +508,7 @@ mod tests {
         };
         assert!(config4.validate().is_err());
 
-        // Test with very small values
+        // Test with small values
         let config5 = MemoryCacheConfig {
             cleanup_interval: Duration::from_nanos(1),
             ..Default::default()
@@ -747,7 +671,7 @@ mod tests {
         config.warming.enabled = false;
         assert!(config.validate().is_ok());
 
-        // Test with very large warming configuration
+        // Test with large warming configuration
         config.warming.enabled = true;
         config.warming.max_entries = usize::MAX;
         config.warming.timeout = Duration::from_secs(u64::MAX / 1000); // Avoid overflow

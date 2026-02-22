@@ -1,6 +1,6 @@
 //! Cache statistics and metrics types
 //!
-//! This module provides comprehensive statistics and metrics tracking for
+//! This module provides statistics and metrics tracking for
 //! cache performance monitoring, debugging, and optimization.
 //! Optimized for NGDP workload patterns with efficient atomic operations.
 
@@ -114,45 +114,31 @@ impl CacheAlignedAtomicUsize {
 // CacheStats - Unified version using timestamps (works on all platforms)
 // ============================================================================
 
-/// Cache statistics snapshot
+/// Point-in-time cache statistics snapshot.
 ///
-/// Contains point-in-time statistics about cache performance and usage.
 /// Uses millisecond timestamps for cross-platform compatibility.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[allow(clippy::struct_field_names)] // Fields like memory_usage_bytes follow common naming convention
 pub struct CacheStats {
-    /// Total number of get operations
     pub get_count: u64,
-    /// Number of successful cache hits
     pub hit_count: u64,
-    /// Number of cache misses
     pub miss_count: u64,
-    /// Total number of put operations
     pub put_count: u64,
-    /// Total number of remove operations
     pub remove_count: u64,
-    /// Total number of evictions
     pub eviction_count: u64,
-    /// Total number of expired entries removed
     pub expiration_count: u64,
-    /// Current number of entries in cache
     pub entry_count: usize,
-    /// Total memory usage in bytes
     pub memory_usage_bytes: usize,
-    /// Maximum memory usage observed
     pub max_memory_usage_bytes: usize,
-    /// Cache creation time (milliseconds since Unix epoch)
+    /// Milliseconds since Unix epoch
     pub created_at_ms: u64,
-    /// Time of last statistics update (milliseconds since Unix epoch)
+    /// Milliseconds since Unix epoch
     pub updated_at_ms: u64,
-    /// Average response time for get operations
     pub avg_get_time: Duration,
-    /// Average response time for put operations
     pub avg_put_time: Duration,
 }
 
 impl CacheStats {
-    /// Create new empty cache statistics
     pub fn new() -> Self {
         let now_ms = current_time_ms();
         Self {
@@ -173,7 +159,6 @@ impl CacheStats {
         }
     }
 
-    /// Calculate hit rate (hits / total gets)
     #[inline]
     pub fn hit_rate(&self) -> f64 {
         if self.get_count == 0 {
@@ -183,7 +168,6 @@ impl CacheStats {
         }
     }
 
-    /// Calculate miss rate (misses / total gets)
     #[inline]
     pub fn miss_rate(&self) -> f64 {
         if self.get_count == 0 {
@@ -193,7 +177,6 @@ impl CacheStats {
         }
     }
 
-    /// Calculate cache utilization based on maximum entries
     #[inline]
     pub fn utilization(&self, max_entries: usize) -> f64 {
         if max_entries == 0 {
@@ -203,7 +186,6 @@ impl CacheStats {
         }
     }
 
-    /// Calculate memory utilization based on maximum memory
     #[inline]
     pub fn memory_utilization(&self, max_memory_bytes: usize) -> f64 {
         if max_memory_bytes == 0 {
@@ -213,14 +195,12 @@ impl CacheStats {
         }
     }
 
-    /// Get cache age (time since creation)
     #[inline]
     pub fn age(&self) -> Duration {
         let now_ms = current_time_ms();
         Duration::from_millis(now_ms.saturating_sub(self.created_at_ms))
     }
 
-    /// Merge statistics from another cache (for multi-layer stats)
     pub fn merge(&mut self, other: &CacheStats) {
         let prev_get_count = self.get_count;
         let prev_put_count = self.put_count;
@@ -312,7 +292,6 @@ pub struct AtomicCacheMetrics {
 
 #[cfg(not(target_arch = "wasm32"))]
 impl AtomicCacheMetrics {
-    /// Create new atomic cache metrics
     pub fn new() -> Self {
         Self {
             get_count: CacheAlignedAtomicU64::new(0),
@@ -332,7 +311,6 @@ impl AtomicCacheMetrics {
         }
     }
 
-    /// Record a cache get operation with optimized hot path
     #[inline]
     pub fn record_get(&self, hit: bool, duration: Duration) {
         // Use acquire ordering only where necessary for correctness
@@ -352,7 +330,6 @@ impl AtomicCacheMetrics {
         }
     }
 
-    /// Record a cache put operation with memory tracking
     #[inline]
     pub fn record_put(&self, size_bytes: usize, duration: Duration) {
         self.put_count.fetch_add(1, Ordering::Relaxed);
@@ -374,7 +351,6 @@ impl AtomicCacheMetrics {
         }
     }
 
-    /// Record a cache remove operation
     #[inline]
     pub fn record_remove(&self, size_bytes: usize) {
         self.remove_count.fetch_add(1, Ordering::Relaxed);
@@ -383,7 +359,6 @@ impl AtomicCacheMetrics {
             .fetch_sub(size_bytes, Ordering::Relaxed);
     }
 
-    /// Record a cache eviction
     #[inline]
     pub fn record_eviction(&self, size_bytes: usize) {
         self.eviction_count.fetch_add(1, Ordering::Relaxed);
@@ -392,7 +367,6 @@ impl AtomicCacheMetrics {
             .fetch_sub(size_bytes, Ordering::Relaxed);
     }
 
-    /// Record an expiration
     #[inline]
     pub fn record_expiration(&self, size_bytes: usize) {
         self.expiration_count.fetch_add(1, Ordering::Relaxed);
@@ -401,8 +375,7 @@ impl AtomicCacheMetrics {
             .fetch_sub(size_bytes, Ordering::Relaxed);
     }
 
-    /// Batch record multiple get operations for efficiency
-    /// Optimized for NGDP workloads where multiple keys are often accessed together
+    /// Batches atomic updates for multiple operations at once.
     #[inline]
     pub fn record_batch_gets(&self, operations: &[(bool, Duration)]) {
         if operations.is_empty() {
@@ -437,7 +410,6 @@ impl AtomicCacheMetrics {
         }
     }
 
-    /// Get current statistics snapshot with optimized reads
     pub fn snapshot(&self) -> CacheStats {
         // Use acquire ordering for consistent reads across all metrics
         let get_count = self.get_count.load(Ordering::Acquire);
@@ -483,8 +455,7 @@ impl AtomicCacheMetrics {
         }
     }
 
-    /// Get lightweight metrics for hot paths (reduced precision)
-    /// Optimized for high-frequency monitoring in NGDP systems
+    /// Reduced precision snapshot for hot paths.
     #[inline]
     pub fn fast_snapshot(&self) -> FastCacheMetrics {
         FastCacheMetrics {
@@ -496,7 +467,6 @@ impl AtomicCacheMetrics {
         }
     }
 
-    /// Reset all metrics to zero
     pub fn reset(&self) {
         self.get_count.store(0, Ordering::Relaxed);
         self.hit_count.store(0, Ordering::Relaxed);
@@ -512,7 +482,6 @@ impl AtomicCacheMetrics {
         self.total_put_time_nanos.store(0, Ordering::Relaxed);
     }
 
-    /// Get hit rate without full snapshot (optimized for monitoring)
     #[inline]
     pub fn fast_hit_rate(&self) -> f32 {
         let get_count = self.get_count.load(Ordering::Relaxed);
@@ -524,7 +493,6 @@ impl AtomicCacheMetrics {
         }
     }
 
-    /// Get memory utilization without full snapshot
     #[inline]
     pub fn fast_memory_utilization(&self, max_memory_bytes: usize) -> f32 {
         if max_memory_bytes == 0 {
@@ -543,22 +511,17 @@ impl Default for AtomicCacheMetrics {
     }
 }
 
-/// Lightweight cache metrics for high-frequency monitoring
-/// Optimized for NGDP hot paths where full statistics are too expensive
+/// Lightweight cache metrics for high-frequency monitoring.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FastCacheMetrics {
-    /// Total get operations
     pub get_count: u64,
-    /// Cache hits
     pub hit_count: u64,
-    /// Current entries
     pub entry_count: u64,
-    /// Memory usage in MB (reduced precision for efficiency)
+    /// Reduced precision (MB) for efficiency
     pub memory_usage_mb: u32,
 }
 
 impl FastCacheMetrics {
-    /// Calculate hit rate
     #[inline]
     pub fn hit_rate(&self) -> f32 {
         if self.get_count == 0 {
@@ -568,7 +531,7 @@ impl FastCacheMetrics {
         }
     }
 
-    /// Get memory usage in bytes (estimated)
+    /// Estimated; derived from MB field
     #[inline]
     pub fn memory_usage_bytes(&self) -> usize {
         (self.memory_usage_mb as usize) * 1024 * 1024
@@ -579,23 +542,17 @@ impl FastCacheMetrics {
 // Multi-layer statistics - Native only
 // ============================================================================
 
-/// Multi-layer cache statistics
-///
-/// Aggregates statistics from multiple cache layers for hierarchical caches.
+/// Aggregated statistics from multiple cache layers.
 #[cfg(not(target_arch = "wasm32"))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MultiLayerStats {
-    /// Statistics for each layer (L1, L2, L3, etc.)
     pub layer_stats: Vec<CacheStats>,
-    /// Aggregated statistics across all layers
     pub total_stats: CacheStats,
-    /// Promotion statistics between layers
     pub promotion_stats: PromotionStats,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 impl MultiLayerStats {
-    /// Create new multi-layer statistics
     pub fn new(layers: usize) -> Self {
         Self {
             layer_stats: vec![CacheStats::new(); layers],
@@ -604,7 +561,6 @@ impl MultiLayerStats {
         }
     }
 
-    /// Update statistics for a specific layer
     pub fn update_layer(&mut self, layer_index: usize, stats: CacheStats) {
         if layer_index < self.layer_stats.len() {
             self.layer_stats[layer_index] = stats;
@@ -612,12 +568,10 @@ impl MultiLayerStats {
         }
     }
 
-    /// Record a promotion between layers
     pub fn record_promotion(&mut self, from_layer: usize, to_layer: usize) {
         self.promotion_stats.record_promotion(from_layer, to_layer);
     }
 
-    /// Recalculate total statistics from all layers
     fn recalculate_totals(&mut self) {
         self.total_stats = CacheStats::new();
         for layer_stats in &self.layer_stats {
@@ -625,26 +579,22 @@ impl MultiLayerStats {
         }
     }
 
-    /// Get aggregated hit rate across all layers
     #[inline]
     pub fn overall_hit_rate(&self) -> f64 {
         self.total_stats.hit_rate()
     }
 }
 
-/// Statistics for promotions between cache layers
 #[cfg(not(target_arch = "wasm32"))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PromotionStats {
-    /// Total number of promotions
     pub total_promotions: u64,
-    /// Promotions per layer pair (from_layer -> to_layer)
+    /// Keyed by (from_layer, to_layer)
     pub layer_promotions: std::collections::HashMap<(usize, usize), u64>,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 impl PromotionStats {
-    /// Create new promotion statistics
     pub fn new() -> Self {
         Self {
             total_promotions: 0,
@@ -652,7 +602,6 @@ impl PromotionStats {
         }
     }
 
-    /// Record a promotion between layers
     pub fn record_promotion(&mut self, from_layer: usize, to_layer: usize) {
         self.total_promotions = self.total_promotions.saturating_add(1);
         *self
@@ -665,7 +614,6 @@ impl PromotionStats {
             .saturating_add(1);
     }
 
-    /// Get promotion count between specific layers
     pub fn get_promotion_count(&self, from_layer: usize, to_layer: usize) -> u64 {
         self.layer_promotions
             .get(&(from_layer, to_layer))
@@ -681,25 +629,17 @@ impl Default for PromotionStats {
     }
 }
 
-/// Performance metrics for cache operations
-///
-/// Tracks detailed performance metrics for different types of cache operations.
 #[cfg(not(target_arch = "wasm32"))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PerformanceMetrics {
-    /// Get operation metrics
     pub get_metrics: OperationMetrics,
-    /// Put operation metrics
     pub put_metrics: OperationMetrics,
-    /// Remove operation metrics
     pub remove_metrics: OperationMetrics,
-    /// Eviction metrics
     pub eviction_metrics: OperationMetrics,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 impl PerformanceMetrics {
-    /// Create new performance metrics
     pub fn new() -> Self {
         Self {
             get_metrics: OperationMetrics::new("get"),
@@ -717,29 +657,20 @@ impl Default for PerformanceMetrics {
     }
 }
 
-/// Metrics for a specific type of cache operation
 #[cfg(not(target_arch = "wasm32"))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OperationMetrics {
-    /// Operation name
     pub operation_name: String,
-    /// Total number of operations
     pub count: u64,
-    /// Total time spent on operations
     pub total_duration: Duration,
-    /// Minimum operation time
     pub min_duration: Duration,
-    /// Maximum operation time
     pub max_duration: Duration,
-    /// 95th percentile operation time
     pub p95_duration: Duration,
-    /// 99th percentile operation time
     pub p99_duration: Duration,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 impl OperationMetrics {
-    /// Create new operation metrics
     pub fn new(operation_name: impl Into<String>) -> Self {
         Self {
             operation_name: operation_name.into(),
@@ -752,7 +683,6 @@ impl OperationMetrics {
         }
     }
 
-    /// Record an operation duration
     pub fn record(&mut self, duration: Duration) {
         self.count = self.count.saturating_add(1);
         self.total_duration = self.total_duration.saturating_add(duration);
@@ -762,7 +692,6 @@ impl OperationMetrics {
         // of durations or using a more sophisticated data structure
     }
 
-    /// Get average operation duration
     #[inline]
     pub fn avg_duration(&self) -> Duration {
         if self.count == 0 {
@@ -772,7 +701,6 @@ impl OperationMetrics {
         }
     }
 
-    /// Get operations per second
     #[inline]
     pub fn ops_per_second(&self, time_window: Duration) -> f64 {
         let secs = time_window.as_secs_f64();

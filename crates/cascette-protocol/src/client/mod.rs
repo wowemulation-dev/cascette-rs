@@ -126,7 +126,7 @@ use crate::error::{ProtocolError, Result};
 ///
 /// ## Features
 ///
-/// - **Automatic Protocol Fallback**: Seamlessly falls back between TACT HTTPS, TACT HTTP, and Ribbit TCP
+/// - **Automatic Protocol Fallback**: Falls back between TACT HTTPS, TACT HTTP, and Ribbit TCP
 /// - **Intelligent Caching**: All responses are cached with appropriate TTL values
 /// - **Error Recovery**: Automatic retry with exponential backoff for transient errors
 /// - **Performance Optimized**: Uses optimized HTTP client and memory management

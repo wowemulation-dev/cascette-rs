@@ -204,7 +204,7 @@ impl ZbsdiffBuilder {
     /// - Implement match caching to avoid redundant searches
     /// - Add memory usage limits and streaming for large files
     /// - Benchmark against reference bsdiff implementation
-    /// - Add comprehensive tests with various data patterns
+    /// - Add tests with various data patterns
     ///
     /// For now, falls back to the chunked algorithm which provides reasonable results.
     pub fn build_optimized_patch(&self) -> ZbsdiffResult<Vec<u8>> {

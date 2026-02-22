@@ -76,7 +76,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## Examples
 
-The crate includes comprehensive examples demonstrating real-world usage:
+The crate includes examples demonstrating real-world usage:
 
 ### Native Example
 

@@ -5,6 +5,8 @@
 //! It supports lazy validation for performance-critical paths and async validation
 //! compatible with tokio.
 
+#![allow(missing_docs)]
+
 use crate::error::{CacheError, CacheResult, NgdpCacheError, NgdpCacheResult};
 use async_trait::async_trait;
 use bytes::Bytes;
@@ -17,18 +19,14 @@ use std::{
 /// Validation result with timing information
 #[derive(Debug, Clone)]
 pub struct ValidationResult {
-    /// Whether the content is valid
     pub is_valid: bool,
-    /// Time taken to validate
     pub validation_time: std::time::Duration,
-    /// Hash computation time (subset of validation_time)
+    /// Subset of validation_time
     pub hash_time: std::time::Duration,
-    /// Size of content validated
     pub content_size: usize,
 }
 
 impl ValidationResult {
-    /// Create a successful validation result
     pub fn valid(
         validation_time: std::time::Duration,
         hash_time: std::time::Duration,
@@ -42,7 +40,6 @@ impl ValidationResult {
         }
     }
 
-    /// Create a failed validation result
     pub fn invalid(
         validation_time: std::time::Duration,
         hash_time: std::time::Duration,
@@ -56,7 +53,7 @@ impl ValidationResult {
         }
     }
 
-    /// Create an error result (treated as invalid)
+    /// Treated as invalid
     pub fn error(validation_time: std::time::Duration, content_size: usize) -> Self {
         Self {
             is_valid: false,
@@ -73,20 +70,15 @@ impl ValidationResult {
 /// and can be called during cache put/get operations.
 #[async_trait]
 pub trait ValidationHooks: Send + Sync {
-    /// Validate content against a content key
-    ///
-    /// This is called during put operations to ensure content integrity.
-    /// Returns true if content is valid, false otherwise.
+    /// Called during put operations to ensure content integrity.
     async fn validate_content(
         &self,
         content_key: &ContentKey,
         data: &[u8],
     ) -> CacheResult<ValidationResult>;
 
-    /// Validate content during get operations (optional lazy validation)
-    ///
-    /// This can be called during get operations if lazy validation is enabled.
-    /// Default implementation calls validate_content.
+    /// Optional lazy validation during get operations.
+    /// Default delegates to `validate_content`.
     async fn validate_on_get(
         &self,
         content_key: &ContentKey,
@@ -95,17 +87,13 @@ pub trait ValidationHooks: Send + Sync {
         self.validate_content(content_key, data).await
     }
 
-    /// Check if validation should be skipped for performance reasons
-    ///
-    /// This allows implementations to skip validation under certain conditions
-    /// (e.g., trusted sources, cached validation results, etc.)
+    /// Allows skipping validation for trusted sources, cached results, etc.
     async fn should_skip_validation(&self, content_key: &ContentKey, data_size: usize) -> bool {
         // Default: never skip validation
         let _ = (content_key, data_size);
         false
     }
 
-    /// Called when validation fails to allow custom error handling
     async fn on_validation_failure(
         &self,
         content_key: &ContentKey,
@@ -116,38 +104,29 @@ pub trait ValidationHooks: Send + Sync {
         let _ = (content_key, data, error);
     }
 
-    /// Called when validation succeeds for metrics/logging
     async fn on_validation_success(&self, content_key: &ContentKey, result: &ValidationResult) {
         // Default: no-op
         let _ = (content_key, result);
     }
 
-    /// Get validation metrics (if available)
-    ///
-    /// Default implementation returns None. Implementations can override this
-    /// to provide their internal metrics.
+    /// Default returns None; override to expose internal metrics.
     fn get_metrics(&self) -> Option<&ValidationMetrics> {
         None
     }
 }
 
-/// MD5-based content validation implementation
-///
 /// Validates content by computing MD5 hash and comparing with the content key.
 pub struct Md5ValidationHooks {
-    /// Metrics for validation operations
     pub metrics: ValidationMetrics,
 }
 
 impl Md5ValidationHooks {
-    /// Create a new MD5 validation hooks instance
     pub fn new() -> Self {
         Self {
             metrics: ValidationMetrics::new(),
         }
     }
 
-    /// Get validation metrics
     pub fn metrics(&self) -> &ValidationMetrics {
         &self.metrics
     }
@@ -168,12 +147,10 @@ impl ValidationHooks for Md5ValidationHooks {
     ) -> CacheResult<ValidationResult> {
         let start_time = Instant::now();
 
-        // Compute MD5 hash of the content using md5 crate
         let hash_start = Instant::now();
         let computed_hash = md5::compute(data);
         let hash_time = hash_start.elapsed();
 
-        // Compare with expected hash from content key
         let expected_hash = content_key.as_bytes();
         let is_valid = computed_hash.as_ref() == expected_hash;
 
@@ -184,7 +161,6 @@ impl ValidationHooks for Md5ValidationHooks {
             ValidationResult::invalid(validation_time, hash_time, data.len())
         };
 
-        // Update metrics
         if is_valid {
             self.metrics.record_success(validation_time, data.len());
         } else {
@@ -195,7 +171,7 @@ impl ValidationHooks for Md5ValidationHooks {
     }
 
     async fn should_skip_validation(&self, _content_key: &ContentKey, data_size: usize) -> bool {
-        // Skip validation for very large files in performance mode
+        // Skip validation for large files in performance mode
         // This is configurable behavior - in production you might want different thresholds
         const MAX_VALIDATION_SIZE: usize = 100 * 1024 * 1024; // 100MB
         data_size > MAX_VALIDATION_SIZE
@@ -232,26 +208,18 @@ impl ValidationHooks for Md5ValidationHooks {
 }
 
 /// Validation metrics collector
-///
-/// Tracks validation operations for monitoring and performance analysis.
 #[derive(Debug)]
 pub struct ValidationMetrics {
-    /// Total validation attempts
     pub total_validations: AtomicU64,
-    /// Successful validations
     pub successful_validations: AtomicU64,
-    /// Failed validations
     pub failed_validations: AtomicU64,
-    /// Total bytes validated
     pub bytes_validated: AtomicU64,
-    /// Total validation time (nanoseconds)
+    /// Nanoseconds
     pub total_validation_time_ns: AtomicU64,
-    /// Validations skipped for performance
     pub validations_skipped: AtomicU64,
 }
 
 impl ValidationMetrics {
-    /// Create new validation metrics
     pub fn new() -> Self {
         Self {
             total_validations: AtomicU64::new(0),
@@ -263,7 +231,6 @@ impl ValidationMetrics {
         }
     }
 
-    /// Record a successful validation
     pub fn record_success(&self, duration: std::time::Duration, bytes: usize) {
         self.total_validations.fetch_add(1, Ordering::Relaxed);
         self.successful_validations.fetch_add(1, Ordering::Relaxed);
@@ -273,7 +240,6 @@ impl ValidationMetrics {
             .fetch_add(duration.as_nanos() as u64, Ordering::Relaxed);
     }
 
-    /// Record a failed validation
     pub fn record_failure(&self, duration: std::time::Duration, bytes: usize) {
         self.total_validations.fetch_add(1, Ordering::Relaxed);
         self.failed_validations.fetch_add(1, Ordering::Relaxed);
@@ -283,12 +249,11 @@ impl ValidationMetrics {
             .fetch_add(duration.as_nanos() as u64, Ordering::Relaxed);
     }
 
-    /// Record a skipped validation
     pub fn record_skip(&self) {
         self.validations_skipped.fetch_add(1, Ordering::Relaxed);
     }
 
-    /// Get validation success rate (0.0 to 1.0)
+    /// Returns 0.0 to 1.0
     #[allow(clippy::cast_precision_loss)] // Stats calculation intentionally accepts precision loss
     pub fn success_rate(&self) -> f64 {
         let total = self.total_validations.load(Ordering::Relaxed);
@@ -299,7 +264,6 @@ impl ValidationMetrics {
         successful as f64 / total as f64
     }
 
-    /// Get average validation time
     pub fn average_validation_time(&self) -> std::time::Duration {
         let total_time_ns = self.total_validation_time_ns.load(Ordering::Relaxed);
         let total_validations = self.total_validations.load(Ordering::Relaxed);
@@ -311,7 +275,7 @@ impl ValidationMetrics {
         std::time::Duration::from_nanos(total_time_ns / total_validations)
     }
 
-    /// Get validation throughput (bytes per second)
+    /// Bytes per second
     #[allow(clippy::cast_precision_loss)] // Stats calculation intentionally accepts precision loss
     pub fn validation_throughput(&self) -> f64 {
         let total_bytes = self.bytes_validated.load(Ordering::Relaxed);
@@ -325,7 +289,6 @@ impl ValidationMetrics {
         total_bytes as f64 / total_time_secs
     }
 
-    /// Reset all metrics
     pub fn reset(&self) {
         self.total_validations.store(0, Ordering::Relaxed);
         self.successful_validations.store(0, Ordering::Relaxed);
@@ -392,16 +355,12 @@ impl ValidationHooks for std::sync::Arc<dyn ValidationHooks> {
 /// This implementation supports MD5 content validation as well as Jenkins96
 /// path validation and TACT key validation for encrypted content.
 pub struct NgdpValidationHooks {
-    /// Base MD5 validation hooks
     pub md5_hooks: Md5ValidationHooks,
-    /// Optional TACT key for encrypted content validation
     pub tact_key: Option<TactKey>,
-    /// Enable Jenkins96 path validation for archive indices
     pub jenkins96_validation: bool,
 }
 
 impl NgdpValidationHooks {
-    /// Create new NGDP validation hooks with MD5 validation only
     pub fn new() -> Self {
         Self {
             md5_hooks: Md5ValidationHooks::new(),
@@ -410,7 +369,6 @@ impl NgdpValidationHooks {
         }
     }
 
-    /// Create NGDP validation hooks with TACT key support
     pub fn with_tact_key(tact_key: TactKey) -> Self {
         Self {
             md5_hooks: Md5ValidationHooks::new(),
@@ -419,13 +377,11 @@ impl NgdpValidationHooks {
         }
     }
 
-    /// Enable Jenkins96 path validation
     pub fn with_jenkins96_validation(mut self) -> Self {
         self.jenkins96_validation = true;
         self
     }
 
-    /// Validate content using Jenkins96 hash for archive indices
     pub fn validate_jenkins96(
         &self,
         expected_hash: u64,
@@ -446,7 +402,6 @@ impl NgdpValidationHooks {
             ValidationResult::invalid(validation_time, hash_time, data.len())
         };
 
-        // Update metrics through underlying MD5 hooks
         if is_valid {
             self.md5_hooks
                 .metrics
@@ -460,7 +415,6 @@ impl NgdpValidationHooks {
         Ok(result)
     }
 
-    /// Validate encoding key against content
     pub fn validate_encoding_key(
         &self,
         encoding_key: &EncodingKey,
@@ -484,7 +438,6 @@ impl NgdpValidationHooks {
             ValidationResult::invalid(validation_time, hash_time, data.len())
         };
 
-        // Update metrics
         if is_valid {
             self.md5_hooks
                 .metrics
@@ -498,7 +451,6 @@ impl NgdpValidationHooks {
         Ok(result)
     }
 
-    /// Batch validate multiple content keys for performance
     pub async fn batch_validate_content(
         &self,
         items: &[(ContentKey, &[u8])],
@@ -527,7 +479,6 @@ impl ValidationHooks for NgdpValidationHooks {
         content_key: &ContentKey,
         data: &[u8],
     ) -> CacheResult<ValidationResult> {
-        // Delegate to MD5 validation hooks
         self.md5_hooks.validate_content(content_key, data).await
     }
 
@@ -581,7 +532,6 @@ impl ValidationHooks for NoOpValidationHooks {
         _content_key: &ContentKey,
         data: &[u8],
     ) -> CacheResult<ValidationResult> {
-        // Return immediate success without validation
         Ok(ValidationResult::valid(
             std::time::Duration::ZERO,
             std::time::Duration::ZERO,
@@ -594,17 +544,13 @@ impl ValidationHooks for NoOpValidationHooks {
     }
 }
 
-/// Wrapper for bytes with validation state and content key
+/// Bytes wrapper with lazy validation state tracking.
 ///
-/// This wrapper provides lazy validation capabilities and stores the content key
-/// for integrity verification. Uses AtomicBool for thread-safe validation tracking.
+/// Uses AtomicBool for thread-safe validation status.
 #[derive(Debug)]
 pub struct NgdpBytes {
-    /// Underlying byte data (reference-counted for zero-copy)
     data: Bytes,
-    /// Content key for validation
     content_key: Option<ContentKey>,
-    /// Validation status (thread-safe)
     validated: AtomicBool,
 }
 
@@ -620,10 +566,7 @@ impl Clone for NgdpBytes {
 }
 
 impl NgdpBytes {
-    /// Create new NgdpBytes with automatic validation
-    ///
-    /// This constructor immediately validates the content against the provided
-    /// content key using cascette-crypto MD5 validation.
+    /// Validates immediately; returns error on hash mismatch.
     #[allow(clippy::needless_pass_by_value)]
     pub fn new_validated(data: Bytes, content_key: ContentKey) -> NgdpCacheResult<Self> {
         let ngdp_bytes = Self {
@@ -632,7 +575,6 @@ impl NgdpBytes {
             validated: AtomicBool::new(false),
         };
 
-        // Validate content integrity using md5 crate
         let computed_hash = md5::compute(&data);
         let expected_hash = content_key.as_bytes();
 
@@ -644,7 +586,7 @@ impl NgdpBytes {
         }
     }
 
-    /// Create new NgdpBytes with content key (lazy validation)
+    /// Defers validation until `validate_if_needed` is called.
     pub fn new_with_key(data: Bytes, content_key: ContentKey) -> Self {
         Self {
             data,
@@ -653,37 +595,30 @@ impl NgdpBytes {
         }
     }
 
-    /// Create new NgdpBytes without content key (no validation possible)
+    /// No content key means no validation is possible; starts as "valid".
     pub fn new_without_key(data: Bytes) -> Self {
         Self {
             data,
             content_key: None,
-            validated: AtomicBool::new(true), // Consider "valid" since no validation is possible
+            validated: AtomicBool::new(true),
         }
     }
 
-    /// Get the underlying bytes
     pub fn as_bytes(&self) -> &Bytes {
         &self.data
     }
 
-    /// Get the content key if available
     pub fn content_key(&self) -> Option<&ContentKey> {
         self.content_key.as_ref()
     }
 
-    /// Lazy validation for performance-critical paths
-    ///
-    /// This method performs validation only if needed and returns whether
-    /// the content is valid. Uses AtomicBool to track validation status
-    /// in a thread-safe manner.
+    /// Validates on first call, returns cached result on subsequent calls.
     pub fn validate_if_needed(&self) -> NgdpCacheResult<bool> {
         // Fast path: already validated
         if self.validated.load(Ordering::Relaxed) {
             return Ok(true);
         }
 
-        // Perform validation using md5 crate if content key is available
         if let Some(content_key) = &self.content_key {
             let computed_hash = md5::compute(&self.data);
             let expected_hash = content_key.as_bytes();
@@ -700,20 +635,14 @@ impl NgdpBytes {
         }
     }
 
-    /// Check if validation is needed
     pub fn needs_validation(&self) -> bool {
         !self.validated.load(Ordering::Relaxed) && self.content_key.is_some()
     }
 
-    /// Check if content is validated
     pub fn is_validated(&self) -> bool {
         self.validated.load(Ordering::Relaxed)
     }
 
-    /// Validate content using provided hooks
-    ///
-    /// This method integrates with the ValidationHooks system while maintaining
-    /// thread-safe validation status tracking.
     pub async fn validate_with_hooks<H: ValidationHooks + ?Sized>(
         &self,
         hooks: &H,
@@ -771,7 +700,7 @@ impl NgdpBytes {
         }
     }
 
-    /// Get validation state
+    /// Returns "skipped", "valid", or "pending".
     pub fn validation_state(&self) -> &str {
         if self.content_key.is_none() {
             "skipped"
@@ -782,10 +711,7 @@ impl NgdpBytes {
         }
     }
 
-    /// Create NgdpBytes from existing bytes, bypassing validation
-    ///
-    /// This is useful when you have already validated content elsewhere
-    /// or when dealing with trusted data sources.
+    /// Bypasses validation -- use when content was already validated elsewhere.
     pub fn from_validated_bytes(data: Bytes, content_key: Option<ContentKey>) -> Self {
         Self {
             data,
@@ -794,18 +720,11 @@ impl NgdpBytes {
         }
     }
 
-    /// Get the underlying bytes with zero-copy semantics
-    ///
-    /// Returns a clone of the underlying Bytes, which is zero-copy
-    /// due to reference counting in the Bytes type.
+    /// Zero-copy due to Bytes reference counting.
     pub fn into_bytes(self) -> Bytes {
         self.data
     }
 
-    /// Create NgdpBytes from a pooled buffer
-    ///
-    /// This method creates an NgdpBytes instance from a buffer allocated
-    /// from a memory pool. The content key is optional for lazy validation.
     pub fn from_pool_buffer(buffer: bytes::BytesMut, content_key: Option<ContentKey>) -> Self {
         let data = buffer.freeze();
         match content_key {
@@ -814,10 +733,7 @@ impl NgdpBytes {
         }
     }
 
-    /// Create validated NgdpBytes from pooled buffer
-    ///
-    /// This method immediately validates the buffer content against the
-    /// provided content key and returns an error if validation fails.
+    /// Validates immediately; returns error on hash mismatch.
     pub fn from_pool_buffer_validated(
         buffer: bytes::BytesMut,
         content_key: ContentKey,
@@ -826,11 +742,7 @@ impl NgdpBytes {
         Self::new_validated(data, content_key)
     }
 
-    /// Extract underlying bytes for pool deallocation
-    ///
-    /// This method consumes the NgdpBytes and returns the underlying Bytes,
-    /// which can then be converted back to BytesMut for pool deallocation.
-    /// Note: This will only work if the Bytes has a reference count of 1.
+    /// Only works if Bytes reference count is 1 (for BytesMut conversion).
     pub fn into_bytes_for_deallocation(self) -> Bytes {
         self.data
     }
