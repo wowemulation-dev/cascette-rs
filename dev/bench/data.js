@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1771729623513,
+  "lastUpdate": 1771802950730,
   "repoUrl": "https://github.com/wowemulation-dev/cascette-rs",
   "entries": {
     "Benchmark": [
@@ -1090,6 +1090,48 @@ window.BENCHMARK_DATA = {
           {
             "name": "bpsv_generation/summary/all",
             "value": 208,
+            "range": "± 1",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "daniel@kogito.network",
+            "name": "Daniel S. Reichenbach",
+            "username": "danielsreichenbach"
+          },
+          "committer": {
+            "email": "daniel@kogito.network",
+            "name": "Daniel S. Reichenbach",
+            "username": "danielsreichenbach"
+          },
+          "distinct": true,
+          "id": "9e6f2e5543f6768c94bbff0375f40117cf09ce16",
+          "message": "chore: simplify cargo config and update Discord link",
+          "timestamp": "2026-02-23T06:26:50+07:00",
+          "tree_id": "cc73c527a8e9c659a5d8bad58dda1c2c0e1f3d93",
+          "url": "https://github.com/wowemulation-dev/cascette-rs/commit/9e6f2e5543f6768c94bbff0375f40117cf09ce16"
+        },
+        "date": 1771802949822,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "bpsv_generation/versions/wow",
+            "value": 1635,
+            "range": "± 11",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "bpsv_generation/cdns/wow",
+            "value": 1240,
+            "range": "± 13",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "bpsv_generation/summary/all",
+            "value": 210,
             "range": "± 1",
             "unit": "ns/iter"
           }
