@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1771687554868,
+  "lastUpdate": 1771728789835,
   "repoUrl": "https://github.com/wowemulation-dev/cascette-rs",
   "entries": {
     "Benchmark": [
@@ -1007,6 +1007,48 @@ window.BENCHMARK_DATA = {
             "name": "bpsv_generation/summary/all",
             "value": 209,
             "range": "± 4",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "daniel@kogito.network",
+            "name": "Daniel S. Reichenbach",
+            "username": "danielsreichenbach"
+          },
+          "committer": {
+            "email": "daniel@kogito.network",
+            "name": "Daniel S. Reichenbach",
+            "username": "danielsreichenbach"
+          },
+          "distinct": true,
+          "id": "7cc522ccec9ed8c84605b5151f3f01af1adb321f",
+          "message": "chore: normalize Rust version to 1.92",
+          "timestamp": "2026-02-22T09:51:06+07:00",
+          "tree_id": "465373b9b1d8efa4a57a968dd978ae8079ea9a55",
+          "url": "https://github.com/wowemulation-dev/cascette-rs/commit/7cc522ccec9ed8c84605b5151f3f01af1adb321f"
+        },
+        "date": 1771728788848,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "bpsv_generation/versions/wow",
+            "value": 1851,
+            "range": "± 36",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "bpsv_generation/cdns/wow",
+            "value": 1159,
+            "range": "± 7",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "bpsv_generation/summary/all",
+            "value": 208,
+            "range": "± 6",
             "unit": "ns/iter"
           }
         ]
