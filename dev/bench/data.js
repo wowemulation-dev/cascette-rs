@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1771902832200,
+  "lastUpdate": 1771917038026,
   "repoUrl": "https://github.com/wowemulation-dev/cascette-rs",
   "entries": {
     "Benchmark": [
@@ -1217,6 +1217,48 @@ window.BENCHMARK_DATA = {
             "name": "bpsv_generation/summary/all",
             "value": 214,
             "range": "± 1",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "daniel@kogito.network",
+            "name": "Daniel S. Reichenbach",
+            "username": "danielsreichenbach"
+          },
+          "committer": {
+            "email": "daniel@kogito.network",
+            "name": "Daniel S. Reichenbach",
+            "username": "danielsreichenbach"
+          },
+          "distinct": true,
+          "id": "746f8b734bca8b1120f7eaf0addeaaf688d86ea9",
+          "message": "docs: sync documentation with current codebase state\n\nAdd cargo aliases to .cargo/config.toml that were documented in\nAGENTS.md but missing from the config file. Update README.md to\naccurately reflect which features exist (library, ribbit server)\nversus which are planned (CLI tools, download agent).",
+          "timestamp": "2026-02-24T14:06:55+07:00",
+          "tree_id": "32fb5d5e9382fc1c816ae8a7b58f3dd1d6269bf1",
+          "url": "https://github.com/wowemulation-dev/cascette-rs/commit/746f8b734bca8b1120f7eaf0addeaaf688d86ea9"
+        },
+        "date": 1771917037014,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "bpsv_generation/versions/wow",
+            "value": 1909,
+            "range": "± 24",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "bpsv_generation/cdns/wow",
+            "value": 1231,
+            "range": "± 38",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "bpsv_generation/summary/all",
+            "value": 207,
+            "range": "± 3",
             "unit": "ns/iter"
           }
         ]
