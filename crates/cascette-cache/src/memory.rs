@@ -1193,10 +1193,10 @@ impl BackgroundMemoryManager {
 
 impl Drop for BackgroundMemoryManager {
     fn drop(&mut self) {
-        if self.is_running.load(Ordering::Relaxed) {
-            if let Some(shutdown_sender) = self.shutdown_sender.take() {
-                let _ = shutdown_sender.send(());
-            }
+        if self.is_running.load(Ordering::Relaxed)
+            && let Some(shutdown_sender) = self.shutdown_sender.take()
+        {
+            let _ = shutdown_sender.send(());
         }
     }
 }
