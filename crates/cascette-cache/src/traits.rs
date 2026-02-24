@@ -158,7 +158,9 @@ pub enum InvalidationStrategy {
     Ttl(Duration),
     Lru,
     Lfu,
-    Size { max_entries: usize },
+    Size {
+        max_entries: usize,
+    },
     Memory {
         /// Bytes
         max_bytes: usize,

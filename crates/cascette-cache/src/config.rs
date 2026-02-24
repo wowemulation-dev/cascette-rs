@@ -262,8 +262,12 @@ pub enum PromotionStrategy {
     #[default]
     OnHit,
     AfterNHits(u32),
-    FrequencyBased { threshold: f64 },
-    AgeBased { min_age: Duration },
+    FrequencyBased {
+        threshold: f64,
+    },
+    AgeBased {
+        min_age: Duration,
+    },
     Manual,
 }
 
