@@ -31,29 +31,6 @@ adding support for other Blizzard products are welcome.
 
 ## Features
 
-### CLI Tools
-
-- Browse and extract files from local WoW installations
-- Download builds directly from Blizzard's CDN
-- Mirror entire builds for archival and preservation
-- Query build information and version history
-
-### Ribbit Server
-
-A Ribbit protocol server for hosting and distributing custom game builds.
-Intended for mod developers and private server operators who need to serve
-their own content to clients.
-
-### Download Agent
-
-An HTTP service (port 1120) for downloading World of Warcraft products. Downloads
-from official Blizzard CDNs with automatic fallback to community archive mirrors.
-Useful for:
-
-- Archivists preserving historical builds
-- Players on Classic private servers needing specific client versions
-- Developers testing against particular game versions
-
 ### Library
 
 Rust crates for building your own tools:
@@ -62,10 +39,27 @@ Rust crates for building your own tools:
 - CDN client with automatic failover
 - Encryption key management
 - Multi-layer caching
+- Local CASC storage (IDX/KMT indices, data archives, shared memory IPC)
 
 **WASM Compatible**: Core libraries compile to WebAssembly (`wasm32-unknown-unknown`),
 enabling browser-based tools and web applications. All cryptographic and format
 parsing code uses pure Rust implementations with no C dependencies.
+
+### Ribbit Server
+
+A Ribbit protocol server for hosting and distributing custom game builds.
+Intended for mod developers and private server operators who need to serve
+their own content to clients.
+
+### Planned
+
+These features are implemented in an internal development branch and are being
+ported incrementally:
+
+- **CLI Tools**: Browse and extract files from local WoW installations, download
+  builds from CDN, mirror builds for archival
+- **Download Agent**: HTTP service (port 1120) for downloading World of Warcraft
+  products with automatic CDN failover
 
 ## Project Status
 

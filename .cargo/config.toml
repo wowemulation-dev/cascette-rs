@@ -17,6 +17,31 @@ color = "always"
 # Enable backtraces for better error messages during development
 RUST_BACKTRACE = "1"
 
+[alias]
+# Format check without changes
+fmt-check = "fmt --all -- --check"
+# Clippy on workspace with all features
+lint = "clippy --workspace --all-targets"
+# All tests with all features (uses cargo test)
+test-all = "test --workspace --all-features"
+# Library unit tests only (faster)
+test-lib = "test --workspace --lib"
+# Doc tests only
+test-doc = "test --workspace --doc"
+# Build documentation
+docs = "doc --workspace --no-deps"
+# Type checking for all targets
+check-all = "check --workspace --all-targets"
+# Release build for workspace
+build-release = "build --workspace --release"
+# Nextest test runner (faster than cargo test)
+nextest-all = "nextest run --workspace --all-features"
+nextest-lib = "nextest run --workspace --lib"
+nextest-ci = "nextest run --profile ci --workspace"
+nextest-release = "nextest run --workspace --release"
+nextest-unit = "nextest run --workspace --lib --bins"
+nextest-integration = "nextest run --workspace --test '*'"
+
 [target.wasm32-unknown-unknown]
 # getrandom 0.3.x requires cfg flag for WASM support
 # https://docs.rs/getrandom/latest/getrandom/#webassembly-support
