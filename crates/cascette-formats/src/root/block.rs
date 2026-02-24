@@ -25,21 +25,22 @@ pub struct RootBlockHeader {
     pub locale_flags: LocaleFlags,
 }
 
-/// Block header for Version 2 format (17 bytes) - used when extended header version >= 2
-/// Per wowdev.wiki: locale_flags moved before content flags, plus extra fields
+/// Block header for Version 2 format (17 bytes) - introduced in build 11.1.0.58221
+/// V2 moves locale_flags before content flags and splits content flags into 3 fields.
+/// Reconstructed content_flags = content_flags_1 | content_flags_2 | ((content_flags_3 as u32) << 17)
 #[derive(BinRead, BinWrite, Debug, Clone, PartialEq, Eq)]
 #[brw(little)]
 pub struct RootBlockHeaderV2 {
     /// Number of file records in this block
     pub num_records: u32,
-    /// Locale flags (MOVED to second position in V2)
+    /// Locale flags (locale IS first in V2, unlike V1)
     pub locale_flags: LocaleFlags,
-    /// Content flags (was second in V1, now third in V2)
-    pub content_flags: u32,
-    /// Unknown field 2
-    pub unk2: u32,
-    /// Unknown field 3 (upper bits define flags via bit-shift)
-    pub unk3: u8,
+    /// Content flags split field 1 (unk1)
+    pub content_flags_1: u32,
+    /// Content flags split field 2 (unk2)
+    pub content_flags_2: u32,
+    /// Content flags split field 3 (unk3)
+    pub content_flags_3: u8,
 }
 
 impl BinRead for RootBlockHeader {
@@ -144,80 +145,9 @@ impl RootBlock {
         _has_named_files: bool,
     ) -> Result<Self> {
         match version {
-            // V1 (no header): 12-byte block header, interleaved format
-            RootVersion::V1 => {
-                let header = RootBlockHeader::read_le(reader)?;
-
-                // Sanity check - detect garbage data
-                if header.num_records == 0 || header.num_records > 1_000_000 {
-                    return Ok(Self {
-                        header,
-                        records: Vec::new(),
-                    });
-                }
-
-                let count = header.num_records as usize;
-                parse_v1_block(reader, header, count)
-            }
-            // V2/V3 (with MFST/TSFM header): 17-byte block header, separated format
-            RootVersion::V2 | RootVersion::V3 => {
-                let header_v2 = RootBlockHeaderV2::read_le(reader)?;
-
-                // Sanity check - detect garbage data
-                if header_v2.num_records == 0 || header_v2.num_records > 1_000_000 {
-                    let header = RootBlockHeader {
-                        num_records: header_v2.num_records,
-                        content_flags: u64::from(header_v2.content_flags),
-                        locale_flags: header_v2.locale_flags,
-                    };
-                    return Ok(Self {
-                        header,
-                        records: Vec::new(),
-                    });
-                }
-
-                let count = header_v2.num_records as usize;
-                let content_flags = ContentFlags::new(u64::from(header_v2.content_flags));
-
-                let header = RootBlockHeader {
-                    num_records: header_v2.num_records,
-                    content_flags: u64::from(header_v2.content_flags),
-                    locale_flags: header_v2.locale_flags,
-                };
-
-                parse_v2_block(reader, header, count, content_flags)
-            }
-            // V4: 18-byte block header with 40-bit (5-byte) content flags
-            RootVersion::V4 => {
-                let num_records = u32::read_le(reader)?;
-                let locale_flags = LocaleFlags::read_le(reader)?;
-                let content_flags = ContentFlags::read_v4(reader)?;
-                let _unk2 = u32::read_le(reader)?;
-                let _unk3 = u8::read_le(reader)?;
-
-                // Sanity check - detect garbage data
-                if num_records == 0 || num_records > 1_000_000 {
-                    let header = RootBlockHeader {
-                        num_records,
-                        content_flags: content_flags.value,
-                        locale_flags,
-                    };
-                    return Ok(Self {
-                        header,
-                        records: Vec::new(),
-                    });
-                }
-
-                let count = num_records as usize;
-
-                let header = RootBlockHeader {
-                    num_records,
-                    content_flags: content_flags.value,
-                    locale_flags,
-                };
-
-                parse_v2_block(reader, header, count, content_flags)
-            }
+            RootVersion::V1 => parse_v1_header(reader),
+            RootVersion::V2 | RootVersion::V3 => parse_v2v3_header(reader),
+            RootVersion::V4 => parse_v4_header(reader),
         }
     }
 
@@ -237,14 +167,15 @@ impl RootBlock {
                 }
             }
             // V2/V3 (MFST header): 17-byte header + separated format
+            // Write content_flags into content_flags_1; content_flags_2 and _3 are zero.
             RootVersion::V2 | RootVersion::V3 => {
                 #[allow(clippy::cast_possible_truncation)]
                 let header_v2 = RootBlockHeaderV2 {
                     num_records: self.header.num_records,
                     locale_flags: self.header.locale_flags,
-                    content_flags: (self.header.content_flags & 0xFFFF_FFFF) as u32,
-                    unk2: 0,
-                    unk3: 0,
+                    content_flags_1: (self.header.content_flags & 0xFFFF_FFFF) as u32,
+                    content_flags_2: 0,
+                    content_flags_3: 0,
                 };
                 header_v2.write_le(writer)?;
                 if !self.records.is_empty() {
@@ -299,6 +230,61 @@ impl RootBlock {
 
         header_size + fdid_size + ckey_size + name_hash_size
     }
+}
+
+/// Parse a V1 block header and dispatch to record parsing.
+fn parse_v1_header<R: Read + Seek>(reader: &mut R) -> Result<RootBlock> {
+    let header = RootBlockHeader::read_le(reader)?;
+    if header.num_records == 0 || header.num_records > 1_000_000 {
+        return Ok(RootBlock { header, records: Vec::new() });
+    }
+    let count = header.num_records as usize;
+    parse_v1_block(reader, header, count)
+}
+
+/// Parse a V2/V3 block header (17 bytes) and dispatch to record parsing.
+/// Reconstructs content_flags from 3 split fields per the wowdev wiki spec.
+fn parse_v2v3_header<R: Read + Seek>(reader: &mut R) -> Result<RootBlock> {
+    let header_v2 = RootBlockHeaderV2::read_le(reader)?;
+    let reconstructed_flags = reconstruct_v2_content_flags(&header_v2);
+    let header = RootBlockHeader {
+        num_records: header_v2.num_records,
+        content_flags: reconstructed_flags,
+        locale_flags: header_v2.locale_flags,
+    };
+    if header_v2.num_records == 0 || header_v2.num_records > 1_000_000 {
+        return Ok(RootBlock { header, records: Vec::new() });
+    }
+    let count = header_v2.num_records as usize;
+    let content_flags = ContentFlags::new(reconstructed_flags);
+    parse_v2_block(reader, header, count, content_flags)
+}
+
+/// Reconstruct a single content_flags u64 from the 3 split fields in a V2 header.
+/// Formula from wowdev wiki: flags_1 | flags_2 | (flags_3 << 17)
+fn reconstruct_v2_content_flags(h: &RootBlockHeaderV2) -> u64 {
+    u64::from(h.content_flags_1)
+        | u64::from(h.content_flags_2)
+        | (u64::from(h.content_flags_3) << 17)
+}
+
+/// Parse a V4 block header (18 bytes) and dispatch to record parsing.
+fn parse_v4_header<R: Read + Seek>(reader: &mut R) -> Result<RootBlock> {
+    let num_records = u32::read_le(reader)?;
+    let locale_flags = LocaleFlags::read_le(reader)?;
+    let content_flags = ContentFlags::read_v4(reader)?;
+    let _unk2 = u32::read_le(reader)?;
+    let _unk3 = u8::read_le(reader)?;
+    let header = RootBlockHeader {
+        num_records,
+        content_flags: content_flags.value,
+        locale_flags,
+    };
+    if num_records == 0 || num_records > 1_000_000 {
+        return Ok(RootBlock { header, records: Vec::new() });
+    }
+    let count = num_records as usize;
+    parse_v2_block(reader, header, count, content_flags)
 }
 
 /// Parse V1 block (all deltas first, then interleaved ckey+hash per record)
@@ -494,353 +480,5 @@ fn write_v2_v3_block<W: Write + Seek>(
 }
 
 #[cfg(test)]
-#[allow(clippy::expect_used, clippy::unwrap_used)]
-mod tests {
-    use super::*;
-    use std::io::Cursor;
-
-    fn create_test_records() -> Vec<RootRecord> {
-        vec![
-            RootRecord::new(
-                FileDataId::new(100),
-                ContentKey::from_hex("0123456789abcdef0123456789abcdef")
-                    .expect("Operation should succeed"),
-                Some(0x1234_567890abcdef),
-            ),
-            RootRecord::new(
-                FileDataId::new(102),
-                ContentKey::from_hex("fedcba9876543210fedcba9876543210")
-                    .expect("Operation should succeed"),
-                Some(0xfedc_ba0987654321),
-            ),
-        ]
-    }
-
-    #[test]
-    fn test_block_header_round_trip() {
-        let header = RootBlockHeader {
-            num_records: 42,
-            content_flags: 0x1234_5678,
-            locale_flags: LocaleFlags::new(LocaleFlags::ENUS),
-        };
-
-        let mut buffer = Vec::new();
-        let mut cursor = Cursor::new(&mut buffer);
-        header
-            .write_le(&mut cursor)
-            .expect("Operation should succeed");
-
-        let mut cursor = Cursor::new(&buffer);
-        let restored = RootBlockHeader::read_le(&mut cursor).expect("Operation should succeed");
-
-        assert_eq!(header, restored);
-        assert_eq!(buffer.len(), 12); // 4 + 4 + 4 bytes
-    }
-
-    #[test]
-    fn test_v1_block_round_trip() {
-        let mut block = RootBlock::new(
-            ContentFlags::new(ContentFlags::INSTALL),
-            LocaleFlags::new(LocaleFlags::ENUS),
-        );
-
-        for record in create_test_records() {
-            block.add_record(record);
-        }
-
-        let mut buffer = Vec::new();
-        let mut cursor = Cursor::new(&mut buffer);
-        block
-            .write(&mut cursor, RootVersion::V1, true)
-            .expect("Operation should succeed");
-
-        let mut cursor = Cursor::new(&buffer);
-        let restored =
-            RootBlock::parse(&mut cursor, RootVersion::V1, true).expect("Operation should succeed");
-
-        assert_eq!(block, restored);
-    }
-
-    #[test]
-    fn test_v2_block_round_trip_with_names() {
-        let mut block = RootBlock::new(
-            ContentFlags::new(ContentFlags::INSTALL),
-            LocaleFlags::new(LocaleFlags::ENUS),
-        );
-
-        for record in create_test_records() {
-            block.add_record(record);
-        }
-
-        let mut buffer = Vec::new();
-        let mut cursor = Cursor::new(&mut buffer);
-        block
-            .write(&mut cursor, RootVersion::V2, true)
-            .expect("Operation should succeed");
-
-        let mut cursor = Cursor::new(&buffer);
-        let restored =
-            RootBlock::parse(&mut cursor, RootVersion::V2, true).expect("Operation should succeed");
-
-        assert_eq!(block, restored);
-    }
-
-    #[test]
-    fn test_v2_block_round_trip_without_names() {
-        let mut block = RootBlock::new(
-            ContentFlags::new(ContentFlags::INSTALL | ContentFlags::NO_NAME_HASH),
-            LocaleFlags::new(LocaleFlags::ENUS),
-        );
-
-        // Create records without name hashes
-        let records = vec![
-            RootRecord::new(
-                FileDataId::new(100),
-                ContentKey::from_hex("0123456789abcdef0123456789abcdef")
-                    .expect("Operation should succeed"),
-                None,
-            ),
-            RootRecord::new(
-                FileDataId::new(102),
-                ContentKey::from_hex("fedcba9876543210fedcba9876543210")
-                    .expect("Operation should succeed"),
-                None,
-            ),
-        ];
-
-        for record in records {
-            block.add_record(record);
-        }
-
-        let mut buffer = Vec::new();
-        let mut cursor = Cursor::new(&mut buffer);
-        block
-            .write(&mut cursor, RootVersion::V2, true)
-            .expect("Operation should succeed");
-
-        let mut cursor = Cursor::new(&buffer);
-        let restored =
-            RootBlock::parse(&mut cursor, RootVersion::V2, true).expect("Operation should succeed");
-
-        assert_eq!(block, restored);
-    }
-
-    #[test]
-    fn test_v3_block_round_trip() {
-        let mut block = RootBlock::new(
-            ContentFlags::new(ContentFlags::INSTALL),
-            LocaleFlags::new(LocaleFlags::ENUS | LocaleFlags::DEDE),
-        );
-
-        for record in create_test_records() {
-            block.add_record(record);
-        }
-
-        let mut buffer = Vec::new();
-        let mut cursor = Cursor::new(&mut buffer);
-        block
-            .write(&mut cursor, RootVersion::V3, true)
-            .expect("Operation should succeed");
-
-        let mut cursor = Cursor::new(&buffer);
-        let restored =
-            RootBlock::parse(&mut cursor, RootVersion::V3, true).expect("Operation should succeed");
-
-        assert_eq!(block, restored);
-    }
-
-    #[test]
-    fn test_v4_block_round_trip() {
-        let mut block = RootBlock::new(
-            ContentFlags::new(ContentFlags::INSTALL | ContentFlags::BUNDLE),
-            LocaleFlags::new(LocaleFlags::ENUS),
-        );
-
-        for record in create_test_records() {
-            block.add_record(record);
-        }
-
-        let mut buffer = Vec::new();
-        let mut cursor = Cursor::new(&mut buffer);
-        block
-            .write(&mut cursor, RootVersion::V4, true)
-            .expect("Operation should succeed");
-
-        let mut cursor = Cursor::new(&buffer);
-        let restored =
-            RootBlock::parse(&mut cursor, RootVersion::V4, true).expect("Operation should succeed");
-
-        assert_eq!(block, restored);
-    }
-
-    #[test]
-    fn test_v4_block_round_trip_extended_content_flags() {
-        // V4 supports 40-bit content flags -- verify bits above 31 survive round-trip
-        let flags_with_high_bits = ContentFlags::new(0xAB_0000_8004); // bit 39, 33, plus INSTALL
-        let mut block = RootBlock::new(flags_with_high_bits, LocaleFlags::new(LocaleFlags::ENUS));
-
-        for record in create_test_records() {
-            block.add_record(record);
-        }
-
-        let mut buffer = Vec::new();
-        let mut cursor = Cursor::new(&mut buffer);
-        block
-            .write(&mut cursor, RootVersion::V4, true)
-            .expect("Operation should succeed");
-
-        let mut cursor = Cursor::new(&buffer);
-        let restored =
-            RootBlock::parse(&mut cursor, RootVersion::V4, true).expect("Operation should succeed");
-
-        // The 40-bit content flags should survive the round-trip
-        assert_eq!(
-            restored.content_flags().value,
-            0xAB_0000_8004,
-            "V4 40-bit content flags should round-trip without truncation"
-        );
-        assert_eq!(block, restored);
-    }
-
-    #[test]
-    fn test_empty_block_v1() {
-        let block = RootBlock::new(
-            ContentFlags::new(ContentFlags::NONE),
-            LocaleFlags::new(LocaleFlags::ALL),
-        );
-
-        let mut buffer = Vec::new();
-        let mut cursor = Cursor::new(&mut buffer);
-        block
-            .write(&mut cursor, RootVersion::V1, true)
-            .expect("Operation should succeed");
-
-        let mut cursor = Cursor::new(&buffer);
-        let restored =
-            RootBlock::parse(&mut cursor, RootVersion::V1, true).expect("Operation should succeed");
-
-        assert_eq!(block, restored);
-        assert_eq!(restored.records.len(), 0);
-        assert_eq!(buffer.len(), 12); // V1 header is 12 bytes
-    }
-
-    #[test]
-    fn test_empty_block_v2() {
-        let block = RootBlock::new(
-            ContentFlags::new(ContentFlags::NONE),
-            LocaleFlags::new(LocaleFlags::ALL),
-        );
-
-        let mut buffer = Vec::new();
-        let mut cursor = Cursor::new(&mut buffer);
-        block
-            .write(&mut cursor, RootVersion::V2, true)
-            .expect("Operation should succeed");
-
-        let mut cursor = Cursor::new(&buffer);
-        let restored =
-            RootBlock::parse(&mut cursor, RootVersion::V2, true).expect("Operation should succeed");
-
-        assert_eq!(block, restored);
-        assert_eq!(restored.records.len(), 0);
-        assert_eq!(buffer.len(), 17); // V2 header is 17 bytes
-    }
-
-    #[test]
-    fn test_block_sort_records() {
-        let mut block = RootBlock::new(
-            ContentFlags::new(ContentFlags::INSTALL),
-            LocaleFlags::new(LocaleFlags::ENUS),
-        );
-
-        // Add records in reverse order
-        let records = vec![
-            RootRecord::new(
-                FileDataId::new(300),
-                ContentKey::from_hex("0123456789abcdef0123456789abcdef")
-                    .expect("Operation should succeed"),
-                Some(0x1111_111111111111),
-            ),
-            RootRecord::new(
-                FileDataId::new(100),
-                ContentKey::from_hex("fedcba9876543210fedcba9876543210")
-                    .expect("Operation should succeed"),
-                Some(0x2222_222222222222),
-            ),
-            RootRecord::new(
-                FileDataId::new(200),
-                ContentKey::from_hex("abcdefabcdefabcdefabcdefabcdefab")
-                    .expect("Operation should succeed"),
-                Some(0x3333_333333333333),
-            ),
-        ];
-
-        for record in records {
-            block.add_record(record);
-        }
-
-        // Should be unsorted
-        assert_eq!(block.records[0].file_data_id, FileDataId::new(300));
-        assert_eq!(block.records[1].file_data_id, FileDataId::new(100));
-        assert_eq!(block.records[2].file_data_id, FileDataId::new(200));
-
-        block.sort_records();
-
-        // Should now be sorted
-        assert_eq!(block.records[0].file_data_id, FileDataId::new(100));
-        assert_eq!(block.records[1].file_data_id, FileDataId::new(200));
-        assert_eq!(block.records[2].file_data_id, FileDataId::new(300));
-    }
-
-    #[test]
-    fn test_block_size_calculation_v1() {
-        let mut block = RootBlock::new(
-            ContentFlags::new(ContentFlags::INSTALL),
-            LocaleFlags::new(LocaleFlags::ENUS),
-        );
-
-        // Empty V1 block: header(12)
-        assert_eq!(block.calculate_size(RootVersion::V1, true), 12);
-
-        // Add records
-        for record in create_test_records() {
-            block.add_record(record);
-        }
-
-        // V1 with 2 records: header(12) + fdids(8) + ckeys(32) + names(16) = 68
-        assert_eq!(block.calculate_size(RootVersion::V1, true), 68);
-    }
-
-    #[test]
-    fn test_block_size_calculation_v2() {
-        let mut block = RootBlock::new(
-            ContentFlags::new(ContentFlags::INSTALL),
-            LocaleFlags::new(LocaleFlags::ENUS),
-        );
-
-        // Empty V2 block: header(17)
-        assert_eq!(block.calculate_size(RootVersion::V2, true), 17);
-
-        // Add records
-        for record in create_test_records() {
-            block.add_record(record);
-        }
-
-        // V2 with 2 records and names: header(17) + fdids(8) + ckeys(32) + names(16) = 73
-        assert_eq!(block.calculate_size(RootVersion::V2, true), 73);
-
-        // V2 without names: header(17) + fdids(8) + ckeys(32) = 57
-        let mut no_names_block = RootBlock::new(
-            ContentFlags::new(ContentFlags::INSTALL | ContentFlags::NO_NAME_HASH),
-            LocaleFlags::new(LocaleFlags::ENUS),
-        );
-        for record in create_test_records() {
-            no_names_block.add_record(RootRecord::new(
-                record.file_data_id,
-                record.content_key,
-                None,
-            ));
-        }
-        assert_eq!(no_names_block.calculate_size(RootVersion::V2, true), 57);
-    }
-}
+#[path = "block_tests.rs"]
+mod tests;

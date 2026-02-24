@@ -40,8 +40,8 @@ impl ContentFlags {
     /// Encrypted content (bit 12)
     pub const ENCRYPTED: u64 = 0x1000;
 
-    /// No name hash present in block (bit 13) - V2+ only
-    pub const NO_NAME_HASH: u64 = 0x2000;
+    /// No name hash present in block (bit 28) - V2+ only
+    pub const NO_NAME_HASH: u64 = 0x1000_0000;
 
     /// Uncommon resolution (bit 14)
     pub const UNCOMMON_RESOLUTION: u64 = 0x4000;
