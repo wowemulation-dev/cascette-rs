@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1771802950730,
+  "lastUpdate": 1771900587191,
   "repoUrl": "https://github.com/wowemulation-dev/cascette-rs",
   "entries": {
     "Benchmark": [
@@ -1132,6 +1132,48 @@ window.BENCHMARK_DATA = {
           {
             "name": "bpsv_generation/summary/all",
             "value": 210,
+            "range": "± 1",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "daniel@kogito.network",
+            "name": "Daniel S. Reichenbach",
+            "username": "danielsreichenbach"
+          },
+          "committer": {
+            "email": "daniel@kogito.network",
+            "name": "Daniel S. Reichenbach",
+            "username": "danielsreichenbach"
+          },
+          "distinct": true,
+          "id": "d422faa097f3386117a4b577ef85b350a7e251b5",
+          "message": "style: fix rustfmt formatting for single-field enum variants\n\nRust 1.92 rustfmt expands single-field struct variants to multi-line.",
+          "timestamp": "2026-02-24T09:34:02+07:00",
+          "tree_id": "b58494f4abaebfee8855f89c0cdda519ff1f9bb1",
+          "url": "https://github.com/wowemulation-dev/cascette-rs/commit/d422faa097f3386117a4b577ef85b350a7e251b5"
+        },
+        "date": 1771900586201,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "bpsv_generation/versions/wow",
+            "value": 1866,
+            "range": "± 25",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "bpsv_generation/cdns/wow",
+            "value": 1184,
+            "range": "± 31",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "bpsv_generation/summary/all",
+            "value": 208,
             "range": "± 1",
             "unit": "ns/iter"
           }
