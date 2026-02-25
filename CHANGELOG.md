@@ -10,6 +10,14 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- cascette-formats: Download manifest CDN test fixture (Classic Era V1, truncated
+  to 100 entries) with manifest.json metadata
+- cascette-formats: Install manifest CDN test fixtures (Classic Era V1, Classic
+  4.4.0 V1) with manifest.json metadata
+- cascette-formats: Integration tests for download manifest parsing against real
+  CDN data (7 tests covering V1 parsing, tags, tag types, round-trip, validation)
+- cascette-formats: Integration tests for install manifest parsing against real
+  CDN data (10 tests covering V1 parsing, tags, entries, round-trip, cross-product)
 - cascette-formats: Root file CDN test fixtures (Classic Era V1, Retail V2
   extended header) downloaded via cascette-py, with manifest.json metadata
 - cascette-formats: Integration tests for root file parsing against real CDN data
@@ -43,6 +51,12 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   to backslashes, matching CascLib `NormalizeFileName_UpperBkSlash`
 - cascette-formats: Root name hash word swap removed. Returns `(pc << 32) | pb`
   directly, matching CascLib `CalcNormNameHash`
+- cascette-formats: Download `flag_size` validation added. Rejects flag_size > 4
+  in both `DownloadHeader::validate()` and `DownloadManifestBuilder::with_flags()`,
+  matching Agent.exe behavior
+- cascette-formats: Install V2 extended header support. `InstallHeader` now reads
+  and writes 6 additional bytes for V2 (content_key_size, entry_count_v2,
+  v2_unknown). V1 computes content_key_size as `ckey_length + 4`
 - cascette-formats: ZBSDIFF1 header endianness corrected from big-endian to
   little-endian, matching the original bsdiff format and verified against
   Agent.exe `tact::BsPatch::ParseHeader` at 0x6fbd1c

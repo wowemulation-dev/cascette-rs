@@ -184,6 +184,12 @@ impl DownloadHeader {
             return Err(DownloadError::InvalidEncodingKeyLength(ekey_length));
         }
 
+        // Check flag size (V2+): Agent.exe rejects flag_size > 4
+        let flag_size = self.flag_size();
+        if flag_size > 4 {
+            return Err(DownloadError::UnsupportedFlagSize(flag_size));
+        }
+
         Ok(())
     }
 

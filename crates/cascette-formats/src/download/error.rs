@@ -32,6 +32,10 @@ pub enum DownloadError {
     #[error("Invalid flag size: got {0} bytes, expected {1} bytes")]
     InvalidFlagSize(usize, u8),
 
+    /// Unsupported flag size in header (Agent.exe rejects > 4)
+    #[error("Unsupported number of flag bytes in download manifest: {0}")]
+    UnsupportedFlagSize(u8),
+
     /// Missing required checksum
     #[error("Missing checksum when required by header")]
     MissingChecksum,
@@ -153,6 +157,7 @@ impl DownloadError {
         matches!(
             self,
             Self::FileSizeTooLarge(_)
+                | Self::UnsupportedFlagSize(_)
                 | Self::ReservedFieldNotZero(_)
                 | Self::PriorityCalculationOverflow(_, _)
         )

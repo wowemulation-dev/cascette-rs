@@ -1,0 +1,18 @@
+{
+  "description": "Download manifest test fixtures from WoW CDN",
+  "source": "Downloaded via cascette-py from Blizzard CDN mirrors, BLTE-decompressed",
+  "fixtures": [
+    {
+      "file": "classic_era_1.15.7_v1_100entries.download",
+      "product": "wow_classic_era",
+      "version": "1.15.7.61582",
+      "format": "V1 (11-byte header, no flags)",
+      "header_version": 1,
+      "hash_size": 16,
+      "has_checksum": 0,
+      "entry_count": 100,
+      "tag_count": 29,
+      "notes": "Truncated from 218,791 entries to 100. Tag bitmasks shortened to match. Original EKey: 53ba96f0965adc306d2d0cf3b457949c."
+    }
+  ]
+}

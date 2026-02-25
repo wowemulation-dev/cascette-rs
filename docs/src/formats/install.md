@@ -34,14 +34,14 @@ struct InstallHeader {
     uint32_t entry_count;        // Number of file entries (big-endian)
 
     // Version 2+ fields (6 additional bytes, total 16 bytes)
-    uint8_t  loose_file_type;    // File type for loose files
-    uint32_t extra_entry_count;  // Additional entry count (big-endian)
-    uint8_t  entry_size;         // Per-entry byte size
+    uint8_t  content_key_size;   // Content key size (Agent.exe) / loose file type (CascLib)
+    uint32_t entry_count_v2;     // Additional entry count (big-endian)
+    uint8_t  unknown;            // Unknown byte
 };
 ```
 
-For version 1, the entry size is derived as `ckey_length + 4` (content key +
-4-byte file size). Version 2 specifies entry_size explicitly.
+For version 1, the content key size is derived as `ckey_length + 4` (content key +
+4-byte file size). Version 2 specifies content_key_size explicitly.
 
 ### Tag Section
 
@@ -456,10 +456,9 @@ The Install manifest format has two versions:
 ### Version 2
 
 - **Header Size**: 16 bytes (10 base + 6 additional)
-- **Added Fields**: `loose_file_type` (1 byte), `extra_entry_count` (4 bytes
-  BE), `entry_size` (1 byte)
-- **Features**: All version 1 features plus explicit entry size and support
-  for loose file types
+- **Added Fields**: `content_key_size` (1 byte), `entry_count_v2` (4 bytes
+  BE), `unknown` (1 byte)
+- **Features**: All version 1 features plus explicit content key size
 
 ### Version Detection
 
@@ -468,7 +467,7 @@ The version field is at offset 2 in the header. The agent accepts versions
 
 ### Implementation Status
 
-- **cascette-formats**: Full support for version 1 with validation
+- **cascette-formats**: Full support for versions 1 and 2 with validation
 - **cascette-py**: Complete parsing for version 1 with tag extraction
 
 ## References

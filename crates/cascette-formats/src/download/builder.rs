@@ -92,6 +92,9 @@ impl DownloadManifestBuilder {
         if self.version < 2 && flag_size > 0 {
             return Err(DownloadError::FlagsNotSupportedInVersion(self.version));
         }
+        if flag_size > 4 {
+            return Err(DownloadError::UnsupportedFlagSize(flag_size));
+        }
         self.flag_size = flag_size;
         Ok(self)
     }

@@ -15,7 +15,7 @@
 //! Download manifests use version-specific binary structures:
 //!
 //! ## Version 1 (Battle.net Agent/BNA):
-//! - **Header** (10 bytes): Magic "DL", version, key length, entry/tag counts
+//! - **Header** (11 bytes): Magic "DL", version, key length, entry/tag counts
 //! - **File Entries Section**: EncodingKeys, 40-bit file sizes, priorities, optional checksums
 //! - **Tag Section**: Tags with names, types, and bit masks
 //!
