@@ -58,6 +58,12 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (10 tests covering parsing, header fields, EST table, table offsets, entry
   counts, round-trip, BLTE loading, file paths, VFS-CFT references, and CFT
   entry size validation)
+- cascette-formats: Encoding CDN test fixtures (2 truncated files from WoW
+  Classic Era and WoW Classic, 2 pages each) with manifest.json metadata
+- cascette-formats: Integration tests for encoding file parsing against real
+  CDN data (14 tests covering header fields, page size shift encoding, ESpec
+  table, CKey/EKey page entries, page index sorting, page checksums, round-trip,
+  byte-exact round-trip, CKey/EKey lookups, batch lookup, data size calculation)
 
 ### Changed
 
@@ -67,6 +73,13 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (span_count + N spans with file_offset, span_length, cft_offset). Container
   file table uses byte-offset addressed fixed-stride entries. All three tables
   now parse real CDN data from WoW Retail, Classic, and Classic Era.
+- cascette-formats: Encoding header `ckey_page_size_kb` and `ekey_page_size_kb`
+  doc comments clarify Agent.exe `(hi << 8 | lo) << 0xa` encoding and link to
+  helper methods
+- docs: Encoding format documentation updated to use actual cascette-formats API
+  (replaced fictional structs/methods with real `EncodingFile`, `EncodingBuilder`
+  usage). Header `unknown` field renamed to `flags`. Builder example fixed to
+  use correct field names and types.
 - cascette-formats: TVFS header `InvalidHeaderSize` error now shows both actual
   and expected values instead of hardcoded "expected 46"
 - cascette-formats: TVFS header gains `cft_offs_size()`, `est_offs_size()`, and

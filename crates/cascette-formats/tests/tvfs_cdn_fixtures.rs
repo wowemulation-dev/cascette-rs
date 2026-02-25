@@ -4,7 +4,6 @@
 //! Tests parse real TVFS manifest files downloaded from Blizzard CDN
 //! for WoW Retail, WoW Classic, and WoW Classic Era.
 
-use cascette_formats::CascFormat;
 use cascette_formats::tvfs::TvfsFile;
 use std::path::Path;
 

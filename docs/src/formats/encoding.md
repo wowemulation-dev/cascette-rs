@@ -42,7 +42,7 @@ struct EncodingHeader {
     uint16_t ekey_page_size;  // 0x07: EKey page size in KB (BE)
     uint32_t ckey_page_count; // 0x09: Number of CKey pages (BE)
     uint32_t ekey_page_count; // 0x0D: Number of EKey pages (BE)
-    uint8_t  unknown;         // 0x11: Unknown (0)
+    uint8_t  flags;            // 0x11: Flags (must be 0)
     uint32_t espec_size;      // 0x12: ESpec table size (BE)
 };
 ```
@@ -145,117 +145,86 @@ skipped. Two sentinel patterns indicate padding:
    - Index into ESpec string table
    - Parse encoding specification for compression details
 
-## Implementation Example
+## Usage
+
+### Parsing
 
 ```rust
-#[derive(BinRead)]
-#[br(big)]
-struct EncodingHeader {
-    #[br(assert(magic == 0x454E))]
-    magic: u16,
-    version: u8,
-    ckey_size: u8,
-    ekey_size: u8,
-    ckey_page_size_kb: u16,
-    ekey_page_size_kb: u16,
-    ckey_page_count: u32,
-    ekey_page_count: u32,
-    #[br(assert(unknown == 0))]
-    unknown: u8,
-    espec_table_size: u32,
+use cascette_formats::encoding::EncodingFile;
+
+// From decompressed data
+let encoding = EncodingFile::parse(&data)?;
+
+// From BLTE-encoded CDN data
+let encoding = EncodingFile::parse_blte(&blte_data)?;
+```
+
+### Content Key Lookup
+
+```rust
+use cascette_crypto::ContentKey;
+
+// Single lookup (binary search on page index, linear within page)
+if let Some(ekey) = encoding.find_encoding(&content_key) {
+    println!("Encoding key: {:?}", ekey);
 }
 
-impl EncodingFile {
-    pub fn find_encoding_key(&self, content_key: &[u8; 16]) -> Option<EncodingResult> {
-        // 1. Find page containing content key
-        let page_idx = self.find_ckey_page(content_key)?;
-        let page = self.read_ckey_page(page_idx);
+// Get all encoding keys for a content key
+let ekeys = encoding.find_all_encodings(&content_key);
 
-        // 2. Search within page
-        for entry in page.entries() {
-            if entry.ckey == *content_key {
-                return Some(EncodingResult {
-                    ekeys: entry.ekeys.clone(),
-                    decompressed_size: entry.file_size,
-                });
-            }
-        }
-        None
-    }
+// Batch lookup (sort-merge across pages)
+let results = encoding.batch_find_encodings(&content_keys);
+```
+
+### EKey to ESpec Lookup
+
+```rust
+use cascette_crypto::EncodingKey;
+
+if let Some(espec) = encoding.find_espec(&encoding_key) {
+    println!("Compression spec: {}", espec);
 }
 ```
 
-## Chunked Page Loading and Binary Search
-
-The implementation uses chunked processing for memory efficiency with large
-encoding files:
+### Building
 
 ```rust
-/// Encoding file with chunked page loading
-pub struct EncodingFile {
-    /// Header with format information
-    pub header: EncodingHeader,
-    /// ESpec string table (always loaded)
-    pub espec_table: Vec<String>,
-    /// CKey page info for lazy loading
-    pub ckey_page_info: Vec<PageInfo>,
-    /// EKey page info for lazy loading
-    pub ekey_page_info: Vec<PageInfo>,
-    /// Binary page data for on-demand parsing
-    ckey_page_data: Vec<u8>,
-    ekey_page_data: Vec<u8>,
+use cascette_formats::encoding::{EncodingBuilder, CKeyEntryData, EKeyEntryData};
+
+let mut builder = EncodingBuilder::new(); // 4KB pages
+builder.add_ckey_entry(CKeyEntryData {
+    content_key,
+    file_size: 524_288,
+    encoding_keys: vec![encoding_key],
+});
+builder.add_ekey_entry(EKeyEntryData {
+    encoding_key,
+    espec: "z".to_string(),
+    file_size: 187_234,
+});
+let encoding_file = builder.build()?;
+```
+
+### Page Structure
+
+All pages are loaded eagerly. Each page preserves its original binary data
+for byte-exact round-trip reconstruction:
+
+```rust
+// Page<T> holds parsed entries and raw bytes
+pub struct Page<T> {
+    pub entries: Vec<T>,
+    pub original_data: Vec<u8>,
 }
 
-impl EncodingFile {
-    /// Binary search with chunked loading
-    pub fn find_encoding_key(&self, content_key: &[u8; 16]) -> Option<EncodingResult> {
-        // 1. Binary search page index to find target page
-        let page_idx = self.find_ckey_page(content_key)?;
-
-        // 2. Parse page on demand (memory efficient)
-        let page_info = &self.ckey_page_info[page_idx];
-        let page_data = &self.ckey_page_data[page_info.data_range()];
-
-        // 3. Validate page hash for integrity
-        if !self.validate_page_hash(page_data, &page_info.hash) {
-            return None; // Page corruption detected
-        }
-
-        // 4. Parse page entries and binary search
-        let page = EncodingPage::parse_ckey_page(page_data).ok()?;
-        page.binary_search_content_key(content_key)
-    }
-
-    /// Find page containing target key using binary search on page indices
-    fn find_ckey_page(&self, target_key: &[u8; 16]) -> Option<usize> {
-        self.ckey_page_info.binary_search_by(|page_info| {
-            page_info.first_key.cmp(target_key)
-        }).map(|idx| idx).or_else(|idx| {
-            if idx > 0 { Some(idx - 1) } else { None }
-        })
-    }
-
-    /// Validate page integrity using MD5 hash
-    fn validate_page_hash(&self, page_data: &[u8], expected_hash: &[u8; 16]) -> bool {
-        let computed = md5::compute(page_data);
-        computed.0 == *expected_hash
-    }
+// IndexEntry holds first key + MD5 checksum for integrity
+pub struct IndexEntry {
+    pub first_key: [u8; 16],
+    pub checksum: [u8; 16],
 }
 ```
 
-### Mixed Endianness Handling
-
-The encoding file format uses mixed endianness requiring careful parsing:
-
-```rust
-// Header and page indices are big-endian
-#[derive(BinRead, BinWrite)]
-#[br(big)] #[bw(big)]
-pub struct EncodingHeader { /* ... */ }
-
-// But some internal structures may vary
-// Always verify endianness for each field type
-```
+All multi-byte header and page fields are big-endian.
 
 ## ESpec Integration
 
@@ -479,80 +448,21 @@ This shows a typical game asset compressed from 512KB to 183KB using ZLib.
 ## Implementation Flow
 
 ```rust
-// 1. Fetch encoding file from CDN using encoding key
-let encoding_key = "bbf06e7476382cfaa396cff0049d356b";
-let encoding_data = cdn.fetch_data(encoding_key).await?;
+use cascette_formats::encoding::EncodingFile;
+use cascette_crypto::ContentKey;
 
-// 2. Decompress BLTE container
-let decompressed = blte::decompress(encoding_data)?;
+// 1. Parse encoding file from BLTE-encoded CDN data
+let encoding = EncodingFile::parse_blte(&cdn_data)?;
 
-// 3. Parse encoding file
-let encoding = EncodingFile::parse(decompressed)?;
+// 2. Look up content by content key
+let ekey = encoding.find_encoding(&content_key)
+    .ok_or("content key not found")?;
 
-// 4. Look up content by content key
-let content_key = hex!("3ce96e7a9e3b6f5c9d99c8b4e0a4f3d2");
-let result = encoding.find_encoding_key(&content_key)?;
+// 3. Optionally get the compression spec
+let espec = encoding.find_espec(&ekey);
 
-// 5. Fetch actual file using encoding key
-let file_data = cdn.fetch_data(&result.ekeys[0]).await?;
-
-// 6. Decompress using ESpec
-let final_data = decompress_with_espec(file_data, result.espec)?;
+// 4. Fetch actual file from CDN using encoding key, then decompress
 ```
-
-## Implementation Status
-
-### Rust Implementation (cascette-formats)
-
-Encoding file parser and builder:
-
-- **Header parsing** - Magic bytes, version, page sizes (complete)
-
-- **ESpec string table** - Null-terminated string handling (complete)
-
-- **Page-based architecture** - CKey and EKey page support (complete)
-
-- **Dynamic key sizes** - Entries use `ckey_size` and `ekey_size` from header
-instead of hardcoded 16 bytes (complete)
-
-- **Content resolution** - CKey to EKey mapping with multi-version support
-(complete)
-
-- **Batch lookups** - `batch_find_encodings()`, `batch_find_all_encodings()`,
-`batch_find_especs()` using sort-and-merge across pages (complete)
-
-- **Binary preservation** - Page-level binary data for perfect round-trip
-(complete)
-
-- **Builder support** - EncodingBuilder with automatic ESpec generation
-(complete)
-
-**Validation Status:**
-
-- Byte-for-byte round-trip validation with real WoW encoding files
-
-- Successfully processes WoW Classic Era encoding files
-
-- Page-based processing for memory efficiency with large files
-
-- Self-referential trailing ESpec generation for parser bootstrapping
-
-### Python Tools (cascette-py)
-
-Analysis tool supports:
-
-- Magic byte detection and version parsing
-
-- Page-based content lookup and analysis
-
-- Content key to encoding key mapping
-
-- ESpec table extraction and analysis
-
-- String block parsing and validation
-
-See <https://github.com/wowemulation-dev/cascette-py> for the Python
-implementation.
 
 ## Version History
 
@@ -576,10 +486,6 @@ The Encoding file format currently has only one version:
 All known encoding files use version 1. The version field is at offset 2 in the header. If future
 versions are introduced, parsers should check this field after validating the "EN" magic bytes.
 
-### Implementation Status
-
-- **cascette-formats**: Full support for version 1 with parser and builder
-- **cascette-py**: Complete analysis and extraction tools for version 1
 ## References
 
 - See [ESpec Documentation](espec.md) for encoding specifications
