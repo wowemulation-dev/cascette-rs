@@ -44,9 +44,29 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - cascette-formats: Integration tests for CDN archive index parsing (9 tests
   covering parsing, footer integrity, entry counts, TOC consistency, round-trip
   building, and binary search against real CDN data)
+- cascette-formats: CDN patch manifest test fixtures (3 files from WoW Classic
+  Era, WoW Retail, and StarCraft 2) with manifest.json metadata
+- cascette-formats: Integration tests for patch archive parsing against real CDN
+  data (9 tests covering parsing, header fields, encoding info, known entry
+  counts, block sort validation, decoded sizes, flatten entries, and round-trip)
+- cascette-formats: Block-based data types for patch archive format
+  (`PatchBlock`, `PatchFileEntry`, `FilePatch`, `PatchArchiveEncodingInfo`)
 
 ### Fixed
 
+- cascette-formats: Patch archive rewritten from incorrect flat-entry model to
+  block-based format matching real CDN data. Previous implementation used flat
+  entries with null-terminated compression strings and rejected extended headers
+  (flag 0x02), making it unable to parse any real CDN patch manifest. New
+  implementation parses block table, file entries with uint40 decoded sizes,
+  and per-file patch lists with 0x00 sentinel termination
+- cascette-formats: Patch archive extended header support. Parses encoding CKey,
+  encoding EKey, decoded/encoded sizes, and length-prefixed ESpec string when
+  flags bit 1 (0x02) is set. All known CDN patch manifests use this flag
+- cascette-formats: Patch archive block sort validation added via
+  `validate_block_sort_order()`, matching Agent.exe `_memcmp` validation
+- cascette-formats: Patch archive key size validation relaxed from exactly 16 to
+  1-16 range, matching Agent.exe `tact::PatchManifestReader::ParseHeader`
 - cascette-formats: ESpec encryption IV parsing accepts 1-8 bytes instead of
   exactly 4. CDN data shows Classic uses 4-byte IVs, Retail uses 8-byte IVs
   (99.8% of encrypted entries). Previous parser rejected all Retail IVs.

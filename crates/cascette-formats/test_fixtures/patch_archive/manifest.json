@@ -1,0 +1,39 @@
+{
+  "description": "CDN patch manifest files for integration testing",
+  "source": "Blizzard CDN (level3.blizzard.com/tpr/wow and /tpr/s2)",
+  "fetched_date": "2025-02-25",
+  "files": {
+    "e3fffe04f64007852408b86e44d91e5a.bin": {
+      "product": "wow_classic_era",
+      "version": "1.15.8.65989",
+      "size_bytes": 9901,
+      "block_count": 1,
+      "file_entries": 50,
+      "flags": "0x02"
+    },
+    "aaad2399821319140599c508abd54c9c.bin": {
+      "product": "wow",
+      "version": "12.0.1.66066",
+      "size_bytes": 16725,
+      "block_count": 1,
+      "file_entries": 112,
+      "flags": "0x02"
+    },
+    "071290388e1f3b898157c372f03bc435.bin": {
+      "product": "s2",
+      "version": "5.0.15.95841",
+      "size_bytes": 2709,
+      "block_count": 1,
+      "file_entries": 19,
+      "flags": "0x02"
+    }
+  },
+  "common_properties": {
+    "version": 2,
+    "file_key_size": 16,
+    "old_key_size": 16,
+    "patch_key_size": 16,
+    "block_size_bits": 16,
+    "flags": "0x02 (extended header)"
+  }
+}
