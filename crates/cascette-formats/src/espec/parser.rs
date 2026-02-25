@@ -78,25 +78,6 @@ impl<'a> Parser<'a> {
             })
     }
 
-    /// Parse a hex string of specified length (in bytes)
-    fn parse_hex_string(&mut self, byte_len: usize) -> Result<Vec<u8>, ESpecError> {
-        let hex_len = byte_len * 2;
-        let start = self.pos;
-        let end = (self.pos + hex_len).min(self.input.len());
-
-        if end - start < hex_len {
-            return Err(ESpecError::InvalidHex(format!(
-                "Expected {} hex chars, got {}",
-                hex_len,
-                end - start
-            )));
-        }
-
-        self.pos = end;
-        let hex_str = &self.input[start..end];
-        hex::decode(hex_str).map_err(|e| ESpecError::InvalidHex(e.to_string()))
-    }
-
     /// Parse an identifier (alphanumeric string)
     fn parse_identifier(&mut self) -> String {
         let start = self.pos;
@@ -226,6 +207,46 @@ impl<'a> Parser<'a> {
         Ok(bits)
     }
 
+    /// Parse variable-length hex string up to a delimiter character.
+    ///
+    /// Returns the decoded bytes. Validates that the hex length is even
+    /// and within `[min_bytes, max_bytes]`.
+    fn parse_hex_until(
+        &mut self,
+        delimiter: char,
+        min_bytes: usize,
+        max_bytes: usize,
+    ) -> Result<Vec<u8>, ESpecError> {
+        let start = self.pos;
+        while let Some(ch) = self.peek() {
+            if ch == delimiter {
+                break;
+            }
+            if !ch.is_ascii_hexdigit() {
+                return Err(ESpecError::InvalidHex(format!(
+                    "Invalid hex character '{ch}' at position {}",
+                    self.pos
+                )));
+            }
+            self.pos += 1;
+        }
+
+        let hex_str = &self.input[start..self.pos];
+        if !hex_str.len().is_multiple_of(2) {
+            return Err(ESpecError::InvalidHex(format!(
+                "Odd number of hex chars: {}",
+                hex_str.len()
+            )));
+        }
+
+        let byte_len = hex_str.len() / 2;
+        if byte_len < min_bytes || byte_len > max_bytes {
+            return Err(ESpecError::InvalidIvLength(byte_len));
+        }
+
+        hex::decode(hex_str).map_err(|e| ESpecError::InvalidHex(e.to_string()))
+    }
+
     /// Parse encrypted `ESpec`
     fn parse_encrypted(&mut self) -> Result<ESpec, ESpecError> {
         self.consume('e')?;
@@ -243,8 +264,8 @@ impl<'a> Parser<'a> {
 
         self.consume(',')?;
 
-        // Parse 4-byte hex IV
-        let iv = self.parse_hex_string(4)?;
+        // Parse 1-8 byte hex IV (variable length, Agent.exe zero-pads to 8)
+        let iv = self.parse_hex_until(',', 1, 8)?;
 
         self.consume(',')?;
 
@@ -263,7 +284,22 @@ impl<'a> Parser<'a> {
 
         // Check if it's a single spec or multiple chunks
         if self.peek() != Some('{') {
-            // Single spec without size specification
+            // Could be either `b:<espec>` (no size spec) or `b:<size_spec>=<espec>` (shorthand)
+            if self.peek().is_some_and(|c| c.is_ascii_digit() || c == '*') {
+                // Shorthand with size spec, no braces (e.g., `b:256K*=z`)
+                let size_spec = if self.peek() == Some('*') {
+                    self.consume('*')?;
+                    None
+                } else {
+                    Some(self.parse_block_size_spec()?)
+                };
+                self.consume('=')?;
+                let spec = self.parse_espec()?;
+                return Ok(ESpec::BlockTable {
+                    chunks: vec![BlockChunk { size_spec, spec }],
+                });
+            }
+            // Single spec without size specification (e.g., `b:n`)
             let spec = self.parse_espec()?;
             return Ok(ESpec::BlockTable {
                 chunks: vec![BlockChunk {
@@ -276,11 +312,16 @@ impl<'a> Parser<'a> {
         self.consume('{')?;
 
         let mut chunks = Vec::new();
+        let mut variable_count: usize = 0;
 
         loop {
             // Parse size spec or final chunk marker
             let size_spec = if self.peek() == Some('*') {
                 self.consume('*')?;
+                variable_count += 1;
+                if variable_count > 1 {
+                    return Err(ESpecError::MultipleVariableBlocks);
+                }
                 if self.peek() == Some('=') {
                     None // Final chunk with no size
                 } else {

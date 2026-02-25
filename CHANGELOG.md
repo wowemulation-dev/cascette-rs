@@ -10,6 +10,11 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- cascette-formats: ESpec CDN test fixtures (50 representative strings from
+  Classic Era, Classic, and Retail encoding files) with manifest.json metadata
+- cascette-formats: Integration tests for ESpec parsing against real CDN data
+  (14 tests covering 4-byte IV, 8-byte IV, mixed encryption, shorthand forms,
+  MPQ variant, round-trip, and validation)
 - cascette-formats: Download manifest CDN test fixture (Classic Era V1, truncated
   to 100 entries) with manifest.json metadata
 - cascette-formats: Install manifest CDN test fixtures (Classic Era V1, Classic
@@ -37,6 +42,15 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- cascette-formats: ESpec encryption IV parsing accepts 1-8 bytes instead of
+  exactly 4. CDN data shows Classic uses 4-byte IVs, Retail uses 8-byte IVs
+  (99.8% of encrypted entries). Previous parser rejected all Retail IVs.
+- cascette-formats: ESpec block table rejects multiple variable (`*=`) blocks,
+  matching Agent.exe validation
+- cascette-formats: ESpec block table shorthand form `b:256K*=z` (without braces)
+  now parses, matching CDN production data
+- cascette-formats: Encoding header validation rejects zero page sizes, matching
+  Agent.exe behavior
 - cascette-formats: Root content flags corrected to match CascLib/TACTSharp/wiki
   (10 of 12 values were wrong). Added X86_32 and X86_64. Removed NO_TOC_HASH.
 - cascette-formats: Root locale flags corrected (PTBR, ITIT, RURU had wrong

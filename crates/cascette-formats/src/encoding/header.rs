@@ -82,6 +82,14 @@ impl EncodingHeader {
             });
         }
 
+        if self.ckey_page_size_kb == 0 {
+            return Err(EncodingError::InvalidPageSize(0));
+        }
+
+        if self.ekey_page_size_kb == 0 {
+            return Err(EncodingError::InvalidPageSize(0));
+        }
+
         if self.ckey_page_count == 0 {
             return Err(EncodingError::InvalidPageCount {
                 field: "ckey_page_count",

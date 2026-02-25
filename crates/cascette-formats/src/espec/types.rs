@@ -31,8 +31,11 @@ pub enum ESpecError {
     /// Unexpected character
     #[error("Expected '{expected}' at position {position}, found '{found}'")]
     UnexpectedChar {
+        /// Expected character
         expected: char,
+        /// Actual character found
         found: char,
+        /// Position in input
         position: usize,
     },
 
@@ -42,7 +45,12 @@ pub enum ESpecError {
 
     /// Invalid number format
     #[error("Invalid number at position {position}: {error}")]
-    InvalidNumber { position: usize, error: String },
+    InvalidNumber {
+        /// Position in input
+        position: usize,
+        /// Error description
+        error: String,
+    },
 
     /// Invalid size unit
     #[error("Invalid size unit '{0}', must be K or M")]
@@ -51,6 +59,14 @@ pub enum ESpecError {
     /// Missing encryption parameters
     #[error("Encryption requires key, IV, and nested spec")]
     MissingEncryptionParams,
+
+    /// Multiple variable blocks in block table
+    #[error("Multiple variable blocks detected in block table")]
+    MultipleVariableBlocks,
+
+    /// Invalid IV length (must be 1-8 bytes)
+    #[error("Invalid IV length: {0} bytes, must be 1-8")]
+    InvalidIvLength(usize),
 }
 
 /// Encoding specification defining how to encode/compress data
@@ -73,7 +89,7 @@ pub enum ESpec {
     Encrypted {
         /// Encryption key name (8 bytes as 16 hex chars)
         key: String,
-        /// Initialization vector (4 bytes)
+        /// Initialization vector (1-8 bytes, zero-padded to 8 by Agent.exe)
         iv: Vec<u8>,
         /// Nested specification for encrypted data
         spec: Box<ESpec>,
