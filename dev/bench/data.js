@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1771983977170,
+  "lastUpdate": 1771995711575,
   "repoUrl": "https://github.com/wowemulation-dev/cascette-rs",
   "entries": {
     "Benchmark": [
@@ -1301,6 +1301,48 @@ window.BENCHMARK_DATA = {
             "name": "bpsv_generation/summary/all",
             "value": 199,
             "range": "± 0",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "daniel@kogito.network",
+            "name": "Daniel S. Reichenbach",
+            "username": "danielsreichenbach"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6e47b250346eeec3efa4b8d8307d79af601a4dd7",
+          "message": "Merge pull request #44 from Osso/improve-header-parsing\n\nrefactor(root): extract tests and improve header parsing clarity",
+          "timestamp": "2026-02-25T11:59:59+07:00",
+          "tree_id": "b0124d631dd5f33cea449a18615121a35a72609d",
+          "url": "https://github.com/wowemulation-dev/cascette-rs/commit/6e47b250346eeec3efa4b8d8307d79af601a4dd7"
+        },
+        "date": 1771995711237,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "bpsv_generation/versions/wow",
+            "value": 1920,
+            "range": "± 25",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "bpsv_generation/cdns/wow",
+            "value": 1160,
+            "range": "± 14",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "bpsv_generation/summary/all",
+            "value": 211,
+            "range": "± 2",
             "unit": "ns/iter"
           }
         ]
