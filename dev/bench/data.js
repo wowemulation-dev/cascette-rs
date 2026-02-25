@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1771917038026,
+  "lastUpdate": 1771983977170,
   "repoUrl": "https://github.com/wowemulation-dev/cascette-rs",
   "entries": {
     "Benchmark": [
@@ -1259,6 +1259,48 @@ window.BENCHMARK_DATA = {
             "name": "bpsv_generation/summary/all",
             "value": 207,
             "range": "± 3",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "daniel@kogito.network",
+            "name": "Daniel S. Reichenbach",
+            "username": "danielsreichenbach"
+          },
+          "committer": {
+            "email": "daniel@kogito.network",
+            "name": "Daniel S. Reichenbach",
+            "username": "danielsreichenbach"
+          },
+          "distinct": true,
+          "id": "d20fb275b39eb96a297ebf4eae62b3a55708bced",
+          "message": "fix: correct naming, documentation, and missing crypto provider\n\nRename fields and constants based on Agent.exe verification:\n- EncodingHeader::unk_11 -> flags (verified at 0x6a23e6)\n- TVFS_FLAG_WRITE_SUPPORT deprecated, TVFS_FLAG_ENCODING_SPEC is primary\n- INDEX_VERSION -> LOCAL_IDX_VERSION (local IDX v7, not CDN footer 0-1)\n\nAdd doc comments for BLTE HeaderFlags::Extended (Avowed-only), LZ4\ncompression format rationale, and ZLibVariant codec ID mapping.\n\nFix ReqwestHttpClient::with_cdn_servers missing ensure_crypto_provider()\ncall that caused panic with rustls-no-provider configuration.\n\nSync documentation in CHANGELOG, docs/formats/tvfs.md, and\ndocs/development/agent-comparison.md with renamed identifiers.",
+          "timestamp": "2026-02-25T08:33:47+07:00",
+          "tree_id": "40946d370179c94aa8cbfe8afcf7630fe57d6575",
+          "url": "https://github.com/wowemulation-dev/cascette-rs/commit/d20fb275b39eb96a297ebf4eae62b3a55708bced"
+        },
+        "date": 1771983976692,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "bpsv_generation/versions/wow",
+            "value": 1815,
+            "range": "± 15",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "bpsv_generation/cdns/wow",
+            "value": 1138,
+            "range": "± 4",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "bpsv_generation/summary/all",
+            "value": 199,
+            "range": "± 0",
             "unit": "ns/iter"
           }
         ]
