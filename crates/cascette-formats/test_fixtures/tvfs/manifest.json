@@ -1,0 +1,60 @@
+{
+  "description": "TVFS (vfs-root) test fixtures from Blizzard CDN",
+  "fetch_date": "2026-02-25T15:25:13.544721+00:00",
+  "products_checked": [
+    "wow",
+    "wow_classic",
+    "wow_classic_era"
+  ],
+  "products_skipped": [],
+  "fixtures": [
+    {
+      "product": "wow",
+      "build_id": "66066",
+      "version": "12.0.1.66066",
+      "build_config_hash": "7b498dd7e196bf4161d631064f617189",
+      "cdn_config_hash": "76cd7e3ed47b6b0c1395f236c77034fe",
+      "content_key": "dbd6a1911a9dd0255ee60aabf658327b",
+      "encoding_key": "a61caa3b4019405a85d5352e8bae49b8",
+      "blte_size": 34953,
+      "decompressed_size": 55471,
+      "decompressed_md5": "dbd6a1911a9dd0255ee60aabf658327b",
+      "blte_file": "wow_dbd6a1911a9dd025.blte",
+      "bin_file": "wow_dbd6a1911a9dd025.bin",
+      "vfs_entry_count": 867,
+      "fetch_date": "2026-02-25T15:25:13.350494+00:00"
+    },
+    {
+      "product": "wow_classic",
+      "build_id": "65988",
+      "version": "5.5.3.65988",
+      "build_config_hash": "8c0bf563261db21d953517aba9564738",
+      "cdn_config_hash": "76cd7e3ed47b6b0c1395f236c77034fe",
+      "content_key": "cbd15a9f67c4d28d0aa14aa3cab554e1",
+      "encoding_key": "dcca488f1a709c1d60c8567bfe897311",
+      "blte_size": 18142,
+      "decompressed_size": 26732,
+      "decompressed_md5": "cbd15a9f67c4d28d0aa14aa3cab554e1",
+      "blte_file": "wow_classic_cbd15a9f67c4d28d.blte",
+      "bin_file": "wow_classic_cbd15a9f67c4d28d.bin",
+      "vfs_entry_count": 443,
+      "fetch_date": "2026-02-25T15:25:13.425990+00:00"
+    },
+    {
+      "product": "wow_classic_era",
+      "build_id": "65989",
+      "version": "1.15.8.65989",
+      "build_config_hash": "903cc3552ca1075d5bdc264eab8e2480",
+      "cdn_config_hash": "76cd7e3ed47b6b0c1395f236c77034fe",
+      "content_key": "04ca19154f0c48b1a0ed06dc342fa6b1",
+      "encoding_key": "2a6f1a538227094c04a4c364b1dda995",
+      "blte_size": 10220,
+      "decompressed_size": 14641,
+      "decompressed_md5": "04ca19154f0c48b1a0ed06dc342fa6b1",
+      "blte_file": "wow_classic_era_04ca19154f0c48b1.blte",
+      "bin_file": "wow_classic_era_04ca19154f0c48b1.bin",
+      "vfs_entry_count": 239,
+      "fetch_date": "2026-02-25T15:25:13.543873+00:00"
+    }
+  ]
+}

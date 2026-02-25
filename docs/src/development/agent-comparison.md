@@ -47,10 +47,12 @@ PR [#33](https://github.com/wowemulation-dev/cascette-rs/pull/33):
 
 PR [#34](https://github.com/wowemulation-dev/cascette-rs/pull/34):
 
-- TVFS VFS entry size: uses `VFS_ENTRY_DISK_SIZE` constant (22 bytes)
-  instead of `size_of::<VfsEntry>()` (24 bytes due to alignment padding)
-- TVFS builder path table size: uses exact `varint_size()` instead of
-  hardcoded 5-byte approximation
+- ~~TVFS VFS entry size: uses `VFS_ENTRY_DISK_SIZE` constant (22 bytes)
+  instead of `size_of::<VfsEntry>()` (24 bytes due to alignment padding)~~
+  Superseded: TVFS module rewritten with span-based VFS entries
+- ~~TVFS builder path table size: uses exact `varint_size()` instead of
+  hardcoded 5-byte approximation~~
+  Superseded: TVFS path table rewritten as recursive prefix tree
 - Root empty block parsing: skips empty intermediate blocks instead of
   breaking, EOF check handles termination
 - Root TSFM endianness: stores `RootMagic` in `RootHeader`, writes
@@ -444,9 +446,7 @@ These cascette-rs implementations match Agent.exe behavior:
 | Root V4 content flags | 40-bit (5-byte) flags | `ContentFlags::read_v4()`/`write_v4()` |
 | Root version detection | Header size + version field | `matches!(value2, 2..=4)` heuristic |
 | Root file V1-V4 | MFST/TSFM magic | Interleaved and separated formats |
-| TVFS header validation | `format_version`, key sizes | `TvfsHeader::validate()` called on parse |
-| TVFS path table | Prefix tree with varints | LEB128-like encoding |
-| TVFS container table | Variable EKey entries | `ekey_size` from header, `Vec<u8>` EKey + file\_size + optional CKey |
+| TVFS header validation | `format_version`, key sizes, dynamic header size | `TvfsHeader::validate()` called on parse |
 | Encoding header validation | 8-field check | `EncodingHeader::validate()` all fields |
 | ESpec table validation | Null-terminated, no empty | Rejects empty strings and unterminated data |
 | Install manifest V1+V2 | Version 1-2, file\_type byte | `InstallFileEntry::file_type` for V2 |
@@ -455,8 +455,7 @@ These cascette-rs implementations match Agent.exe behavior:
 | Build config accessors | 22+ typed fields | `size()`, `vfs_root()`, `vfs_entries()`, `build_partial_priority()`, `build_playtime_url()`, `build_product_espec()` |
 | CDN config patch indices | `patch-file-index` fields | `patch_file_index()`, `patch_file_index_size()`, `patch_file_indices()` |
 | ZBSDIFF1 header endianness | Big-endian int64 sizes | `#[br(big)]` matches TACT conventions; "ZBSDIFF1" signature is big-endian 0x5A42534449464631 |
-| TVFS VFS entry disk size | 22-byte entries | `VFS_ENTRY_DISK_SIZE` constant, not `size_of` (24 bytes with padding) |
-| TVFS path table varint sizes | Variable-length encoding | `varint_size()` for exact calculation |
+| TVFS format | CascLib recursive prefix tree, span-based VFS, byte-offset CFT | Path table, VFS table, and CFT rewritten to match CascLib/CDN data |
 | Root MFST/TSFM endianness | Magic determines byte order | `RootMagic` stored and preserved on round-trip |
 | Root empty block handling | Skip empty, continue parsing | EOF-based termination, empty blocks do not truncate |
 | Root format scope | WoW-specific root format | Module docs note WoW-specific nature |

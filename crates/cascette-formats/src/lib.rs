@@ -140,11 +140,10 @@ pub mod size;
 /// that enables content deduplication and multi-product support.
 ///
 /// Key features:
-/// - **Hierarchical Paths**: Prefix tree structure for efficient path storage
-/// - **Content Deduplication**: Same content referenced by multiple paths
-/// - **Multi-Product Support**: Manages files across different products
-/// - **BLTE Integration**: Seamless decompression of compressed manifests
-/// - **Streaming Support**: Lazy loading for large manifests
+/// - **Hierarchical Paths**: Recursive prefix tree for path storage
+/// - **Span-Based VFS**: Variable-length entries with multi-span file support
+/// - **Flag-Dependent CFT**: Entry size varies with CKEY/EST/patch flags
+/// - **BLTE Integration**: Decompression of CDN-encoded manifests
 ///
 /// See the [`tvfs`] module for detailed usage examples and integration patterns.
 pub mod tvfs;

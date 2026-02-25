@@ -1,4 +1,8 @@
 //! Utility functions for TVFS parsing
+//!
+//! The varint functions are not used by the current TVFS binary format
+//! (which uses fixed-width big-endian integers), but are retained for
+//! potential use with other variable-length encoded formats.
 
 use crate::tvfs::error::{TvfsError, TvfsResult};
 

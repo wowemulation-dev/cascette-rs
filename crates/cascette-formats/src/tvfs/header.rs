@@ -126,7 +126,10 @@ impl TvfsHeader {
             38
         };
         if self.header_size != expected_header_size {
-            return Err(TvfsError::InvalidHeaderSize(self.header_size));
+            return Err(TvfsError::InvalidHeaderSize {
+                got: self.header_size,
+                expected: expected_header_size,
+            });
         }
 
         if self.ekey_size != 9 || self.pkey_size != 9 {
@@ -184,5 +187,54 @@ impl TvfsHeader {
         self.cft_table_offset = cft_table_offset;
         self.cft_table_size = cft_table_size;
         self.max_depth = max_depth;
+    }
+
+    /// Compute the byte width needed to address positions within the CFT.
+    ///
+    /// CascLib's `GetOffsetFieldSize`: minimum bytes to hold `cft_table_size`.
+    pub fn cft_offs_size(&self) -> u8 {
+        offset_field_size(self.cft_table_size)
+    }
+
+    /// Compute the byte width needed to address positions within the EST.
+    ///
+    /// Only meaningful when `has_encoding_spec()` returns true.
+    pub fn est_offs_size(&self) -> u8 {
+        offset_field_size(self.est_table_size.unwrap_or(0))
+    }
+
+    /// Compute the size of a single CFT entry in bytes.
+    ///
+    /// Layout per CascLib: `EKey(ekey_size) + EncodedSize(4)`, then
+    /// optionally `+ CKey(ekey_size)` if `INCLUDE_CKEY`, then optionally
+    /// `+ EstOffsSize` if `ENCODING_SPEC`, then optionally
+    /// `+ CftOffsSize` if `PATCH_SUPPORT`.
+    pub fn cft_entry_size(&self) -> usize {
+        let mut size = self.ekey_size as usize + 4; // EKey + EncodedSize
+        if self.includes_content_keys() {
+            size += self.pkey_size as usize; // CKey (same size as PKey)
+        }
+        if self.has_encoding_spec() {
+            size += self.est_offs_size() as usize;
+        }
+        if self.has_patch_support() {
+            size += self.cft_offs_size() as usize;
+        }
+        size
+    }
+}
+
+/// Minimum number of bytes to address any offset within a table of `size` bytes.
+///
+/// Matches CascLib's `GetOffsetFieldSize`.
+fn offset_field_size(size: u32) -> u8 {
+    if size > 0x00FF_FFFF {
+        4
+    } else if size > 0x0000_FFFF {
+        3
+    } else if size > 0x0000_00FF {
+        2
+    } else {
+        1
     }
 }

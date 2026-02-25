@@ -51,6 +51,27 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   counts, block sort validation, decoded sizes, flatten entries, and round-trip)
 - cascette-formats: Block-based data types for patch archive format
   (`PatchBlock`, `PatchFileEntry`, `FilePatch`, `PatchArchiveEncodingInfo`)
+- cascette-formats: TVFS CDN test fixtures (3 products: WoW Retail, Classic,
+  Classic Era) with .bin (decompressed) and .blte (raw) files, plus
+  manifest.json metadata
+- cascette-formats: Integration tests for TVFS parsing against real CDN data
+  (10 tests covering parsing, header fields, EST table, table offsets, entry
+  counts, round-trip, BLTE loading, file paths, VFS-CFT references, and CFT
+  entry size validation)
+
+### Changed
+
+- cascette-formats: TVFS module rewritten to match CascLib/Agent.exe binary
+  format. Path table uses recursive prefix tree with 0xFF NodeValue markers
+  (folder bit 31 / VFS byte offset). VFS table uses span-based entries
+  (span_count + N spans with file_offset, span_length, cft_offset). Container
+  file table uses byte-offset addressed fixed-stride entries. All three tables
+  now parse real CDN data from WoW Retail, Classic, and Classic Era.
+- cascette-formats: TVFS header `InvalidHeaderSize` error now shows both actual
+  and expected values instead of hardcoded "expected 46"
+- cascette-formats: TVFS header gains `cft_offs_size()`, `est_offs_size()`, and
+  `cft_entry_size()` methods for computing field widths from table sizes,
+  matching CascLib's `GetOffsetFieldSize`
 
 ### Fixed
 

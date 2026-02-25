@@ -1,19 +1,20 @@
 //! TVFS (TACT Virtual File System) format implementation
 //!
-//! TVFS is the virtual file system introduced in WoW 8.2 (CASC v3) that provides
-//! a unified interface for managing content across multiple products and build
-//! configurations. It replaces direct file path mappings with a flexible
-//! namespace-based system that enables content deduplication and multi-product support.
+//! TVFS is the virtual file system introduced in WoW 8.2 (CASC v3) that maps
+//! file paths to encoding keys via a prefix tree, VFS span table, and container
+//! file table. The binary format matches CascLib's `CascRootFile_TVFS.cpp`.
 //!
-//! # Features
+//! # Tables
 //!
-//! - Parser and builder for TVFS manifests
-//! - Hierarchical path table with prefix tree structure
-//! - VFS table for file span mappings
-//! - Container file table with EKeys and optional content keys
-//! - BLTE integration for compressed manifests
-//! - Streaming support for large files
-//! - Round-trip validation
+//! - **Path table**: Recursive prefix tree encoding file paths. Each file leaf
+//!   stores a VFS byte offset.
+//! - **VFS table**: Span-based entries (span_count + N spans). Each span has a
+//!   file_offset, span_length, and CFT byte offset.
+//! - **Container file table (CFT)**: Fixed-stride entries addressed by byte
+//!   offset. Each entry has an EKey, encoded size, and optional CKey/EST/patch
+//!   fields depending on header flags.
+//! - **Encoding spec table (EST)**: Null-terminated encoding specification
+//!   strings, present when `TVFS_FLAG_ENCODING_SPEC` is set.
 
 mod builder;
 mod container_table;
@@ -21,6 +22,7 @@ mod error;
 mod est_table;
 mod header;
 mod path_table;
+#[allow(dead_code)]
 mod utils;
 mod vfs_table;
 
@@ -33,12 +35,11 @@ pub use header::{
     TVFS_FLAG_ENCODING_SPEC, TVFS_FLAG_INCLUDE_CKEY, TVFS_FLAG_PATCH_SUPPORT,
     TVFS_FLAG_WRITE_SUPPORT, TvfsHeader,
 };
-pub use path_table::{PathNode, PathTable};
-pub use vfs_table::{VfsEntry, VfsTable};
+pub use path_table::{PathFileEntry, PathTable, PathTreeNode};
+pub use vfs_table::{VfsEntry, VfsSpan, VfsTable};
 
 use crate::CascFormat;
-use binrw::io::{Read, Seek, SeekFrom};
-use binrw::{BinRead, BinResult, BinWrite};
+use binrw::{BinRead, BinWrite};
 use std::io::Cursor;
 
 /// Complete TVFS file structure
@@ -46,7 +47,7 @@ use std::io::Cursor;
 pub struct TvfsFile {
     /// TVFS header
     pub header: TvfsHeader,
-    /// Path table with hierarchical structure
+    /// Path table with prefix tree structure
     pub path_table: PathTable,
     /// VFS table with file span mappings
     pub vfs_table: VfsTable,
@@ -56,38 +57,56 @@ pub struct TvfsFile {
     pub est_table: Option<EstTable>,
 }
 
-impl BinRead for TvfsFile {
-    type Args<'a> = ();
+impl TvfsFile {
+    /// Parse TVFS from decompressed data.
+    pub fn parse(data: &[u8]) -> TvfsResult<Self> {
+        // Read header via binrw (handles the mixed endianness)
+        let mut cursor = Cursor::new(data);
+        let header = TvfsHeader::read_options(&mut cursor, binrw::Endian::Big, ())?;
+        header.validate()?;
 
-    fn read_options<R: Read + Seek>(
-        reader: &mut R,
-        endian: binrw::Endian,
-        _args: Self::Args<'_>,
-    ) -> BinResult<Self> {
-        // Read header
-        let header = TvfsHeader::read_options(reader, endian, ())?;
+        // Extract table slices from the data using header offsets
+        let path_start = header.path_table_offset as usize;
+        let path_end = path_start + header.path_table_size as usize;
+        if path_end > data.len() {
+            return Err(TvfsError::InvalidTableOffset(header.path_table_offset));
+        }
+        let path_data = &data[path_start..path_end];
 
-        // Load path table
-        reader.seek(SeekFrom::Start(u64::from(header.path_table_offset)))?;
-        let path_table = PathTable::read_options(reader, endian, (header.path_table_size,))?;
+        let vfs_start = header.vfs_table_offset as usize;
+        let vfs_end = vfs_start + header.vfs_table_size as usize;
+        if vfs_end > data.len() {
+            return Err(TvfsError::InvalidTableOffset(header.vfs_table_offset));
+        }
+        let vfs_data = &data[vfs_start..vfs_end];
 
-        // Load VFS table
-        reader.seek(SeekFrom::Start(u64::from(header.vfs_table_offset)))?;
-        let vfs_table = VfsTable::read_options(reader, endian, (header.vfs_table_size,))?;
+        let cft_start = header.cft_table_offset as usize;
+        let cft_end = cft_start + header.cft_table_size as usize;
+        if cft_end > data.len() {
+            return Err(TvfsError::InvalidTableOffset(header.cft_table_offset));
+        }
+        let cft_data = &data[cft_start..cft_end];
 
-        // Load container file table
-        reader.seek(SeekFrom::Start(u64::from(header.cft_table_offset)))?;
-        let container_table = ContainerFileTable::read_options(
-            reader,
-            endian,
-            (header.cft_table_size, header.flags, header.ekey_size),
-        )?;
+        // Parse tables
+        let path_table = PathTable::parse(path_data)?;
+        let vfs_table = VfsTable::parse(vfs_data, &header)?;
+        let container_table = ContainerFileTable::parse(cft_data, &header)?;
 
-        // Load EST table if present
+        // Parse EST table if present
         let est_table = if header.has_encoding_spec() {
             if let (Some(offset), Some(size)) = (header.est_table_offset, header.est_table_size) {
-                reader.seek(SeekFrom::Start(u64::from(offset)))?;
-                Some(EstTable::read_options(reader, endian, (size,))?)
+                let est_start = offset as usize;
+                let est_end = est_start + size as usize;
+                if est_end > data.len() {
+                    return Err(TvfsError::InvalidTableOffset(offset));
+                }
+                let est_data = &data[est_start..est_end];
+                let mut est_cursor = Cursor::new(est_data);
+                Some(EstTable::read_options(
+                    &mut est_cursor,
+                    binrw::Endian::Big,
+                    (size,),
+                )?)
             } else {
                 None
             }
@@ -103,153 +122,115 @@ impl BinRead for TvfsFile {
             est_table,
         })
     }
-}
 
-impl BinWrite for TvfsFile {
-    type Args<'a> = ();
-
-    fn write_options<W: binrw::io::Write + Seek>(
-        &self,
-        writer: &mut W,
-        endian: binrw::Endian,
-        _args: Self::Args<'_>,
-    ) -> BinResult<()> {
-        // Write header
-        self.header.write_options(writer, endian, ())?;
-
-        // Write path table
-        self.path_table.write_options(writer, endian, ())?;
-
-        // Write VFS table
-        self.vfs_table.write_options(writer, endian, ())?;
-
-        // Write container file table
-        self.container_table.write_options(
-            writer,
-            endian,
-            (self.header.flags, self.header.ekey_size),
-        )?;
-
-        // Write EST table if present
-        if let Some(ref est_table) = self.est_table {
-            est_table.write_options(writer, endian, ())?;
-        }
-
-        Ok(())
-    }
-}
-
-impl TvfsFile {
-    /// Load TVFS file from BLTE-compressed data
+    /// Load TVFS file from BLTE-compressed data.
     pub fn load_from_blte(blte_data: &[u8]) -> TvfsResult<Self> {
-        // First decompress BLTE container
-        let blte = crate::blte::BlteFile::parse(blte_data).map_err(|e| {
-            TvfsError::Io(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                e.to_string(),
-            ))
-        })?;
+        let blte = <crate::blte::BlteFile as CascFormat>::parse(blte_data).map_err(
+            |e: Box<dyn std::error::Error>| {
+                TvfsError::Io(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    e.to_string(),
+                ))
+            },
+        )?;
         let decompressed = blte.decompress()?;
-
-        // Then parse TVFS structure
-        let mut cursor = Cursor::new(&decompressed);
-        let tvfs = Self::read_options(&mut cursor, binrw::Endian::Big, ())?;
-        tvfs.header.validate()?;
-
-        Ok(tvfs)
+        Self::parse(&decompressed)
     }
 
-    /// Parse TVFS from decompressed data
-    pub fn parse(data: &[u8]) -> TvfsResult<Self> {
-        let mut cursor = Cursor::new(data);
-        let tvfs = Self::read_options(&mut cursor, binrw::Endian::Big, ())?;
-        tvfs.header.validate()?;
-        Ok(tvfs)
-    }
-
-    /// Build TVFS to bytes
+    /// Build TVFS to bytes.
     pub fn build(&self) -> TvfsResult<Vec<u8>> {
         let mut output = Vec::new();
+
+        // Build table data first to compute sizes
+        let path_data = self.path_table.data.clone();
+        let vfs_data = self.vfs_table.data.clone();
+        let cft_data = self.container_table.build(&self.header);
+        let est_data = self.est_table.as_ref().map(|est| {
+            let mut buf = Vec::new();
+            for spec in &est.specs {
+                buf.extend_from_slice(spec.as_bytes());
+                buf.push(0); // null terminator
+            }
+            buf
+        });
+
+        // Compute a header with correct offsets
+        let mut header = self.header.clone();
+        let header_size = header.header_size as u32;
+
+        // Table layout: header → path_table → est_table(optional) → cft_table → vfs_table
+        let path_offset = header_size;
+        let path_size = path_data.len() as u32;
+
+        let est_offset;
+        let est_size;
+        let cft_start_offset;
+
+        if let Some(ref est) = est_data {
+            est_offset = path_offset + path_size;
+            est_size = est.len() as u32;
+            cft_start_offset = est_offset + est_size;
+            header.est_table_offset = Some(est_offset);
+            header.est_table_size = Some(est_size);
+        } else {
+            est_offset = 0;
+            est_size = 0;
+            let _ = (est_offset, est_size);
+            cft_start_offset = path_offset + path_size;
+        }
+
+        let cft_size = cft_data.len() as u32;
+        let vfs_offset = cft_start_offset + cft_size;
+        let vfs_size = vfs_data.len() as u32;
+
+        header.path_table_offset = path_offset;
+        header.path_table_size = path_size;
+        header.vfs_table_offset = vfs_offset;
+        header.vfs_table_size = vfs_size;
+        header.cft_table_offset = cft_start_offset;
+        header.cft_table_size = cft_size;
+
+        // Write header
         let mut cursor = Cursor::new(&mut output);
-        self.write_options(&mut cursor, binrw::Endian::Big, ())?;
+        header.write_options(&mut cursor, binrw::Endian::Big, ())?;
+
+        // Write tables in layout order
+        output.extend_from_slice(&path_data);
+        if let Some(ref est) = est_data {
+            output.extend_from_slice(est);
+        }
+        output.extend_from_slice(&cft_data);
+        output.extend_from_slice(&vfs_data);
+
         Ok(output)
     }
 
-    /// Resolve file path to container entry
+    /// Resolve a file path to its container entry.
     pub fn resolve_path(&self, path: &str) -> Option<&ContainerEntry> {
-        let components: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
-        let mut current_node = &self.path_table.root_node;
-
-        // Navigate through path components
-        for component in &components {
-            current_node = self.find_child_node(current_node, component)?;
-        }
-
-        // Get file reference
-        let file_id = current_node.file_id?;
-        let vfs_entry = self.vfs_table.get_entry(file_id)?;
-        let container_entry = self.container_table.get_entry(vfs_entry.container_index)?;
-
-        Some(container_entry)
+        let vfs_offset = self.path_table.resolve_path(path)?;
+        // Find the VFS entry at this offset
+        let vfs_entry = self
+            .vfs_table
+            .entries
+            .iter()
+            .find(|e| e.offset == vfs_offset)?;
+        let span = vfs_entry.spans.first()?;
+        self.container_table
+            .entries
+            .iter()
+            .find(|e| e.offset == span.cft_offset)
     }
 
-    /// Find child node by name
-    fn find_child_node(&self, parent: &PathNode, name: &str) -> Option<&PathNode> {
-        for &child_id in &parent.children {
-            let child = self.path_table.get_node(child_id)?;
-            if child.path_part == name {
-                return Some(child);
-            }
-        }
-        None
-    }
-
-    /// Enumerate all files in the TVFS
-    pub fn enumerate_files(&self) -> TvfsIterator<'_> {
-        TvfsIterator {
-            tvfs: self,
-            stack: vec![(&self.path_table.root_node, String::new())],
-        }
-    }
-}
-
-/// Iterator for enumerating files in TVFS
-pub struct TvfsIterator<'a> {
-    tvfs: &'a TvfsFile,
-    stack: Vec<(&'a PathNode, String)>, // (node, full_path)
-}
-
-impl<'a> Iterator for TvfsIterator<'a> {
-    type Item = (String, &'a ContainerEntry);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        while let Some((node, path)) = self.stack.pop() {
-            // Add children to stack
-            for &child_id in &node.children {
-                if let Some(child) = self.tvfs.path_table.get_node(child_id) {
-                    let child_path = if path.is_empty() {
-                        child.path_part.clone()
-                    } else {
-                        format!("{}/{}", path, child.path_part)
-                    };
-
-                    self.stack.push((child, child_path));
-                }
-            }
-
-            // Return file entry if this is a file
-            if let Some(file_id) = node.file_id
-                && let Some(vfs_entry) = self.tvfs.vfs_table.get_entry(file_id)
-                && let Some(container_entry) = self
-                    .tvfs
-                    .container_table
-                    .get_entry(vfs_entry.container_index)
-            {
-                return Some((path, container_entry));
-            }
-        }
-
-        None
+    /// Enumerate all files in the TVFS.
+    pub fn enumerate_files(&self) -> impl Iterator<Item = (&PathFileEntry, Option<&VfsEntry>)> {
+        self.path_table.files.iter().map(move |file| {
+            let vfs_entry = self
+                .vfs_table
+                .entries
+                .iter()
+                .find(|e| e.offset == file.vfs_offset);
+            (file, vfs_entry)
+        })
     }
 }
 
@@ -271,45 +252,41 @@ mod tests {
 
     #[test]
     fn test_tvfs_header_parsing() {
-        // Create a minimal TVFS header for testing
         let mut header = TvfsHeader::new(TVFS_FLAG_INCLUDE_CKEY);
-        header.update_table_info(46, 10, 56, 20, 76, 33, 1);
+        header.update_table_info(38, 10, 48, 20, 68, 33, 1);
 
-        // Test serialization
         let mut buffer = Vec::new();
         let mut cursor = std::io::Cursor::new(&mut buffer);
         header
             .write_options(&mut cursor, binrw::Endian::Big, ())
             .expect("Operation should succeed");
 
-        // Test parsing
         let mut cursor = std::io::Cursor::new(&buffer);
         let parsed_header = TvfsHeader::read_options(&mut cursor, binrw::Endian::Big, ())
             .expect("Operation should succeed");
 
         assert_eq!(parsed_header.magic, *b"TVFS");
         assert_eq!(parsed_header.format_version, 1);
+        assert_eq!(parsed_header.header_size, 38);
         assert_eq!(parsed_header.ekey_size, 9);
         assert_eq!(parsed_header.pkey_size, 9);
+        assert_eq!(parsed_header.flags, TVFS_FLAG_INCLUDE_CKEY);
     }
 
     #[test]
-    fn test_path_node_creation() {
-        let mut root = PathNode::root();
-        let child = PathNode::new("test".to_string(), false);
-        root.add_child(1);
-
-        assert!(root.is_directory);
-        assert_eq!(root.children.len(), 1);
-        assert_eq!(child.path_part, "test");
-        assert!(!child.is_directory);
+    fn test_tvfs_header_with_est() {
+        let flags = TVFS_FLAG_INCLUDE_CKEY | TVFS_FLAG_ENCODING_SPEC | TVFS_FLAG_PATCH_SUPPORT;
+        let header = TvfsHeader::new(flags);
+        assert_eq!(header.header_size, 46);
+        assert!(header.has_encoding_spec());
+        assert!(header.has_patch_support());
+        assert!(header.includes_content_keys());
     }
 
     #[test]
     fn test_tvfs_parse_rejects_invalid_format_version() {
-        // Build a valid TVFS, then corrupt the format_version
         let mut header = TvfsHeader::new(TVFS_FLAG_INCLUDE_CKEY);
-        header.update_table_info(46, 10, 56, 20, 76, 33, 1);
+        header.update_table_info(38, 10, 48, 20, 68, 33, 1);
 
         let mut buffer = Vec::new();
         let mut cursor = std::io::Cursor::new(&mut buffer);
@@ -317,10 +294,8 @@ mod tests {
             .write_options(&mut cursor, binrw::Endian::Big, ())
             .expect("Operation should succeed");
 
-        // Corrupt format_version (byte 4, after 4-byte magic)
+        // Corrupt format_version (byte 4)
         buffer[4] = 2;
-
-        // Pad buffer to satisfy table offsets
         buffer.resize(200, 0);
 
         let result = TvfsFile::parse(&buffer);
@@ -330,7 +305,7 @@ mod tests {
     #[test]
     fn test_tvfs_parse_rejects_invalid_key_sizes() {
         let mut header = TvfsHeader::new(TVFS_FLAG_INCLUDE_CKEY);
-        header.update_table_info(46, 10, 56, 20, 76, 33, 1);
+        header.update_table_info(38, 10, 48, 20, 68, 33, 1);
 
         let mut buffer = Vec::new();
         let mut cursor = std::io::Cursor::new(&mut buffer);
@@ -340,7 +315,6 @@ mod tests {
 
         // Corrupt ekey_size (byte 6)
         buffer[6] = 16;
-
         buffer.resize(200, 0);
 
         let result = TvfsFile::parse(&buffer);
@@ -348,23 +322,33 @@ mod tests {
     }
 
     #[test]
-    fn test_vfs_entry_flags() {
-        let entry = VfsEntry::new(1, 0, 0, 1024, false, true);
-
-        assert!(!entry.is_directory());
-        assert!(entry.is_compressed());
-        assert_eq!(entry.file_size, 1024);
+    fn test_cft_offs_size() {
+        let header = TvfsHeader::new(TVFS_FLAG_INCLUDE_CKEY);
+        // Default cft_table_size is 0, so cft_offs_size should be 1
+        assert_eq!(header.cft_offs_size(), 1);
     }
 
     #[test]
-    fn test_container_entry() {
-        let ekey = [0x12; 9];
-        let content_key = [0x34; 16];
-        let entry = ContainerEntry::new(ekey, 1024, Some(512), Some(content_key));
+    fn test_offset_field_size_thresholds() {
+        // Test via headers with different CFT sizes
+        let mut h = TvfsHeader::new(TVFS_FLAG_INCLUDE_CKEY);
 
-        assert_eq!(entry.ekey, ekey.to_vec());
-        assert_eq!(entry.file_size, 1024);
-        assert_eq!(entry.effective_compressed_size(), 512);
-        assert!(entry.has_content_key());
+        h.cft_table_size = 0xFF;
+        assert_eq!(h.cft_offs_size(), 1);
+
+        h.cft_table_size = 0x100;
+        assert_eq!(h.cft_offs_size(), 2);
+
+        h.cft_table_size = 0xFFFF;
+        assert_eq!(h.cft_offs_size(), 2);
+
+        h.cft_table_size = 0x1_0000;
+        assert_eq!(h.cft_offs_size(), 3);
+
+        h.cft_table_size = 0xFF_FFFF;
+        assert_eq!(h.cft_offs_size(), 3);
+
+        h.cft_table_size = 0x100_0000;
+        assert_eq!(h.cft_offs_size(), 4);
     }
 }
