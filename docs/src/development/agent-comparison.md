@@ -24,7 +24,7 @@ PR [#31](https://github.com/wowemulation-dev/cascette-rs/pull/31):
 PR [#32](https://github.com/wowemulation-dev/cascette-rs/pull/32):
 
 - Encoding header: `EncodingHeader::validate()` checks all 8 fields
-  (version, unk_11, ckey/ekey hash sizes, page counts, espec block size)
+  (version, flags, ckey/ekey hash sizes, page counts, espec block size)
 - ESpec table: rejects empty strings (consecutive nulls) and
   unterminated data (non-null-terminated blocks)
 - Install manifest V2: supports version 2 with per-entry `file_type`

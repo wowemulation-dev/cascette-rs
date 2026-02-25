@@ -200,9 +200,20 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (`1 << offset`) instead of MSB-first (`0x80 >> offset`). This caused
   incorrect file-to-tag associations when parsing real install manifests.
   Verified against WoW Classic agent manifest data
+- cascette-protocol: `ReqwestHttpClient::with_cdn_servers` missing
+  `ensure_crypto_provider()` call, causing panic when creating reqwest
+  client with rustls-no-provider configuration
 
 ### Changed
 
+- cascette-formats: Renamed fields and constants based on Agent.exe verification
+  - `EncodingHeader::unk_11` renamed to `flags` (verified at 0x6a23e6, must be 0)
+  - `TVFS_FLAG_WRITE_SUPPORT` deprecated, use `TVFS_FLAG_ENCODING_SPEC` (0x02)
+  - `TvfsHeader::has_write_support()` deprecated, use `has_encoding_spec()`
+  - `constants::INDEX_VERSION` renamed to `LOCAL_IDX_VERSION` to distinguish
+    local IDX format (v7) from CDN archive index footer version (0-1)
+  - Added doc comments for BLTE `HeaderFlags::Extended` (Avowed-only),
+    LZ4 compression format rationale, and `ZLibVariant` codec ID mapping
 - **Breaking**: cascette-formats ESpec type model updated to match TACT behavior
   - Renamed `ZLibBits` to `ZLibVariant`, removed `Bits(u8)` variant
   - `ESpec::ZLib` fields changed from `bits: Option<ZLibBits>` to
@@ -311,7 +322,7 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - EKey entry proptest size assertion corrected (36 -> 25 bytes), added
     missing `#[test]` annotations to 7 proptest macro functions
 - cascette-formats: Added format validation matching CASC constraints
-  - `EncodingHeader::validate` checks all 8 header fields (version, unk_11
+  - `EncodingHeader::validate` checks all 8 header fields (version, flags,
     ckey/ekey hash sizes, page counts, espec block size)
   - `ESpecTable::parse` rejects empty strings and unterminated data
   - Install manifest V2 support with per-entry `file_type` byte

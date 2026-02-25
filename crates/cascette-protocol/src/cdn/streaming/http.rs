@@ -153,6 +153,7 @@ impl ReqwestHttpClient {
         config: StreamingConfig,
         mut cdn_servers: Vec<CdnServer>,
     ) -> Result<Self, StreamingError> {
+        crate::transport::ensure_crypto_provider();
         let client = reqwest::Client::builder()
             .timeout(config.request_timeout)
             .connect_timeout(config.connect_timeout)

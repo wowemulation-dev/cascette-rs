@@ -12,13 +12,20 @@ use super::error::{BlteError, BlteResult};
 /// BLTE magic bytes
 pub const BLTE_MAGIC: [u8; 4] = *b"BLTE";
 
-/// Header flags for chunk table format
+/// Header flags (tableFormat) for chunk table format
+///
+/// Determines the per-chunk entry size in the BLTE chunk table.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum HeaderFlags {
-    /// Standard chunk info (24 bytes per chunk)
+    /// Standard chunk info (24 bytes per chunk):
+    /// compressed_size(4) + decompressed_size(4) + checksum(16)
     Standard = 0x0F,
-    /// Extended chunk info (40 bytes per chunk)
+    /// Extended chunk info (40 bytes per chunk):
+    /// compressed_size(4) + decompressed_size(4) + checksum(16) + decompressed_checksum(16)
+    ///
+    /// Only observed in the Avowed (aqua) product. Not present in Agent.exe
+    /// 3.13.3 (WoW/Battle.net). Documented on WoWDev wiki as "Block v0x10".
     Extended = 0x10,
 }
 

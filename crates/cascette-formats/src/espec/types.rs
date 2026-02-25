@@ -117,13 +117,22 @@ pub struct BlockSizeSpec {
 }
 
 /// `ZLib` compression variant
+///
+/// Agent.exe (`tact::ESpec::GetCodecId` at 0x6be389) assigns different
+/// codec IDs based on the variant:
+/// - MPQ/ZLib → codec ID 2
+/// - LZ4HC → codec ID 3
+///
+/// This distinction matters for encoding: LZ4HC uses a different codec
+/// pipeline than standard zlib despite sharing the 'z' letter in ESpec
+/// strings.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ZLibVariant {
-    /// MPQ compression mode
+    /// MPQ compression mode (codec ID 2)
     MPQ,
-    /// Standard `ZLib` mode
+    /// Standard `ZLib` mode (codec ID 2)
     ZLib,
-    /// LZ4HC compression mode
+    /// LZ4HC compression mode (codec ID 3)
     LZ4HC,
 }
 

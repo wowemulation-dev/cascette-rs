@@ -28,7 +28,14 @@ pub fn compress_chunk(data: &[u8], mode: CompressionMode) -> BlteResult<Vec<u8>>
             Ok(compressed)
         }
         CompressionMode::LZ4 => {
-            // LZ4 compression with decompressed size prefix
+            // LZ4 compression: 8-byte LE decompressed size prefix + single LZ4 block.
+            //
+            // The WoWDev wiki describes a different format with headerVersion,
+            // BE size, and blockShift for sub-blocks. However, Agent.exe 3.13.3
+            // (`tact::Codec::DecodeLZ4` at 0x6f5fdb) is a stub that returns
+            // error 5 — LZ4 decompression is not implemented in that binary.
+            // This implementation uses the 8-byte LE prefix format observed in
+            // real WoW BLTE data.
             let decompressed_size = data.len() as u64;
 
             // Pre-allocate with worst-case size (LZ4 worst case is ~1.06x original size)
@@ -91,7 +98,8 @@ pub fn decompress_chunk(data: &[u8], mode: CompressionMode) -> BlteResult<Vec<u8
             Ok(decompressed)
         }
         CompressionMode::LZ4 => {
-            // LZ4 decompression: [decompressed_size:8] [compressed_data]
+            // LZ4 decompression: 8-byte LE decompressed size prefix + single LZ4 block.
+            // See compression comment above for format rationale.
             if data.len() < 8 {
                 return Err(BlteError::CompressionError(
                     "LZ4 data too short - missing size header".to_string(),

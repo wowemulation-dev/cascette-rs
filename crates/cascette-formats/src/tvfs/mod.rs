@@ -28,6 +28,7 @@ pub use builder::TvfsBuilder;
 pub use container_table::{ContainerEntry, ContainerFileTable};
 pub use error::{TvfsError, TvfsResult};
 pub use est_table::EstTable;
+#[allow(deprecated)]
 pub use header::{
     TVFS_FLAG_ENCODING_SPEC, TVFS_FLAG_INCLUDE_CKEY, TVFS_FLAG_PATCH_SUPPORT,
     TVFS_FLAG_WRITE_SUPPORT, TvfsHeader,

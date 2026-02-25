@@ -109,11 +109,11 @@ struct TvfsHeader {  // 38 bytes minimum, 46 with EST table
 ```rust
 // TVFS format flags
 const TVFS_FLAG_INCLUDE_CKEY: u32 = 0x01;      // Include content keys
-const TVFS_FLAG_WRITE_SUPPORT: u32 = 0x02;     // Write support / EST present
+const TVFS_FLAG_ENCODING_SPEC: u32 = 0x02;     // Encoding spec table (EST) present
 const TVFS_FLAG_PATCH_SUPPORT: u32 = 0x04;     // Patch support enabled
 ```
 
-- **Value 7 (0x7)**: Include C-key + Write support + Patch support (all
+- **Value 7 (0x7)**: Include C-key + Encoding spec + Patch support (all
 features)
 
 - **EST Table Present**: When bit 1 (0x02) is set. The agent checks `flags &
@@ -177,7 +177,7 @@ absent
   bytes, > 0xFFFF = 3 bytes, > 0xFF = 2 bytes, else 1 byte. This applies to
   both EST table size fields and container file table size fields.
 
-**Encoding Specifier Table (EST)** (Optional, if write support enabled):
+**Encoding Specifier Table (EST)** (Optional, if encoding spec flag is set):
 
 - Contains null-terminated encoding spec strings (same format as the ESpec
   table in the encoding file)

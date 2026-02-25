@@ -39,7 +39,7 @@ pub enum EncodingError {
     #[error("ESpec table size doesn't match header")]
     InvalidESpecSize,
 
-    #[error("Invalid flags: unk_11 must be 0, got {0}")]
+    #[error("Invalid flags: must be 0, got {0}")]
     InvalidFlags(u8),
 
     #[error("Invalid {field} hash size: expected 1..=16, got {value}")]

@@ -6,12 +6,23 @@ use binrw::{BinRead, BinWrite};
 /// TVFS format flags
 /// Include content keys in container file table
 pub const TVFS_FLAG_INCLUDE_CKEY: u32 = 0x01;
-/// Write support enabled
-pub const TVFS_FLAG_WRITE_SUPPORT: u32 = 0x02;
+/// Encoding specification table (EST) present in header
+///
+/// When set, the header includes 8 additional bytes for the EST table
+/// offset and size fields (46-byte header instead of 38-byte).
+/// Agent.exe (`tact::FileManifestReader::ParseHeader` at 0x6cea7f) checks
+/// `flags & 2` for this purpose.
+pub const TVFS_FLAG_ENCODING_SPEC: u32 = 0x02;
 /// Patch support enabled
 pub const TVFS_FLAG_PATCH_SUPPORT: u32 = 0x04;
-/// Encoding specification table present (write support flag only)
-pub const TVFS_FLAG_ENCODING_SPEC: u32 = TVFS_FLAG_WRITE_SUPPORT;
+
+/// Legacy alias for [`TVFS_FLAG_ENCODING_SPEC`]
+///
+/// Bit 0x02 was previously documented as "write support" but Agent.exe
+/// uses it to indicate the encoding spec table is present. Use
+/// `TVFS_FLAG_ENCODING_SPEC` instead.
+#[deprecated(note = "use TVFS_FLAG_ENCODING_SPEC instead")]
+pub const TVFS_FLAG_WRITE_SUPPORT: u32 = TVFS_FLAG_ENCODING_SPEC;
 
 /// TVFS file header (38 bytes base, 46 bytes with encoding spec table)
 #[derive(Debug, Clone, BinRead, BinWrite)]
@@ -134,6 +145,12 @@ impl TvfsHeader {
     }
 
     /// Check if write support is enabled
+    ///
+    /// This returns the same result as [`has_encoding_spec`](Self::has_encoding_spec).
+    /// Prefer using `has_encoding_spec()` which better describes the flag's
+    /// purpose in the file manifest context.
+    #[deprecated(note = "use has_encoding_spec() instead")]
+    #[allow(deprecated)]
     pub fn has_write_support(&self) -> bool {
         (self.flags & TVFS_FLAG_WRITE_SUPPORT) != 0
     }

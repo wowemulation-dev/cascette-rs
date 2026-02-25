@@ -352,7 +352,7 @@ impl EncodingBuilder {
             ckey_page_count: ckey_pages.len() as u32,
             #[allow(clippy::cast_possible_truncation)]
             ekey_page_count: ekey_pages.len() as u32,
-            unk_11: 0,
+            flags: 0,
             #[allow(clippy::cast_possible_truncation)]
             espec_block_size: espec_data.len() as u32,
         };

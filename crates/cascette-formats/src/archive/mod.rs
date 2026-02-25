@@ -154,8 +154,12 @@ pub mod constants {
     /// Size of archive index footer in bytes (20 fixed + 8 hash = 28)
     pub const FOOTER_SIZE: usize = 28;
 
-    /// Archive index format version
-    pub const INDEX_VERSION: u8 = 0x07;
+    /// Local IDX/KMT file format version (v7)
+    ///
+    /// This refers to the local CASC storage index format (`{bucket}{version}.idx`),
+    /// NOT the CDN archive index footer version. The CDN footer version field
+    /// accepts values 0 or 1 (validated in `IndexFooter::validate_format`).
+    pub const LOCAL_IDX_VERSION: u8 = 0x07;
 
     /// Expected key size in index footer
     pub const EXPECTED_KEY_SIZE: u8 = 0x09;

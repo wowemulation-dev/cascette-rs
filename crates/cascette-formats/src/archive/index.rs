@@ -211,7 +211,11 @@ impl Ord for IndexEntry {
 pub struct IndexFooter {
     /// First 8 bytes of MD5 hash of table of contents
     pub toc_hash: [u8; 8],
-    /// Index format version (always 1)
+    /// CDN archive index footer version (0 or 1)
+    ///
+    /// Agent.exe (`tact::CdnIndexFooterValidator` at 0x6b8168) accepts
+    /// versions 0 and 1. Not to be confused with the local IDX file
+    /// format version (7).
     pub version: u8,
     /// Reserved bytes (must be [0, 0])
     pub reserved: [u8; 2],
