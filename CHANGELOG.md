@@ -10,6 +10,10 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- cascette-formats: Root file CDN test fixtures (Classic Era V1, Retail V2
+  extended header) downloaded via cascette-py, with manifest.json metadata
+- cascette-formats: Integration tests for root file parsing against real CDN data
+  (11 tests covering V1/V2 parsing, content/locale flags, records, lookups)
 - cascette-formats: Suffix array-based bsdiff patch creation in `ZbsdiffBuilder`
   - `build()` / `build_optimized_patch()` using `divsufsort` for suffix array
     construction, implementing the Percival bsdiff algorithm
@@ -25,6 +29,20 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- cascette-formats: Root content flags corrected to match CascLib/TACTSharp/wiki
+  (10 of 12 values were wrong). Added X86_32 and X86_64. Removed NO_TOC_HASH.
+- cascette-formats: Root locale flags corrected (PTBR, ITIT, RURU had wrong
+  values). Added missing locales: enCN, enTW, esMX, ptPT.
+- cascette-formats: Root default magic changed from MFST to TSFM to match real
+  WoW output (CascLib `CASC_WOW_ROOT_SIGNATURE = 0x4D465354`)
+- cascette-formats: Root extended header size handling fixed. Read/write now
+  handle padding conditionally based on header_size field.
+- cascette-formats: Root version detection accepts extended header version 1
+  (matches CascLib and TACTSharp behavior). Maps to V2 block format.
+- cascette-formats: Root name hash normalization corrected from forward slashes
+  to backslashes, matching CascLib `NormalizeFileName_UpperBkSlash`
+- cascette-formats: Root name hash word swap removed. Returns `(pc << 32) | pb`
+  directly, matching CascLib `CalcNormNameHash`
 - cascette-formats: ZBSDIFF1 header endianness corrected from big-endian to
   little-endian, matching the original bsdiff format and verified against
   Agent.exe `tact::BsPatch::ParseHeader` at 0x6fbd1c

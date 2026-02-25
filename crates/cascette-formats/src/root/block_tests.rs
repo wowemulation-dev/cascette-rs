@@ -1,6 +1,6 @@
 //! Tests for root block parsing and serialization
+#![allow(clippy::expect_used, clippy::unwrap_used)]
 
-#[allow(clippy::expect_used, clippy::unwrap_used)]
 use super::*;
 use std::io::Cursor;
 

@@ -1,3 +1,4 @@
+#![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
 //! Integration tests for ZBSDIFF1 format using real CDN fixtures.
 //!
 //! These tests load `.zbsdiff` files from `test_fixtures/zbsdiff/` and
@@ -20,8 +21,6 @@
 //! Then copy the files to `crates/cascette-formats/test_fixtures/zbsdiff/`.
 //!
 //! If no fixture files are present, the tests are skipped.
-
-#![allow(clippy::expect_used)]
 
 use std::path::PathBuf;
 

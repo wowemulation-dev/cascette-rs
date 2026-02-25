@@ -193,19 +193,18 @@ impl RootLookupTables {
     }
 }
 
-/// Calculate name hash for file path using Jenkins96 with `WoW`-specific transform
+/// Calculate name hash for file path using Jenkins96
+///
+/// Normalizes the path to uppercase with backslashes, matching CascLib's
+/// `NormalizeFileName_UpperBkSlash` and `CalcNormNameHash`.
 pub fn calculate_name_hash(path: &str) -> u64 {
-    // Normalize path: uppercase and forward slashes
-    let normalized = path.to_uppercase().replace('\\', "/");
+    // CascLib: NormalizeFileName_UpperBkSlash - uppercase, forward slashes to backslashes
+    let normalized = path.to_uppercase().replace('/', "\\");
 
-    // Calculate Jenkins96 hash
+    // CascLib: hashlittle2 returns (pc, pb), then CalcNormNameHash returns (pc << 32) | pb
+    // Jenkins96::hash stores hash64 = (pc << 32) | pb, which matches directly
     let hash = Jenkins96::hash(normalized.as_bytes());
-
-    // WoW swaps the high and low 32-bit parts of the hash
-    let high = (hash.hash64 >> 32) as u32;
-    let low = (hash.hash64 & 0xFFFF_FFFF) as u32;
-
-    (u64::from(low) << 32) | u64::from(high)
+    hash.hash64
 }
 
 /// Decode `FileDataID` delta sequence

@@ -13,7 +13,7 @@ use std::io::{Cursor, Read, Write};
 /// encoding: bit 63 is the sign bit, bits 0-62 hold the absolute value,
 /// stored in little-endian byte order. This differs from two's complement
 /// which Rust's `i64::from_le_bytes` assumes.
-fn offtin(buf: &[u8; 8]) -> i64 {
+fn offtin(buf: [u8; 8]) -> i64 {
     let magnitude = i64::from_le_bytes([
         buf[0],
         buf[1],
@@ -173,13 +173,13 @@ impl ControlBlock {
             // magnitude) rather than two's complement for all three fields.
             let mut buf = [0u8; 8];
             cursor.read_exact(&mut buf)?;
-            let diff_size = offtin(&buf);
+            let diff_size = offtin(buf);
 
             cursor.read_exact(&mut buf)?;
-            let extra_size = offtin(&buf);
+            let extra_size = offtin(buf);
 
             cursor.read_exact(&mut buf)?;
-            let seek_offset = offtin(&buf);
+            let seek_offset = offtin(buf);
 
             let entry = ControlEntry::new(diff_size, extra_size, seek_offset);
             entry.validate()?;

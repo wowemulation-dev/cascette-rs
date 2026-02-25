@@ -448,8 +448,8 @@ mod tests {
         let data = builder.build().expect("Test operation should succeed");
         assert!(!data.is_empty());
 
-        // V2 should start with MFST magic
-        assert_eq!(&data[0..4], b"MFST");
+        // V2 should start with TSFM magic (real WoW output)
+        assert_eq!(&data[0..4], b"TSFM");
     }
 
     #[test]
@@ -467,10 +467,10 @@ mod tests {
         let data = builder.build().expect("Test operation should succeed");
         assert!(!data.is_empty());
 
-        // V3 should start with MFST magic
-        assert_eq!(&data[0..4], b"MFST");
+        // V3 should start with TSFM magic (real WoW output)
+        assert_eq!(&data[0..4], b"TSFM");
 
-        // Check header structure (MFST + header_size + version + ...)
+        // Check header structure (TSFM + header_size + version + ...)
         assert!(data.len() >= 20); // Minimum header size for V3
     }
 
@@ -488,7 +488,7 @@ mod tests {
 
         let data = builder.build().expect("Test operation should succeed");
         assert!(!data.is_empty());
-        assert_eq!(&data[0..4], b"MFST");
+        assert_eq!(&data[0..4], b"TSFM");
     }
 
     #[test]
