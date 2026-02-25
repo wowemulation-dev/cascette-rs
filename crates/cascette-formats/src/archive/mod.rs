@@ -151,7 +151,12 @@ pub mod constants {
     /// Maximum entries that can fit in one chunk
     pub const MAX_ENTRIES_PER_CHUNK: usize = CHUNK_SIZE / ENTRY_SIZE; // 170
 
-    /// Size of archive index footer in bytes (20 fixed + 8 hash = 28)
+    /// Typical CDN archive index footer size in bytes (20 fixed + 8 hash = 28)
+    ///
+    /// The actual footer size is `MIN_FOOTER_SIZE + footer_hash_bytes` (see
+    /// `index::MIN_FOOTER_SIZE`). This constant assumes the typical
+    /// `footer_hash_bytes = 8`. Use `MIN_FOOTER_SIZE + footer.footer_hash_bytes`
+    /// for the exact size.
     pub const FOOTER_SIZE: usize = 28;
 
     /// Local IDX/KMT file format version (v7)
@@ -161,8 +166,12 @@ pub mod constants {
     /// accepts values 0 or 1 (validated in `IndexFooter::validate_format`).
     pub const LOCAL_IDX_VERSION: u8 = 0x07;
 
-    /// Expected key size in index footer
-    pub const EXPECTED_KEY_SIZE: u8 = 0x09;
+    /// Typical truncated key size for local IDX entries (9 bytes)
+    ///
+    /// This is the common truncated `EKey` size in local CASC storage indices.
+    /// CDN archive indices typically use full 16-byte keys. Agent.exe accepts
+    /// any `hash_size` in `1..=16` (`tact::CdnIndexFooterValidator` at 0x6b8168).
+    pub const TYPICAL_TRUNCATED_KEY_SIZE: u8 = 0x09;
 
     /// Expected segment size log2 (4KB chunks)
     pub const EXPECTED_SEGMENT_SIZE_LOG2: u8 = 0x0C;

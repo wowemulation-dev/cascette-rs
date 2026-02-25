@@ -39,6 +39,11 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     and application-correct
 - cascette-formats: ZBSDIFF1 CDN test fixtures (5 triplets from WoW Classic)
   downloaded via cascette-py, with manifest.json metadata
+- cascette-formats: CDN archive index test fixtures (3 files from WoW Classic Era
+  and StarCraft 2) with manifest.json metadata
+- cascette-formats: Integration tests for CDN archive index parsing (9 tests
+  covering parsing, footer integrity, entry counts, TOC consistency, round-trip
+  building, and binary search against real CDN data)
 
 ### Fixed
 
@@ -78,6 +83,14 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   two's complement (`i64::from_be_bytes`) to sign-magnitude (`offtin`/`offtout`),
   matching the bsdiff format where bit 63 is sign, bits 0-62 are magnitude in
   little-endian order
+- cascette-formats: CDN archive index `ekey_length` validation relaxed from 9-16
+  to 1-16, matching Agent.exe (`tact::CdnIndexFooterValidator` accepts `<= 0x10`)
+- cascette-formats: CDN archive index `element_count` doc comment corrected from
+  "number of chunks" to "number of entries". Verified against real CDN data.
+- cascette-formats: `ArchiveIndex::build()` fixed to compute chunk count from
+  entries instead of using `element_count` directly as chunk count
+- cascette-formats: `EXPECTED_KEY_SIZE` renamed to `TYPICAL_TRUNCATED_KEY_SIZE`
+  with doc comment clarifying it is the common local IDX value, not an enforced limit
 
 ### Added
 

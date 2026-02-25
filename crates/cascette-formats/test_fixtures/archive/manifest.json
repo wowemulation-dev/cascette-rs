@@ -1,0 +1,30 @@
+{
+  "description": "CDN archive index files for integration testing",
+  "source": "Blizzard CDN (level3.blizzard.com/tpr/wow and /tpr/s2)",
+  "fetched_date": "2025-02-25",
+  "files": {
+    "0017a402f556fbece46c38dc431a2c9b.index": {
+      "product": "wow_classic_era",
+      "entries": 7060,
+      "size_bytes": 173068
+    },
+    "00b79cc0eebdd26437c7e92e57ac7f5c.index": {
+      "product": "wow_classic_era",
+      "entries": 2062,
+      "size_bytes": 53588
+    },
+    "s2_00872b40344ef1a3dac4aff09588603c.index": {
+      "product": "s2",
+      "entries": 1555,
+      "size_bytes": 41228
+    }
+  },
+  "footer_format": {
+    "version": 1,
+    "page_size_kb": 4,
+    "offset_bytes": 4,
+    "size_bytes": 4,
+    "ekey_length": 16,
+    "footer_hash_bytes": 8
+  }
+}

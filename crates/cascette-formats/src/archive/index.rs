@@ -12,7 +12,7 @@
 //! - Variable-size footer (20 bytes + hash_bytes)
 //! - Block-based structure (typically 4KB blocks)
 //! - VARIABLE-LENGTH keys as specified in footer
-//! - Mixed endianness (little-endian for element_count, big-endian for sizes/offsets)
+//! - Mixed endianness (little-endian element_count in footer, big-endian entry sizes/offsets)
 
 use crate::archive::error::{ArchiveError, ArchiveResult};
 use binrw::io::{Seek, SeekFrom, Write};
@@ -228,12 +228,14 @@ pub struct IndexFooter {
     pub offset_bytes: u8,
     /// Compressed size field size in bytes (always 4)
     pub size_bytes: u8,
-    /// `EKey` length in bytes (always 16 for full MD5)
+    /// `EKey` length in bytes (1-16, typically 16 for CDN, 9 for local IDX)
     pub ekey_length: u8,
     /// Footer hash length in bytes (always 8)
     pub footer_hash_bytes: u8,
-    /// Number of TOC entries/chunks (little-endian - special case!)
-    /// This is NOT the number of data entries, but the number of 4KB chunks
+    /// Total number of data entries (little-endian in on-disk format)
+    ///
+    /// Agent.exe reads this as a native LE dereference (`*(arg4 + 8)` on x86).
+    /// The number of 4KB chunks is `ceil(element_count / records_per_page)`.
     pub element_count: u32,
     /// First N bytes of MD5 hash of footer fields (N = footer_hash_bytes)
     pub footer_hash: Vec<u8>,
@@ -344,10 +346,12 @@ impl IndexFooter {
             )));
         }
 
-        // Support variable ekey_length (typically 9 or 16 bytes)
-        if self.ekey_length < 9 || self.ekey_length > 16 {
+        // Agent.exe accepts hash_size 1..=16 (tact::CdnIndexFooterValidator at 0x6b8168:
+        // `if (eax_9.b u<= 0x10)` — error: "Unsupported CDN index hash size: %u").
+        // CDN archives typically use 16 (full MD5); local IDX uses 9 (truncated).
+        if self.ekey_length == 0 || self.ekey_length > 16 {
             return Err(ArchiveError::InvalidFormat(format!(
-                "EKey length should be between 9 and 16, got {}",
+                "EKey length should be between 1 and 16, got {}",
                 self.ekey_length
             )));
         }
@@ -599,12 +603,12 @@ impl ArchiveIndex {
 
     /// Build archive index to writer
     pub fn build<W: Write + Seek>(&self, mut writer: W) -> ArchiveResult<()> {
-        let chunk_count = self.footer.element_count as usize;
         let block_size = (self.footer.page_size_kb as usize) * 1024;
         let record_size = self.footer.ekey_length as usize
             + self.footer.size_bytes as usize
             + self.footer.offset_bytes as usize;
         let records_per_block = block_size / record_size;
+        let chunk_count = self.entries.len().div_ceil(records_per_block);
         let hash_bytes = self.footer.footer_hash_bytes;
 
         // Write entry chunks and compute block hashes
@@ -1407,9 +1411,15 @@ mod tests {
             Err(ArchiveError::UnsupportedVersion(2))
         ));
 
-        // Reset and test invalid ekey length (outside valid range 9-16)
+        // Reset and test ekey_length validation (valid range 1-16)
         footer.version = 1;
-        footer.ekey_length = 8; // Less than minimum 9
+        footer.ekey_length = 8; // Valid: Agent.exe accepts 1-16
+        assert!(footer.validate_format().is_ok());
+
+        footer.ekey_length = 1; // Minimum valid
+        assert!(footer.validate_format().is_ok());
+
+        footer.ekey_length = 0; // Zero is invalid
         assert!(matches!(
             footer.validate_format(),
             Err(ArchiveError::InvalidFormat(_))

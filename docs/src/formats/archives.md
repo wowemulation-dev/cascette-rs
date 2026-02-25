@@ -167,7 +167,7 @@ struct ArchiveIndexFooter {  // 28 bytes total
 
 **Verified Footer Properties**:
 
-- Standard values: offset_bytes=4, size_bytes=4, ekey_length=16 (9-16 valid)
+- Standard values: offset_bytes=4, size_bytes=4, ekey_length=16 (1-16 valid)
 
 - offset_bytes can be 4 (regular archives), 5 (archives >4GB), or 6
   (archive-groups: 2-byte archive index + 4-byte offset)
