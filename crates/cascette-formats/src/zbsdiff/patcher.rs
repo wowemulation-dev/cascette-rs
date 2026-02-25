@@ -35,7 +35,7 @@ pub fn apply_patch_memory(old_data: &[u8], patch_data: &[u8]) -> ZbsdiffResult<V
     let mut cursor = Cursor::new(patch_data);
 
     // Parse header
-    let header = ZbsdiffHeader::read_options(&mut cursor, binrw::Endian::Big, ())?;
+    let header = ZbsdiffHeader::read_options(&mut cursor, binrw::Endian::Little, ())?;
     header.validate()?;
 
     // Read compressed blocks based on header sizes
@@ -188,7 +188,7 @@ impl<R: Read + Seek> ZbsdiffPatcher<R> {
         let mut cursor = Cursor::new(patch_data);
 
         // Parse header
-        let header = ZbsdiffHeader::read_options(&mut cursor, binrw::Endian::Big, ())?;
+        let header = ZbsdiffHeader::read_options(&mut cursor, binrw::Endian::Little, ())?;
         header.validate()?;
 
         // Read compressed blocks
@@ -364,7 +364,7 @@ impl ZbsdiffHeader {
         }
 
         let mut cursor = Cursor::new(patch_data);
-        let header = Self::read_options(&mut cursor, binrw::Endian::Big, ())?;
+        let header = Self::read_options(&mut cursor, binrw::Endian::Little, ())?;
         header.validate()?;
         Ok(header)
     }

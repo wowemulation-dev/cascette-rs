@@ -10,6 +10,31 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- cascette-formats: Suffix array-based bsdiff patch creation in `ZbsdiffBuilder`
+  - `build()` / `build_optimized_patch()` using `divsufsort` for suffix array
+    construction, implementing the Percival bsdiff algorithm
+  - Produces near-optimal ZBSDIFF1 patches with three separate zlib-compressed
+    blocks (control, diff, extra)
+  - New `suffix` module with binary search on suffix array, forward/backward
+    extension, and overlap resolution
+  - CDN fixture round-trip tests: build patch from old->new, apply, verify
+    output matches expected; parse CDN patch, rebuild bytes, verify byte-identical
+    and application-correct
+- cascette-formats: ZBSDIFF1 CDN test fixtures (5 triplets from WoW Classic)
+  downloaded via cascette-py, with manifest.json metadata
+
+### Fixed
+
+- cascette-formats: ZBSDIFF1 header endianness corrected from big-endian to
+  little-endian, matching the original bsdiff format and verified against
+  Agent.exe `tact::BsPatch::ParseHeader` at 0x6fbd1c
+- cascette-formats: ZBSDIFF1 control block integer encoding corrected from
+  two's complement (`i64::from_be_bytes`) to sign-magnitude (`offtin`/`offtout`),
+  matching the bsdiff format where bit 63 is sign, bits 0-62 are magnitude in
+  little-endian order
+
+### Added
+
 - cascette-client-storage: KMT update section for LSM-tree L0 writes
   - 24-byte `UpdateEntry` with hash guard, status byte, and delete markers
   - 512-byte `UpdatePage` (21 entries max) with 4KB sync every 8th page

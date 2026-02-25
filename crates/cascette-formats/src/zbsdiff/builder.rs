@@ -1,29 +1,21 @@
-//! ZBSDIFF1 patch builder for creating binary differential patches
+//! ZBSDIFF1 patch builder for creating binary differential patches.
 //!
 //! This module provides functionality to create ZBSDIFF1 patches from old and new data.
 //!
-//! ## Current Implementation
+//! ## Algorithms
 //!
-//! The implementation provides two algorithms:
+//! Three algorithms are available:
 //!
-//! 1. **Simple Algorithm** (`build_simple_patch`): Treats all new data as "extra" data.
-//!    Fast and memory-efficient but produces large patches.
+//! 1. **Optimized** (`build()` / `build_optimized_patch()`): Suffix array-based bsdiff
+//!    algorithm. Produces near-optimal patches by finding longest matches anywhere in
+//!    the old data. This is the recommended method.
 //!
-//! 2. **Chunked Algorithm** (`build_chunked_patch`): Finds matching byte sequences
-//!    between old and new data using simple pattern matching. Better compression
-//!    than simple algorithm but not optimal.
+//! 2. **Simple** (`build_simple_patch()`): Treats all new data as "extra" data.
+//!    Fast but produces patches roughly the size of the new file. Useful for
+//!    testing and zero-diff cases.
 //!
-//! ## Deferred Optimized Implementation
-//!
-//! A suffix array-based algorithm (`build_optimized_patch`) would provide optimal
-//! patch sizes similar to the original bsdiff, but implementation is deferred due to:
-//!
-//! - Algorithm complexity and memory requirements
-//! - Current system requirements being met by existing algorithms
-//! - Development priorities focused on core CASC functionality
-//!
-//! The chunked algorithm provides reasonable patch sizes for CASC use cases while
-//! maintaining simplicity and predictable resource usage.
+//! 3. **Chunked** (`build_chunked_patch()`): Forward-only byte matching. Better than
+//!    simple but worse than optimized. Kept for testing.
 
 use crate::zbsdiff::{
     ZBSDIFF1_SIGNATURE, ZbsdiffHeader,
@@ -33,11 +25,11 @@ use crate::zbsdiff::{
 use binrw::BinWrite;
 use std::io::{Cursor, Write};
 
-/// Builder for creating ZBSDIFF1 patches
+/// Builder for creating ZBSDIFF1 patches.
 ///
-/// This builder creates patches that transform old data into new data.
-/// The current implementation uses a simple algorithm that's not optimized
-/// for minimal patch sizes but ensures correctness.
+/// Creates patches that transform old data into new data. The recommended
+/// method is `build()`, which uses the bsdiff suffix array algorithm for
+/// near-optimal patch sizes.
 ///
 /// # Examples
 ///
@@ -48,7 +40,7 @@ use std::io::{Cursor, Write};
 /// let new_data = b"Hello, Rust!".to_vec();
 ///
 /// let builder = ZbsdiffBuilder::new(old_data, new_data);
-/// let patch = builder.build_simple_patch().expect("Operation should succeed");
+/// let patch = builder.build().expect("Operation should succeed");
 ///
 /// // Verify the patch works
 /// let result = cascette_formats::zbsdiff::apply_patch_memory(b"Hello, World!", &patch).expect("Operation should succeed");
@@ -161,56 +153,36 @@ impl ZbsdiffBuilder {
         self.build_patch_internal(control_block, diff_data, extra_data)
     }
 
-    /// Build patch using an optimized algorithm
+    /// Build a patch using the bsdiff suffix array algorithm.
     ///
-    /// This method would implement a suffix array-based algorithm for optimal patch sizes,
-    /// similar to the original bsdiff algorithm. The implementation is deferred due to complexity
-    /// and current system requirements being met by the chunked algorithm.
+    /// This is the recommended method. It uses suffix array-based matching
+    /// (via `divsufsort`) to find the longest match of each new-data position
+    /// anywhere in the old data, producing near-optimal patches.
     ///
-    /// # Suffix Array Algorithm Overview
+    /// Memory usage is approximately 5x the old data size (1 byte + 4 bytes
+    /// per byte for the suffix array). The i32 suffix array index limits
+    /// old data to ~2 GiB, which is within the header's 1 GiB validation cap.
+    pub fn build(&self) -> ZbsdiffResult<Vec<u8>> {
+        self.build_optimized_patch()
+    }
+
+    /// Build a patch using the bsdiff suffix array algorithm.
     ///
-    /// The optimal algorithm would work as follows:
-    ///
-    /// 1. **Build Suffix Array**: Create a suffix array for the old data using a linear-time
-    ///    construction algorithm (e.g., SA-IS or DC3). This allows efficient substring searches.
-    ///
-    /// 2. **Find Longest Matches**: For each position in the new data, use binary search
-    ///    on the suffix array to find the longest matching substring in the old data.
-    ///    This requires O(n log n) time for n bytes.
-    ///
-    /// 3. **Dynamic Programming**: Use dynamic programming to choose the optimal sequence
-    ///    of matches that minimizes total patch size, considering:
-    ///    - Match length vs. encoding cost
-    ///    - Seek distances between matches
-    ///    - Compression efficiency of diff vs. extra blocks
-    ///
-    /// 4. **Generate Control Blocks**: Create optimal control/diff/extra block structure
-    ///    based on the chosen matches.
-    ///
-    /// # Why Implementation is Deferred
-    ///
-    /// - **Complexity**: Suffix array construction and optimal matching algorithms are complex
-    ///   to implement correctly and efficiently.
-    /// - **Memory Usage**: Suffix arrays require significant memory (4-8x input size).
-    /// - **Current Needs**: The chunked algorithm produces functional patches that meet
-    ///   current system requirements for CASC operations.
-    /// - **Development Priority**: Core CASC functionality takes precedence over patch
-    ///   size optimization.
-    ///
-    /// # Future Implementation Notes
-    ///
-    /// When implementing this algorithm:
-    /// - Consider using the `suffix` crate for suffix array construction
-    /// - Implement match caching to avoid redundant searches
-    /// - Add memory usage limits and streaming for large files
-    /// - Benchmark against reference bsdiff implementation
-    /// - Add tests with various data patterns
-    ///
-    /// For now, falls back to the chunked algorithm which provides reasonable results.
+    /// Equivalent to `build()`. Kept for API symmetry with `build_simple_patch()`
+    /// and `build_chunked_patch()`.
     pub fn build_optimized_patch(&self) -> ZbsdiffResult<Vec<u8>> {
-        // Implementation deferred - see documentation above for details
-        // Use chunked algorithm as current best alternative
-        self.build_chunked_patch()
+        use super::suffix;
+
+        let result = suffix::compute_diff(&self.old_data, &self.new_data);
+
+        // Handle empty new data: compute_diff returns no control entries,
+        // but build_patch_internal requires at least one entry.
+        if result.control.is_empty() {
+            return self.build_simple_patch();
+        }
+
+        let control_block = ControlBlock::with_entries(result.control)?;
+        self.build_patch_internal(control_block, result.diff_data, result.extra_data)
     }
 
     /// Internal method to build a patch from components
@@ -239,7 +211,7 @@ impl ZbsdiffBuilder {
         let mut cursor = Cursor::new(&mut patch);
 
         // Write header (32 bytes)
-        header.write_options(&mut cursor, binrw::Endian::Big, ())?;
+        header.write_options(&mut cursor, binrw::Endian::Little, ())?;
 
         // Write compressed blocks
         cursor.write_all(&control_compressed)?;
@@ -527,6 +499,184 @@ mod tests {
             .build_chunked_patch()
             .expect("Operation should succeed");
         let result = apply_patch_memory(old_data, &patch).expect("Operation should succeed");
+        assert_eq!(result, new_data);
+    }
+
+    // --- Optimized (bsdiff) patch tests ---
+
+    #[test]
+    fn test_optimized_patch_small_edit() {
+        let old_data = b"Hello, World!";
+        let new_data = b"Hello, Rust!";
+
+        let builder = ZbsdiffBuilder::new(old_data.to_vec(), new_data.to_vec());
+        let patch = builder.build().expect("build() should succeed");
+
+        let result = apply_patch_memory(old_data, &patch).expect("apply should succeed");
+        assert_eq!(result, new_data);
+    }
+
+    #[test]
+    fn test_optimized_patch_identical() {
+        let data = b"Identical data that should diff to nearly nothing";
+
+        let builder = ZbsdiffBuilder::new(data.to_vec(), data.to_vec());
+        let patch = builder.build().expect("build() should succeed");
+
+        let result = apply_patch_memory(data, &patch).expect("apply should succeed");
+        assert_eq!(result, data);
+    }
+
+    #[test]
+    fn test_optimized_patch_empty_old() {
+        let old_data = b"";
+        let new_data = b"Brand new content";
+
+        let builder = ZbsdiffBuilder::new(old_data.to_vec(), new_data.to_vec());
+        let patch = builder.build().expect("build() should succeed");
+
+        let result = apply_patch_memory(old_data, &patch).expect("apply should succeed");
+        assert_eq!(result, new_data);
+    }
+
+    #[test]
+    fn test_optimized_patch_empty_new() {
+        let old_data = b"Content to delete";
+        let new_data = b"";
+
+        let builder = ZbsdiffBuilder::new(old_data.to_vec(), new_data.to_vec());
+        let patch = builder.build().expect("build() should succeed");
+
+        let result = apply_patch_memory(old_data, &patch).expect("apply should succeed");
+        assert_eq!(result, new_data);
+    }
+
+    #[test]
+    fn test_optimized_patch_both_empty() {
+        let builder = ZbsdiffBuilder::new(Vec::new(), Vec::new());
+        let patch = builder.build().expect("build() should succeed");
+
+        let result = apply_patch_memory(&[], &patch).expect("apply should succeed");
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_optimized_patch_single_byte() {
+        let old_data = b"A";
+        let new_data = b"B";
+
+        let builder = ZbsdiffBuilder::new(old_data.to_vec(), new_data.to_vec());
+        let patch = builder.build().expect("build() should succeed");
+
+        let result = apply_patch_memory(old_data, &patch).expect("apply should succeed");
+        assert_eq!(result, new_data);
+    }
+
+    #[test]
+    fn test_optimized_patch_insertion() {
+        let old_data = b"The quick fox jumps over the lazy dog";
+        let new_data = b"The quick brown fox jumps over the lazy dog";
+
+        let builder = ZbsdiffBuilder::new(old_data.to_vec(), new_data.to_vec());
+        let patch = builder.build().expect("build() should succeed");
+
+        let result = apply_patch_memory(old_data, &patch).expect("apply should succeed");
+        assert_eq!(result, new_data);
+    }
+
+    #[test]
+    fn test_optimized_patch_deletion() {
+        let old_data = b"The quick brown fox jumps over the lazy dog";
+        let new_data = b"The quick fox jumps over the lazy dog";
+
+        let builder = ZbsdiffBuilder::new(old_data.to_vec(), new_data.to_vec());
+        let patch = builder.build().expect("build() should succeed");
+
+        let result = apply_patch_memory(old_data, &patch).expect("apply should succeed");
+        assert_eq!(result, new_data);
+    }
+
+    #[test]
+    fn test_optimized_patch_reordered_blocks() {
+        // Content with blocks that get reordered
+        let old_data = b"AAAABBBBCCCCDDDD";
+        let new_data = b"CCCCAAAADDDDBBBB";
+
+        let builder = ZbsdiffBuilder::new(old_data.to_vec(), new_data.to_vec());
+        let patch = builder.build().expect("build() should succeed");
+
+        let result = apply_patch_memory(old_data, &patch).expect("apply should succeed");
+        assert_eq!(result, new_data);
+    }
+
+    #[test]
+    fn test_optimized_smaller_than_simple() {
+        // Data with shared content should produce smaller patches than simple
+        let old_data = vec![42u8; 2000];
+        let mut new_data = old_data.clone();
+        new_data[1000] = 99; // Single byte change
+
+        let builder = ZbsdiffBuilder::new(old_data.clone(), new_data.clone());
+        let optimized_patch = builder.build().expect("optimized build should succeed");
+
+        let builder2 = ZbsdiffBuilder::new(old_data.clone(), new_data.clone());
+        let simple_patch = builder2
+            .build_simple_patch()
+            .expect("simple build should succeed");
+
+        // Verify both produce correct output
+        let result1 =
+            apply_patch_memory(&old_data, &optimized_patch).expect("apply should succeed");
+        let result2 = apply_patch_memory(&old_data, &simple_patch).expect("apply should succeed");
+        assert_eq!(result1, new_data);
+        assert_eq!(result2, new_data);
+
+        // Optimized should be smaller for data with shared content
+        assert!(
+            optimized_patch.len() < simple_patch.len(),
+            "optimized ({}) should be smaller than simple ({})",
+            optimized_patch.len(),
+            simple_patch.len(),
+        );
+    }
+
+    #[test]
+    fn test_optimized_patch_random_edits() {
+        use rand::{RngExt, SeedableRng};
+
+        let mut rng = rand::rngs::StdRng::seed_from_u64(12345);
+
+        // Generate base data
+        let mut old_data = vec![0u8; 4096];
+        rng.fill(&mut old_data[..]);
+
+        // Make a copy with scattered edits
+        let mut new_data = old_data.clone();
+        for _ in 0..50 {
+            let pos = rng.random_range(0..new_data.len());
+            new_data[pos] = rng.random();
+        }
+
+        let builder = ZbsdiffBuilder::new(old_data.clone(), new_data.clone());
+        let patch = builder.build().expect("build() should succeed");
+
+        let result = apply_patch_memory(&old_data, &patch).expect("apply should succeed");
+        assert_eq!(result, new_data);
+    }
+
+    #[test]
+    fn test_optimized_patch_large_with_suffix() {
+        // Larger data with appended content
+        let old_data = vec![42u8; 5000];
+        let mut new_data = old_data.clone();
+        new_data[1000] = 100;
+        new_data[2000] = 200;
+        new_data.extend_from_slice(b" Additional content at the end");
+
+        let builder = ZbsdiffBuilder::new(old_data.clone(), new_data.clone());
+        let patch = builder.build().expect("build() should succeed");
+
+        let result = apply_patch_memory(&old_data, &patch).expect("apply should succeed");
         assert_eq!(result, new_data);
     }
 }

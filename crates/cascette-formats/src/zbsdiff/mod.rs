@@ -9,10 +9,10 @@
 //! ```text
 //! ZBSDIFF1 File:
 //! ├── Header (32 bytes)
-//! │   ├── Signature: "ZBSDIFF1" (8 bytes, big-endian)
-//! │   ├── Control Block Size (8 bytes, big-endian)
-//! │   ├── Diff Block Size (8 bytes, big-endian)
-//! │   └── Output File Size (8 bytes, big-endian)
+//! │   ├── Signature: "ZBSDIFF1" (8 bytes, little-endian)
+//! │   ├── Control Block Size (8 bytes, little-endian)
+//! │   ├── Diff Block Size (8 bytes, little-endian)
+//! │   └── Output File Size (8 bytes, little-endian)
 //! ├── Control Block (zlib-compressed)
 //! │   └── Triple sequences: (diff_size, extra_size, seek_offset)
 //! ├── Diff Block (zlib-compressed)
@@ -23,7 +23,7 @@
 //!
 //! # Key Characteristics
 //!
-//! - **Big-Endian Header**: All header fields use big-endian byte order
+//! - **Little-Endian Header**: All header fields use little-endian byte order
 //! - **Zlib Compression**: All data blocks are zlib-compressed
 //! - **Three-Block Structure**: Control, diff, and extra data blocks
 //! - **Signed Integers**: Uses signed 64-bit integers for sizes and offsets
@@ -50,7 +50,7 @@
 //! # }
 //! ```
 //!
-//! ## Creating Simple Patches
+//! ## Creating Patches
 //!
 //! ```rust
 //! use cascette_formats::zbsdiff::ZbsdiffBuilder;
@@ -59,9 +59,9 @@
 //! let old_data = b"Hello, World!".to_vec();
 //! let new_data = b"Hello, Rust!".to_vec();
 //!
-//! // Create patch
+//! // Create patch using bsdiff algorithm
 //! let builder = ZbsdiffBuilder::new(old_data, new_data);
-//! let patch = builder.build_simple_patch()?;
+//! let patch = builder.build()?;
 //!
 //! // Apply patch to verify
 //! let result = cascette_formats::zbsdiff::apply_patch_memory(b"Hello, World!", &patch)?;
@@ -77,7 +77,8 @@
 //! - ✅ Zlib compression/decompression
 //! - ✅ Memory-based patch application
 //! - ✅ Streaming patch application for large files
-//! - ✅ Basic patch creation (non-optimized)
+//! - ✅ Suffix array-based patch creation (bsdiff algorithm)
+//! - ✅ Basic patch creation (simple and chunked, for testing)
 //! - ✅ Error handling
 //! - ✅ Round-trip validation
 
@@ -85,6 +86,7 @@ mod builder;
 mod error;
 mod header;
 mod patcher;
+mod suffix;
 mod utils;
 
 // Re-export public API
@@ -116,7 +118,7 @@ impl ZbsDiff {
         let mut cursor = Cursor::new(data);
 
         // Parse header
-        let header = ZbsdiffHeader::read_options(&mut cursor, binrw::Endian::Big, ())?;
+        let header = ZbsdiffHeader::read_options(&mut cursor, binrw::Endian::Little, ())?;
         header.validate()?;
 
         // Read compressed blocks based on header sizes
@@ -147,7 +149,7 @@ impl ZbsDiff {
 
         // Write header
         self.header
-            .write_options(&mut cursor, binrw::Endian::Big, ())?;
+            .write_options(&mut cursor, binrw::Endian::Little, ())?;
 
         // Write compressed blocks
         cursor.write_all(&self.control_data)?;
