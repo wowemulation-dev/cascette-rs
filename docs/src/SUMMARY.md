@@ -49,6 +49,3 @@
 - [Project Setup](development/setup.md)
 - [Testing Guidelines](development/testing.md)
 - [Coding Standards](development/coding-standards.md)
-- [Agent IDX/KMT Format](development/agent-idx-file-format.md)
-- [Agent Container Storage](development/agent-container-storage.md)
-- [Agent Maintenance Operations](development/agent-maintenance-operations.md)
