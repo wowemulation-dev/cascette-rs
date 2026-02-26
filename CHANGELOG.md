@@ -83,6 +83,11 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - cascette-formats: Integration tests for keyring config parsing against real
   CDN data (16 tests covering parsing, validation, entry values, hex/u64
   lookups, round-trip for all three products)
+- cascette-formats: Patch archive header hash verification via
+  `PatchArchive::header_region_size()`, `compute_header_hash()`, and
+  `verify_header_hash()`. Validates that MD5 of the header region (fixed header
+  + extended header + block table) matches the CDN content key. Verified against
+  Agent.exe `tact::PatchManifestReader::ParseHeader` at 0x6a6487.
 
 ### Changed
 

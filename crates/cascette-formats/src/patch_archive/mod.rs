@@ -160,6 +160,73 @@ impl PatchArchive {
         results
     }
 
+    /// Compute the size of the header region in bytes
+    ///
+    /// The header region includes the fixed header (10 bytes), optional
+    /// extended header, and block table. Agent.exe computes MD5 over this
+    /// region at `tact::PatchManifestReader::ParseHeader` (0x6a6487).
+    ///
+    /// Layout:
+    /// - Fixed header: 10 bytes
+    /// - Extended header (when flags & 0x02):
+    ///   `2 * file_key_size + 4 + 4 + 1 + espec.len()`
+    /// - Block table: `block_count * (file_key_size + 20)`
+    pub fn header_region_size(&self) -> usize {
+        let fixed_header = 10;
+
+        let extended = if let Some(ref info) = self.encoding_info {
+            2 * usize::from(self.header.file_key_size) + 9 + info.espec.len()
+        } else {
+            0
+        };
+
+        let block_table =
+            usize::from(self.header.block_count) * (usize::from(self.header.file_key_size) + 20);
+
+        fixed_header + extended + block_table
+    }
+
+    /// Compute the MD5 hash of the header region from raw archive data
+    ///
+    /// Returns the MD5 digest of `data[0..header_region_size()]`. This hash
+    /// should match the CDN content key used to fetch the patch manifest.
+    ///
+    /// # Errors
+    ///
+    /// Returns `UnexpectedEndOfBlock` if data is shorter than the header region.
+    pub fn compute_header_hash(&self, data: &[u8]) -> PatchArchiveResult<[u8; 16]> {
+        let size = self.header_region_size();
+        if data.len() < size {
+            return Err(PatchArchiveError::UnexpectedEndOfBlock(size as u64));
+        }
+        Ok(md5::compute(&data[..size]).into())
+    }
+
+    /// Verify the header hash against an expected content key
+    ///
+    /// Agent.exe computes MD5 of the header region (fixed header + extended
+    /// header + block table) and compares it against the content key used to
+    /// fetch the file from CDN. The hash is NOT stored in the binary itself.
+    ///
+    /// # Arguments
+    ///
+    /// * `data` - Raw patch archive bytes
+    /// * `expected` - Expected MD5 hash (typically the CDN content key)
+    ///
+    /// # Errors
+    ///
+    /// Returns `HeaderHashMismatch` if the computed hash does not match.
+    pub fn verify_header_hash(&self, data: &[u8], expected: &[u8; 16]) -> PatchArchiveResult<()> {
+        let actual = self.compute_header_hash(data)?;
+        if actual != *expected {
+            return Err(PatchArchiveError::HeaderHashMismatch {
+                expected: hex::encode(expected),
+                actual: hex::encode(actual),
+            });
+        }
+        Ok(())
+    }
+
     /// Validate that blocks are sorted by CKey
     ///
     /// Agent.exe validates this with `_memcmp` during parsing at 0x6a6487.
@@ -321,6 +388,75 @@ mod tests {
         let found = archive.find_patches_from_source(&source);
         assert_eq!(found.len(), 1);
         assert_eq!(found[0].1.patch_size, 200);
+    }
+
+    #[test]
+    fn test_header_region_size_no_extended() {
+        let mut builder = PatchArchiveBuilder::new();
+        builder.add_file_entry(
+            [0x02; 16],
+            1000,
+            vec![([0x01; 16], 500, [0x03; 16], 200, 0)],
+        );
+
+        let data = builder.build().expect("build should succeed");
+        let archive = PatchArchive::parse(&data).expect("parse should succeed");
+
+        // No extended header: 10 + 0 + 1*(16+20) = 46
+        assert!(archive.encoding_info.is_none());
+        assert_eq!(archive.header_region_size(), 46);
+    }
+
+    #[test]
+    fn test_compute_header_hash() {
+        let mut builder = PatchArchiveBuilder::new();
+        builder.add_file_entry(
+            [0x02; 16],
+            1000,
+            vec![([0x01; 16], 500, [0x03; 16], 200, 0)],
+        );
+
+        let data = builder.build().expect("build should succeed");
+        let archive = PatchArchive::parse(&data).expect("parse should succeed");
+
+        let size = archive.header_region_size();
+        let expected: [u8; 16] = md5::compute(&data[..size]).into();
+        let actual = archive.compute_header_hash(&data).expect("should compute");
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_verify_header_hash_success() {
+        let mut builder = PatchArchiveBuilder::new();
+        builder.add_file_entry(
+            [0x02; 16],
+            1000,
+            vec![([0x01; 16], 500, [0x03; 16], 200, 0)],
+        );
+
+        let data = builder.build().expect("build should succeed");
+        let archive = PatchArchive::parse(&data).expect("parse should succeed");
+
+        let size = archive.header_region_size();
+        let hash: [u8; 16] = md5::compute(&data[..size]).into();
+        assert!(archive.verify_header_hash(&data, &hash).is_ok());
+    }
+
+    #[test]
+    fn test_verify_header_hash_mismatch() {
+        let mut builder = PatchArchiveBuilder::new();
+        builder.add_file_entry(
+            [0x02; 16],
+            1000,
+            vec![([0x01; 16], 500, [0x03; 16], 200, 0)],
+        );
+
+        let data = builder.build().expect("build should succeed");
+        let archive = PatchArchive::parse(&data).expect("parse should succeed");
+
+        let wrong = [0xFF; 16];
+        let result = archive.verify_header_hash(&data, &wrong);
+        assert!(result.is_err());
     }
 
     #[test]

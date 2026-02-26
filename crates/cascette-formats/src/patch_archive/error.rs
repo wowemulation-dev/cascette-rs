@@ -72,6 +72,19 @@ pub enum PatchArchiveError {
     #[error("ZBSDIFF error: {0}")]
     ZbsdiffError(String),
 
+    /// Header hash mismatch
+    ///
+    /// Agent.exe computes MD5 of the header region (fixed header + extended
+    /// header + block table) and compares against the content key used to
+    /// fetch the file from CDN.
+    #[error("header hash mismatch: expected {expected}, got {actual}")]
+    HeaderHashMismatch {
+        /// Expected hash (hex string)
+        expected: String,
+        /// Actual computed hash (hex string)
+        actual: String,
+    },
+
     /// Binary parsing error
     #[error("binary parsing error: {0}")]
     BinRw(#[from] binrw::Error),

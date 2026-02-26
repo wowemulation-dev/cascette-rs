@@ -234,6 +234,85 @@ fn patch_archive_cdn_flatten_entries() {
     }
 }
 
+// --- Header hash verification ---
+
+#[test]
+fn patch_archive_cdn_header_hash_matches_filename() {
+    let dir = fixtures_dir();
+    let files = [
+        (
+            "wow_classic_era",
+            "e3fffe04f64007852408b86e44d91e5a",
+            "e3fffe04f64007852408b86e44d91e5a.bin",
+        ),
+        (
+            "wow_retail",
+            "aaad2399821319140599c508abd54c9c",
+            "aaad2399821319140599c508abd54c9c.bin",
+        ),
+        (
+            "starcraft2",
+            "071290388e1f3b898157c372f03bc435",
+            "071290388e1f3b898157c372f03bc435.bin",
+        ),
+    ];
+
+    for (name, expected_hex, filename) in &files {
+        let data = std::fs::read(dir.join(filename)).unwrap();
+        let archive =
+            PatchArchive::parse(&data).unwrap_or_else(|e| panic!("Parse failed for {name}: {e}"));
+
+        // Decode the expected content key from the filename
+        let expected_bytes: Vec<u8> = (0..32)
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&expected_hex[i..i + 2], 16).unwrap())
+            .collect();
+        let mut expected = [0u8; 16];
+        expected.copy_from_slice(&expected_bytes);
+
+        // Verify the header hash matches the CDN content key
+        assert!(
+            archive.verify_header_hash(&data, &expected).is_ok(),
+            "{name}: header hash should match CDN content key {expected_hex}"
+        );
+    }
+}
+
+#[test]
+fn patch_archive_cdn_header_hash_rejects_wrong_key() {
+    let dir = fixtures_dir();
+    let data = std::fs::read(dir.join("e3fffe04f64007852408b86e44d91e5a.bin")).unwrap();
+    let archive = PatchArchive::parse(&data).unwrap();
+
+    let wrong_key = [0xFFu8; 16];
+    let result = archive.verify_header_hash(&data, &wrong_key);
+    assert!(result.is_err(), "Should reject wrong content key");
+}
+
+#[test]
+fn patch_archive_cdn_header_region_sizes() {
+    let dir = fixtures_dir();
+
+    // WoW CE: 10 + (2*16 + 9 + espec_len) + 1*(16+20) = 142
+    let data = std::fs::read(dir.join("e3fffe04f64007852408b86e44d91e5a.bin")).unwrap();
+    let archive = PatchArchive::parse(&data).unwrap();
+    assert_eq!(archive.header_region_size(), 142, "WoW CE header region");
+
+    // WoW Retail: 10 + (2*16 + 9 + espec_len) + 1*(16+20) = 151
+    let data = std::fs::read(dir.join("aaad2399821319140599c508abd54c9c.bin")).unwrap();
+    let archive = PatchArchive::parse(&data).unwrap();
+    assert_eq!(
+        archive.header_region_size(),
+        151,
+        "WoW Retail header region"
+    );
+
+    // SC2: 10 + (2*16 + 9 + espec_len) + 1*(16+20) = 148
+    let data = std::fs::read(dir.join("071290388e1f3b898157c372f03bc435.bin")).unwrap();
+    let archive = PatchArchive::parse(&data).unwrap();
+    assert_eq!(archive.header_region_size(), 148, "SC2 header region");
+}
+
 // --- Round-trip: parse -> build -> parse ---
 
 #[test]
