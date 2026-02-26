@@ -5,12 +5,13 @@ product versions, CDN endpoints, and content distribution.
 
 ## Overview
 
-NGDP uses four primary configuration file types:
+NGDP uses five configuration file types:
 
 1. **Build Configuration** - Defines build metadata and system file references
 2. **CDN Configuration** - Lists CDN servers and available archives
 3. **Patch Configuration** - Contains delta update information
-4. **Product Configuration** - Client installation and platform metadata
+4. **Keyring Configuration** - Encryption keys for Salsa20 decryption
+5. **Product Configuration** - Client installation and platform metadata
 
 ## Configuration File Access
 
@@ -374,6 +375,58 @@ Patch configs are found in:
 
 - Rarely in modern builds (mostly replaced by direct patching)
 
+## Keyring Configuration
+
+Keyring configurations contain encryption keys for decrypting protected CASC
+content. Each entry maps an 8-byte key ID to a 16-byte Salsa20 encryption key.
+
+### Discovery
+
+Keyring config hashes are in the Ribbit versions response `KeyRing` column,
+NOT in build configs. The config is fetched from CDN using the standard config
+path structure.
+
+### Format
+
+Same key-value format as other configs, with ` = ` delimiter. Each entry uses
+the `key-` prefix followed by a hex-encoded key ID.
+
+```text
+key-{KEY_ID_HEX} = {KEY_VALUE_HEX}
+```
+
+Where:
+
+- `KEY_ID_HEX`: 16 hex characters (8 bytes) identifying the encryption key
+- `KEY_VALUE_HEX`: 32 hex characters (16 bytes) Salsa20 encryption key
+
+### Example
+
+```text
+key-4eb4869f95f23b53 = c9316739348dcc033aa8112f9a3acf5d
+```
+
+### Validation
+
+Agent.exe (`tact::ConfigReader::ValidateKeyringConfig` at 0x6e7020) requires
+at least one key entry. Duplicate key IDs with different values produce a
+warning and the duplicate is ignored (first entry wins).
+
+### Usage
+
+Keys are loaded into a hash map by `tact::KeyGetter::LoadKeyring`. During BLTE
+decryption, the 8-byte key ID from the encrypted block header is used to look
+up the 16-byte Salsa20 decryption key.
+
+### Distribution
+
+Keyring sizes vary by product:
+
+- WoW Retail: 1 key entry
+- Call of Duty (Odin): 1 key entry
+- Overwatch 2: 63 key entries (largest observed)
+- WoW Classic products: empty keyrings (no KeyRing column in versions response)
+
 ## Product Configuration
 
 Product configurations contain Battle.net client metadata for installation
@@ -614,17 +667,18 @@ These are referenced in Ribbit responses and are accessible via CDN.
 ## Configuration Discovery Flow
 
 1. **Ribbit Query**: Get version and CDN information
-2. **Version Lookup**: Find build configuration hash
+2. **Version Lookup**: Find build configuration hash and keyring hash
 3. **Build Config**: Fetch build metadata and system files
 4. **CDN Config**: Get archive lists and CDN servers
-5. **Patch Config**: Retrieve update paths (rarely available)
-6. **Product Config**: Client installation metadata (may not be accessible)
+5. **Keyring Config**: Fetch encryption keys (if KeyRing column present)
+6. **Patch Config**: Retrieve update paths (rarely available)
+7. **Product Config**: Client installation metadata (may not be accessible)
 
 ## Implementation Considerations
 
 ### Parsing
 
-- Build/CDN/Patch configs: Simple key-value parser
+- Build/CDN/Patch/Keyring configs: Simple key-value parser
 
 - Product config: JSON parser
 
