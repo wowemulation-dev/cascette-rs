@@ -5,11 +5,13 @@
 
 mod build_config;
 mod cdn_config;
+mod keyring_config;
 mod patch_config;
 mod product_config;
 
 pub use build_config::{BuildConfig, BuildInfo, PartialPriority};
 pub use cdn_config::{ArchiveInfo, CdnConfig};
+pub use keyring_config::{KeyringConfig, KeyringEntry};
 pub use patch_config::{PatchConfig, PatchEntry};
 pub use product_config::{
     AddRemoveProgramsConfig, Config, DiscInfo, EulaConfig, FormConfig, GameDirConfig,

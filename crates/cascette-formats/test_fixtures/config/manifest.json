@@ -1,5 +1,5 @@
 {
-  "description": "Build config files downloaded from Blizzard CDN for integration testing",
+  "description": "Build config and keyring config files downloaded from Blizzard CDN for integration testing",
   "fetched": "2026-02-26",
   "files": {
     "wow_classic_era_build_config.txt": {
@@ -19,6 +19,21 @@
       "build_name": "WOW-66066patch12.0.1_Retail",
       "build_config_hash": "7b498dd7e196bf4161d631064f617189",
       "notes": "WoW Retail 12.0.1.66066. Has build-partial-priority, feature-placeholder, vfs entries 1-879."
+    },
+    "wow_keyring_config.txt": {
+      "product": "wow",
+      "keyring_hash": "3ca57fe7319a297346440e4d2a03a0cd",
+      "notes": "WoW Retail keyring config. 1 key entry. Referenced in versions response KeyRing column."
+    },
+    "overwatch_keyring_config.txt": {
+      "product": "pro",
+      "keyring_hash": "3dabb1bf65a3a797ccc6eff63c51b509",
+      "notes": "Overwatch 2 keyring config. 63 key entries. Largest keyring observed."
+    },
+    "odin_keyring_config.txt": {
+      "product": "odin",
+      "keyring_hash": "52c63cd064e423e177a9797e012c9efb",
+      "notes": "Call of Duty (Odin) keyring config. 1 key entry."
     }
   }
 }

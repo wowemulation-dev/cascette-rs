@@ -75,6 +75,14 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   data (14 tests covering parsing, required fields, metadata, build UIDs, hash
   format, sizes, feature flags, VFS entries, partial priority, validation,
   round-trip, dual-hash format, raw accessor)
+- cascette-formats: `KeyringConfig` type for parsing, building, and validating
+  keyring config files (`key-{ID} = {VALUE}` format). Supports key lookup by
+  hex string or u64 ID with case-insensitive matching.
+- cascette-formats: Keyring config CDN test fixtures (WoW Retail 1 entry,
+  Overwatch 2 63 entries, Call of Duty 1 entry) with manifest.json metadata
+- cascette-formats: Integration tests for keyring config parsing against real
+  CDN data (16 tests covering parsing, validation, entry values, hex/u64
+  lookups, round-trip for all three products)
 
 ### Changed
 
