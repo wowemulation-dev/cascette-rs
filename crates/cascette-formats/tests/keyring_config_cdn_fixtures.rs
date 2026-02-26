@@ -3,7 +3,7 @@
 //! These tests parse keyring config files fetched from Blizzard CDN to verify
 //! that the parser handles real-world data correctly.
 
-#![allow(clippy::expect_used, clippy::unwrap_used)]
+#![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
 
 use cascette_formats::config::KeyringConfig;
 
