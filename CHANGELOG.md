@@ -88,6 +88,18 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `verify_header_hash()`. Validates that MD5 of the header region (fixed header
   + extended header + block table) matches the CDN content key. Verified against
   Agent.exe `tact::PatchManifestReader::ParseHeader` at 0x6a6487.
+- cascette-formats: Patch Index (`patch_index/`) module for the block-based
+  format referenced by build config `patch-index` key. Parses header with block
+  descriptors, block type 2 entries (source/target EKey pairs with sizes), and
+  block type 8 extended entries. Builder produces CDN-matching 3-block layout.
+  Distinct from patch archive `.index` files which use the standard CDN archive
+  index format.
+- cascette-formats: Patch Index CDN test fixtures (WoW Classic Era, WoW Classic,
+  WoW Retail) downloaded via cascette-py with manifest.json metadata
+- cascette-formats: Integration tests for Patch Index parsing (12 tests covering
+  header fields, known entry counts, key validation, size validation, suffix
+  offset, unique patch keys, block 2/8 consistency, queries, round-trip, block
+  size verification)
 
 ### Changed
 

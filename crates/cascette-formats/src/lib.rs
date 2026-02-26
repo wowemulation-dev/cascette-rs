@@ -118,6 +118,21 @@ pub mod install;
 ///
 /// See the [`patch_archive`] module for detailed usage examples.
 pub mod patch_archive;
+/// Patch Index format for mapping patch blobs to source/target file pairs
+///
+/// This module provides parsing and building support for the Patch Index
+/// format referenced by the `patch-index` key in build configs. This is
+/// distinct from patch archive index files (`.index` on CDN `patch/` path)
+/// which use the standard CDN archive index format.
+///
+/// Key features:
+/// - **Block-Based Structure**: Header-first format with typed data blocks
+/// - **Key-Pair Entries**: Maps patch EKeys to source/target file metadata
+/// - **Variable Key Size**: Supports 1-16 byte encoding keys
+/// - **Block Type Dispatch**: Types 1 (config), 2 (entries), 8 (extended)
+///
+/// See the [`patch_index`] module for detailed usage examples.
+pub mod patch_index;
 /// Root file format for mapping paths/FileDataIDs to content keys
 ///
 /// This module provides complete parsing and building support for CASC root files
