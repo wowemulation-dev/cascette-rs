@@ -180,76 +180,96 @@ impl BlteBuilder {
     }
 
     /// Create an encrypted chunk using the builder's current encryption config
-    fn create_encrypted_chunk(
-        &self,
-        mut data: Vec<u8>,
-        block_index: usize,
-    ) -> BlteResult<ChunkData> {
+    ///
+    /// The encrypted payload always starts with an inner compression mode byte.
+    /// After decryption, this byte indicates how to decompress the content.
+    fn create_encrypted_chunk(&self, data: Vec<u8>, block_index: usize) -> BlteResult<ChunkData> {
         let encryption = self.encryption.as_ref().ok_or_else(|| {
             super::error::BlteError::CompressionError("No encryption config set".to_string())
         })?;
 
-        // Apply compression first if needed
-        if self.default_mode != CompressionMode::None
-            && self.default_mode != CompressionMode::Encrypted
-        {
-            let compressed = super::compression::compress_chunk(&data, self.default_mode)?;
-            data = vec![self.default_mode.as_byte()];
-            data.extend_from_slice(&compressed);
-        }
+        let inner = self.build_inner_payload(data)?;
 
-        // Then encrypt
+        // Encrypt the payload (mode byte + compressed/raw data)
         let encrypted_data =
-            encrypt_chunk_with_key(&data, encryption.spec, &encryption.key, block_index)?;
+            encrypt_chunk_with_key(&inner, encryption.spec, &encryption.key, block_index)?;
 
         Ok(ChunkData::from_compressed(
             CompressionMode::Encrypted,
             encrypted_data,
-            Some(data.len()),
+            Some(inner.len()),
         ))
     }
 
     /// Create an encrypted chunk with specific parameters
     fn create_encrypted_chunk_with_params(
         &self,
-        mut data: Vec<u8>,
+        data: Vec<u8>,
         spec: EncryptionSpec,
         key: [u8; 16],
         block_index: usize,
     ) -> BlteResult<ChunkData> {
-        // Apply compression first if needed
-        if self.default_mode != CompressionMode::None
-            && self.default_mode != CompressionMode::Encrypted
-        {
-            let compressed = super::compression::compress_chunk(&data, self.default_mode)?;
-            data = vec![self.default_mode.as_byte()];
-            data.extend_from_slice(&compressed);
-        }
+        let inner = self.build_inner_payload(data)?;
 
-        // Then encrypt
-        let encrypted_data = encrypt_chunk_with_key(&data, spec, &key, block_index)?;
+        // Encrypt the payload (mode byte + compressed/raw data)
+        let encrypted_data = encrypt_chunk_with_key(&inner, spec, &key, block_index)?;
 
         Ok(ChunkData::from_compressed(
             CompressionMode::Encrypted,
             encrypted_data,
-            Some(data.len()),
+            Some(inner.len()),
         ))
     }
 
+    /// Build the inner payload for an encrypted chunk: mode byte + data
+    fn build_inner_payload(&self, data: Vec<u8>) -> BlteResult<Vec<u8>> {
+        let inner_mode = if self.default_mode != CompressionMode::None
+            && self.default_mode != CompressionMode::Encrypted
+        {
+            self.default_mode
+        } else {
+            CompressionMode::None
+        };
+
+        if inner_mode == CompressionMode::None {
+            // Prepend 'N' mode byte + raw data
+            let mut payload = Vec::with_capacity(1 + data.len());
+            payload.push(CompressionMode::None.as_byte());
+            payload.extend_from_slice(&data);
+            Ok(payload)
+        } else {
+            // Compress, then prepend mode byte
+            let compressed = super::compression::compress_chunk(&data, inner_mode)?;
+            let mut payload = Vec::with_capacity(1 + compressed.len());
+            payload.push(inner_mode.as_byte());
+            payload.extend_from_slice(&compressed);
+            Ok(payload)
+        }
+    }
+
     /// Build the BLTE file
+    ///
+    /// Encrypted chunks always use the multi-chunk (extended header) format,
+    /// even when there is only one chunk. The spec requires encrypted content
+    /// to have a chunk table.
     pub fn build(self) -> BlteResult<BlteFile> {
         if self.chunks.is_empty() {
             return Err(super::error::BlteError::InvalidChunkCount(0));
         }
 
-        if self.chunks.len() == 1 {
-            // Single chunk file
+        let has_encrypted = self
+            .chunks
+            .iter()
+            .any(|c| c.mode == CompressionMode::Encrypted);
+
+        if self.chunks.len() == 1 && !has_encrypted {
+            // Single chunk file (non-encrypted only)
             Ok(BlteFile {
                 header: BlteHeader::single_chunk(),
                 chunks: self.chunks,
             })
         } else {
-            // Multi-chunk file
+            // Multi-chunk file, or single encrypted chunk
             let header = BlteHeader::multi_chunk(&self.chunks)?;
             Ok(BlteFile {
                 header,
@@ -349,8 +369,8 @@ mod tests {
             .build()
             .expect("Test operation should succeed");
 
-        // Should be single chunk with encryption mode
-        assert!(blte.header.is_single_chunk());
+        // Encrypted content always uses multi-chunk format
+        assert!(!blte.header.is_single_chunk());
         assert_eq!(blte.chunks.len(), 1);
         assert_eq!(blte.chunks[0].mode, CompressionMode::Encrypted);
 
@@ -425,8 +445,8 @@ mod tests {
             .build()
             .expect("Test operation should succeed");
 
-        // Should be single encrypted chunk
-        assert!(blte.header.is_single_chunk());
+        // Encrypted content always uses multi-chunk format
+        assert!(!blte.header.is_single_chunk());
         assert_eq!(blte.chunks[0].mode, CompressionMode::Encrypted);
 
         // Create key store for decryption
@@ -497,8 +517,8 @@ mod tests {
             .build()
             .expect("Test operation should succeed");
 
-        // Should be encrypted (compression happens inside encryption)
-        assert!(blte.header.is_single_chunk());
+        // Encrypted content always uses multi-chunk format
+        assert!(!blte.header.is_single_chunk());
         assert_eq!(blte.chunks[0].mode, CompressionMode::Encrypted);
 
         // Create key store for decryption

@@ -8,7 +8,7 @@
 //!
 //! Install manifests use the following binary structure:
 //!
-//! - **Header** (10 bytes): Magic "IN", version, key length, tag/entry counts
+//! - **Header** (10 bytes V1, 16 bytes V2): Magic "IN", version, key length, tag/entry counts
 //! - **Tag Section**: Variable-length tags with names, types, and bit masks
 //! - **File Entries**: Variable-length file paths, content keys, and sizes
 //!

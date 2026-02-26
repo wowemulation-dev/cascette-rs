@@ -612,13 +612,7 @@ mod tests {
             ),
         ];
 
-        let header = InstallHeader {
-            magic: *b"IN",
-            version: 2,
-            ckey_length: 16,
-            tag_count: 0,
-            entry_count: 2,
-        };
+        let header = InstallHeader::new_v2(0, 2, 16, 0);
 
         let manifest = InstallManifest {
             header,

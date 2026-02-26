@@ -1,17 +1,8 @@
 //! Patch Archive (PA) format implementation
 //!
-//! Patch Archives contain manifest files that describe differential patches between
-//! different versions of NGDP content. They enable incremental updates by providing
-//! mappings between old content keys, new content keys, and patch data.
-//!
-//! # Features
-//!
-//! - Parser and builder for PA format
-//! - Big-endian header with mixed-endianness entries
-//! - Variable-length compression specifications
-//! - Support for both compressed (BLTE) and uncompressed archives
-//! - Content addressing through MD5 hashes
-//! - Streaming operations for large patch files
+//! Patch Archives are block-based manifests that describe differential patches
+//! between content versions. They map target files to available patches from
+//! various source versions.
 //!
 //! # Format Structure
 //!
@@ -19,20 +10,36 @@
 //! PA File:
 //! ├── Header (10 bytes, big-endian)
 //! │   ├── Magic: "PA" (2 bytes)
-//! │   ├── Version (1 byte) - Typically 2
-//! │   ├── File Key Size (1 byte) - 16 for MD5
-//! │   ├── Old Key Size (1 byte) - 16 for MD5
-//! │   ├── Patch Key Size (1 byte) - 16 for MD5
-//! │   ├── Block Size Bits (1 byte) - 16 for 64KB blocks
+//! │   ├── Version (1 byte) - 1 or 2
+//! │   ├── File Key Size (1 byte) - 1-16
+//! │   ├── Old Key Size (1 byte) - 1-16
+//! │   ├── Patch Key Size (1 byte) - 1-16
+//! │   ├── Block Size Bits (1 byte) - 12-24
 //! │   ├── Block Count (2 bytes, big-endian)
 //! │   └── Flags (1 byte)
-//! └── Patch Entries (variable number)
-//!     └── Per entry:
-//!         ├── Old Content Key (16 bytes, MD5)
-//!         ├── New Content Key (16 bytes, MD5)
-//!         ├── Patch Encoding Key (16 bytes, MD5)
-//!         ├── Compression Info (null-terminated string)
-//!         └── Additional Patch Data (variable)
+//! ├── Extended Header (optional, when flags & 0x02)
+//! │   ├── Encoding CKey (file_key_size bytes)
+//! │   ├── Encoding EKey (file_key_size bytes)
+//! │   ├── Decoded Size (4 bytes, big-endian)
+//! │   ├── Encoded Size (4 bytes, big-endian)
+//! │   ├── ESpec Length (1 byte)
+//! │   └── ESpec String (espec_length bytes, UTF-8)
+//! ├── Block Table (block_count entries)
+//! │   └── Per block:
+//! │       ├── Last File CKey (file_key_size bytes)
+//! │       ├── Block MD5 (16 bytes)
+//! │       └── Block Offset (4 bytes, big-endian)
+//! └── Block Data (at block_offset for each block)
+//!     └── File Entries (terminated by 0x00 sentinel):
+//!         ├── Num Patches (1 byte, 0 = end of block)
+//!         ├── Target CKey (file_key_size bytes)
+//!         ├── Decoded Size (5 bytes, uint40, big-endian)
+//!         └── Per patch:
+//!             ├── Source EKey (old_key_size bytes)
+//!             ├── Source Decoded Size (5 bytes, uint40, big-endian)
+//!             ├── Patch EKey (patch_key_size bytes)
+//!             ├── Patch Size (4 bytes, big-endian)
+//!             └── Patch Index (1 byte)
 //! ```
 //!
 //! # Usage
@@ -46,15 +53,19 @@
 //! let data = std::fs::read("patch_manifest.pa")?;
 //! let archive = PatchArchive::parse(&data)?;
 //!
-//! println!("PA v{}, {} entries", archive.header.version, archive.entries.len());
+//! println!("PA v{}, {} blocks, {} file entries",
+//!     archive.header.version,
+//!     archive.blocks.len(),
+//!     archive.total_file_entries());
 //!
-//! // Find patch for specific content
-//! let content_key = [0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0,
-//!                    0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88];
-//! if let Some(patch) = archive.find_patch_for_content(&content_key) {
-//!     println!("Found patch: {} -> {}",
-//!         hex::encode(&patch.old_content_key),
-//!         hex::encode(&patch.new_content_key));
+//! if let Some(info) = &archive.encoding_info {
+//!     println!("Encoding: espec={}", info.espec);
+//! }
+//!
+//! for file_entry in archive.all_file_entries() {
+//!     println!("Target: {}, {} patches",
+//!         hex::encode(file_entry.target_ckey),
+//!         file_entry.patches.len());
 //! }
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
@@ -65,25 +76,34 @@
 //! use cascette_formats::patch_archive::PatchArchiveBuilder;
 //!
 //! let mut builder = PatchArchiveBuilder::new();
-//! builder.add_patch(
-//!     [0x01; 16], // old content key
-//!     [0x02; 16], // new content key
-//!     [0x03; 16], // patch encoding key
-//!     "{*=z}".to_string(), // compression info
+//! builder.add_file_entry(
+//!     [0x02; 16], // target CKey
+//!     1000,       // decoded size
+//!     vec![
+//!         (
+//!             [0x01; 16], // source EKey
+//!             500,        // source decoded size
+//!             [0x03; 16], // patch EKey
+//!             200,        // patch size
+//!             0,          // patch index
+//!         ),
+//!     ],
 //! );
 //!
 //! let archive_data = builder.build()?;
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 
+pub(crate) mod block;
 mod builder;
 mod compression;
 mod entry;
 mod error;
 mod header;
-mod parser;
+pub(crate) mod parser;
 mod utils;
 
+pub use block::{FilePatch, PatchArchiveEncodingInfo, PatchBlock, PatchFileEntry};
 pub use builder::PatchArchiveBuilder;
 pub use compression::{
     decompress_patch_data, format_compression_spec, get_compression_at_offset,
@@ -92,162 +112,190 @@ pub use compression::{
 pub use entry::PatchEntry;
 pub use error::{PatchArchiveError, PatchArchiveResult};
 pub use header::PatchArchiveHeader;
-pub use parser::PatchArchiveParser;
 
-use binrw::io::{Read, Seek, Write};
-use binrw::{BinRead, BinResult, BinWrite};
-use std::collections::HashMap;
-
-/// Complete Patch Archive structure
+/// Complete Patch Archive with block-based structure
+///
+/// Parsed from the real CDN patch manifest format. Contains a header,
+/// optional encoding info (extended header), and blocks with file entries.
 #[derive(Debug, Clone)]
 pub struct PatchArchive {
     /// PA header containing format metadata
     pub header: PatchArchiveHeader,
-    /// Patch entries with mappings and compression info
-    pub entries: Vec<PatchEntry>,
-}
-
-impl BinRead for PatchArchive {
-    type Args<'a> = ();
-
-    fn read_options<R: Read + Seek>(
-        reader: &mut R,
-        endian: binrw::Endian,
-        _args: Self::Args<'_>,
-    ) -> BinResult<Self> {
-        // Read header (big-endian)
-        let header = PatchArchiveHeader::read_options(reader, binrw::Endian::Big, ())?;
-
-        // Validate header
-        header.validate().map_err(|e| binrw::Error::Custom {
-            pos: reader.stream_position().unwrap_or(0),
-            err: Box::new(e),
-        })?;
-
-        // Read entries
-        let mut entries = Vec::with_capacity(header.block_count as usize);
-        let args = (
-            header.file_key_size,
-            header.old_key_size,
-            header.patch_key_size,
-        );
-
-        for _ in 0..header.block_count {
-            let entry = PatchEntry::read_options(reader, endian, args)?;
-            entries.push(entry);
-        }
-
-        Ok(Self { header, entries })
-    }
-}
-
-impl BinWrite for PatchArchive {
-    type Args<'a> = ();
-
-    fn write_options<W: Write + Seek>(
-        &self,
-        writer: &mut W,
-        _endian: binrw::Endian,
-        _args: Self::Args<'_>,
-    ) -> BinResult<()> {
-        // Write header (big-endian)
-        self.header.write_options(writer, binrw::Endian::Big, ())?;
-
-        // Write entries
-        let args = (
-            self.header.file_key_size,
-            self.header.old_key_size,
-            self.header.patch_key_size,
-        );
-
-        for entry in &self.entries {
-            entry.write_options(writer, binrw::Endian::Little, args)?;
-        }
-
-        Ok(())
-    }
+    /// Encoding info from extended header (when flags & 0x02)
+    pub encoding_info: Option<PatchArchiveEncodingInfo>,
+    /// Blocks containing file entries and patches
+    pub blocks: Vec<PatchBlock>,
 }
 
 impl PatchArchive {
-    /// Create streaming parser for large archives
-    pub fn parser<R: Read + Seek>(reader: R) -> PatchArchiveResult<PatchArchiveParser<R>> {
-        PatchArchiveParser::new(reader)
+    /// Total number of file entries across all blocks
+    pub fn total_file_entries(&self) -> usize {
+        self.blocks.iter().map(|b| b.file_entries.len()).sum()
     }
 
-    /// Find patch entry for specific content key
-    pub fn find_patch_for_content(&self, content_key: &[u8; 16]) -> Option<&PatchEntry> {
-        self.entries
-            .iter()
-            .find(|entry| &entry.old_content_key == content_key)
+    /// Iterate over all file entries across all blocks
+    pub fn all_file_entries(&self) -> impl Iterator<Item = &PatchFileEntry> {
+        self.blocks.iter().flat_map(|b| &b.file_entries)
     }
 
-    /// Build lookup map for efficient patch queries
-    pub fn build_lookup_map(&self) -> HashMap<[u8; 16], &PatchEntry> {
-        self.entries
-            .iter()
-            .map(|entry| (entry.old_content_key, entry))
-            .collect()
+    /// Find a patch for a specific target content key
+    pub fn find_patches_for_target(&self, target_ckey: &[u8; 16]) -> Option<&PatchFileEntry> {
+        self.all_file_entries()
+            .find(|entry| &entry.target_ckey == target_ckey)
     }
 
-    /// Build patch chain from start key to end key
-    pub fn build_patch_chain(
+    /// Find all patches available from a specific source
+    pub fn find_patches_from_source(
         &self,
-        start_key: &[u8; 16],
-        end_key: &[u8; 16],
-    ) -> Option<PatchChain> {
-        let mut chain = Vec::new();
-        let mut current_key = *start_key;
-        let mut visited = std::collections::HashSet::new();
-
-        while current_key != *end_key {
-            if visited.contains(&current_key) {
-                return None; // Cycle detected
-            }
-            visited.insert(current_key);
-
-            let patch_entry = self.find_patch_for_content(&current_key)?;
-            current_key = patch_entry.new_content_key;
-            chain.push(patch_entry.clone());
-
-            if chain.len() > 10 {
-                return None; // Chain too long
+        source_ekey: &[u8; 16],
+    ) -> Vec<(&PatchFileEntry, &FilePatch)> {
+        let mut results = Vec::new();
+        for entry in self.all_file_entries() {
+            for patch in &entry.patches {
+                if &patch.source_ekey == source_ekey {
+                    results.push((entry, patch));
+                }
             }
         }
-
-        Some(PatchChain {
-            steps: chain,
-            start_key: *start_key,
-            end_key: *end_key,
-        })
+        results
     }
-}
 
-/// Chain of patches from one content key to another
-#[derive(Debug, Clone)]
-pub struct PatchChain {
-    /// Sequence of patch steps
-    pub steps: Vec<PatchEntry>,
-    /// Starting content key
-    pub start_key: [u8; 16],
-    /// Final content key
-    pub end_key: [u8; 16],
+    /// Compute the size of the header region in bytes
+    ///
+    /// The header region includes the fixed header (10 bytes), optional
+    /// extended header, and block table. Agent.exe computes MD5 over this
+    /// region at `tact::PatchManifestReader::ParseHeader` (0x6a6487).
+    ///
+    /// Layout:
+    /// - Fixed header: 10 bytes
+    /// - Extended header (when flags & 0x02):
+    ///   `2 * file_key_size + 4 + 4 + 1 + espec.len()`
+    /// - Block table: `block_count * (file_key_size + 20)`
+    pub fn header_region_size(&self) -> usize {
+        let fixed_header = 10;
+
+        let extended = if let Some(ref info) = self.encoding_info {
+            2 * usize::from(self.header.file_key_size) + 9 + info.espec.len()
+        } else {
+            0
+        };
+
+        let block_table =
+            usize::from(self.header.block_count) * (usize::from(self.header.file_key_size) + 20);
+
+        fixed_header + extended + block_table
+    }
+
+    /// Compute the MD5 hash of the header region from raw archive data
+    ///
+    /// Returns the MD5 digest of `data[0..header_region_size()]`. This hash
+    /// should match the CDN content key used to fetch the patch manifest.
+    ///
+    /// # Errors
+    ///
+    /// Returns `UnexpectedEndOfBlock` if data is shorter than the header region.
+    pub fn compute_header_hash(&self, data: &[u8]) -> PatchArchiveResult<[u8; 16]> {
+        let size = self.header_region_size();
+        if data.len() < size {
+            return Err(PatchArchiveError::UnexpectedEndOfBlock(size as u64));
+        }
+        Ok(md5::compute(&data[..size]).into())
+    }
+
+    /// Verify the header hash against an expected content key
+    ///
+    /// Agent.exe computes MD5 of the header region (fixed header + extended
+    /// header + block table) and compares it against the content key used to
+    /// fetch the file from CDN. The hash is NOT stored in the binary itself.
+    ///
+    /// # Arguments
+    ///
+    /// * `data` - Raw patch archive bytes
+    /// * `expected` - Expected MD5 hash (typically the CDN content key)
+    ///
+    /// # Errors
+    ///
+    /// Returns `HeaderHashMismatch` if the computed hash does not match.
+    pub fn verify_header_hash(&self, data: &[u8], expected: &[u8; 16]) -> PatchArchiveResult<()> {
+        let actual = self.compute_header_hash(data)?;
+        if actual != *expected {
+            return Err(PatchArchiveError::HeaderHashMismatch {
+                expected: hex::encode(expected),
+                actual: hex::encode(actual),
+            });
+        }
+        Ok(())
+    }
+
+    /// Validate that blocks are sorted by CKey
+    ///
+    /// Agent.exe validates this with `_memcmp` during parsing at 0x6a6487.
+    pub fn validate_block_sort_order(&self) -> PatchArchiveResult<()> {
+        for window in self.blocks.windows(2) {
+            if window[0].last_file_ckey > window[1].last_file_ckey {
+                return Err(PatchArchiveError::BlocksNotSorted {
+                    index: 1, // Relative to window
+                });
+            }
+        }
+        Ok(())
+    }
+
+    /// Flatten all file entries into legacy PatchEntry format
+    ///
+    /// Each (file_entry, patch) pair becomes one PatchEntry.
+    /// The compression_info field is populated from the archive-level espec
+    /// if available.
+    pub fn flatten_entries(&self) -> Vec<PatchEntry> {
+        let compression_info = self
+            .encoding_info
+            .as_ref()
+            .map(|info| info.espec.clone())
+            .unwrap_or_default();
+
+        let mut entries = Vec::new();
+        for file_entry in self.all_file_entries() {
+            for patch in &file_entry.patches {
+                entries.push(PatchEntry {
+                    old_content_key: patch.source_ekey,
+                    new_content_key: file_entry.target_ckey,
+                    patch_encoding_key: patch.patch_ekey,
+                    compression_info: compression_info.clone(),
+                    additional_data: Vec::new(),
+                });
+            }
+        }
+        entries
+    }
 }
 
 impl crate::CascFormat for PatchArchive {
     fn parse(data: &[u8]) -> Result<Self, Box<dyn std::error::Error>> {
-        Self::read_options(&mut std::io::Cursor::new(data), binrw::Endian::Big, ())
-            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
+        let mut cursor = std::io::Cursor::new(data);
+        let (header, encoding_info, blocks) = parser::parse_patch_archive(&mut cursor)?;
+        Ok(Self {
+            header,
+            encoding_info,
+            blocks,
+        })
     }
 
     fn build(&self) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-        let mut output = Vec::new();
-        self.write_options(
-            &mut std::io::Cursor::new(&mut output),
-            binrw::Endian::Big,
-            (),
-        )
-        .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
-        Ok(output)
+        let mut builder = PatchArchiveBuilder::new()
+            .version(self.header.version)
+            .block_size_bits(self.header.block_size_bits);
+
+        if let Some(ref info) = self.encoding_info {
+            builder = builder.encoding_info(info.clone());
+        }
+
+        for entry in self.all_file_entries() {
+            builder.add_entry(entry.clone());
+        }
+
+        builder
+            .build()
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
     }
 }
 
@@ -260,32 +308,171 @@ mod tests {
     #[test]
     fn test_patch_archive_round_trip() {
         let mut builder = PatchArchiveBuilder::new();
-        builder.add_patch([0x01; 16], [0x02; 16], [0x03; 16], "{*=z}".to_string());
+        builder.add_file_entry(
+            [0x02; 16],
+            1000,
+            vec![([0x01; 16], 500, [0x03; 16], 200, 0)],
+        );
 
-        let built = builder.build().expect("Operation should succeed");
-        let parsed = PatchArchive::parse(&built).expect("Operation should succeed");
+        let data = builder.build().expect("build should succeed");
+        let parsed = PatchArchive::parse(&data).expect("parse should succeed");
 
-        assert_eq!(parsed.entries.len(), 1);
-        assert_eq!(parsed.entries[0].old_content_key, [0x01; 16]);
-        assert_eq!(parsed.entries[0].new_content_key, [0x02; 16]);
-        assert_eq!(parsed.entries[0].patch_encoding_key, [0x03; 16]);
-        assert_eq!(parsed.entries[0].compression_info, "{*=z}");
+        assert_eq!(parsed.blocks.len(), 1);
+        assert_eq!(parsed.total_file_entries(), 1);
+        let entry = &parsed.blocks[0].file_entries[0];
+        assert_eq!(entry.target_ckey, [0x02; 16]);
+        assert_eq!(entry.decoded_size, 1000);
+        assert_eq!(entry.patches[0].source_ekey, [0x01; 16]);
+        assert_eq!(entry.patches[0].patch_size, 200);
     }
 
     #[test]
-    fn test_patch_lookup() {
+    fn test_flatten_entries() {
         let mut builder = PatchArchiveBuilder::new();
-        let old_key = [0x01; 16];
-        builder.add_patch(old_key, [0x02; 16], [0x03; 16], "{*=z}".to_string());
-
-        let built = builder.build().expect("Operation should succeed");
-        let archive = PatchArchive::parse(&built).expect("Operation should succeed");
-
-        let patch = archive.find_patch_for_content(&old_key);
-        assert!(patch.is_some());
-        assert_eq!(
-            patch.expect("Patch should be found").new_content_key,
-            [0x02; 16]
+        builder.add_file_entry(
+            [0x02; 16],
+            1000,
+            vec![
+                ([0x01; 16], 500, [0x03; 16], 200, 0),
+                ([0x04; 16], 800, [0x05; 16], 300, 1),
+            ],
         );
+
+        let data = builder.build().expect("build should succeed");
+        let archive = PatchArchive::parse(&data).expect("parse should succeed");
+
+        let flat = archive.flatten_entries();
+        assert_eq!(flat.len(), 2);
+        assert_eq!(flat[0].old_content_key, [0x01; 16]);
+        assert_eq!(flat[0].new_content_key, [0x02; 16]);
+        assert_eq!(flat[1].old_content_key, [0x04; 16]);
+    }
+
+    #[test]
+    fn test_block_sort_validation() {
+        let mut builder = PatchArchiveBuilder::new();
+        builder.add_file_entry(
+            [0x11; 16],
+            1000,
+            vec![([0x01; 16], 500, [0x03; 16], 200, 0)],
+        );
+        builder.add_file_entry(
+            [0x22; 16],
+            2000,
+            vec![([0x04; 16], 1000, [0x06; 16], 300, 0)],
+        );
+
+        let data = builder.build().expect("build should succeed");
+        let archive = PatchArchive::parse(&data).expect("parse should succeed");
+
+        // Builder sorts entries, so blocks should be sorted
+        assert!(archive.validate_block_sort_order().is_ok());
+    }
+
+    #[test]
+    fn test_find_patches() {
+        let mut builder = PatchArchiveBuilder::new();
+        let target = [0x02; 16];
+        let source = [0x01; 16];
+        builder.add_file_entry(target, 1000, vec![(source, 500, [0x03; 16], 200, 0)]);
+
+        let data = builder.build().expect("build should succeed");
+        let archive = PatchArchive::parse(&data).expect("parse should succeed");
+
+        // Find by target
+        let found = archive.find_patches_for_target(&target);
+        assert!(found.is_some());
+        assert_eq!(found.unwrap().decoded_size, 1000);
+
+        // Find by source
+        let found = archive.find_patches_from_source(&source);
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].1.patch_size, 200);
+    }
+
+    #[test]
+    fn test_header_region_size_no_extended() {
+        let mut builder = PatchArchiveBuilder::new();
+        builder.add_file_entry(
+            [0x02; 16],
+            1000,
+            vec![([0x01; 16], 500, [0x03; 16], 200, 0)],
+        );
+
+        let data = builder.build().expect("build should succeed");
+        let archive = PatchArchive::parse(&data).expect("parse should succeed");
+
+        // No extended header: 10 + 0 + 1*(16+20) = 46
+        assert!(archive.encoding_info.is_none());
+        assert_eq!(archive.header_region_size(), 46);
+    }
+
+    #[test]
+    fn test_compute_header_hash() {
+        let mut builder = PatchArchiveBuilder::new();
+        builder.add_file_entry(
+            [0x02; 16],
+            1000,
+            vec![([0x01; 16], 500, [0x03; 16], 200, 0)],
+        );
+
+        let data = builder.build().expect("build should succeed");
+        let archive = PatchArchive::parse(&data).expect("parse should succeed");
+
+        let size = archive.header_region_size();
+        let expected: [u8; 16] = md5::compute(&data[..size]).into();
+        let actual = archive.compute_header_hash(&data).expect("should compute");
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_verify_header_hash_success() {
+        let mut builder = PatchArchiveBuilder::new();
+        builder.add_file_entry(
+            [0x02; 16],
+            1000,
+            vec![([0x01; 16], 500, [0x03; 16], 200, 0)],
+        );
+
+        let data = builder.build().expect("build should succeed");
+        let archive = PatchArchive::parse(&data).expect("parse should succeed");
+
+        let size = archive.header_region_size();
+        let hash: [u8; 16] = md5::compute(&data[..size]).into();
+        assert!(archive.verify_header_hash(&data, &hash).is_ok());
+    }
+
+    #[test]
+    fn test_verify_header_hash_mismatch() {
+        let mut builder = PatchArchiveBuilder::new();
+        builder.add_file_entry(
+            [0x02; 16],
+            1000,
+            vec![([0x01; 16], 500, [0x03; 16], 200, 0)],
+        );
+
+        let data = builder.build().expect("build should succeed");
+        let archive = PatchArchive::parse(&data).expect("parse should succeed");
+
+        let wrong = [0xFF; 16];
+        let result = archive.verify_header_hash(&data, &wrong);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_casc_format_round_trip() {
+        let mut builder = PatchArchiveBuilder::new();
+        builder.add_file_entry(
+            [0x02; 16],
+            1000,
+            vec![([0x01; 16], 500, [0x03; 16], 200, 0)],
+        );
+
+        let original_data = builder.build().expect("build should succeed");
+        let archive = PatchArchive::parse(&original_data).expect("parse should succeed");
+        let rebuilt_data = archive.build().expect("rebuild should succeed");
+        let reparsed = PatchArchive::parse(&rebuilt_data).expect("reparse should succeed");
+
+        assert_eq!(archive.total_file_entries(), reparsed.total_file_entries());
     }
 }

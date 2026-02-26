@@ -136,46 +136,46 @@ features)
 
 **Path Table** (PathTableOffset + PathTableSize):
 
-- **Prefix Tree Structure**: Hierarchical path storage with shared prefixes
+Recursive prefix tree (trie) encoding file paths. Each entry has:
 
-- **Node Types**: Directory nodes and file nodes with different flags
+- Optional `0x00` path separator bytes (before/after name fragments)
+- Length-prefixed name fragment (1-byte length + N bytes)
+- `0xFF` marker followed by 4-byte big-endian NodeValue:
+  - Bit 31 set: folder node, lower 31 bits = folder data length (includes the
+    4-byte NodeValue). Children are inline within that byte range.
+  - Bit 31 clear: file node, value = byte offset into the VFS table.
 
-- **Path Components**: Each node contains a path component string
-
-- **Child Linking**: Nodes reference child node indices for traversal
-
-- **Maximum Depth**: Tracked in header for validation and optimization
+Maximum depth is tracked in the header.
 
 **VFS Table** (VfsTableOffset + VfsTableSize):
 
-- **File Spans**: Maps logical file ranges to physical container locations
+Span-based entries addressed by byte offset from path table NodeValues. Each
+entry has:
 
-- **Container Indices**: References into the container file table
+- `span_count` (1 byte): 1-224 = file entry, 225-254 = other, 255 = deleted
+- Per span (repeated `span_count` times):
+  - `file_offset` (4 bytes BE): offset within the referenced content
+  - `span_length` (4 bytes BE): content size of this span
+  - `cft_offset` (CftOffsSize bytes BE): byte offset into the CFT
 
-- **Size Information**: File size and compressed size tracking
-
-- **Compression Flags**: Indicates whether content is compressed
-
-- **Directory Flags**: Distinguishes files from directories
+`CftOffsSize` is computed from `cft_table_size` using `GetOffsetFieldSize`:
+`>0xFFFFFF` = 4 bytes, `>0xFFFF` = 3 bytes, `>0xFF` = 2 bytes, else 1 byte.
 
 **Container File Table** (CftTableOffset + CftTableSize):
 
-- **EKeys**: Encoding keys sized by header's `ekey_size` field (typically 9
-  bytes for TACT)
+Fixed-stride entries addressed by byte offset from VFS span `cft_offset`
+values. Entry layout depends on header flags:
 
-- **File Sizes**: Uncompressed file sizes
+- `EKey` (ekey_size bytes): encoding key
+- `EncodedSize` (4 bytes BE): encoded (compressed) size
+- `CKey` (pkey_size bytes): content key (if `TVFS_FLAG_INCLUDE_CKEY`)
+- `est_index` (EstOffsSize bytes BE): EST entry index (if
+  `TVFS_FLAG_ENCODING_SPEC`)
+- `patch_offset` (CftOffsSize bytes BE): patch entry offset (if
+  `TVFS_FLAG_PATCH_SUPPORT`)
 
-- **Compressed Sizes**: Optional compressed size information
-
-- **Content Keys**: Optional 16-byte content keys (if INCLUDE_CKEY flag set)
-
-- **Effective Size Calculation**: Handles cases where compressed size may be
-absent
-
-- **Variable-Width Size Encoding**: Size fields use 1-4 bytes based on the
-  maximum value in the table. The agent determines width as: > 0xFFFFFF = 4
-  bytes, > 0xFFFF = 3 bytes, > 0xFF = 2 bytes, else 1 byte. This applies to
-  both EST table size fields and container file table size fields.
+`EstOffsSize` is computed from `est_table_size` using the same
+`GetOffsetFieldSize` function as `CftOffsSize`.
 
 **Encoding Specifier Table (EST)** (Optional, if encoding spec flag is set):
 
@@ -198,331 +198,75 @@ Container Table: Offset 11,882, Size 29,645 bytes
 
 ## Format Analysis Status
 
-**Verified Information:**
+**Verified against CascLib and CDN data (WoW Retail, Classic, Classic Era):**
 
-- Header format and magic bytes confirmed
+- Header format, magic bytes, flags, and table offsets
+- Path table recursive prefix tree with 0xFF NodeValue markers
+- VFS span-based entries with variable-width CFT offsets
+- CFT fixed-stride entries with flag-dependent fields
+- EST null-terminated encoding spec strings
+- Round-trip parse/build produces structurally equivalent output
 
-- Version consistency across builds established
+## Usage
 
-- File size ranges and compression confirmed
-
-- String patterns and hierarchical structure observed
-
-**Requires Further Analysis:**
-
-- Complete binary structure specification
-
-- Entry format definitions
-
-- Namespace and directory organization
-
-- File reference mechanisms
-
-- Cross-reference resolution with encoding files
-
-## Content Resolution
-
-### Path Resolution Algorithm
+### Parsing a TVFS Manifest
 
 ```rust
-fn resolve_path(tvfs: &TVFS, path: &str) -> Option<TVFSFileEntry> {
-    let parts: Vec<&str> = path.split('/').collect();
+use cascette_formats::tvfs::TvfsFile;
 
-    // Start from root or current namespace
-    let mut current_ns = tvfs.get_current_namespace();
-    let mut current_dir = current_ns.root_directory_id;
+// From decompressed data
+let tvfs = TvfsFile::parse(&data)?;
 
-    // Navigate path components
-    for part in &parts[..parts.len() - 1] {
-        if let Some(dir) = tvfs.find_subdirectory(current_dir, part) {
-            current_dir = dir.directory_id;
-        } else {
-            return None;
+// From BLTE-encoded CDN data
+let tvfs = TvfsFile::load_from_blte(&blte_data)?;
+```
+
+### Enumerating Files
+
+```rust
+// All file entries from the path table
+for file in &tvfs.path_table.files {
+    println!("{} -> VFS offset {}", file.path, file.vfs_offset);
+}
+
+// With VFS entry details
+for (file, vfs_entry) in tvfs.enumerate_files() {
+    if let Some(entry) = vfs_entry {
+        for span in &entry.spans {
+            println!("{}: offset={}, length={}, cft_offset={}",
+                file.path, span.file_offset, span.span_length, span.cft_offset);
         }
     }
-
-    // Find file in final directory
-    let filename = parts.last()?;
-    tvfs.find_file(current_dir, filename)
 }
 ```
 
-### Content Key Mapping
+### Resolving a Path
 
 ```rust
-struct ContentMapping {
-    content_key: [u8; 16],
-    encoding_key: [u8; 16],
-    archive_info: Option<ArchiveLocation>,
-}
-
-impl TVFS {
-    pub fn get_content(&self, file_id: u32) -> Option<ContentMapping> {
-        let file = self.get_file(file_id)?;
-
-        // Look up encoding key from content key
-        let encoding_key = self.encoding_lookup(&file.content_key)?;
-
-        // Find archive location if applicable
-        let archive_info = self.find_archive_location(&encoding_key);
-
-        Some(ContentMapping {
-            content_key: file.content_key,
-            encoding_key,
-            archive_info,
-        })
+// Resolve path -> VFS entry -> CFT entry (EKey)
+if let Some(container_entry) = tvfs.resolve_path("path/to/file") {
+    println!("EKey: {}", container_entry.ekey_hex());
+    if let Some(ckey) = container_entry.content_key_hex() {
+        println!("CKey: {}", ckey);
     }
 }
 ```
 
-## Virtual File Operations
-
-### Directory Traversal
+### Building a TVFS Manifest
 
 ```rust
-struct TVFSIterator {
-    tvfs: Arc<TVFS>,
-    stack: Vec<u32>,  // Directory ID stack
-}
+use cascette_formats::tvfs::TvfsBuilder;
 
-impl Iterator for TVFSIterator {
-    type Item = TVFSEntry;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        while let Some(dir_id) = self.stack.pop() {
-            let dir = self.tvfs.get_directory(dir_id)?;
-
-            // Add subdirectories to stack
-            for subdir in &dir.subdirectories {
-                self.stack.push(subdir.directory_id);
-            }
-
-            // Return directory entry
-            return Some(TVFSEntry::Directory(dir));
-        }
-
-        None
-    }
-}
-```
-
-### File Filtering
-
-```rust
-impl TVFS {
-    pub fn find_files_by_extension(&self, ext: &str) -> Vec<TVFSFileEntry> {
-        self.files
-            .values()
-            .filter(|f| f.name.ends_with(ext))
-            .cloned()
-            .collect()
-    }
-
-    pub fn find_files_by_pattern(&self, pattern: &Regex) -> Vec<TVFSFileEntry> {
-        self.files
-            .values()
-            .filter(|f| pattern.is_match(&f.name))
-            .cloned()
-            .collect()
-    }
-}
-```
-
-## Multi-Product Support
-
-### Product Isolation
-
-```rust
-struct MultiProductTVFS {
-    products: HashMap<String, ProductNamespace>,
-    shared: SharedNamespace,
-}
-
-impl MultiProductTVFS {
-    pub fn get_product_files(&self, product: &str) -> Vec<TVFSFileEntry> {
-        if let Some(ns) = self.products.get(product) {
-            ns.enumerate_files()
-        } else {
-            Vec::new()
-        }
-    }
-
-    pub fn get_shared_files(&self) -> Vec<TVFSFileEntry> {
-        self.shared.enumerate_files()
-    }
-}
-```
-
-### Content Deduplication
-
-```rust
-struct DeduplicationIndex {
-    content_map: HashMap<[u8; 16], Vec<FileReference>>,
-}
-
-impl DeduplicationIndex {
-    pub fn find_duplicates(&self) -> Vec<([u8; 16], Vec<FileReference>)> {
-        self.content_map
-            .iter()
-            .filter(|(_, refs)| refs.len() > 1)
-            .map(|(key, refs)| (*key, refs.clone()))
-            .collect()
-    }
-}
-```
-
-## Build Management
-
-### Build Switching
-
-```rust
-impl TVFS {
-    pub fn switch_build(&mut self, build_id: &str) -> Result<()> {
-        // Save current build state
-        self.save_current_state()?;
-
-        // Load new build namespace
-        let build_ns = self.load_build_namespace(build_id)?;
-
-        // Update active namespace
-        self.active_namespace = build_ns;
-
-        // Refresh content mappings
-        self.refresh_mappings()?;
-
-        Ok(())
-    }
-}
-```
-
-### Patch Application
-
-```rust
-struct TVFSPatch {
-    base_build: String,
-    target_build: String,
-    added_files: Vec<TVFSFileEntry>,
-    modified_files: Vec<(u32, TVFSFileEntry)>,
-    removed_files: Vec<u32>,
-}
-
-impl TVFS {
-    pub fn apply_patch(&mut self, patch: TVFSPatch) -> Result<()> {
-        // Remove deleted files
-        for file_id in patch.removed_files {
-            self.remove_file(file_id)?;
-        }
-
-        // Update modified files
-        for (file_id, new_entry) in patch.modified_files {
-            self.update_file(file_id, new_entry)?;
-        }
-
-        // Add new files
-        for entry in patch.added_files {
-            self.add_file(entry)?;
-        }
-
-        Ok(())
-    }
-}
-```
-
-## Implementation Example
-
-```rust
-struct TVFS {
-    header: TVFSHeader,
-    namespaces: HashMap<u32, TVFSNamespace>,
-    directories: HashMap<u32, TVFSDirectory>,
-    files: HashMap<u32, TVFSFileEntry>,
-    active_namespace: u32,
-}
-
-impl TVFS {
-    pub fn open_file(&self, path: &str) -> Result<Vec<u8>> {
-        // Resolve path to file entry
-        let file = self.resolve_path(path)
-            .ok_or("File not found")?;
-
-        // Get content mapping
-        let mapping = self.get_content(file.file_id)
-            .ok_or("Content not found")?;
-
-        // Fetch and decompress content
-        let compressed = self.fetch_content(&mapping.encoding_key)?;
-        let decompressed = decompress_blte(compressed)?;
-
-        Ok(decompressed)
-    }
-}
-```
-
-## Performance Optimization
-
-### Caching Strategy
-
-```rust
-struct TVFSCache {
-    path_cache: LruCache<String, u32>,      // Path -> FileID
-    content_cache: LruCache<u32, Vec<u8>>,  // FileID -> Content
-    metadata_cache: HashMap<u32, FileMetadata>,
-}
-```
-
-### Lazy Loading
-
-```rust
-impl TVFS {
-    pub fn lazy_load_directory(&mut self, dir_id: u32) -> Result<()> {
-        if self.directories.contains_key(&dir_id) {
-            return Ok(()); // Already loaded
-        }
-
-        // Load directory metadata on demand
-        let dir_data = self.fetch_directory_data(dir_id)?;
-        let directory = parse_directory(dir_data)?;
-
-        self.directories.insert(dir_id, directory);
-        Ok(())
-    }
-}
-```
-
-## Common Issues
-
-1. **Namespace conflicts**: Multiple products using same paths
-2. **Build inconsistencies**: Missing files between builds
-3. **Permission management**: Access control across namespaces
-4. **Cache invalidation**: Stale data after build switches
-5. **Memory usage**: Large file trees consuming RAM
-
-## Future Extensions
-
-### Symbolic Links
-
-Support for virtual symlinks:
-
-```rust
-struct TVFSSymlink {
-    link_id: u32,
-    target_path: String,
-    namespace_id: u32,
-}
-```
-
-### Metadata Extensions
-
-Additional file metadata:
-
-```rust
-struct ExtendedMetadata {
-    created_time: u64,
-    modified_time: u64,
-    attributes: u32,
-    permissions: u32,
-    custom_data: HashMap<String, String>,
-}
+let mut builder = TvfsBuilder::with_flags(0x07); // CKEY + EST + PATCH
+builder.add_est_spec("b:256K*=z".to_string());
+builder.add_file(
+    "path/to/file".to_string(),
+    [0x01; 9],   // ekey
+    1024,         // encoded_size
+    2048,         // content_size
+    Some([0x02; 16]), // content_key
+);
+let data = builder.build()?;
 ```
 
 ## References

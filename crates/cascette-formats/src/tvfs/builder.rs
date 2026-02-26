@@ -1,308 +1,258 @@
 //! TVFS builder for creating TVFS files
-
-use std::collections::HashMap;
+//!
+//! Builds a TVFS manifest from a list of files. Produces the binary prefix
+//! tree path table, span-based VFS table, and fixed-stride CFT that CascLib
+//! and Agent.exe expect.
 
 use crate::tvfs::{
     TvfsFile,
     container_table::{ContainerEntry, ContainerFileTable},
     error::TvfsResult,
-    header::{TVFS_FLAG_INCLUDE_CKEY, TvfsHeader},
-    path_table::{PathNode, PathTable},
-    utils::varint_size,
-    vfs_table::{VfsEntry, VfsTable},
+    est_table::EstTable,
+    header::{TVFS_FLAG_ENCODING_SPEC, TVFS_FLAG_INCLUDE_CKEY, TvfsHeader},
+    path_table::{PathTable, PathTreeNode},
+    vfs_table::{VfsEntry, VfsSpan, VfsTable},
 };
 
-/// Builder for creating TVFS files
+/// Builder for creating TVFS files.
 #[derive(Debug)]
 pub struct TvfsBuilder {
-    /// Files to include in the TVFS
-    files: Vec<(String, ContainerEntry)>,
+    /// Files to include: (path, ekey, encoded_size, content_key)
+    files: Vec<FileRecord>,
     /// Format flags
     flags: u32,
-    /// Maximum depth tracking
-    max_depth: u16,
+    /// Encoding spec strings (if TVFS_FLAG_ENCODING_SPEC is set)
+    est_specs: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+struct FileRecord {
+    path: String,
+    ekey: Vec<u8>,
+    encoded_size: u32,
+    content_size: u32,
+    content_key: Option<Vec<u8>>,
+    est_index: Option<u32>,
 }
 
 impl TvfsBuilder {
-    /// Create a new TVFS builder
+    /// Create a new TVFS builder with default flags (INCLUDE_CKEY only).
     pub fn new() -> Self {
         Self {
             files: Vec::new(),
             flags: TVFS_FLAG_INCLUDE_CKEY,
-            max_depth: 0,
+            est_specs: Vec::new(),
         }
     }
 
-    /// Create a new TVFS builder with custom flags
+    /// Create a new TVFS builder with custom flags.
     pub fn with_flags(flags: u32) -> Self {
         Self {
             files: Vec::new(),
             flags,
-            max_depth: 0,
+            est_specs: Vec::new(),
         }
     }
 
-    /// Add a file to the TVFS
+    /// Add an encoding spec string (only used when TVFS_FLAG_ENCODING_SPEC is set).
+    pub fn add_est_spec(&mut self, spec: String) {
+        self.est_specs.push(spec);
+    }
+
+    /// Add a file to the TVFS.
     pub fn add_file(
         &mut self,
         path: String,
         ekey: [u8; 9],
-        file_size: u32,
+        encoded_size: u32,
+        content_size: u32,
         content_key: Option<[u8; 16]>,
     ) {
-        let compressed_size = if (self.flags & TVFS_FLAG_INCLUDE_CKEY) != 0 {
-            Some(file_size) // Default to same size
-        } else {
-            None
-        };
-
-        let entry = ContainerEntry::new(ekey, file_size, compressed_size, content_key);
-        // Update max depth before moving path
-        let depth = path.split('/').filter(|s| !s.is_empty()).count() as u16;
-
-        self.files.push((path, entry));
-        self.max_depth = self.max_depth.max(depth);
+        self.files.push(FileRecord {
+            path,
+            ekey: ekey.to_vec(),
+            encoded_size,
+            content_size,
+            content_key: content_key.map(|k| k.to_vec()),
+            est_index: None,
+        });
     }
 
-    /// Add a file to the TVFS with a variable-length encoding key
-    pub fn add_file_with_ekey(
+    /// Add a file with an encoding spec index.
+    pub fn add_file_with_est(
         &mut self,
         path: String,
-        ekey: Vec<u8>,
-        file_size: u32,
+        ekey: [u8; 9],
+        encoded_size: u32,
+        content_size: u32,
         content_key: Option<[u8; 16]>,
+        est_index: u32,
     ) {
-        let compressed_size = if (self.flags & TVFS_FLAG_INCLUDE_CKEY) != 0 {
-            Some(file_size)
+        self.files.push(FileRecord {
+            path,
+            ekey: ekey.to_vec(),
+            encoded_size,
+            content_size,
+            content_key: content_key.map(|k| k.to_vec()),
+            est_index: Some(est_index),
+        });
+    }
+
+    /// Build the TVFS file and return serialized bytes.
+    pub fn build(&mut self) -> TvfsResult<Vec<u8>> {
+        // Sort files for deterministic output
+        self.files.sort_by(|a, b| a.path.cmp(&b.path));
+
+        // Create a temporary header to compute field sizes.
+        // We need to know cft_table_size for CftOffsSize, but cft_table_size
+        // depends on CftOffsSize (circular). Break the cycle by computing
+        // the entry count first — entry_size only depends on flags and the
+        // *range* of cft_table_size (1/2/3/4 byte threshold).
+        let mut header = TvfsHeader::new(self.flags);
+
+        // Build CFT entries and data
+        let cft_entries: Vec<ContainerEntry> = self
+            .files
+            .iter()
+            .map(|rec| ContainerEntry {
+                offset: 0, // will be set below
+                ekey: rec.ekey.clone(),
+                encoded_size: rec.encoded_size,
+                content_key: rec.content_key.clone(),
+                est_index: rec.est_index,
+                patch_offset: None,
+            })
+            .collect();
+
+        // First pass: estimate CFT size with minimum offs sizes
+        let est_entry_size_estimate = header.cft_entry_size();
+        let cft_size_estimate = (cft_entries.len() * est_entry_size_estimate) as u32;
+        header.cft_table_size = cft_size_estimate;
+
+        // Now recompute with correct offs sizes
+        let entry_size = header.cft_entry_size();
+        let cft_size = (cft_entries.len() * entry_size) as u32;
+        header.cft_table_size = cft_size;
+
+        // Assign offsets to CFT entries
+        let cft_entries: Vec<ContainerEntry> = cft_entries
+            .into_iter()
+            .enumerate()
+            .map(|(i, mut e)| {
+                e.offset = (i * entry_size) as u32;
+                e
+            })
+            .collect();
+
+        // Build VFS entries (one per file, single span each)
+        let mut vfs_entries: Vec<VfsEntry> = Vec::with_capacity(self.files.len());
+        let cft_offs_size = header.cft_offs_size() as usize;
+        let span_wire_size = 1 + 4 + 4 + cft_offs_size; // span_count(1) + file_offset(4) + span_length(4) + cft_offset
+
+        let mut vfs_offset = 0u32;
+        for (i, rec) in self.files.iter().enumerate() {
+            vfs_entries.push(VfsEntry {
+                offset: vfs_offset,
+                spans: vec![VfsSpan {
+                    file_offset: 0,
+                    span_length: rec.content_size,
+                    cft_offset: cft_entries[i].offset,
+                }],
+            });
+            vfs_offset += span_wire_size as u32;
+        }
+
+        // Build path tree
+        let root = build_path_tree(&self.files, &vfs_entries);
+
+        // Serialize path table
+        let path_data = PathTable::build(&root);
+
+        // Serialize VFS table
+        let vfs_data = VfsTable::build(&vfs_entries, &header);
+
+        // Serialize CFT
+        let container_table = ContainerFileTable {
+            data: Vec::new(), // will be built
+            entries: cft_entries,
+        };
+        let cft_data = container_table.build(&header);
+
+        // EST
+        let est_table = if (self.flags & TVFS_FLAG_ENCODING_SPEC) != 0 && !self.est_specs.is_empty()
+        {
+            let mut est = EstTable::new();
+            for spec in &self.est_specs {
+                est.add_spec(spec.clone());
+            }
+            Some(est)
         } else {
             None
         };
 
-        let entry = ContainerEntry::with_ekey(ekey, file_size, compressed_size, content_key);
-        let depth = path.split('/').filter(|s| !s.is_empty()).count() as u16;
+        let est_data = est_table.as_ref().map(|est| {
+            let mut buf = Vec::new();
+            for spec in &est.specs {
+                buf.extend_from_slice(spec.as_bytes());
+                buf.push(0);
+            }
+            buf
+        });
 
-        self.files.push((path, entry));
-        self.max_depth = self.max_depth.max(depth);
-    }
+        // Compute table layout: header → path → est(opt) → cft → vfs
+        let header_size = header.header_size as u32;
+        let path_offset = header_size;
+        let path_size = path_data.len() as u32;
 
-    /// Build the TVFS file
-    pub fn build(&mut self) -> TvfsResult<Vec<u8>> {
-        // Sort files for optimal path table generation
-        self.files.sort_by(|a, b| a.0.cmp(&b.0));
+        let (est_offset, est_size, cft_start);
+        if let Some(ref est) = est_data {
+            est_offset = path_offset + path_size;
+            est_size = est.len() as u32;
+            cft_start = est_offset + est_size;
+            header.est_table_offset = Some(est_offset);
+            header.est_table_size = Some(est_size);
+        } else {
+            est_offset = 0;
+            est_size = 0;
+            let _ = (est_offset, est_size);
+            cft_start = path_offset + path_size;
+        }
 
-        // Build path table from file list
-        let path_table = self.build_path_table()?;
+        let cft_actual_size = cft_data.len() as u32;
+        let vfs_off = cft_start + cft_actual_size;
+        let vfs_size = vfs_data.len() as u32;
 
-        // Build VFS table
-        let vfs_table = self.build_vfs_table()?;
+        // Calculate max depth
+        let max_depth = calculate_max_depth(&root, 0);
 
-        // Build container table
-        let container_table = self.build_container_table();
+        header.path_table_offset = path_offset;
+        header.path_table_size = path_size;
+        header.vfs_table_offset = vfs_off;
+        header.vfs_table_size = vfs_size;
+        header.cft_table_offset = cft_start;
+        header.cft_table_size = cft_actual_size;
+        header.max_depth = max_depth;
 
-        // Create complete TVFS structure
+        // Assemble the TvfsFile for serialization
         let tvfs = TvfsFile {
-            header: self.create_header(&path_table, &vfs_table, &container_table),
-            path_table,
-            vfs_table,
-            container_table,
-            est_table: None,
+            header,
+            path_table: PathTable {
+                data: path_data.clone(),
+                files: Vec::new(), // not needed for build output
+                root,
+            },
+            vfs_table: VfsTable {
+                data: vfs_data.clone(),
+                entries: vfs_entries,
+            },
+            container_table: ContainerFileTable {
+                data: cft_data.clone(),
+                entries: container_table.entries,
+            },
+            est_table,
         };
 
-        // Serialize to bytes
         tvfs.build()
-    }
-
-    /// Build path table from file list
-    fn build_path_table(&self) -> TvfsResult<PathTable> {
-        let root = PathNode::root();
-        let mut nodes = vec![root.clone()];
-        let mut node_index_map = HashMap::new();
-        node_index_map.insert(String::new(), 0u32);
-
-        let mut next_file_id = 0u32;
-
-        // Process each file
-        for (file_index, (path, _)) in self.files.iter().enumerate() {
-            self.insert_path_into_table(
-                path,
-                &mut nodes,
-                &mut node_index_map,
-                file_index as u32,
-                &mut next_file_id,
-            )?;
-        }
-
-        // Root node is already updated in nodes[0] during insertion
-
-        // Create path table
-        let mut path_table = PathTable {
-            root_node: nodes[0].clone(),
-            nodes,
-            node_index: HashMap::new(),
-        };
-
-        // Build node index mapping
-        for (i, _node) in path_table.nodes.iter().enumerate() {
-            path_table.node_index.insert(i as u32, i);
-        }
-
-        Ok(path_table)
-    }
-
-    /// Insert a path into the path table
-    fn insert_path_into_table(
-        &self,
-        path: &str,
-        nodes: &mut Vec<PathNode>,
-        node_index_map: &mut HashMap<String, u32>,
-        _file_index: u32,
-        next_file_id: &mut u32,
-    ) -> TvfsResult<()> {
-        let components: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
-        if components.is_empty() {
-            return Ok(());
-        }
-
-        let mut current_path = String::new();
-        let mut _current_node_index = 0u32; // Root node
-
-        // Navigate/create path components
-        for (i, component) in components.iter().enumerate() {
-            let parent_path = current_path.clone();
-            current_path = if current_path.is_empty() {
-                (*component).to_string()
-            } else {
-                format!("{}/{}", current_path, component)
-            };
-
-            let is_file = i == components.len() - 1;
-
-            // Check if node already exists
-            if let Some(&existing_index) = node_index_map.get(&current_path) {
-                _current_node_index = existing_index;
-
-                // If it's a file, set the file ID
-                if is_file && let Some(node) = nodes.get_mut(existing_index as usize) {
-                    node.file_id = Some(*next_file_id);
-                    *next_file_id += 1;
-                }
-            } else {
-                // Create new node
-                let mut new_node = PathNode::new((*component).to_string(), !is_file);
-                new_node.node_index = nodes.len() as u32;
-
-                if is_file {
-                    new_node.file_id = Some(*next_file_id);
-                    *next_file_id += 1;
-                }
-
-                let new_index = nodes.len() as u32;
-                nodes.push(new_node);
-                node_index_map.insert(current_path.clone(), new_index);
-
-                // Add child reference to parent
-                if let Some(parent_index) = node_index_map.get(&parent_path)
-                    && let Some(parent_node) = nodes.get_mut(*parent_index as usize)
-                {
-                    parent_node.add_child(new_index);
-                }
-
-                _current_node_index = new_index;
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Build VFS table
-    fn build_vfs_table(&self) -> TvfsResult<VfsTable> {
-        let mut vfs_table = VfsTable::new();
-
-        for (file_index, (_path, _entry)) in self.files.iter().enumerate() {
-            let vfs_entry = VfsEntry::new(
-                file_index as u32, // file_id
-                file_index as u32, // container_index
-                0,                 // file_offset (not used in TVFS)
-                _entry.file_size,  // file_size
-                false,             // is_directory
-                false,             // is_compressed
-            );
-
-            vfs_table.add_entry(vfs_entry);
-        }
-
-        Ok(vfs_table)
-    }
-
-    /// Build container table
-    fn build_container_table(&self) -> ContainerFileTable {
-        let mut container_table = ContainerFileTable::new();
-
-        for (_path, entry) in &self.files {
-            container_table.add_entry(entry.clone());
-        }
-
-        container_table
-    }
-
-    /// Create header with proper offsets and sizes
-    fn create_header(
-        &self,
-        path_table: &PathTable,
-        vfs_table: &VfsTable,
-        container_table: &ContainerFileTable,
-    ) -> TvfsHeader {
-        let mut header = TvfsHeader::new(self.flags);
-
-        // Calculate table sizes
-        let path_table_size = self.calculate_path_table_size(path_table);
-        let vfs_table_size = vfs_table.table_size();
-        let container_table_size =
-            container_table.calculate_size(header.includes_content_keys(), header.ekey_size);
-
-        // Calculate offsets
-        let header_size = u32::from(header.header_size);
-        let path_table_offset = header_size;
-        let vfs_table_offset = path_table_offset + path_table_size;
-        let cft_table_offset = vfs_table_offset + vfs_table_size;
-
-        header.update_table_info(
-            path_table_offset,
-            path_table_size,
-            vfs_table_offset,
-            vfs_table_size,
-            cft_table_offset,
-            container_table_size,
-            self.max_depth,
-        );
-
-        header
-    }
-
-    /// Calculate path table size
-    fn calculate_path_table_size(&self, path_table: &PathTable) -> u32 {
-        let mut size = 0usize;
-
-        for node in &path_table.nodes {
-            size += 1; // flags
-            size += 1; // path length
-            size += node.path_part.len(); // path data
-
-            if !node.children.is_empty() {
-                size += 1; // child count
-                size += node
-                    .children
-                    .iter()
-                    .map(|&idx| varint_size(idx))
-                    .sum::<usize>();
-            }
-
-            if let Some(fid) = node.file_id {
-                size += varint_size(fid);
-            }
-        }
-
-        size as u32
     }
 }
 
@@ -310,4 +260,62 @@ impl Default for TvfsBuilder {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Build a path tree from sorted file records and their VFS entries.
+fn build_path_tree(files: &[FileRecord], vfs_entries: &[VfsEntry]) -> PathTreeNode {
+    let mut root = PathTreeNode {
+        name: String::new(),
+        children: Vec::new(),
+        vfs_offset: None,
+    };
+
+    for (i, rec) in files.iter().enumerate() {
+        let components: Vec<&str> = rec.path.split('/').filter(|s| !s.is_empty()).collect();
+        insert_path(&mut root, &components, 0, vfs_entries[i].offset);
+    }
+
+    root
+}
+
+/// Recursively insert a path into the tree.
+fn insert_path(node: &mut PathTreeNode, components: &[&str], depth: usize, vfs_offset: u32) {
+    if depth >= components.len() {
+        return;
+    }
+
+    let component = components[depth];
+    let is_leaf = depth == components.len() - 1;
+
+    // Find existing child
+    let child_pos = node.children.iter().position(|c| c.name == component);
+
+    if let Some(pos) = child_pos {
+        if is_leaf {
+            node.children[pos].vfs_offset = Some(vfs_offset);
+        } else {
+            insert_path(&mut node.children[pos], components, depth + 1, vfs_offset);
+        }
+    } else {
+        let mut child = PathTreeNode {
+            name: component.to_string(),
+            children: Vec::new(),
+            vfs_offset: if is_leaf { Some(vfs_offset) } else { None },
+        };
+
+        if !is_leaf {
+            insert_path(&mut child, components, depth + 1, vfs_offset);
+        }
+
+        node.children.push(child);
+    }
+}
+
+/// Calculate maximum depth of the tree.
+fn calculate_max_depth(node: &PathTreeNode, depth: u16) -> u16 {
+    let mut max = depth;
+    for child in &node.children {
+        max = max.max(calculate_max_depth(child, depth + 1));
+    }
+    max
 }

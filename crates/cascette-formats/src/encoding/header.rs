@@ -19,10 +19,18 @@ pub struct EncodingHeader {
     /// Size of encoding key hashes (typically 16 for MD5)
     pub ekey_hash_size: u8,
 
-    /// Content key page size in KB
+    /// Content key page size in KB (big-endian u16)
+    ///
+    /// Agent.exe reads this as two bytes: `(hi << 8 | lo) << 0xa`, which is
+    /// equivalent to `value_u16 * 1024`. The raw value (typically 4) represents
+    /// kilobytes; use [`ckey_page_size()`](Self::ckey_page_size) to get the
+    /// byte size (typically 4096).
     pub ckey_page_size_kb: u16,
 
-    /// Encoding key page size in KB
+    /// Encoding key page size in KB (big-endian u16)
+    ///
+    /// Same encoding as [`ckey_page_size_kb`](Self::ckey_page_size_kb).
+    /// Use [`ekey_page_size()`](Self::ekey_page_size) to get the byte size.
     pub ekey_page_size_kb: u16,
 
     /// Number of content key pages
@@ -80,6 +88,14 @@ impl EncodingHeader {
                 field: "ekey_hash_size",
                 value: self.ekey_hash_size,
             });
+        }
+
+        if self.ckey_page_size_kb == 0 {
+            return Err(EncodingError::InvalidPageSize(0));
+        }
+
+        if self.ekey_page_size_kb == 0 {
+            return Err(EncodingError::InvalidPageSize(0));
         }
 
         if self.ckey_page_count == 0 {

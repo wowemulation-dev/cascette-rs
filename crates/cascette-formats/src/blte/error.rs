@@ -65,6 +65,21 @@ pub enum BlteError {
     #[error("decompression failed: {0}")]
     DecompressionFailed(String),
 
+    /// Invalid IV size (must be 4 or 8)
+    #[error("invalid IV size: {actual} (expected 4 or 8)")]
+    InvalidIvSize {
+        /// The invalid size encountered
+        actual: u8,
+    },
+
+    /// Nested encryption (encrypted chunk inside encrypted chunk)
+    #[error("nested encryption is not supported")]
+    NestedEncryption,
+
+    /// Single-chunk encrypted BLTE files are not valid
+    #[error("encrypted BLTE requires extended (multi-chunk) header")]
+    SingleChunkEncrypted,
+
     /// Encryption key not found
     #[error("encryption key not found: {0:016X}")]
     KeyNotFound(u64),

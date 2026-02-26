@@ -49,49 +49,87 @@ Specifically:
 
 ## Patch Manifest Format
 
-Patch manifests use the PA (Patch Archive) format with **mixed endianness**:
+Patch manifests use the PA (Patch Archive) format. All numeric fields are
+big-endian throughout (header, block table, and block data).
 
 ### Header Structure (10 bytes)
 
 ```c
 struct PatchArchiveHeader {  // 10 bytes, big-endian
     uint8_t  magic[2];         // "PA" (0x5041)
-    uint8_t  version;          // Format version (non-zero, <= 2)
-    uint8_t  file_key_size;    // Target file C-Key size (1-16)
-    uint8_t  old_key_size;     // Base file E-Key size (1-16, encoding key)
-    uint8_t  patch_key_size;   // P-Key size (1-16)
+    uint8_t  version;          // Format version (1-2)
+    uint8_t  file_key_size;    // Target file CKey size (1-16, typically 16)
+    uint8_t  old_key_size;     // Source file EKey size (1-16, typically 16)
+    uint8_t  patch_key_size;   // Patch EKey size (1-16, typically 16)
     uint8_t  block_size_bits;  // Block size as power of 2 (range [12, 24])
-    uint16_t block_count;      // Number of block entries (big-endian, non-zero)
+    uint16_t block_count;      // Number of blocks (big-endian)
     uint8_t  flags;            // Format flags (see below)
 };
 ```
 
-**Header Validation**:
-
-- Total header size must not exceed 64KB (0x10000)
-- A 16-byte header hash follows the header and is verified on parse
-- Block table must be sorted by target C-Key
-
 **Flags**:
 
-- **Bit 0**: Plain data mode (informational)
-- **Bit 1**: Extended header present (adds target C-Key + base E-Key
-  hash data before the block table)
+- **Bit 0 (0x01)**: Plain data mode (informational, Agent.exe logs but
+  does not reject)
+- **Bit 1 (0x02)**: Extended header present with encoding info. All
+  known CDN patch manifests have this flag set.
 
-### Block Table Entries
+### Extended Header (when flags & 0x02)
 
-Each block entry has a fixed size of `file_key_size + 20` bytes:
+Present immediately after the 10-byte header. Contains encoding file
+metadata for the patch manifest:
 
 ```c
-struct BlockEntry {  // file_key_size + 20 bytes per entry
-    uint8_t  target_ckey[file_key_size];  // Target file C-Key
-    uint8_t  hash_data[16];               // 16 bytes of hash/key data
-    uint32_t value;                       // Big-endian 32-bit value
+struct PatchArchiveEncodingInfo {
+    uint8_t  encoding_ckey[file_key_size];  // Encoding file CKey
+    uint8_t  encoding_ekey[file_key_size];  // Encoding file EKey
+    uint32_t decoded_size;                  // Decoded size (big-endian)
+    uint32_t encoded_size;                  // Encoded size (big-endian)
+    uint8_t  espec_length;                  // Length of ESpec string
+    uint8_t  espec[espec_length];           // ESpec (length-prefixed, NOT null-terminated)
 };
 ```
 
-The block table is sorted by target C-Key. The agent validates sort order
-on parse.
+### Block Table
+
+Follows the header (or extended header if present). Each entry has a
+fixed size of `file_key_size + 20` bytes:
+
+```c
+struct BlockTableEntry {  // file_key_size + 20 bytes per entry
+    uint8_t  last_file_ckey[file_key_size];  // Last (highest) CKey in this block
+    uint8_t  block_md5[16];                  // MD5 hash of block data
+    uint32_t block_offset;                   // Absolute byte offset (big-endian)
+};
+```
+
+The block table is sorted by `last_file_ckey`. Agent.exe validates sort
+order using `_memcmp` during parsing.
+
+### Block Data
+
+At each `block_offset`, file entries are stored as variable-length records
+terminated by a 0x00 sentinel byte:
+
+```c
+// Repeat until num_patches == 0:
+struct FileEntry {
+    uint8_t  num_patches;                    // 0 = end of block
+    uint8_t  target_ckey[file_key_size];     // Target file CKey
+    uint8_t  decoded_size[5];                // uint40, big-endian
+    // Followed by num_patches patch records:
+    struct {
+        uint8_t  source_ekey[old_key_size];  // Source file EKey
+        uint8_t  source_decoded_size[5];     // uint40, big-endian
+        uint8_t  patch_ekey[patch_key_size]; // Patch data EKey
+        uint32_t patch_size;                 // Patch data size (big-endian)
+        uint8_t  patch_index;                // Ordering hint
+    } patches[num_patches];
+};
+uint8_t end_marker = 0;  // Sentinel byte
+```
+
+Decoded sizes use uint40 (5-byte big-endian) to support files up to ~1 TB.
 
 ## Compression Info Format
 
@@ -167,14 +205,14 @@ This describes a chain:
 ZBSDIFF1 is the binary differential patch format used by NGDP/TACT for
 efficient file updates:
 
-### Header (32 bytes, big-endian)
+### Header (32 bytes, little-endian)
 
 ```c
 struct ZbsdiffHeader {
-    uint8_t  signature[8];       // "ZBSDIFF1" (0x5A4253444946463)
-    uint64_t control_size;       // Size of compressed control block (big-endian)
-    uint64_t diff_size;          // Size of compressed diff block (big-endian)
-    uint64_t output_size;        // Size of final output file (big-endian)
+    uint8_t  signature[8];       // "ZBSDIFF1"
+    int64_t  control_size;       // Size of compressed control block (little-endian)
+    int64_t  diff_size;          // Size of compressed diff block (little-endian)
+    int64_t  output_size;        // Size of final output file (little-endian)
 };
 ```
 
@@ -220,10 +258,11 @@ while let Some((diff_size, extra_size, seek_offset)) = control_entries.next()? {
 
 ### Format Characteristics
 
-- **Big-Endian Header**: All header fields use big-endian byte order
+- **Little-Endian Header**: All header fields use little-endian byte order
+  (verified against Agent.exe `tact::BsPatch::ParseHeader` at 0x6fbd1c)
 
-- **Signed Integers**: Control block uses signed 64-bit integers for sizes and
-offsets
+- **Signed Integers**: Control block uses signed 64-bit little-endian integers
+  for sizes and offsets
 
 - **Zlib Compression**: All data blocks compressed independently
 

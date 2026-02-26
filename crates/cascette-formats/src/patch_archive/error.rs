@@ -28,9 +28,16 @@ pub enum PatchArchiveError {
     #[error("invalid block size bits: {0}")]
     InvalidBlockSize(u8),
 
-    /// Unsupported flags (e.g. extended header that we cannot parse)
+    /// Unsupported flags
     #[error("unsupported PA flags: 0x{0:02X}")]
     UnsupportedFlags(u8),
+
+    /// Blocks are not sorted by CKey
+    #[error("blocks not sorted: block {index} CKey is not >= previous block CKey")]
+    BlocksNotSorted {
+        /// Index of the out-of-order block
+        index: usize,
+    },
 
     /// String too long in patch entry
     #[error("string too long in patch entry")]
@@ -65,6 +72,19 @@ pub enum PatchArchiveError {
     #[error("ZBSDIFF error: {0}")]
     ZbsdiffError(String),
 
+    /// Header hash mismatch
+    ///
+    /// Agent.exe computes MD5 of the header region (fixed header + extended
+    /// header + block table) and compares against the content key used to
+    /// fetch the file from CDN.
+    #[error("header hash mismatch: expected {expected}, got {actual}")]
+    HeaderHashMismatch {
+        /// Expected hash (hex string)
+        expected: String,
+        /// Actual computed hash (hex string)
+        actual: String,
+    },
+
     /// Binary parsing error
     #[error("binary parsing error: {0}")]
     BinRw(#[from] binrw::Error),
@@ -76,6 +96,10 @@ pub enum PatchArchiveError {
     /// Invalid entry format
     #[error("invalid entry: {0}")]
     InvalidEntry(String),
+
+    /// Unexpected end of block data
+    #[error("unexpected end of block data at offset {0}")]
+    UnexpectedEndOfBlock(u64),
 }
 
 /// Result type for Patch Archive operations

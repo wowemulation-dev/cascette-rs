@@ -108,7 +108,7 @@ mod parser;
 mod types;
 
 pub use parser::Parser;
-pub use types::{BlockChunk, BlockSizeSpec, ESpec, ZLibVariant};
+pub use types::{BlockChunk, BlockSizeSpec, ESpec, ESpecError, ZLibVariant};
 
 // Re-export the main parse function
 pub use types::parse;

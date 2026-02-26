@@ -1,0 +1,28 @@
+{
+  "description": "Install manifest test fixtures from WoW CDN",
+  "source": "Downloaded via cascette-py from Blizzard CDN mirrors, BLTE-decompressed",
+  "fixtures": [
+    {
+      "file": "classic_era_1.15.7_v1.install",
+      "product": "wow_classic_era",
+      "version": "1.15.7.61582",
+      "format": "V1 (10-byte header)",
+      "header_version": 1,
+      "hash_size": 16,
+      "tag_count": 29,
+      "entry_count": 240,
+      "notes": "Full install manifest (not truncated). Original EKey: a9dcee49ab3f952d69441eb3fd91c159."
+    },
+    {
+      "file": "classic_4.4.0_v1.install",
+      "product": "wow_classic",
+      "version": "4.4.0.55460",
+      "format": "V1 (10-byte header)",
+      "header_version": 1,
+      "hash_size": 16,
+      "tag_count": 27,
+      "entry_count": 182,
+      "notes": "Full install manifest (not truncated). Original EKey: dd5ecdf7aef8f5ebf2c17675cde4bd48."
+    }
+  ]
+}

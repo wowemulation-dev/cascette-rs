@@ -14,8 +14,13 @@ pub enum TvfsError {
     UnsupportedVersion(u8),
 
     /// Invalid header size
-    #[error("invalid header size: {0}, expected 46")]
-    InvalidHeaderSize(u8),
+    #[error("invalid header size: got {got}, expected {expected}")]
+    InvalidHeaderSize {
+        /// Header size found
+        got: u8,
+        /// Expected header size
+        expected: u8,
+    },
 
     /// Invalid key sizes
     #[error("invalid key sizes: EKey={ekey}, PKey={pkey}, expected 9 each")]
@@ -57,6 +62,23 @@ pub enum TvfsError {
     /// Variable integer parsing error
     #[error("variable integer parsing error at offset {0}")]
     VarIntError(usize),
+
+    /// Invalid VFS span count
+    #[error("invalid VFS span count {count} at offset {offset}")]
+    InvalidSpanCount {
+        /// Span count found
+        count: u8,
+        /// Byte offset
+        offset: usize,
+    },
+
+    /// VFS table truncated
+    #[error("VFS table truncated at offset {0}")]
+    VfsTableTruncated(usize),
+
+    /// Container file table truncated
+    #[error("container file table truncated at offset {0}")]
+    CftTableTruncated(usize),
 
     /// Table size mismatch
     #[error("table size mismatch: expected {expected}, got {actual}")]

@@ -1,0 +1,30 @@
+{
+  "description": "Root file test fixtures from WoW CDN",
+  "source": "Downloaded via cascette-py from Blizzard CDN mirrors",
+  "fixtures": [
+    {
+      "file": "classic_era_v1_2blocks.root",
+      "product": "wow_classic_era",
+      "version": "1.13.7.38704",
+      "format": "V1 (no header, interleaved)",
+      "blocks": 2,
+      "block_0_records": 1487,
+      "block_1_records": 6,
+      "notes": "First 2 blocks truncated from full root file. V1 format: 12-byte block headers (content_flags first), interleaved ckey+hash per record."
+    },
+    {
+      "file": "retail_11.2.7_v2_3blocks.root",
+      "product": "wow",
+      "version": "11.2.7.65299",
+      "format": "V2 extended header (TSFM, version=2, header_size=24)",
+      "blocks": 3,
+      "block_0_records": 6750,
+      "block_1_records": 1190,
+      "block_2_records": 2362,
+      "header_size": 24,
+      "header_version": 2,
+      "magic": "TSFM",
+      "notes": "First 3 blocks truncated from full root file. V2 block format: 17-byte block headers (locale_flags first, split content flags). header_size=24 includes 4 bytes padding beyond the base 20-byte struct."
+    }
+  ]
+}

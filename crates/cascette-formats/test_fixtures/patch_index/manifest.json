@@ -1,0 +1,66 @@
+{
+  "description": "TACT patch index files downloaded from Blizzard CDN and decoded from BLTE containers",
+  "download_date": "2026-02-26",
+  "source": "us.cdn.blizzard.com/tpr/wow/data/",
+  "notes": [
+    "Files were fetched as BLTE containers from the CDN data/ path using the encoding key (ekey).",
+    "The BLTE containers were decoded with cascette-py to produce the raw patch index data.",
+    "Content keys (ckey) verified via MD5 hash of the decoded data.",
+    "The patch-index format is not well documented. CascLib marks it as 'needs research'.",
+    "The patch-index is referenced by the 'patch-index' field in build configs.",
+    "It is NOT the same format as CDN archive .index files or patch archive .index files."
+  ],
+  "files": [
+    {
+      "filename": "wow_classic_era_patch_index.bin",
+      "product": "wow_classic_era",
+      "build_name": "WOW-65989patch1.15.8_ClassicRetail",
+      "version": "1.15.8.65989",
+      "build_config": "903cc3552ca1075d5bdc264eab8e2480",
+      "content_key": "4c0fcc3e0db1881e58bb6b3e2b14078d",
+      "encoding_key": "e3acece1a3569956a84ee138dfedb873",
+      "decoded_size": 13733,
+      "encoded_size": 5511
+    },
+    {
+      "filename": "wow_classic_patch_index.bin",
+      "product": "wow_classic",
+      "build_name": "WOW-65988patch5.5.3_ClassicRetail",
+      "version": "5.5.3.65988",
+      "build_config": "8c0bf563261db21d953517aba9564738",
+      "content_key": "fa24d500121e588b11dfbc34070e9825",
+      "encoding_key": "7687e231ec5becedca332a7fe67ee697",
+      "decoded_size": 17271,
+      "encoded_size": 6994
+    },
+    {
+      "filename": "wow_retail_patch_index.bin",
+      "product": "wow",
+      "build_name": "WOW-66066patch12.0.1_Retail",
+      "version": "12.0.1.66066",
+      "build_config": "7b498dd7e196bf4161d631064f617189",
+      "content_key": "c7d04f9b11cd0178a34ad4a457170d93",
+      "encoding_key": "89f87c2b0eeb0f02d64cff6d23431515",
+      "decoded_size": 29593,
+      "encoded_size": 11982
+    }
+  ],
+  "header_analysis": {
+    "description": "Preliminary structure analysis. Format is not fully documented.",
+    "known_fields": {
+      "0x00 LE u32": "header_size = 43 (0x2B), constant across all files",
+      "0x04 LE u32": "version = 1, constant across all files",
+      "0x08 LE u32": "total file size (matches actual decoded size)"
+    },
+    "uncertain_fields": {
+      "0x0C-0x2A": "31 bytes of format parameters, mostly constant across files. Includes BE u32 values: 0x01000003, 1, 7, 2. Some fields vary with file size.",
+      "0x2B-0x36": "Post-header block: contains u32(3), u16(0x006E=110), u16(entry_count), u16(0), u8(0x10=16). Entry counts: 112 (era), 141 (classic), 242 (retail)."
+    },
+    "entry_observations": {
+      "entry_region": "Starts around offset 0x37",
+      "key_size": "16 bytes (0x10), consistent with TACT key sizes",
+      "entry_content": "Each entry contains at least one 16-byte key, offset/size fields, and a flag byte",
+      "repeated_key_pattern": "Some 16-byte keys repeat at stride 61 (0x3D), suggesting entries may reference a common patch archive key"
+    }
+  }
+}

@@ -116,10 +116,10 @@ impl RootMagic {
 }
 
 impl RootHeader {
-    /// Create V2 header (defaults to MFST/big-endian)
+    /// Create V2 header (defaults to TSFM/little-endian, matching real WoW output)
     pub fn new_v2(total_files: u32, named_files: u32) -> Self {
         Self::V2 {
-            magic: RootMagic::Mfst,
+            magic: RootMagic::Tsfm,
             info: RootHeaderInfo {
                 total_files,
                 named_files,
@@ -127,11 +127,11 @@ impl RootHeader {
         }
     }
 
-    /// Create V3/V4 header (defaults to MFST/big-endian)
+    /// Create V3/V4 header (defaults to TSFM/little-endian, matching real WoW output)
     pub fn new_v3v4(version: u32, total_files: u32, named_files: u32) -> Self {
         Self::V3V4 {
-            magic: RootMagic::Mfst,
-            header_size: 20, // Standard size
+            magic: RootMagic::Tsfm,
+            header_size: 20, // CascLib: 5 x u32 = 20 bytes (magic through named_files)
             version,
             info: RootHeaderInfo {
                 total_files,
@@ -165,7 +165,9 @@ impl RootHeader {
     /// Get version number
     pub const fn version(&self) -> RootVersion {
         match self {
-            Self::V2 { .. } | Self::V3V4 { version: 2, .. } => RootVersion::V2,
+            Self::V2 { .. } | Self::V3V4 { version: 1, .. } | Self::V3V4 { version: 2, .. } => {
+                RootVersion::V2
+            }
             Self::V3V4 { version: 3, .. } => RootVersion::V3,
             Self::V3V4 { version, .. } => {
                 // Default to V4 for versions >= 4
@@ -231,14 +233,37 @@ impl RootHeader {
             let header_size = value1;
             let version_field = value2;
 
-            // Read remaining: total_files, named_files, padding
+            // Read remaining: total_files, named_files
             let info = RootHeaderInfo::read(reader, is_little_endian)?;
 
-            reader.read_exact(&mut buf)?;
-            let padding = if is_little_endian {
-                u32::from_le_bytes(buf)
+            // CascLib struct is 20 bytes (5 x u32: magic, header_size, version,
+            // total_files, named_files). If header_size > 20, skip the extra
+            // bytes (padding/future extensions). We've read 20 bytes so far
+            // (magic=4 + header_size=4 + version=4 + info=8).
+            let bytes_read: u32 = 20;
+            let padding = if header_size > bytes_read {
+                let skip = header_size - bytes_read;
+                // Read the first u32 of padding if available
+                if skip >= 4 {
+                    reader.read_exact(&mut buf)?;
+                    let val = if is_little_endian {
+                        u32::from_le_bytes(buf)
+                    } else {
+                        u32::from_be_bytes(buf)
+                    };
+                    // Skip any remaining bytes beyond the first u32
+                    if skip > 4 {
+                        let mut discard = vec![0u8; (skip - 4) as usize];
+                        reader.read_exact(&mut discard)?;
+                    }
+                    val
+                } else {
+                    let mut discard = vec![0u8; skip as usize];
+                    reader.read_exact(&mut discard)?;
+                    0
+                }
             } else {
-                u32::from_be_bytes(buf)
+                0
             };
 
             Ok(Self::V3V4 {
@@ -283,12 +308,17 @@ impl RootHeader {
                     writer.write_all(&header_size.to_le_bytes())?;
                     writer.write_all(&version.to_le_bytes())?;
                     info.write_le(writer)?;
-                    writer.write_all(&padding.to_le_bytes())?;
+                    // Only write padding if header_size exceeds the base 20 bytes
+                    if *header_size > 20 {
+                        writer.write_all(&padding.to_le_bytes())?;
+                    }
                 } else {
                     writer.write_all(&header_size.to_be_bytes())?;
                     writer.write_all(&version.to_be_bytes())?;
                     info.write_be(writer)?;
-                    writer.write_all(&padding.to_be_bytes())?;
+                    if *header_size > 20 {
+                        writer.write_all(&padding.to_be_bytes())?;
+                    }
                 }
             }
         }
@@ -368,7 +398,7 @@ mod tests {
 
         // Should be: magic(4) + total_files(4) + named_files(4) = 12 bytes
         assert_eq!(buffer.len(), 12);
-        assert_eq!(&buffer[0..4], b"MFST");
+        assert_eq!(&buffer[0..4], b"TSFM");
 
         let mut cursor = Cursor::new(&buffer);
         let restored =
@@ -378,7 +408,7 @@ mod tests {
         assert_eq!(restored.total_files(), 123_456);
         assert_eq!(restored.named_files(), 78_901);
         assert_eq!(restored.version(), RootVersion::V2);
-        assert_eq!(restored.magic(), RootMagic::Mfst);
+        assert_eq!(restored.magic(), RootMagic::Tsfm);
     }
 
     #[test]
@@ -419,9 +449,10 @@ mod tests {
             .write(&mut cursor)
             .expect("Test operation should succeed");
 
-        // Should be: magic(4) + header_size(4) + version(4) + info(8) + padding(4) = 24 bytes
-        assert_eq!(buffer.len(), 24);
-        assert_eq!(&buffer[0..4], b"MFST");
+        // header_size=20: magic(4) + header_size(4) + version(4) + info(8) = 20 bytes
+        // No padding written when header_size == 20
+        assert_eq!(buffer.len(), 20);
+        assert_eq!(&buffer[0..4], b"TSFM");
 
         let mut cursor = Cursor::new(&buffer);
         let restored =
@@ -435,6 +466,7 @@ mod tests {
 
     #[test]
     fn test_v3v4_tsfm_round_trip() {
+        // header_size=20 (no padding)
         let header = RootHeader::V3V4 {
             magic: RootMagic::Tsfm,
             header_size: 20,
@@ -453,6 +485,7 @@ mod tests {
             .expect("Test operation should succeed");
 
         assert_eq!(&buffer[0..4], b"TSFM");
+        assert_eq!(buffer.len(), 20); // No padding for header_size=20
 
         let mut cursor = Cursor::new(&buffer);
         let restored =
@@ -462,6 +495,65 @@ mod tests {
         assert_eq!(restored.magic(), RootMagic::Tsfm);
         assert_eq!(restored.total_files(), 123_456);
         assert_eq!(restored.named_files(), 78_901);
+    }
+
+    #[test]
+    fn test_v3v4_with_padding_round_trip() {
+        // header_size=24 (with padding)
+        let header = RootHeader::V3V4 {
+            magic: RootMagic::Tsfm,
+            header_size: 24,
+            version: 3,
+            info: RootHeaderInfo {
+                total_files: 123_456,
+                named_files: 78_901,
+            },
+            padding: 0,
+        };
+
+        let mut buffer = Vec::new();
+        let mut cursor = Cursor::new(&mut buffer);
+        header
+            .write(&mut cursor)
+            .expect("Test operation should succeed");
+
+        assert_eq!(buffer.len(), 24); // Padding written for header_size=24
+
+        let mut cursor = Cursor::new(&buffer);
+        let restored =
+            RootHeader::read(&mut cursor, RootVersion::V3).expect("Test operation should succeed");
+
+        assert_eq!(header, restored);
+    }
+
+    #[test]
+    fn test_version_1_extended_header() {
+        // Version 1 in extended header format should map to V2 block format
+        let header = RootHeader::V3V4 {
+            magic: RootMagic::Tsfm,
+            header_size: 20,
+            version: 1,
+            info: RootHeaderInfo {
+                total_files: 50_000,
+                named_files: 40_000,
+            },
+            padding: 0,
+        };
+
+        assert_eq!(header.version(), RootVersion::V2);
+
+        let mut buffer = Vec::new();
+        let mut cursor = Cursor::new(&mut buffer);
+        header
+            .write(&mut cursor)
+            .expect("Test operation should succeed");
+
+        let mut cursor = Cursor::new(&buffer);
+        let restored =
+            RootHeader::read(&mut cursor, RootVersion::V2).expect("Test operation should succeed");
+
+        assert_eq!(restored.version(), RootVersion::V2);
+        assert_eq!(restored.total_files(), 50_000);
     }
 
     #[test]

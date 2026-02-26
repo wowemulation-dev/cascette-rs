@@ -1,0 +1,57 @@
+[
+  {
+    "patch_ekey": "35dc55e39ec07e21e9f9dd83c41ec208",
+    "source_ekey": "cbd5d44604da79c24068b08489e7625f",
+    "target_ckey": "0279dab12f681d0258960679552a2b99",
+    "target_ekey": "039ab7009e456f664a702cec9d267238",
+    "old_size": 9811,
+    "new_size": 9847,
+    "patch_size": 182,
+    "source_decoded_size": 9811,
+    "target_decoded_size": 9847
+  },
+  {
+    "patch_ekey": "f98184c24ea513d161113a364aefa187",
+    "source_ekey": "2806ee498a2043bcc5586c8d57526112",
+    "target_ckey": "0d2a7c7f32cfa08fc4d2b6692f975ea6",
+    "target_ekey": "dc24744d8ae0b13e4ff24c5dd2cc0b9d",
+    "old_size": 8875,
+    "new_size": 8982,
+    "patch_size": 242,
+    "source_decoded_size": 8875,
+    "target_decoded_size": 8982
+  },
+  {
+    "patch_ekey": "ee0314a6b870402f8fd542f474738a62",
+    "source_ekey": "6e693235d6daf8c1eb208571062b44aa",
+    "target_ckey": "10a5f25faae6272b290f7397c5bda92e",
+    "target_ekey": "7ac23c6dd0d10c2354072766ad90bef9",
+    "old_size": 3916,
+    "new_size": 3916,
+    "patch_size": 1807,
+    "source_decoded_size": 3916,
+    "target_decoded_size": 3916
+  },
+  {
+    "patch_ekey": "effa4356d627f215f7c6d7e35d74abc7",
+    "source_ekey": "deae3f4307d68e8f32e0eafd95740d6e",
+    "target_ckey": "12cddf75877ee0ba409a4ccfdc1bf1c8",
+    "target_ekey": "9b2ed45b69c3a958f306001c469555b5",
+    "old_size": 16519,
+    "new_size": 16583,
+    "patch_size": 378,
+    "source_decoded_size": 16519,
+    "target_decoded_size": 16583
+  },
+  {
+    "patch_ekey": "b3c9bd1bcc8d6e581f70b50b300ec446",
+    "source_ekey": "41850423c752f771e3a4f4b9e3383f60",
+    "target_ckey": "185450cc391cc2f7069a5697c224dd7b",
+    "target_ekey": "2bba4497ec996503e18b593ad9545d0f",
+    "old_size": 2535,
+    "new_size": 2567,
+    "patch_size": 116,
+    "source_decoded_size": 2535,
+    "target_decoded_size": 2567
+  }
+]

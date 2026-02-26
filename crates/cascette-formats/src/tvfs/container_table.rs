@@ -1,101 +1,170 @@
-//! TVFS container file table structures and parsing
+//! TVFS container file table (CFT) structures and parsing
+//!
+//! The CFT stores encoding keys and sizes for content referenced by VFS spans.
+//! Entries are addressed by byte offset (from VFS span CftOffset), not by
+//! sequential index. Entry size depends on header flags.
 
-use binrw::io::{Read, Seek, Write};
-use binrw::{BinRead, BinResult, BinWrite};
+use crate::tvfs::error::{TvfsError, TvfsResult};
+use crate::tvfs::header::{TVFS_FLAG_ENCODING_SPEC, TVFS_FLAG_PATCH_SUPPORT, TvfsHeader};
 
-use crate::tvfs::header::TVFS_FLAG_INCLUDE_CKEY;
-
-/// Container file table with EKeys and optional content keys
+/// Container file table — raw byte blob addressed by offset from VFS spans.
 #[derive(Debug, Clone)]
 pub struct ContainerFileTable {
-    /// Container entries
+    /// Raw table bytes. VFS span CftOffset values index into this blob.
+    pub data: Vec<u8>,
+
+    /// Parsed entries for enumeration (byte offset → entry).
+    /// Populated during parsing; empty for builder-created tables until build.
     pub entries: Vec<ContainerEntry>,
 }
 
-/// Container entry with EKey and optional content key
+/// A single CFT entry extracted at a given byte offset.
 #[derive(Debug, Clone)]
 pub struct ContainerEntry {
-    /// Encoding key (variable length, typically 9 bytes for TACT)
+    /// Byte offset within the CFT where this entry starts
+    pub offset: u32,
+    /// Encoding key (EKey), truncated to `ekey_size` bytes
     pub ekey: Vec<u8>,
-    /// File size (decompressed)
-    pub file_size: u32,
-    /// Compressed size (optional, present when INCLUDE_CKEY flag is set)
-    pub compressed_size: Option<u32>,
-    /// Content key (optional, present when INCLUDE_CKEY flag is set)
-    pub content_key: Option<[u8; 16]>,
-}
-
-impl BinRead for ContainerFileTable {
-    type Args<'a> = (u32, u32, u8); // table_size, flags, ekey_size
-
-    fn read_options<R: Read + Seek>(
-        reader: &mut R,
-        endian: binrw::Endian,
-        args: Self::Args<'_>,
-    ) -> BinResult<Self> {
-        let (table_size, flags, ekey_size) = args;
-        let include_ckey = (flags & TVFS_FLAG_INCLUDE_CKEY) != 0;
-
-        let mut entries = Vec::new();
-        let start_pos = reader.stream_position()?;
-
-        while reader.stream_position()? - start_pos < u64::from(table_size) {
-            let entry = ContainerEntry::read_with_flags(reader, endian, include_ckey, ekey_size)?;
-            entries.push(entry);
-        }
-
-        Ok(ContainerFileTable { entries })
-    }
-}
-
-impl BinWrite for ContainerFileTable {
-    type Args<'a> = (u32, u8); // flags, ekey_size
-
-    fn write_options<W: Write + Seek>(
-        &self,
-        writer: &mut W,
-        endian: binrw::Endian,
-        args: Self::Args<'_>,
-    ) -> BinResult<()> {
-        let (flags, ekey_size) = args;
-        let include_ckey = (flags & TVFS_FLAG_INCLUDE_CKEY) != 0;
-
-        for entry in &self.entries {
-            entry.write_with_flags(writer, endian, include_ckey, ekey_size)?;
-        }
-
-        Ok(())
-    }
+    /// Encoded (compressed) size of the content
+    pub encoded_size: u32,
+    /// Content key (CKey), present when `TVFS_FLAG_INCLUDE_CKEY` is set
+    pub content_key: Option<Vec<u8>>,
+    /// Encoding spec index, present when `TVFS_FLAG_ENCODING_SPEC` is set
+    pub est_index: Option<u32>,
+    /// Patch entry CFT offset, present when `TVFS_FLAG_PATCH_SUPPORT` is set
+    pub patch_offset: Option<u32>,
 }
 
 impl ContainerFileTable {
-    /// Create a new empty container file table
+    /// Create an empty container file table
     pub fn new() -> Self {
         Self {
+            data: Vec::new(),
             entries: Vec::new(),
         }
     }
 
-    /// Get entry by index
+    /// Parse the CFT from raw bytes, enumerating all sequential entries.
+    pub fn parse(data: &[u8], header: &TvfsHeader) -> TvfsResult<Self> {
+        let entry_size = header.cft_entry_size();
+        let mut entries = Vec::new();
+        let mut offset = 0usize;
+
+        while offset + entry_size <= data.len() {
+            let entry = Self::read_entry_at(data, offset, header)?;
+            entries.push(entry);
+            offset += entry_size;
+        }
+
+        Ok(Self {
+            data: data.to_vec(),
+            entries,
+        })
+    }
+
+    /// Read a single entry at the given byte offset.
+    pub fn read_entry_at(
+        data: &[u8],
+        offset: usize,
+        header: &TvfsHeader,
+    ) -> TvfsResult<ContainerEntry> {
+        let ekey_size = header.ekey_size as usize;
+        let mut pos = offset;
+
+        // EKey
+        if pos + ekey_size > data.len() {
+            return Err(TvfsError::CftTableTruncated(pos));
+        }
+        let ekey = data[pos..pos + ekey_size].to_vec();
+        pos += ekey_size;
+
+        // EncodedSize (4 bytes BE)
+        if pos + 4 > data.len() {
+            return Err(TvfsError::CftTableTruncated(pos));
+        }
+        let encoded_size =
+            u32::from_be_bytes([data[pos], data[pos + 1], data[pos + 2], data[pos + 3]]);
+        pos += 4;
+
+        // CKey (pkey_size bytes) if INCLUDE_CKEY
+        let content_key = if header.includes_content_keys() {
+            let pkey_size = header.pkey_size as usize;
+            if pos + pkey_size > data.len() {
+                return Err(TvfsError::CftTableTruncated(pos));
+            }
+            let ckey = data[pos..pos + pkey_size].to_vec();
+            pos += pkey_size;
+            Some(ckey)
+        } else {
+            None
+        };
+
+        // EST index (est_offs_size bytes BE) if ENCODING_SPEC
+        let est_index = if (header.flags & TVFS_FLAG_ENCODING_SPEC) != 0 {
+            let sz = header.est_offs_size() as usize;
+            if pos + sz > data.len() {
+                return Err(TvfsError::CftTableTruncated(pos));
+            }
+            let val = read_be_uint(&data[pos..pos + sz]);
+            pos += sz;
+            Some(val)
+        } else {
+            None
+        };
+
+        // Patch offset (cft_offs_size bytes BE) if PATCH_SUPPORT
+        let patch_offset = if (header.flags & TVFS_FLAG_PATCH_SUPPORT) != 0 {
+            let sz = header.cft_offs_size() as usize;
+            if pos + sz > data.len() {
+                return Err(TvfsError::CftTableTruncated(pos));
+            }
+            let val = read_be_uint(&data[pos..pos + sz]);
+            pos += sz;
+            let _ = pos; // suppress unused assignment warning
+            Some(val)
+        } else {
+            None
+        };
+
+        Ok(ContainerEntry {
+            offset: offset as u32,
+            ekey,
+            encoded_size,
+            content_key,
+            est_index,
+            patch_offset,
+        })
+    }
+
+    /// Look up an entry by byte offset into the CFT.
+    pub fn get_entry_at_offset(
+        &self,
+        cft_offset: u32,
+        header: &TvfsHeader,
+    ) -> TvfsResult<ContainerEntry> {
+        Self::read_entry_at(&self.data, cft_offset as usize, header)
+    }
+
+    /// Get entry by sequential index (for enumeration).
     pub fn get_entry(&self, index: u32) -> Option<&ContainerEntry> {
         self.entries.get(index as usize)
     }
 
-    /// Add a new entry
-    pub fn add_entry(&mut self, entry: ContainerEntry) {
-        self.entries.push(entry);
+    /// Calculate table size in bytes for the given entries.
+    pub fn calculate_size(header: &TvfsHeader, entry_count: usize) -> u32 {
+        (entry_count * header.cft_entry_size()) as u32
     }
 
-    /// Calculate table size in bytes
-    pub fn calculate_size(&self, include_ckey: bool, ekey_size: u8) -> u32 {
-        let base_size = ekey_size as usize + 4; // ekey + file_size (4)
-        let entry_size = if include_ckey {
-            base_size + 4 + 16 // + compressed_size (4) + content_key (16)
-        } else {
-            base_size
-        };
+    /// Build raw CFT bytes from entries.
+    pub fn build(&self, header: &TvfsHeader) -> Vec<u8> {
+        let entry_size = header.cft_entry_size();
+        let mut data = Vec::with_capacity(self.entries.len() * entry_size);
 
-        (self.entries.len() * entry_size) as u32
+        for entry in &self.entries {
+            entry.write_to(&mut data, header);
+        }
+
+        data
     }
 }
 
@@ -106,106 +175,59 @@ impl Default for ContainerFileTable {
 }
 
 impl ContainerEntry {
-    /// Create a new container entry with a fixed-size ekey
-    pub fn new(
-        ekey: [u8; 9],
-        file_size: u32,
-        compressed_size: Option<u32>,
-        content_key: Option<[u8; 16]>,
-    ) -> Self {
+    /// Create a new container entry with a 9-byte EKey.
+    pub fn new(ekey: [u8; 9], encoded_size: u32, content_key: Option<Vec<u8>>) -> Self {
         Self {
+            offset: 0,
             ekey: ekey.to_vec(),
-            file_size,
-            compressed_size,
+            encoded_size,
             content_key,
+            est_index: None,
+            patch_offset: None,
         }
     }
 
-    /// Create a new container entry with a variable-length ekey
-    pub fn with_ekey(
-        ekey: Vec<u8>,
-        file_size: u32,
-        compressed_size: Option<u32>,
-        content_key: Option<[u8; 16]>,
-    ) -> Self {
-        Self {
-            ekey,
-            file_size,
-            compressed_size,
-            content_key,
-        }
-    }
+    /// Write this entry into a byte buffer.
+    pub fn write_to(&self, out: &mut Vec<u8>, header: &TvfsHeader) {
+        let ekey_size = header.ekey_size as usize;
 
-    /// Read container entry with flag-dependent fields
-    fn read_with_flags<R: Read + Seek>(
-        reader: &mut R,
-        endian: binrw::Endian,
-        include_ckey: bool,
-        ekey_size: u8,
-    ) -> BinResult<Self> {
-        // Read EKey (variable length from header)
-        let mut ekey = vec![0u8; ekey_size as usize];
-        reader.read_exact(&mut ekey)?;
-
-        // Read file size
-        let file_size = u32::read_options(reader, endian, ())?;
-
-        // Read compressed size and content key if flag is set
-        let (compressed_size, content_key) = if include_ckey {
-            let comp_size = u32::read_options(reader, endian, ())?;
-            let mut ckey = [0u8; 16];
-            reader.read_exact(&mut ckey)?;
-            (Some(comp_size), Some(ckey))
+        // EKey (padded/truncated to ekey_size)
+        if self.ekey.len() >= ekey_size {
+            out.extend_from_slice(&self.ekey[..ekey_size]);
         } else {
-            (None, None)
-        };
-
-        Ok(ContainerEntry {
-            ekey,
-            file_size,
-            compressed_size,
-            content_key,
-        })
-    }
-
-    /// Write container entry with flag-dependent fields
-    fn write_with_flags<W: Write + Seek>(
-        &self,
-        writer: &mut W,
-        endian: binrw::Endian,
-        include_ckey: bool,
-        ekey_size: u8,
-    ) -> BinResult<()> {
-        // Write EKey, padded or truncated to ekey_size
-        let size = ekey_size as usize;
-        if self.ekey.len() >= size {
-            writer.write_all(&self.ekey[..size])?;
-        } else {
-            writer.write_all(&self.ekey)?;
-            writer.write_all(&vec![0u8; size - self.ekey.len()])?;
+            out.extend_from_slice(&self.ekey);
+            out.resize(out.len() + ekey_size - self.ekey.len(), 0);
         }
 
-        // Write file size
-        self.file_size.write_options(writer, endian, ())?;
+        // EncodedSize (4 bytes BE)
+        out.extend_from_slice(&self.encoded_size.to_be_bytes());
 
-        // Write compressed size and content key if present
-        if include_ckey {
-            if let Some(comp_size) = self.compressed_size {
-                comp_size.write_options(writer, endian, ())?;
-            } else {
-                // Default to file size if compressed size not set
-                self.file_size.write_options(writer, endian, ())?;
-            }
-
+        // CKey if INCLUDE_CKEY
+        if header.includes_content_keys() {
+            let pkey_size = header.pkey_size as usize;
             if let Some(ref ckey) = self.content_key {
-                writer.write_all(ckey)?;
+                if ckey.len() >= pkey_size {
+                    out.extend_from_slice(&ckey[..pkey_size]);
+                } else {
+                    out.extend_from_slice(ckey);
+                    out.resize(out.len() + pkey_size - ckey.len(), 0);
+                }
             } else {
-                // Write zero content key if not set
-                writer.write_all(&[0u8; 16])?;
+                out.resize(out.len() + pkey_size, 0);
             }
         }
 
-        Ok(())
+        // EST index if ENCODING_SPEC
+        if (header.flags & TVFS_FLAG_ENCODING_SPEC) != 0 {
+            let sz = header.est_offs_size() as usize;
+            write_be_uint(out, self.est_index.unwrap_or(0), sz);
+        }
+
+        // Patch offset if PATCH_SUPPORT
+        if (header.flags & TVFS_FLAG_PATCH_SUPPORT) != 0 {
+            let sz = header.cft_offs_size() as usize;
+            write_be_uint(out, self.patch_offset.unwrap_or(0), sz);
+        }
     }
 
     /// Get EKey as hex string
@@ -222,9 +244,20 @@ impl ContainerEntry {
     pub fn has_content_key(&self) -> bool {
         self.content_key.is_some()
     }
+}
 
-    /// Get effective compressed size (compressed_size or file_size)
-    pub fn effective_compressed_size(&self) -> u32 {
-        self.compressed_size.unwrap_or(self.file_size)
+/// Read a big-endian unsigned integer of 1-4 bytes.
+fn read_be_uint(bytes: &[u8]) -> u32 {
+    let mut val = 0u32;
+    for &b in bytes {
+        val = (val << 8) | u32::from(b);
     }
+    val
+}
+
+/// Write a big-endian unsigned integer in exactly `width` bytes.
+fn write_be_uint(out: &mut Vec<u8>, val: u32, width: usize) {
+    let bytes = val.to_be_bytes();
+    // Take the last `width` bytes from the 4-byte BE representation
+    out.extend_from_slice(&bytes[4 - width..]);
 }

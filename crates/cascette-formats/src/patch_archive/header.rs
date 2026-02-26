@@ -9,6 +9,14 @@ pub const STANDARD_BLOCK_SIZE_BITS: u8 = 16;
 pub const STANDARD_KEY_SIZE: u8 = 16;
 
 /// Patch Archive header (10 bytes, big-endian)
+///
+/// Agent.exe validation (`tact::PatchManifestReader::ParseHeader` at 0x6a6487):
+/// - Version: 1-2
+/// - Key sizes: 1-16 each
+/// - Block size bits: 12-24
+/// - Block count: must be non-zero
+/// - Flag bit 0: plain data (informational)
+/// - Flag bit 1: extended header with encoding info
 #[derive(Debug, Clone, PartialEq, Eq, BinRead, BinWrite)]
 #[br(big)] // Big-endian header
 #[bw(big)]
@@ -20,22 +28,26 @@ pub struct PatchArchiveHeader {
     /// Format version (1 or 2)
     pub version: u8,
 
-    /// Size of file content keys in bytes (16 for MD5)
+    /// Size of file content keys in bytes (1-16, typically 16 for MD5)
     pub file_key_size: u8,
 
-    /// Size of old content keys in bytes (16 for MD5)
+    /// Size of old content keys in bytes (1-16, typically 16 for MD5)
     pub old_key_size: u8,
 
-    /// Size of patch encoding keys in bytes (16 for MD5)
+    /// Size of patch encoding keys in bytes (1-16, typically 16 for MD5)
     pub patch_key_size: u8,
 
     /// Block size as power of 2 (16 = 64KB blocks)
     pub block_size_bits: u8,
 
-    /// Number of patch entries in this archive
+    /// Number of blocks in the block table
     pub block_count: u16,
 
-    /// Format flags (typically 0)
+    /// Format flags
+    ///
+    /// - Bit 0 (0x01): plain data mode (informational, Agent.exe logs but
+    ///   does not reject)
+    /// - Bit 1 (0x02): extended header present with encoding info
     pub flags: u8,
 }
 
@@ -70,6 +82,9 @@ impl PatchArchiveHeader {
     }
 
     /// Validate header fields
+    ///
+    /// Checks match Agent.exe `tact::PatchManifestReader::ParseHeader` at
+    /// 0x6a6487.
     pub fn validate(&self) -> PatchArchiveResult<()> {
         if &self.magic != b"PA" {
             return Err(PatchArchiveError::InvalidMagic(self.magic));
@@ -79,7 +94,13 @@ impl PatchArchiveHeader {
             return Err(PatchArchiveError::UnsupportedVersion(self.version));
         }
 
-        if self.file_key_size != 16 || self.old_key_size != 16 || self.patch_key_size != 16 {
+        if self.file_key_size == 0
+            || self.file_key_size > 16
+            || self.old_key_size == 0
+            || self.old_key_size > 16
+            || self.patch_key_size == 0
+            || self.patch_key_size > 16
+        {
             return Err(PatchArchiveError::InvalidKeySize {
                 file: self.file_key_size,
                 old: self.old_key_size,
@@ -89,12 +110,6 @@ impl PatchArchiveHeader {
 
         if self.block_size_bits < 12 || self.block_size_bits > 24 {
             return Err(PatchArchiveError::InvalidBlockSize(self.block_size_bits));
-        }
-
-        // Extended header (bit 1) is not supported -- reject rather than
-        // silently skip the extra data Agent.exe would read.
-        if self.has_extended_header() {
-            return Err(PatchArchiveError::UnsupportedFlags(self.flags));
         }
 
         Ok(())
@@ -160,9 +175,17 @@ mod tests {
         header.version = 3;
         assert!(header.validate().is_err());
 
-        // Test invalid key size
+        // Test invalid key size (0 rejected)
         header.version = 2;
+        header.file_key_size = 0;
+        assert!(header.validate().is_err());
+
+        // Test key size 8 is accepted (1-16 range)
         header.file_key_size = 8;
+        assert!(header.validate().is_ok());
+
+        // Test key size 17 is rejected
+        header.file_key_size = 17;
         assert!(header.validate().is_err());
 
         // Test invalid block size
@@ -195,22 +218,16 @@ mod tests {
         assert!(!header.has_extended_header());
         assert!(header.validate().is_ok());
 
-        // Extended header (bit 1) is rejected
+        // Extended header (bit 1) is now accepted
         header.flags = 0x02;
         assert!(!header.is_plain_data());
         assert!(header.has_extended_header());
-        assert!(matches!(
-            header.validate(),
-            Err(PatchArchiveError::UnsupportedFlags(0x02))
-        ));
+        assert!(header.validate().is_ok());
 
-        // Both bits set is also rejected (extended header takes precedence)
+        // Both bits set is also accepted
         header.flags = 0x03;
         assert!(header.is_plain_data());
         assert!(header.has_extended_header());
-        assert!(matches!(
-            header.validate(),
-            Err(PatchArchiveError::UnsupportedFlags(0x03))
-        ));
+        assert!(header.validate().is_ok());
     }
 }

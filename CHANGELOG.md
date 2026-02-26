@@ -10,6 +10,211 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- cascette-formats: ESpec CDN test fixtures (50 representative strings from
+  Classic Era, Classic, and Retail encoding files) with manifest.json metadata
+- cascette-formats: Integration tests for ESpec parsing against real CDN data
+  (14 tests covering 4-byte IV, 8-byte IV, mixed encryption, shorthand forms,
+  MPQ variant, round-trip, and validation)
+- cascette-formats: Download manifest CDN test fixture (Classic Era V1, truncated
+  to 100 entries) with manifest.json metadata
+- cascette-formats: Install manifest CDN test fixtures (Classic Era V1, Classic
+  4.4.0 V1) with manifest.json metadata
+- cascette-formats: Integration tests for download manifest parsing against real
+  CDN data (7 tests covering V1 parsing, tags, tag types, round-trip, validation)
+- cascette-formats: Integration tests for install manifest parsing against real
+  CDN data (10 tests covering V1 parsing, tags, entries, round-trip, cross-product)
+- cascette-formats: Root file CDN test fixtures (Classic Era V1, Retail V2
+  extended header) downloaded via cascette-py, with manifest.json metadata
+- cascette-formats: Integration tests for root file parsing against real CDN data
+  (11 tests covering V1/V2 parsing, content/locale flags, records, lookups)
+- cascette-formats: Suffix array-based bsdiff patch creation in `ZbsdiffBuilder`
+  - `build()` / `build_optimized_patch()` using `divsufsort` for suffix array
+    construction, implementing the Percival bsdiff algorithm
+  - Produces near-optimal ZBSDIFF1 patches with three separate zlib-compressed
+    blocks (control, diff, extra)
+  - New `suffix` module with binary search on suffix array, forward/backward
+    extension, and overlap resolution
+  - CDN fixture round-trip tests: build patch from old->new, apply, verify
+    output matches expected; parse CDN patch, rebuild bytes, verify byte-identical
+    and application-correct
+- cascette-formats: ZBSDIFF1 CDN test fixtures (5 triplets from WoW Classic)
+  downloaded via cascette-py, with manifest.json metadata
+- cascette-formats: CDN archive index test fixtures (3 files from WoW Classic Era
+  and StarCraft 2) with manifest.json metadata
+- cascette-formats: Integration tests for CDN archive index parsing (9 tests
+  covering parsing, footer integrity, entry counts, TOC consistency, round-trip
+  building, and binary search against real CDN data)
+- cascette-formats: CDN patch manifest test fixtures (3 files from WoW Classic
+  Era, WoW Retail, and StarCraft 2) with manifest.json metadata
+- cascette-formats: Integration tests for patch archive parsing against real CDN
+  data (9 tests covering parsing, header fields, encoding info, known entry
+  counts, block sort validation, decoded sizes, flatten entries, and round-trip)
+- cascette-formats: Block-based data types for patch archive format
+  (`PatchBlock`, `PatchFileEntry`, `FilePatch`, `PatchArchiveEncodingInfo`)
+- cascette-formats: TVFS CDN test fixtures (3 products: WoW Retail, Classic,
+  Classic Era) with .bin (decompressed) and .blte (raw) files, plus
+  manifest.json metadata
+- cascette-formats: Integration tests for TVFS parsing against real CDN data
+  (10 tests covering parsing, header fields, EST table, table offsets, entry
+  counts, round-trip, BLTE loading, file paths, VFS-CFT references, and CFT
+  entry size validation)
+- cascette-formats: Encoding CDN test fixtures (2 truncated files from WoW
+  Classic Era and WoW Classic, 2 pages each) with manifest.json metadata
+- cascette-formats: Integration tests for encoding file parsing against real
+  CDN data (14 tests covering header fields, page size shift encoding, ESpec
+  table, CKey/EKey page entries, page index sorting, page checksums, round-trip,
+  byte-exact round-trip, CKey/EKey lookups, batch lookup, data size calculation)
+- cascette-formats: BuildConfig typed accessors for all Agent.exe build config
+  keys: `build_file_db()`, `client_version()`, `chunk_entries()`,
+  `feature_use_hardlinks()`, `feature_placeholder()`, `install_high_ver()`,
+  `key_layout_index_bits()`, `key_layout_entries()`, `no_frame_encoding()`,
+  `vfs_espec()`, `vfs_root_espec()`
+- cascette-formats: Build config CDN test fixtures (3 files from WoW Classic
+  Era, WoW Classic, and WoW Retail) with manifest.json metadata
+- cascette-formats: Integration tests for build config parsing against real CDN
+  data (14 tests covering parsing, required fields, metadata, build UIDs, hash
+  format, sizes, feature flags, VFS entries, partial priority, validation,
+  round-trip, dual-hash format, raw accessor)
+- cascette-formats: `KeyringConfig` type for parsing, building, and validating
+  keyring config files (`key-{ID} = {VALUE}` format). Supports key lookup by
+  hex string or u64 ID with case-insensitive matching.
+- cascette-formats: Keyring config CDN test fixtures (WoW Retail 1 entry,
+  Overwatch 2 63 entries, Call of Duty 1 entry) with manifest.json metadata
+- cascette-formats: Integration tests for keyring config parsing against real
+  CDN data (16 tests covering parsing, validation, entry values, hex/u64
+  lookups, round-trip for all three products)
+- cascette-formats: Patch archive header hash verification via
+  `PatchArchive::header_region_size()`, `compute_header_hash()`, and
+  `verify_header_hash()`. Validates that MD5 of the header region (fixed header
+  + extended header + block table) matches the CDN content key. Verified against
+  Agent.exe `tact::PatchManifestReader::ParseHeader` at 0x6a6487.
+- cascette-formats: Patch Index (`patch_index/`) module for the block-based
+  format referenced by build config `patch-index` key. Parses header with block
+  descriptors, block type 2 entries (source/target EKey pairs with sizes), and
+  block type 8 extended entries. Builder produces CDN-matching 3-block layout.
+  Distinct from patch archive `.index` files which use the standard CDN archive
+  index format.
+- cascette-formats: Patch Index CDN test fixtures (WoW Classic Era, WoW Classic,
+  WoW Retail) downloaded via cascette-py with manifest.json metadata
+- cascette-formats: Integration tests for Patch Index parsing (12 tests covering
+  header fields, known entry counts, key validation, size validation, suffix
+  offset, unique patch keys, block 2/8 consistency, queries, round-trip, block
+  size verification)
+
+### Changed
+
+- cascette-formats: TVFS module rewritten to match CascLib/Agent.exe binary
+  format. Path table uses recursive prefix tree with 0xFF NodeValue markers
+  (folder bit 31 / VFS byte offset). VFS table uses span-based entries
+  (span_count + N spans with file_offset, span_length, cft_offset). Container
+  file table uses byte-offset addressed fixed-stride entries. All three tables
+  now parse real CDN data from WoW Retail, Classic, and Classic Era.
+- cascette-formats: Encoding header `ckey_page_size_kb` and `ekey_page_size_kb`
+  doc comments clarify Agent.exe `(hi << 8 | lo) << 0xa` encoding and link to
+  helper methods
+- docs: Encoding format documentation updated to use actual cascette-formats API
+  (replaced fictional structs/methods with real `EncodingFile`, `EncodingBuilder`
+  usage). Header `unknown` field renamed to `flags`. Builder example fixed to
+  use correct field names and types.
+- docs: Config format documentation updated with missing build config keys
+  (`client-version`, `feature-placeholder`, `feature-use-hardlinks`,
+  `no-frame-encoding`, `vfs-N-espec`) and corrected key-value separator
+  description to ` = ` (space-equals-space)
+- cascette-formats: TVFS header `InvalidHeaderSize` error now shows both actual
+  and expected values instead of hardcoded "expected 46"
+- cascette-formats: TVFS header gains `cft_offs_size()`, `est_offs_size()`, and
+  `cft_entry_size()` methods for computing field widths from table sizes,
+  matching CascLib's `GetOffsetFieldSize`
+
+### Fixed
+
+- cascette-client-storage: KMT v8 hash guard now computed via Jenkins
+  hashlittle on 33 bytes (`entry[4..37]`, seed 0, OR `0x80000000`),
+  matching Agent.exe `casc::KmtV8::InsertEntry`. Previously used simple
+  XOR which produced incorrect guards.
+- cascette-client-storage: Reconstruction header `checksum_a` computed via
+  Jenkins hashlittle on first 22 bytes with seed `0x3D6BE971`, matching
+  Agent.exe `sub_72c49f`. Previously zeroed.
+- cascette-client-storage: Reconstruction header `checksum_b` computed via
+  XOR accumulation over first 26 bytes with rotating 4-byte index
+  `(base_offset + i) & 3`. Previously zeroed.
+- cascette-formats: BLTE encryption validation: reject single-chunk encrypted
+  files (`SingleChunkEncrypted` error) and nested encryption (`NestedEncryption`
+  error). Builder now forces multi-chunk header for encrypted content and always
+  prepends inner compression mode byte.
+- cascette-formats: BLTE IV size validation: accept 4 or 8 byte IVs (matching
+  TACTSharp and CascLib). Previously only 4-byte IVs were accepted.
+- cascette-crypto: Salsa20 cipher accepts 4 or 8 byte IVs. 4-byte IVs are
+  zero-padded to 8 bytes; 8-byte IVs are used directly.
+- cascette-formats: `build_partial_priority()` parsed incorrectly for real CDN
+  data. Joined values and split on commas, but CDN format uses space-separated
+  `HASH:PRIORITY` tokens. Now iterates parsed values directly.
+- cascette-formats: `BuildConfig::validate()` rejected configs with boolean
+  flags (`feature-placeholder = true`, `no-frame-encoding = 1`) because
+  non-digit non-hash values failed validation. Now skips feature flags, espec
+  strings, key-layout entries, chunk entries, and other non-hash fields.
+- cascette-formats: Removed typo key `build-playbuild-installer` from
+  `BuildConfig::build()` output ordering
+- cascette-formats: Patch archive rewritten from incorrect flat-entry model to
+  block-based format matching real CDN data. Previous implementation used flat
+  entries with null-terminated compression strings and rejected extended headers
+  (flag 0x02), making it unable to parse any real CDN patch manifest. New
+  implementation parses block table, file entries with uint40 decoded sizes,
+  and per-file patch lists with 0x00 sentinel termination
+- cascette-formats: Patch archive extended header support. Parses encoding CKey,
+  encoding EKey, decoded/encoded sizes, and length-prefixed ESpec string when
+  flags bit 1 (0x02) is set. All known CDN patch manifests use this flag
+- cascette-formats: Patch archive block sort validation added via
+  `validate_block_sort_order()`, matching Agent.exe `_memcmp` validation
+- cascette-formats: Patch archive key size validation relaxed from exactly 16 to
+  1-16 range, matching Agent.exe `tact::PatchManifestReader::ParseHeader`
+- cascette-formats: ESpec encryption IV parsing accepts 1-8 bytes instead of
+  exactly 4. CDN data shows Classic uses 4-byte IVs, Retail uses 8-byte IVs
+  (99.8% of encrypted entries). Previous parser rejected all Retail IVs.
+- cascette-formats: ESpec block table rejects multiple variable (`*=`) blocks,
+  matching Agent.exe validation
+- cascette-formats: ESpec block table shorthand form `b:256K*=z` (without braces)
+  now parses, matching CDN production data
+- cascette-formats: Encoding header validation rejects zero page sizes, matching
+  Agent.exe behavior
+- cascette-formats: Root content flags corrected to match CascLib/TACTSharp/wiki
+  (10 of 12 values were wrong). Added X86_32 and X86_64. Removed NO_TOC_HASH.
+- cascette-formats: Root locale flags corrected (PTBR, ITIT, RURU had wrong
+  values). Added missing locales: enCN, enTW, esMX, ptPT.
+- cascette-formats: Root default magic changed from MFST to TSFM to match real
+  WoW output (CascLib `CASC_WOW_ROOT_SIGNATURE = 0x4D465354`)
+- cascette-formats: Root extended header size handling fixed. Read/write now
+  handle padding conditionally based on header_size field.
+- cascette-formats: Root version detection accepts extended header version 1
+  (matches CascLib and TACTSharp behavior). Maps to V2 block format.
+- cascette-formats: Root name hash normalization corrected from forward slashes
+  to backslashes, matching CascLib `NormalizeFileName_UpperBkSlash`
+- cascette-formats: Root name hash word swap removed. Returns `(pc << 32) | pb`
+  directly, matching CascLib `CalcNormNameHash`
+- cascette-formats: Download `flag_size` validation added. Rejects flag_size > 4
+  in both `DownloadHeader::validate()` and `DownloadManifestBuilder::with_flags()`,
+  matching Agent.exe behavior
+- cascette-formats: Install V2 extended header support. `InstallHeader` now reads
+  and writes 6 additional bytes for V2 (content_key_size, entry_count_v2,
+  v2_unknown). V1 computes content_key_size as `ckey_length + 4`
+- cascette-formats: ZBSDIFF1 header endianness corrected from big-endian to
+  little-endian, matching the original bsdiff format and verified against
+  Agent.exe `tact::BsPatch::ParseHeader` at 0x6fbd1c
+- cascette-formats: ZBSDIFF1 control block integer encoding corrected from
+  two's complement (`i64::from_be_bytes`) to sign-magnitude (`offtin`/`offtout`),
+  matching the bsdiff format where bit 63 is sign, bits 0-62 are magnitude in
+  little-endian order
+- cascette-formats: CDN archive index `ekey_length` validation relaxed from 9-16
+  to 1-16, matching Agent.exe (`tact::CdnIndexFooterValidator` accepts `<= 0x10`)
+- cascette-formats: CDN archive index `element_count` doc comment corrected from
+  "number of chunks" to "number of entries". Verified against real CDN data.
+- cascette-formats: `ArchiveIndex::build()` fixed to compute chunk count from
+  entries instead of using `element_count` directly as chunk count
+- cascette-formats: `EXPECTED_KEY_SIZE` renamed to `TYPICAL_TRUNCATED_KEY_SIZE`
+  with doc comment clarifying it is the common local IDX value, not an enforced limit
+
+### Added
+
 - cascette-client-storage: KMT update section for LSM-tree L0 writes
   - 24-byte `UpdateEntry` with hash guard, status byte, and delete markers
   - 512-byte `UpdatePage` (21 entries max) with 4KB sync every 8th page

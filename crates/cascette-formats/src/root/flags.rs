@@ -16,44 +16,47 @@ impl ContentFlags {
     /// No special flags
     pub const NONE: u64 = 0x0000_0000;
 
-    /// Windows platform (bit 0)
-    pub const LOAD_ON_WINDOWS: u64 = 0x0001;
-
-    /// macOS platform (bit 1)
-    pub const LOAD_ON_MACOS: u64 = 0x0002;
-
     /// File should be installed (bit 2)
-    pub const INSTALL: u64 = 0x0004;
+    pub const INSTALL: u64 = 0x0000_0004;
 
-    /// Low violence version (bit 3)
-    pub const LOW_VIOLENCE: u64 = 0x0008;
+    /// Load on Windows (bit 3)
+    pub const LOAD_ON_WINDOWS: u64 = 0x0000_0008;
 
-    /// Do not load (bit 9)
-    pub const DO_NOT_LOAD: u64 = 0x0200;
+    /// Load on macOS (bit 4)
+    pub const LOAD_ON_MACOS: u64 = 0x0000_0010;
 
-    /// Update plugin (bit 10)
-    pub const UPDATE_PLUGIN: u64 = 0x0400;
+    /// x86 32-bit (bit 5)
+    pub const X86_32: u64 = 0x0000_0020;
 
-    /// ARM64 architecture (bit 11)
-    pub const ARM64: u64 = 0x0800;
+    /// x86 64-bit (bit 6)
+    pub const X86_64: u64 = 0x0000_0040;
 
-    /// Encrypted content (bit 12)
-    pub const ENCRYPTED: u64 = 0x1000;
+    /// Low violence version (bit 7)
+    pub const LOW_VIOLENCE: u64 = 0x0000_0080;
+
+    /// Do not load (bit 8)
+    pub const DO_NOT_LOAD: u64 = 0x0000_0100;
+
+    /// Update plugin (bit 11)
+    pub const UPDATE_PLUGIN: u64 = 0x0000_0800;
+
+    /// ARM64 architecture (bit 15)
+    pub const ARM64: u64 = 0x0000_8000;
+
+    /// Encrypted content (bit 27)
+    pub const ENCRYPTED: u64 = 0x0800_0000;
 
     /// No name hash present in block (bit 28) - V2+ only
     pub const NO_NAME_HASH: u64 = 0x1000_0000;
 
-    /// Uncommon resolution (bit 14)
-    pub const UNCOMMON_RESOLUTION: u64 = 0x4000;
+    /// Uncommon resolution (bit 29)
+    pub const UNCOMMON_RESOLUTION: u64 = 0x2000_0000;
 
-    /// Bundled file (bit 15)
-    pub const BUNDLE: u64 = 0x8000;
+    /// Bundled file (bit 30)
+    pub const BUNDLE: u64 = 0x4000_0000;
 
-    /// No compression applied (bit 16)
-    pub const NO_COMPRESSION: u64 = 0x0001_0000;
-
-    /// No TOC hash (bit 17)
-    pub const NO_TOC_HASH: u64 = 0x0002_0000;
+    /// No compression applied (bit 31)
+    pub const NO_COMPRESSION: u64 = 0x8000_0000;
 
     /// Create new content flags from raw value
     pub const fn new(value: u64) -> Self {
@@ -167,14 +170,26 @@ impl LocaleFlags {
     /// English (Great Britain)
     pub const ENGB: u32 = 0x0000_0200;
 
-    /// Portuguese (Brazil)
-    pub const PTBR: u32 = 0x0000_0400;
+    /// English (China)
+    pub const ENCN: u32 = 0x0000_0400;
 
-    /// Italian (Italy)
-    pub const ITIT: u32 = 0x0000_0800;
+    /// English (Taiwan)
+    pub const ENTW: u32 = 0x0000_0800;
+
+    /// Spanish (Mexico)
+    pub const ESMX: u32 = 0x0000_1000;
 
     /// Russian
-    pub const RURU: u32 = 0x0000_1000;
+    pub const RURU: u32 = 0x0000_2000;
+
+    /// Portuguese (Brazil)
+    pub const PTBR: u32 = 0x0000_4000;
+
+    /// Italian (Italy)
+    pub const ITIT: u32 = 0x0000_8000;
+
+    /// Portuguese (Portugal)
+    pub const PTPT: u32 = 0x0001_0000;
 
     /// Create new locale flags
     pub const fn new(value: u32) -> Self {
@@ -264,9 +279,11 @@ mod tests {
         // Test all individual flags
         let flag_values = [
             ContentFlags::NONE,
+            ContentFlags::INSTALL,
             ContentFlags::LOAD_ON_WINDOWS,
             ContentFlags::LOAD_ON_MACOS,
-            ContentFlags::INSTALL,
+            ContentFlags::X86_32,
+            ContentFlags::X86_64,
             ContentFlags::LOW_VIOLENCE,
             ContentFlags::DO_NOT_LOAD,
             ContentFlags::UPDATE_PLUGIN,
@@ -276,7 +293,6 @@ mod tests {
             ContentFlags::UNCOMMON_RESOLUTION,
             ContentFlags::BUNDLE,
             ContentFlags::NO_COMPRESSION,
-            ContentFlags::NO_TOC_HASH,
         ];
 
         for &flag in &flag_values {
@@ -432,9 +448,13 @@ mod tests {
             LocaleFlags::ESES,
             LocaleFlags::ZHTW,
             LocaleFlags::ENGB,
+            LocaleFlags::ENCN,
+            LocaleFlags::ENTW,
+            LocaleFlags::ESMX,
+            LocaleFlags::RURU,
             LocaleFlags::PTBR,
             LocaleFlags::ITIT,
-            LocaleFlags::RURU,
+            LocaleFlags::PTPT,
         ];
 
         for &locale in &all_locales {

@@ -59,12 +59,14 @@ impl RootVersion {
             // Classic V2 header:
             // - value1 = total_files (typically thousands+)
             // - value2 = named_files
-            let looks_like_extended_header = (16..100).contains(&value1) && matches!(value2, 2..=4);
+            // CascLib accepts version 1 and 2, TACTSharp accepts 1 and 2.
+            // Version 1 uses the same block format as V2 (17-byte block headers).
+            let looks_like_extended_header = (16..100).contains(&value1) && matches!(value2, 1..=4);
 
             if looks_like_extended_header {
                 // Extended header structure - version_field determines parsing format
                 match value2 {
-                    2 => Ok(Self::V2), // V2 block format, but with extended header
+                    1 | 2 => Ok(Self::V2), // V2 block format (version 1 uses same format)
                     3 => Ok(Self::V3),
                     _ => Ok(Self::V4), // version >= 4
                 }
@@ -326,5 +328,21 @@ mod tests {
         let mut cursor = Cursor::new(&data);
         let version = RootVersion::detect(&mut cursor).expect("Test operation should succeed");
         assert_eq!(version, RootVersion::V3);
+    }
+
+    #[test]
+    fn test_detect_v1_extended_header() {
+        // Extended header with version=1 should be detected as V2 (same block format)
+        let data = vec![
+            b'T', b'S', b'F', b'M', // magic (TSFM, little-endian)
+            0x14, 0x00, 0x00, 0x00, // header_size = 20 (little-endian)
+            0x01, 0x00, 0x00, 0x00, // version = 1 (little-endian)
+            0x00, 0x01, 0x00, 0x00, // total_files
+            0x00, 0x80, 0x00, 0x00, // named_files
+        ];
+
+        let mut cursor = Cursor::new(&data);
+        let version = RootVersion::detect(&mut cursor).expect("Test operation should succeed");
+        assert_eq!(version, RootVersion::V2);
     }
 }

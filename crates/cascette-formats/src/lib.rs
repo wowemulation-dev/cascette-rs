@@ -103,21 +103,36 @@ pub mod espec;
 pub mod install;
 /// Patch Archive (PA) format for differential patch manifests
 ///
-/// This module provides complete parsing and building support for Patch Archive files
-/// that describe differential patches between different versions of NGDP content.
-/// Patch Archives enable incremental updates by providing mappings between old content
-/// keys, new content keys, and patch data.
+/// This module provides parsing and building support for Patch Archive files
+/// that describe differential patches between content versions. The format
+/// uses a block-based structure where file entries are grouped into blocks,
+/// each containing one or more patches from different source versions.
 ///
 /// Key features:
-/// - **Differential Updates**: Patch mappings for incremental content updates
-/// - **Variable-Length Entries**: Support for complex compression specifications
-/// - **Mixed Endianness**: Big-endian header with little-endian entry data
-/// - **Streaming Support**: Process large patch archives without full memory load
+/// - **Block-Based Structure**: File entries grouped into blocks with MD5 integrity
+/// - **Extended Header**: Optional encoding info with ESpec compression spec
+/// - **Big-Endian Throughout**: Header, block table, and block data are big-endian
+/// - **uint40 Sizes**: Decoded sizes stored as 5-byte big-endian integers
 /// - **Content Addressing**: MD5-based content key system
-/// - **Patch Chains**: Support for multi-step patch sequences
+/// - **Block Sort Validation**: Blocks sorted by CKey for binary search
 ///
-/// See the [`patch_archive`] module for detailed usage examples and patch application patterns.
+/// See the [`patch_archive`] module for detailed usage examples.
 pub mod patch_archive;
+/// Patch Index format for mapping patch blobs to source/target file pairs
+///
+/// This module provides parsing and building support for the Patch Index
+/// format referenced by the `patch-index` key in build configs. This is
+/// distinct from patch archive index files (`.index` on CDN `patch/` path)
+/// which use the standard CDN archive index format.
+///
+/// Key features:
+/// - **Block-Based Structure**: Header-first format with typed data blocks
+/// - **Key-Pair Entries**: Maps patch EKeys to source/target file metadata
+/// - **Variable Key Size**: Supports 1-16 byte encoding keys
+/// - **Block Type Dispatch**: Types 1 (config), 2 (entries), 8 (extended)
+///
+/// See the [`patch_index`] module for detailed usage examples.
+pub mod patch_index;
 /// Root file format for mapping paths/FileDataIDs to content keys
 ///
 /// This module provides complete parsing and building support for CASC root files
@@ -140,11 +155,10 @@ pub mod size;
 /// that enables content deduplication and multi-product support.
 ///
 /// Key features:
-/// - **Hierarchical Paths**: Prefix tree structure for efficient path storage
-/// - **Content Deduplication**: Same content referenced by multiple paths
-/// - **Multi-Product Support**: Manages files across different products
-/// - **BLTE Integration**: Seamless decompression of compressed manifests
-/// - **Streaming Support**: Lazy loading for large manifests
+/// - **Hierarchical Paths**: Recursive prefix tree for path storage
+/// - **Span-Based VFS**: Variable-length entries with multi-span file support
+/// - **Flag-Dependent CFT**: Entry size varies with CKEY/EST/patch flags
+/// - **BLTE Integration**: Decompression of CDN-encoded manifests
 ///
 /// See the [`tvfs`] module for detailed usage examples and integration patterns.
 pub mod tvfs;

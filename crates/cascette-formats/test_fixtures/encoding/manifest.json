@@ -1,0 +1,40 @@
+{
+  "description": "CDN encoding table files for integration testing (truncated to 2 pages each)",
+  "source": "Blizzard CDN via cascette-py",
+  "fetched_date": "2025-02-25",
+  "files": {
+    "wow_classic_era_truncated.bin": {
+      "product": "wow_classic_era",
+      "version": "1.15.8.65989",
+      "build_config": "903cc3552ca1075d5bdc264eab8e2480",
+      "encoding_ckey": "e058fa32dfe994c5e143bd0fcd0994dd",
+      "encoding_ekey": "25c87b6ce82551dc8d62c2800aad6e8f",
+      "size_bytes": 18605,
+      "original_ckey_page_count": 2051,
+      "original_ekey_page_count": 1347,
+      "truncated_page_count": 2,
+      "espec_block_size": 2071
+    },
+    "wow_classic_truncated.bin": {
+      "product": "wow_classic",
+      "version": "5.5.3.65988",
+      "build_config": "8c0bf563261db21d953517aba9564738",
+      "encoding_ckey": "721e1b73007f9779481c6a345cab5471",
+      "encoding_ekey": "f4064cb1e02d9b01890090de60279897",
+      "size_bytes": 131176,
+      "original_ckey_page_count": 7294,
+      "original_ekey_page_count": 4788,
+      "truncated_page_count": 2,
+      "espec_block_size": 114642
+    }
+  },
+  "common_properties": {
+    "version": 1,
+    "ckey_hash_size": 16,
+    "ekey_hash_size": 16,
+    "ckey_page_size_kb": 4,
+    "ekey_page_size_kb": 4,
+    "flags": "0x00"
+  },
+  "notes": "Files are truncated from full CDN encoding tables to contain only the first 2 CKey and 2 EKey pages, with headers patched to reflect reduced page counts. The ESpec table and page index/data are preserved exactly from the originals."
+}

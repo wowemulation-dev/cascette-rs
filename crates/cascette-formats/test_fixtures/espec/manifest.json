@@ -1,0 +1,21 @@
+{
+  "description": "ESpec string test fixtures from WoW CDN encoding files",
+  "source": "Extracted via cascette-py from Blizzard CDN encoding files",
+  "fixtures": [
+    {
+      "file": "representative_especs.json",
+      "description": "50 representative ESpec strings across all categories",
+      "sources": ["wow_classic_era 1.15.8", "wow_classic 5.5.3", "wow 12.0.1"],
+      "categories": ["plain", "zlib", "encrypted IV4", "encrypted IV8", "mpq", "mixed"],
+      "notes": "Includes synthetic 'n' and 'z' entries not observed in production builds."
+    },
+    {
+      "file": "wow_classic_era_especs.json",
+      "description": "Complete set of 56 unique ESpec strings from Classic Era",
+      "product": "wow_classic_era",
+      "version": "1.15.8.65989",
+      "encoding_ekey": "25c87b6ce82551dc8d62c2800aad6e8f",
+      "notes": "All 56 unique ESpecs from one product. Small enough to include in full."
+    }
+  ]
+}

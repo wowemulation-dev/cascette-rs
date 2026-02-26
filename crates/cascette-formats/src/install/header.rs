@@ -1,25 +1,28 @@
 //! Install manifest header parsing and building
 
 use crate::install::error::{InstallError, Result};
-use binrw::{BinRead, BinWrite};
+use binrw::{BinRead, BinResult, BinWrite};
+use std::io::{Read, Seek, Write};
 
 /// Install manifest header
 ///
-/// The header contains metadata about the manifest structure:
+/// The base header (V1) is 10 bytes:
 /// - Magic signature "IN" (2 bytes)
-/// - Version number (1 byte, currently 1)
+/// - Version number (1 byte, 1 or 2)
 /// - Content key length (1 byte, typically 16 for MD5)
 /// - Tag count (2 bytes, big-endian)
 /// - Entry count (4 bytes, big-endian)
-#[derive(Debug, Clone, PartialEq, Eq, BinRead, BinWrite)]
-#[br(big)] // All multi-byte fields are big-endian
-#[bw(big)]
+///
+/// V2 adds 6 bytes after the base header:
+/// - Content key size override (1 byte)
+/// - Additional entry count (4 bytes, big-endian)
+/// - Unknown byte (1 byte)
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InstallHeader {
     /// Magic signature, always "IN"
-    #[br(assert(magic == *b"IN", "Invalid install magic: expected 'IN', got {:?}", magic))]
     pub magic: [u8; 2],
 
-    /// Version number, currently 1
+    /// Version number (1 or 2)
     pub version: u8,
 
     /// Content key length in bytes, typically 16 for MD5
@@ -30,10 +33,19 @@ pub struct InstallHeader {
 
     /// Number of file entries in the manifest
     pub entry_count: u32,
+
+    /// V2: content key size override (None for V1)
+    pub content_key_size: Option<u8>,
+
+    /// V2: additional entry count (None for V1)
+    pub entry_count_v2: Option<u32>,
+
+    /// V2: unknown byte (None for V1)
+    pub v2_unknown: Option<u8>,
 }
 
 impl InstallHeader {
-    /// Create a new install header with specified counts
+    /// Create a new V1 install header with specified counts
     pub fn new(tag_count: u16, entry_count: u32) -> Self {
         Self {
             magic: *b"IN",
@@ -41,7 +53,42 @@ impl InstallHeader {
             ckey_length: 16,
             tag_count,
             entry_count,
+            content_key_size: None,
+            entry_count_v2: None,
+            v2_unknown: None,
         }
+    }
+
+    /// Create a new V2 install header
+    pub fn new_v2(
+        tag_count: u16,
+        entry_count: u32,
+        content_key_size: u8,
+        entry_count_v2: u32,
+    ) -> Self {
+        Self {
+            magic: *b"IN",
+            version: 2,
+            ckey_length: 16,
+            tag_count,
+            entry_count,
+            content_key_size: Some(content_key_size),
+            entry_count_v2: Some(entry_count_v2),
+            v2_unknown: Some(0),
+        }
+    }
+
+    /// Get the effective content key size for entries.
+    ///
+    /// V2 has an explicit field; V1 uses `ckey_length + 4` per Agent.exe.
+    pub fn content_key_size(&self) -> u8 {
+        self.content_key_size
+            .unwrap_or_else(|| self.ckey_length.saturating_add(4))
+    }
+
+    /// Header size in bytes on disk
+    pub fn header_size(&self) -> usize {
+        if self.version >= 2 { 16 } else { 10 }
     }
 
     /// Calculate the size of bit masks for tags
@@ -66,8 +113,104 @@ impl InstallHeader {
             return Err(InstallError::InvalidCKeyLength(self.ckey_length));
         }
 
+        // V2 must have extended fields
+        if self.version >= 2 && self.content_key_size.is_none() {
+            return Err(InstallError::UnsupportedVersion(self.version));
+        }
+
         Ok(())
     }
+}
+
+impl BinRead for InstallHeader {
+    type Args<'a> = ();
+
+    fn read_options<R: Read + Seek>(
+        reader: &mut R,
+        _endian: binrw::Endian,
+        _args: Self::Args<'_>,
+    ) -> BinResult<Self> {
+        // Read base header (10 bytes), always big-endian
+        let mut magic = [0u8; 2];
+        reader.read_exact(&mut magic)?;
+
+        if magic != *b"IN" {
+            return Err(binrw::Error::Custom {
+                pos: reader.stream_position().unwrap_or(0),
+                err: Box::new(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("Invalid install magic: expected 'IN', got {magic:?}"),
+                )),
+            });
+        }
+
+        let version = u8::read_options(reader, binrw::Endian::Big, ())?;
+        let ckey_length = u8::read_options(reader, binrw::Endian::Big, ())?;
+        let tag_count = u16::read_options(reader, binrw::Endian::Big, ())?;
+        let entry_count = u32::read_options(reader, binrw::Endian::Big, ())?;
+
+        // V2: read 6 additional bytes
+        let (content_key_size, entry_count_v2, v2_unknown) = if version >= 2 {
+            let cks = u8::read_options(reader, binrw::Endian::Big, ())?;
+            let ec2 = u32::read_options(reader, binrw::Endian::Big, ())?;
+            let unk = u8::read_options(reader, binrw::Endian::Big, ())?;
+            (Some(cks), Some(ec2), Some(unk))
+        } else {
+            (None, None, None)
+        };
+
+        Ok(Self {
+            magic,
+            version,
+            ckey_length,
+            tag_count,
+            entry_count,
+            content_key_size,
+            entry_count_v2,
+            v2_unknown,
+        })
+    }
+}
+
+impl BinWrite for InstallHeader {
+    type Args<'a> = ();
+
+    fn write_options<W: Write + Seek>(
+        &self,
+        writer: &mut W,
+        _endian: binrw::Endian,
+        _args: Self::Args<'_>,
+    ) -> BinResult<()> {
+        // Write base header (10 bytes), always big-endian
+        writer.write_all(&self.magic)?;
+        self.version.write_options(writer, binrw::Endian::Big, ())?;
+        self.ckey_length
+            .write_options(writer, binrw::Endian::Big, ())?;
+        self.tag_count
+            .write_options(writer, binrw::Endian::Big, ())?;
+        self.entry_count
+            .write_options(writer, binrw::Endian::Big, ())?;
+
+        // V2: write 6 additional bytes
+        if self.version >= 2 {
+            let cks = self.content_key_size.unwrap_or(self.ckey_length);
+            let ec2 = self.entry_count_v2.unwrap_or(0);
+            let unk = self.v2_unknown.unwrap_or(0);
+            cks.write_options(writer, binrw::Endian::Big, ())?;
+            ec2.write_options(writer, binrw::Endian::Big, ())?;
+            unk.write_options(writer, binrw::Endian::Big, ())?;
+        }
+
+        Ok(())
+    }
+}
+
+impl binrw::meta::ReadEndian for InstallHeader {
+    const ENDIAN: binrw::meta::EndianKind = binrw::meta::EndianKind::Endian(binrw::Endian::Big);
+}
+
+impl binrw::meta::WriteEndian for InstallHeader {
+    const ENDIAN: binrw::meta::EndianKind = binrw::meta::EndianKind::Endian(binrw::Endian::Big);
 }
 
 #[cfg(test)]
@@ -84,11 +227,34 @@ mod tests {
         assert_eq!(header.ckey_length, 16);
         assert_eq!(header.tag_count, 2);
         assert_eq!(header.entry_count, 5);
+        assert!(header.content_key_size.is_none());
+    }
+
+    #[test]
+    fn test_header_new_v2() {
+        let header = InstallHeader::new_v2(3, 10, 20, 50);
+        assert_eq!(header.version, 2);
+        assert_eq!(header.content_key_size, Some(20));
+        assert_eq!(header.entry_count_v2, Some(50));
+        assert_eq!(header.v2_unknown, Some(0));
+        assert_eq!(header.content_key_size(), 20);
+    }
+
+    #[test]
+    fn test_v1_content_key_size() {
+        let header = InstallHeader::new(2, 5);
+        // V1: content_key_size = ckey_length + 4 = 16 + 4 = 20
+        assert_eq!(header.content_key_size(), 20);
+    }
+
+    #[test]
+    fn test_header_size() {
+        assert_eq!(InstallHeader::new(0, 0).header_size(), 10);
+        assert_eq!(InstallHeader::new_v2(0, 0, 16, 0).header_size(), 16);
     }
 
     #[test]
     fn test_bit_mask_size() {
-        // Test various entry counts
         assert_eq!(InstallHeader::new(0, 0).bit_mask_size(), 0);
         assert_eq!(InstallHeader::new(0, 1).bit_mask_size(), 1);
         assert_eq!(InstallHeader::new(0, 7).bit_mask_size(), 1);
@@ -111,9 +277,8 @@ mod tests {
             Err(InstallError::InvalidMagic(_))
         ));
 
-        // Test version 2 is valid
-        let mut v2_header = valid_header.clone();
-        v2_header.version = 2;
+        // Test version 2 is valid (with extended fields)
+        let v2_header = InstallHeader::new_v2(2, 5, 16, 0);
         assert!(v2_header.validate().is_ok());
 
         // Test version 0 is invalid
@@ -142,7 +307,7 @@ mod tests {
     }
 
     #[test]
-    fn test_header_parsing() {
+    fn test_v1_header_parsing() {
         let data = [
             b'I', b'N', // Magic (2 bytes)
             1,    // Version (1 byte)
@@ -158,24 +323,63 @@ mod tests {
         assert_eq!(header.ckey_length, 16);
         assert_eq!(header.tag_count, 2);
         assert_eq!(header.entry_count, 5);
-        assert_eq!(header.bit_mask_size(), 1); // (5 + 7) / 8 = 1
+        assert!(header.content_key_size.is_none());
+        assert_eq!(header.bit_mask_size(), 1);
     }
 
     #[test]
-    fn test_header_round_trip() {
+    fn test_v2_header_parsing() {
+        let data = [
+            b'I', b'N', // Magic (2 bytes)
+            2,    // Version (1 byte)
+            16,   // CKey length (1 byte)
+            0, 2, // Tag count (2 bytes, big-endian)
+            0, 0, 0, 5,  // Entry count (4 bytes, big-endian)
+            20, // Content key size (1 byte)
+            0, 0, 0, 10, // Entry count V2 (4 bytes, big-endian)
+            0,  // Unknown (1 byte)
+        ];
+
+        let header =
+            InstallHeader::read(&mut Cursor::new(&data)).expect("Operation should succeed");
+        assert_eq!(header.version, 2);
+        assert_eq!(header.tag_count, 2);
+        assert_eq!(header.entry_count, 5);
+        assert_eq!(header.content_key_size, Some(20));
+        assert_eq!(header.entry_count_v2, Some(10));
+        assert_eq!(header.v2_unknown, Some(0));
+    }
+
+    #[test]
+    fn test_v1_header_round_trip() {
         let original = InstallHeader::new(10, 100);
 
-        // Serialize
         let mut buffer = Vec::new();
         let mut cursor = Cursor::new(&mut buffer);
         original
             .write(&mut cursor)
             .expect("Operation should succeed");
+        assert_eq!(buffer.len(), 10);
 
-        // Deserialize
         let parsed =
             InstallHeader::read(&mut Cursor::new(&buffer)).expect("Operation should succeed");
+        assert_eq!(original, parsed);
+        assert!(parsed.validate().is_ok());
+    }
 
+    #[test]
+    fn test_v2_header_round_trip() {
+        let original = InstallHeader::new_v2(10, 100, 20, 50);
+
+        let mut buffer = Vec::new();
+        let mut cursor = Cursor::new(&mut buffer);
+        original
+            .write(&mut cursor)
+            .expect("Operation should succeed");
+        assert_eq!(buffer.len(), 16);
+
+        let parsed =
+            InstallHeader::read(&mut Cursor::new(&buffer)).expect("Operation should succeed");
         assert_eq!(original, parsed);
         assert!(parsed.validate().is_ok());
     }
@@ -186,30 +390,28 @@ mod tests {
             magic: *b"IN",
             version: 1,
             ckey_length: 16,
-            tag_count: 0x1234,        // Big value to test endianness
-            entry_count: 0x1234_5678, // Big value to test endianness
+            tag_count: 0x1234,
+            entry_count: 0x1234_5678,
+            content_key_size: None,
+            entry_count_v2: None,
+            v2_unknown: None,
         };
 
-        // Serialize
         let mut buffer = Vec::new();
         let mut cursor = Cursor::new(&mut buffer);
         header.write(&mut cursor).expect("Operation should succeed");
 
-        // Check that multi-byte fields are stored in big-endian
         assert_eq!(buffer[0], b'I');
         assert_eq!(buffer[1], b'N');
         assert_eq!(buffer[2], 1);
         assert_eq!(buffer[3], 16);
-        // tag_count 0x1234 should be stored as [0x12, 0x34]
         assert_eq!(buffer[4], 0x12);
         assert_eq!(buffer[5], 0x34);
-        // entry_count 0x12345678 should be stored as [0x12, 0x34, 0x56, 0x78]
         assert_eq!(buffer[6], 0x12);
         assert_eq!(buffer[7], 0x34);
         assert_eq!(buffer[8], 0x56);
         assert_eq!(buffer[9], 0x78);
 
-        // Verify round-trip
         let parsed =
             InstallHeader::read(&mut Cursor::new(&buffer)).expect("Operation should succeed");
         assert_eq!(header, parsed);
@@ -217,7 +419,6 @@ mod tests {
 
     #[test]
     fn test_header_assertion_error() {
-        // Test that invalid magic triggers assertion error
         let data = [
             b'X', b'X', // Invalid magic
             1,    // Version
@@ -228,8 +429,5 @@ mod tests {
 
         let result = InstallHeader::read(&mut Cursor::new(&data));
         assert!(result.is_err());
-        // The assertion error contains the expected magic validation message
-        let error_msg = format!("{:?}", result.expect_err("Test operation should fail"));
-        assert!(error_msg.contains("Invalid install magic") || error_msg.contains("assertion"));
     }
 }

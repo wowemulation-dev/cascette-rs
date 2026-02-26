@@ -7,6 +7,44 @@ use crate::zbsdiff::error::{ZbsdiffError, ZbsdiffResult};
 use flate2::{Compression, read::ZlibDecoder, write::ZlibEncoder};
 use std::io::{Cursor, Read, Write};
 
+/// Decode a sign-magnitude encoded 64-bit integer (bsdiff `offtin`).
+///
+/// The bsdiff format stores signed 64-bit values using sign-magnitude
+/// encoding: bit 63 is the sign bit, bits 0-62 hold the absolute value,
+/// stored in little-endian byte order. This differs from two's complement
+/// which Rust's `i64::from_le_bytes` assumes.
+fn offtin(buf: [u8; 8]) -> i64 {
+    let magnitude = i64::from_le_bytes([
+        buf[0],
+        buf[1],
+        buf[2],
+        buf[3],
+        buf[4],
+        buf[5],
+        buf[6],
+        buf[7] & 0x7F,
+    ]);
+    if buf[7] & 0x80 != 0 {
+        -magnitude
+    } else {
+        magnitude
+    }
+}
+
+/// Encode a signed 64-bit integer using sign-magnitude (bsdiff `offtout`).
+fn offtout(value: i64) -> [u8; 8] {
+    let (magnitude, negative) = if value < 0 {
+        (-value, true)
+    } else {
+        (value, false)
+    };
+    let mut buf = magnitude.to_le_bytes();
+    if negative {
+        buf[7] |= 0x80;
+    }
+    buf
+}
+
 /// Compress data using zlib compression
 pub fn compress_zlib(data: &[u8]) -> ZbsdiffResult<Vec<u8>> {
     let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
@@ -130,16 +168,18 @@ impl ControlBlock {
                 break;
             }
 
-            // Read 8 bytes for each i64 value in big-endian format
+            // Read 8 bytes for each value using bsdiff sign-magnitude encoding.
+            // The bsdiff format uses sign-magnitude (bit 63 = sign, bits 0-62 =
+            // magnitude) rather than two's complement for all three fields.
             let mut buf = [0u8; 8];
             cursor.read_exact(&mut buf)?;
-            let diff_size = i64::from_be_bytes(buf);
+            let diff_size = offtin(buf);
 
             cursor.read_exact(&mut buf)?;
-            let extra_size = i64::from_be_bytes(buf);
+            let extra_size = offtin(buf);
 
             cursor.read_exact(&mut buf)?;
-            let seek_offset = i64::from_be_bytes(buf);
+            let seek_offset = offtin(buf);
 
             let entry = ControlEntry::new(diff_size, extra_size, seek_offset);
             entry.validate()?;
@@ -160,9 +200,9 @@ impl ControlBlock {
         let mut cursor = Cursor::new(&mut uncompressed);
 
         for entry in &self.entries {
-            cursor.write_all(&entry.diff_size.to_be_bytes())?;
-            cursor.write_all(&entry.extra_size.to_be_bytes())?;
-            cursor.write_all(&entry.seek_offset.to_be_bytes())?;
+            cursor.write_all(&offtout(entry.diff_size))?;
+            cursor.write_all(&offtout(entry.extra_size))?;
+            cursor.write_all(&offtout(entry.seek_offset))?;
         }
 
         compress_zlib(&uncompressed)

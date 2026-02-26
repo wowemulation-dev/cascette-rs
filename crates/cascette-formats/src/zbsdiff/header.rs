@@ -9,13 +9,16 @@
 use crate::zbsdiff::error::ZbsdiffError;
 use binrw::{BinRead, BinWrite};
 
-/// ZBSDIFF1 signature: "ZBSDIFF1" as big-endian u64
-pub const ZBSDIFF1_SIGNATURE: u64 = 0x5A42_5344_4946_4631_u64;
+/// ZBSDIFF1 signature: "ZBSDIFF1" as little-endian u64
+pub const ZBSDIFF1_SIGNATURE: u64 = u64::from_le_bytes(*b"ZBSDIFF1");
 
-/// ZBSDIFF1 header structure (32 bytes, big-endian)
+/// ZBSDIFF1 header structure (32 bytes, little-endian)
+///
+/// All integer fields are little-endian, matching the original bsdiff format
+/// and verified against Agent.exe `tact::BsPatch::ParseHeader` at 0x6fbd1c.
 #[derive(Debug, Clone, PartialEq, Eq, BinRead, BinWrite)]
-#[br(big)] // Big-endian
-#[bw(big)]
+#[br(little)]
+#[bw(little)]
 pub struct ZbsdiffHeader {
     /// File signature, must be ZBSDIFF1_SIGNATURE
     #[br(assert(signature == ZBSDIFF1_SIGNATURE, "Invalid ZBSDIFF1 signature: expected {:#x}, got {:#x}", ZBSDIFF1_SIGNATURE, signature))]
@@ -196,27 +199,27 @@ mod tests {
         let mut buffer = Vec::new();
         let mut cursor = Cursor::new(&mut buffer);
         header
-            .write_options(&mut cursor, binrw::Endian::Big, ())
+            .write_options(&mut cursor, binrw::Endian::Little, ())
             .expect("Operation should succeed");
 
         assert_eq!(buffer.len(), 32); // Header is always 32 bytes
-        assert_eq!(&buffer[0..8], &ZBSDIFF1_SIGNATURE.to_be_bytes());
-        assert_eq!(&buffer[8..16], &100i64.to_be_bytes());
-        assert_eq!(&buffer[16..24], &200i64.to_be_bytes());
-        assert_eq!(&buffer[24..32], &1000i64.to_be_bytes());
+        assert_eq!(&buffer[0..8], &ZBSDIFF1_SIGNATURE.to_le_bytes());
+        assert_eq!(&buffer[8..16], &100i64.to_le_bytes());
+        assert_eq!(&buffer[16..24], &200i64.to_le_bytes());
+        assert_eq!(&buffer[24..32], &1000i64.to_le_bytes());
     }
 
     #[test]
     fn test_zbsdiff_header_deserialization() {
-        // Create test header bytes
+        // Create test header bytes in little-endian
         let mut buffer = Vec::new();
-        buffer.extend_from_slice(&ZBSDIFF1_SIGNATURE.to_be_bytes());
-        buffer.extend_from_slice(&100i64.to_be_bytes());
-        buffer.extend_from_slice(&200i64.to_be_bytes());
-        buffer.extend_from_slice(&1000i64.to_be_bytes());
+        buffer.extend_from_slice(&ZBSDIFF1_SIGNATURE.to_le_bytes());
+        buffer.extend_from_slice(&100i64.to_le_bytes());
+        buffer.extend_from_slice(&200i64.to_le_bytes());
+        buffer.extend_from_slice(&1000i64.to_le_bytes());
 
         let mut cursor = Cursor::new(&buffer);
-        let header = ZbsdiffHeader::read_options(&mut cursor, binrw::Endian::Big, ())
+        let header = ZbsdiffHeader::read_options(&mut cursor, binrw::Endian::Little, ())
             .expect("Operation should succeed");
 
         assert_eq!(header.signature, ZBSDIFF1_SIGNATURE);
@@ -238,12 +241,12 @@ mod tests {
         let mut buffer = Vec::new();
         let mut cursor = Cursor::new(&mut buffer);
         original
-            .write_options(&mut cursor, binrw::Endian::Big, ())
+            .write_options(&mut cursor, binrw::Endian::Little, ())
             .expect("Operation should succeed");
 
         // Deserialize
         let mut cursor = Cursor::new(&buffer);
-        let deserialized = ZbsdiffHeader::read_options(&mut cursor, binrw::Endian::Big, ())
+        let deserialized = ZbsdiffHeader::read_options(&mut cursor, binrw::Endian::Little, ())
             .expect("Operation should succeed");
 
         assert_eq!(original, deserialized);
@@ -251,9 +254,9 @@ mod tests {
 
     #[test]
     fn test_zbsdiff_header_signature_constant() {
-        // Verify the signature constant matches "ZBSDIFF1" in big-endian
+        // Verify the signature constant matches "ZBSDIFF1" in little-endian
         let expected_bytes = b"ZBSDIFF1";
-        let signature_bytes = ZBSDIFF1_SIGNATURE.to_be_bytes();
+        let signature_bytes = ZBSDIFF1_SIGNATURE.to_le_bytes();
 
         assert_eq!(expected_bytes, &signature_bytes);
     }

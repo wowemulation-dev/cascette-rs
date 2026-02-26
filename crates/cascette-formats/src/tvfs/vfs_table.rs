@@ -1,107 +1,204 @@
 //! TVFS VFS table structures and parsing
+//!
+//! The VFS table stores file span mappings. Each file in the path table
+//! references its VFS entry by byte offset. Entries are variable-length:
+//! `span_count(1) + N × (file_offset(4 BE) + span_length(4 BE) + cft_offset(cft_offs_size BE))`.
 
-use binrw::io::{Read, Seek, Write};
-use binrw::{BinRead, BinResult, BinWrite};
+use crate::tvfs::error::{TvfsError, TvfsResult};
+use crate::tvfs::header::TvfsHeader;
 
-/// VFS table with file span mappings
+/// VFS table — raw byte blob addressed by offset from path table NodeValues.
 #[derive(Debug, Clone)]
 pub struct VfsTable {
-    /// VFS entries
+    /// Raw table bytes. NodeValues from the path table index into this blob.
+    pub data: Vec<u8>,
+
+    /// Parsed entries for enumeration.
     pub entries: Vec<VfsEntry>,
 }
 
-/// VFS entry mapping file spans to container entries
-#[derive(Debug, Clone, BinRead, BinWrite)]
-#[br(big)] // Big-endian
-#[bw(big)]
+/// A single VFS entry with one or more spans.
+#[derive(Debug, Clone)]
 pub struct VfsEntry {
-    /// File ID (unique identifier)
-    pub file_id: u32,
-    /// Container index (index into container file table)
-    pub container_index: u32,
-    /// File offset within container
-    pub file_offset: u64,
-    /// File size
-    pub file_size: u32,
-    /// Entry flags
-    pub flags: u16,
+    /// Byte offset within the VFS table where this entry starts
+    pub offset: u32,
+    /// Spans making up this file
+    pub spans: Vec<VfsSpan>,
 }
 
-/// On-disk size of a VFS entry: u32 + u32 + u64 + u32 + u16 = 22 bytes.
-/// This differs from `size_of::<VfsEntry>()` (24 bytes) due to alignment padding.
-const VFS_ENTRY_DISK_SIZE: usize = 22;
-
-// Compile-time sanity check: disk size must not exceed the in-memory size.
-const _: () = assert!(VFS_ENTRY_DISK_SIZE <= std::mem::size_of::<VfsEntry>());
-
-// VFS entry flags
-const VFS_FLAG_DIRECTORY: u16 = 0x8000;
-const VFS_FLAG_COMPRESSED: u16 = 0x4000;
-
-impl BinRead for VfsTable {
-    type Args<'a> = (u32,); // table_size
-
-    fn read_options<R: Read + Seek>(
-        reader: &mut R,
-        endian: binrw::Endian,
-        args: Self::Args<'_>,
-    ) -> BinResult<Self> {
-        let table_size = args.0;
-        let entry_size = VFS_ENTRY_DISK_SIZE;
-        let entry_count = table_size as usize / entry_size;
-
-        let mut entries = Vec::with_capacity(entry_count);
-        for _ in 0..entry_count {
-            let entry = VfsEntry::read_options(reader, endian, ())?;
-            entries.push(entry);
-        }
-
-        Ok(VfsTable { entries })
-    }
+/// A single span within a VFS entry.
+#[derive(Debug, Clone)]
+pub struct VfsSpan {
+    /// Offset within the referenced content (used for multi-span assembly)
+    pub file_offset: u32,
+    /// Content size of this span
+    pub span_length: u32,
+    /// Byte offset into the container file table (CFT)
+    pub cft_offset: u32,
 }
 
-impl BinWrite for VfsTable {
-    type Args<'a> = ();
-
-    fn write_options<W: Write + Seek>(
-        &self,
-        writer: &mut W,
-        endian: binrw::Endian,
-        _args: Self::Args<'_>,
-    ) -> BinResult<()> {
-        for entry in &self.entries {
-            entry.write_options(writer, endian, ())?;
-        }
-        Ok(())
-    }
-}
+/// Maximum valid span count for a file entry.
+/// Values 1-224 are file entries, 225-254 are "other", 255 is deleted.
+const MAX_FILE_SPAN_COUNT: u8 = 224;
 
 impl VfsTable {
-    /// Create a new empty VFS table
+    /// Create an empty VFS table.
     pub fn new() -> Self {
         Self {
+            data: Vec::new(),
             entries: Vec::new(),
         }
     }
 
-    /// Get entry by file ID
-    pub fn get_entry(&self, file_id: u32) -> Option<&VfsEntry> {
-        self.entries.iter().find(|entry| entry.file_id == file_id)
+    /// Parse the VFS table from raw bytes, enumerating all sequential entries.
+    pub fn parse(data: &[u8], header: &TvfsHeader) -> TvfsResult<Self> {
+        let cft_offs_size = header.cft_offs_size() as usize;
+        let span_size = 4 + 4 + cft_offs_size; // file_offset + span_length + cft_offset
+        let mut entries = Vec::new();
+        let mut pos = 0usize;
+
+        while pos < data.len() {
+            let entry_offset = pos as u32;
+
+            // Read span count
+            if pos >= data.len() {
+                break;
+            }
+            let span_count = data[pos];
+            pos += 1;
+
+            // Skip deleted (255) or "other" (225-254) entries
+            if span_count > MAX_FILE_SPAN_COUNT {
+                // Skip the spans for this entry
+                let skip = span_count as usize * span_size;
+                if pos + skip > data.len() {
+                    break;
+                }
+                pos += skip;
+                continue;
+            }
+
+            if span_count == 0 {
+                // Zero spans — skip
+                entries.push(VfsEntry {
+                    offset: entry_offset,
+                    spans: Vec::new(),
+                });
+                continue;
+            }
+
+            let needed = span_count as usize * span_size;
+            if pos + needed > data.len() {
+                return Err(TvfsError::VfsTableTruncated(pos));
+            }
+
+            let mut spans = Vec::with_capacity(span_count as usize);
+            for _ in 0..span_count {
+                let file_offset =
+                    u32::from_be_bytes([data[pos], data[pos + 1], data[pos + 2], data[pos + 3]]);
+                pos += 4;
+
+                let span_length =
+                    u32::from_be_bytes([data[pos], data[pos + 1], data[pos + 2], data[pos + 3]]);
+                pos += 4;
+
+                let cft_offset = read_be_uint(&data[pos..pos + cft_offs_size]);
+                pos += cft_offs_size;
+
+                spans.push(VfsSpan {
+                    file_offset,
+                    span_length,
+                    cft_offset,
+                });
+            }
+
+            entries.push(VfsEntry {
+                offset: entry_offset,
+                spans,
+            });
+        }
+
+        Ok(Self {
+            data: data.to_vec(),
+            entries,
+        })
     }
 
-    /// Get entry by index
+    /// Read a single VFS entry at the given byte offset.
+    pub fn read_entry_at(data: &[u8], offset: usize, header: &TvfsHeader) -> TvfsResult<VfsEntry> {
+        let cft_offs_size = header.cft_offs_size() as usize;
+        let span_size = 4 + 4 + cft_offs_size;
+        let mut pos = offset;
+
+        if pos >= data.len() {
+            return Err(TvfsError::VfsTableTruncated(pos));
+        }
+        let span_count = data[pos];
+        pos += 1;
+
+        if span_count > MAX_FILE_SPAN_COUNT {
+            return Err(TvfsError::InvalidSpanCount {
+                count: span_count,
+                offset,
+            });
+        }
+
+        let needed = span_count as usize * span_size;
+        if pos + needed > data.len() {
+            return Err(TvfsError::VfsTableTruncated(pos));
+        }
+
+        let mut spans = Vec::with_capacity(span_count as usize);
+        for _ in 0..span_count {
+            let file_offset =
+                u32::from_be_bytes([data[pos], data[pos + 1], data[pos + 2], data[pos + 3]]);
+            pos += 4;
+
+            let span_length =
+                u32::from_be_bytes([data[pos], data[pos + 1], data[pos + 2], data[pos + 3]]);
+            pos += 4;
+
+            let cft_offset = read_be_uint(&data[pos..pos + cft_offs_size]);
+            pos += cft_offs_size;
+
+            spans.push(VfsSpan {
+                file_offset,
+                span_length,
+                cft_offset,
+            });
+        }
+
+        Ok(VfsEntry {
+            offset: offset as u32,
+            spans,
+        })
+    }
+
+    /// Get entry by sequential index.
     pub fn get_entry_by_index(&self, index: usize) -> Option<&VfsEntry> {
         self.entries.get(index)
     }
 
-    /// Add a new entry
-    pub fn add_entry(&mut self, entry: VfsEntry) {
-        self.entries.push(entry);
+    /// Build raw VFS table bytes from entries.
+    pub fn build(entries: &[VfsEntry], header: &TvfsHeader) -> Vec<u8> {
+        let cft_offs_size = header.cft_offs_size() as usize;
+        let mut data = Vec::new();
+
+        for entry in entries {
+            data.push(entry.spans.len() as u8);
+            for span in &entry.spans {
+                data.extend_from_slice(&span.file_offset.to_be_bytes());
+                data.extend_from_slice(&span.span_length.to_be_bytes());
+                write_be_uint(&mut data, span.cft_offset, cft_offs_size);
+            }
+        }
+
+        data
     }
 
-    /// Get total table size in bytes
+    /// Get total table size in bytes.
     pub fn table_size(&self) -> u32 {
-        (self.entries.len() * VFS_ENTRY_DISK_SIZE) as u32
+        self.data.len() as u32
     }
 }
 
@@ -111,58 +208,17 @@ impl Default for VfsTable {
     }
 }
 
-impl VfsEntry {
-    /// Create a new VFS entry
-    pub fn new(
-        file_id: u32,
-        container_index: u32,
-        file_offset: u64,
-        file_size: u32,
-        is_directory: bool,
-        is_compressed: bool,
-    ) -> Self {
-        let mut flags = 0u16;
-        if is_directory {
-            flags |= VFS_FLAG_DIRECTORY;
-        }
-        if is_compressed {
-            flags |= VFS_FLAG_COMPRESSED;
-        }
-
-        Self {
-            file_id,
-            container_index,
-            file_offset,
-            file_size,
-            flags,
-        }
+/// Read a big-endian unsigned integer of 1-4 bytes.
+fn read_be_uint(bytes: &[u8]) -> u32 {
+    let mut val = 0u32;
+    for &b in bytes {
+        val = (val << 8) | u32::from(b);
     }
+    val
+}
 
-    /// Check if this entry represents a directory
-    pub fn is_directory(&self) -> bool {
-        (self.flags & VFS_FLAG_DIRECTORY) != 0
-    }
-
-    /// Check if this entry is compressed
-    pub fn is_compressed(&self) -> bool {
-        (self.flags & VFS_FLAG_COMPRESSED) != 0
-    }
-
-    /// Set directory flag
-    pub fn set_directory(&mut self, is_directory: bool) {
-        if is_directory {
-            self.flags |= VFS_FLAG_DIRECTORY;
-        } else {
-            self.flags &= !VFS_FLAG_DIRECTORY;
-        }
-    }
-
-    /// Set compressed flag
-    pub fn set_compressed(&mut self, is_compressed: bool) {
-        if is_compressed {
-            self.flags |= VFS_FLAG_COMPRESSED;
-        } else {
-            self.flags &= !VFS_FLAG_COMPRESSED;
-        }
-    }
+/// Write a big-endian unsigned integer in exactly `width` bytes.
+fn write_be_uint(out: &mut Vec<u8>, val: u32, width: usize) {
+    let bytes = val.to_be_bytes();
+    out.extend_from_slice(&bytes[4 - width..]);
 }
