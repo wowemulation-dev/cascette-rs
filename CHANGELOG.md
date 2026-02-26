@@ -128,6 +128,14 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- cascette-formats: BLTE encryption validation: reject single-chunk encrypted
+  files (`SingleChunkEncrypted` error) and nested encryption (`NestedEncryption`
+  error). Builder now forces multi-chunk header for encrypted content and always
+  prepends inner compression mode byte.
+- cascette-formats: BLTE IV size validation: accept 4 or 8 byte IVs (matching
+  TACTSharp and CascLib). Previously only 4-byte IVs were accepted.
+- cascette-crypto: Salsa20 cipher accepts 4 or 8 byte IVs. 4-byte IVs are
+  zero-padded to 8 bytes; 8-byte IVs are used directly.
 - cascette-formats: `build_partial_priority()` parsed incorrectly for real CDN
   data. Joined values and split on commas, but CDN format uses space-separated
   `HASH:PRIORITY` tokens. Now iterates parsed values directly.

@@ -139,9 +139,23 @@ impl BlteFile {
 
     /// Decompress all chunks with decryption support
     ///
+    /// Encrypted BLTE files must use the extended (multi-chunk) header format.
+    /// Single-chunk encrypted files are rejected.
+    ///
     /// Performance: Pre-allocates the output buffer based on the total
     /// decompressed size from chunk headers or chunk metadata.
     pub fn decompress_with_keys(&self, key_store: &TactKeyStore) -> BlteResult<Vec<u8>> {
+        // Single-chunk encrypted BLTE is not valid. The spec requires
+        // encrypted content to use the extended header with a chunk table.
+        if self.header.is_single_chunk()
+            && self
+                .chunks
+                .first()
+                .is_some_and(|c| c.mode == CompressionMode::Encrypted)
+        {
+            return Err(BlteError::SingleChunkEncrypted);
+        }
+
         // Performance: Pre-allocate with estimated total decompressed size
         let total_size = self.estimate_decompressed_size();
         let mut result = Vec::with_capacity(total_size);
@@ -221,6 +235,29 @@ impl crate::CascFormat for BlteFile {
 mod tests {
     use super::*;
     use crate::CascFormat;
+
+    #[test]
+    fn test_single_chunk_encrypted_rejected() {
+        // Manually construct a single-chunk encrypted BLTE (bypassing builder)
+        // to verify that decompress_with_keys rejects it.
+        let chunk = ChunkData::from_compressed(
+            CompressionMode::Encrypted,
+            vec![0x08, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08],
+            Some(9),
+        );
+        let blte = BlteFile {
+            header: BlteHeader::single_chunk(),
+            chunks: vec![chunk],
+        };
+
+        let key_store = cascette_crypto::TactKeyStore::new();
+        let result = blte.decompress_with_keys(&key_store);
+        assert!(result.is_err());
+        assert!(result
+            .expect_err("Should fail")
+            .to_string()
+            .contains("multi-chunk"));
+    }
 
     #[test]
     fn test_single_chunk_round_trip() {

@@ -563,6 +563,81 @@ mod tests {
             .expect("Test operation should succeed");
         assert_eq!(decrypted, plaintext);
     }
+
+    #[test]
+    fn test_decrypt_8byte_iv() {
+        let plaintext = b"Test data with 8-byte IV";
+        let key_name = 0x1234_5678_90AB_CDEF;
+        let key = [0x42; 16];
+
+        let mut key_store = TactKeyStore::new();
+        key_store.add(TactKey::new(key_name, key));
+
+        // Manually build an encrypted chunk with 8-byte IV
+        let iv8 = [0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88];
+        let encrypted_payload =
+            encrypt_salsa20(plaintext, &key, &iv8, 0).expect("Salsa20 should succeed");
+
+        let mut chunk_data = Vec::new();
+        chunk_data.push(8); // key_name_size
+        chunk_data.extend_from_slice(&key_name.to_le_bytes());
+        chunk_data.push(8); // iv_size = 8
+        chunk_data.extend_from_slice(&iv8);
+        chunk_data.push(0x53); // Salsa20
+        chunk_data.extend_from_slice(&encrypted_payload);
+
+        let decrypted = decrypt_chunk_with_keys(&chunk_data, &key_store, 0)
+            .expect("Decryption with 8-byte IV should succeed");
+        assert_eq!(decrypted, plaintext);
+    }
+
+    #[test]
+    fn test_decrypt_invalid_iv_size() {
+        let key_name = 0x1234_5678_90AB_CDEF;
+        let key = [0x42; 16];
+
+        let mut key_store = TactKeyStore::new();
+        key_store.add(TactKey::new(key_name, key));
+
+        // Build chunk with invalid IV size (6)
+        let mut chunk_data = Vec::new();
+        chunk_data.push(8); // key_name_size
+        chunk_data.extend_from_slice(&key_name.to_le_bytes());
+        chunk_data.push(6); // invalid iv_size
+        chunk_data.extend_from_slice(&[0x11; 6]);
+        chunk_data.push(0x53);
+        chunk_data.extend_from_slice(&[0x00; 10]);
+
+        let result = decrypt_chunk_with_keys(&chunk_data, &key_store, 0);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("invalid IV size"));
+    }
+
+    #[test]
+    fn test_decrypt_nested_encryption_rejected() {
+        let key_name = 0x1234_5678_90AB_CDEF;
+        let iv = [0x11, 0x22, 0x33, 0x44];
+        let key = [0x42; 16];
+
+        let mut key_store = TactKeyStore::new();
+        key_store.add(TactKey::new(key_name, key));
+
+        // Create inner data with encryption mode byte (0x45 = 'E')
+        let mut inner_data = vec![CompressionMode::Encrypted.as_byte()];
+        inner_data.extend_from_slice(b"fake inner encrypted data");
+
+        // Encrypt the inner data (simulating nested encryption)
+        let spec = EncryptionSpec::salsa20(key_name, iv);
+        let encrypted = encrypt_chunk_with_key(&inner_data, spec, &key, 0)
+            .expect("Encryption should succeed");
+
+        let result = decrypt_chunk_with_keys(&encrypted, &key_store, 0);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("nested encryption"));
+    }
 }
 
 /// Encryption specification for BLTE chunks
@@ -717,27 +792,24 @@ pub fn decrypt_chunk_with_keys(
         ));
     }
 
-    // Read IV size
+    // Read IV size (must be 4 or 8, matching TACTSharp and CascLib)
     let iv_size = data[offset];
     offset += 1;
 
-    if iv_size != 4 {
-        return Err(BlteError::CompressionError(format!(
-            "Invalid IV size: {iv_size} (expected 4)"
-        )));
+    if iv_size != 4 && iv_size != 8 {
+        return Err(BlteError::InvalidIvSize { actual: iv_size });
     }
 
-    if data.len() < offset + 4 {
+    let iv_len = iv_size as usize;
+    if data.len() < offset + iv_len {
         return Err(BlteError::CompressionError(
             "Encrypted chunk too short for IV".to_string(),
         ));
     }
 
-    // Read IV
-    let iv: [u8; 4] = data[offset..offset + 4]
-        .try_into()
-        .map_err(|_| BlteError::CompressionError("Invalid IV".to_string()))?;
-    offset += 4;
+    // Read IV (4 or 8 bytes)
+    let iv = &data[offset..offset + iv_len];
+    offset += iv_len;
 
     if data.len() < offset + 1 {
         return Err(BlteError::CompressionError(
@@ -755,8 +827,8 @@ pub fn decrypt_chunk_with_keys(
     // Decrypt based on encryption type
     let decrypted_data = match encryption_type {
         0x53 => {
-            // Salsa20 decryption
-            decrypt_salsa20(encrypted_data, key, &iv, block_index).map_err(|e| {
+            // Salsa20 decryption (accepts 4 or 8 byte IV)
+            decrypt_salsa20(encrypted_data, key, iv, block_index).map_err(|e| {
                 BlteError::CompressionError(format!("Salsa20 decryption failed: {e}"))
             })?
         }
@@ -779,10 +851,12 @@ pub fn decrypt_chunk_with_keys(
     if !decrypted_data.is_empty()
         && let Some(inner_mode) = CompressionMode::from_byte(decrypted_data[0])
     {
-        // Recursively decompress the decrypted data if it's compressed
-        if inner_mode != CompressionMode::Encrypted {
-            return decompress_chunk(&decrypted_data[1..], inner_mode);
+        // Nested encryption (E inside E) is not valid
+        if inner_mode == CompressionMode::Encrypted {
+            return Err(BlteError::NestedEncryption);
         }
+        // Decompress the decrypted data
+        return decompress_chunk(&decrypted_data[1..], inner_mode);
     }
 
     Ok(decrypted_data)

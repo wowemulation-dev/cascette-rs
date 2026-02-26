@@ -19,10 +19,11 @@ impl Salsa20Cipher {
     ///
     /// # Arguments
     /// * `key` - 16-byte encryption key
-    /// * `iv` - 4-byte initialization vector
+    /// * `iv` - 4 or 8 byte initialization vector. A 4-byte IV is
+    ///   zero-padded to 8 bytes. An 8-byte IV is used directly.
     /// * `block_index` - Block index for multi-block encryption
     pub fn new(key: &[u8; 16], iv: &[u8], block_index: usize) -> Result<Self, CryptoError> {
-        if iv.len() != 4 {
+        if iv.len() != 4 && iv.len() != 8 {
             return Err(CryptoError::InvalidIvSize {
                 expected: 4,
                 actual: iv.len(),
@@ -52,8 +53,9 @@ impl Salsa20Cipher {
         state[14] = state[4];
 
         // IV with block index XOR
+        // 4-byte IVs are zero-padded to 8; 8-byte IVs are used directly
         let mut extended_iv = [0u8; 8];
-        extended_iv[..4].copy_from_slice(iv);
+        extended_iv[..iv.len()].copy_from_slice(iv);
 
         // XOR block index with first 4 bytes
         #[allow(clippy::cast_possible_truncation)]
@@ -210,10 +212,57 @@ mod tests {
     #[test]
     fn test_salsa20_invalid_iv() {
         let key = [0x01u8; 16];
-        let invalid_iv = [0x02, 0x03]; // Too short
         let plaintext = b"Test";
 
-        let result = encrypt_salsa20(plaintext, &key, &invalid_iv, 0);
+        // 2 bytes: too short
+        let result = encrypt_salsa20(plaintext, &key, &[0x02, 0x03], 0);
         assert!(matches!(result, Err(CryptoError::InvalidIvSize { .. })));
+
+        // 6 bytes: between valid sizes
+        let result = encrypt_salsa20(plaintext, &key, &[0x01; 6], 0);
+        assert!(matches!(result, Err(CryptoError::InvalidIvSize { .. })));
+
+        // 12 bytes: too long
+        let result = encrypt_salsa20(plaintext, &key, &[0x01; 12], 0);
+        assert!(matches!(result, Err(CryptoError::InvalidIvSize { .. })));
+    }
+
+    #[test]
+    fn test_salsa20_8byte_iv_round_trip() {
+        let key = [0x42u8; 16];
+        let iv = [0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88];
+        let plaintext = b"Test data with 8-byte IV";
+
+        let ciphertext =
+            encrypt_salsa20(plaintext, &key, &iv, 0).expect("Operation should succeed");
+        assert_ne!(&ciphertext[..], plaintext);
+
+        let decrypted =
+            decrypt_salsa20(&ciphertext, &key, &iv, 0).expect("Operation should succeed");
+        assert_eq!(&decrypted[..], plaintext);
+    }
+
+    #[test]
+    fn test_salsa20_4byte_vs_8byte_iv() {
+        let key = [0x42u8; 16];
+        let plaintext = b"Test data for IV comparison";
+
+        // 4-byte IV [0x11, 0x22, 0x33, 0x44] is zero-padded to
+        // [0x11, 0x22, 0x33, 0x44, 0x00, 0x00, 0x00, 0x00]
+        let iv4 = [0x11, 0x22, 0x33, 0x44];
+        let iv8_same = [0x11, 0x22, 0x33, 0x44, 0x00, 0x00, 0x00, 0x00];
+        let iv8_diff = [0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88];
+
+        let ct4 = encrypt_salsa20(plaintext, &key, &iv4, 0).expect("Operation should succeed");
+        let ct8_same =
+            encrypt_salsa20(plaintext, &key, &iv8_same, 0).expect("Operation should succeed");
+        let ct8_diff =
+            encrypt_salsa20(plaintext, &key, &iv8_diff, 0).expect("Operation should succeed");
+
+        // 4-byte IV zero-padded should produce same result as 8-byte with trailing zeros
+        assert_eq!(ct4, ct8_same);
+
+        // Different upper 4 bytes should produce different ciphertext
+        assert_ne!(ct4, ct8_diff);
     }
 }
