@@ -56,7 +56,8 @@ files required for a build.
 
 ### Format
 
-Key-value pairs, one per line, with `=` delimiter.
+Key-value pairs, one per line, with ` = ` delimiter (space-equals-space).
+Values may contain multiple space-separated tokens (e.g., content key + encoding key).
 
 ### Common Keys
 
@@ -82,6 +83,10 @@ Key-value pairs, one per line, with `=` delimiter.
 | `build-attributes` | Build attribute metadata | Attribute string |
 | `build-file-db` | File database for containerless builds | Hash value |
 | `build-file-db-size` | Size of file database | Size in bytes |
+| `client-version` | Client version string | Version string |
+| `feature-placeholder` | Feature placeholder flag | `true` or absent |
+| `feature-use-hardlinks` | Enable hard link support | `true` or absent |
+| `no-frame-encoding` | Disable frame encoding (sets v3.0.0) | `true` or absent |
 | `vfs-root-espec` | ESpec for VFS root manifest | ESpec string |
 | `install-high-ver` | High-version install manifest hash | Hash value |
 | `install-high-ver-size` | Size of high-version install | Size in bytes |
@@ -98,6 +103,7 @@ File System) manifests:
 | `vfs-root-size` | Sizes for TVFS root manifest | `50071 33487` |
 | `vfs-1` through `vfs-N` | Additional TVFS manifests for different products/regions | Same format as vfs-root |
 | `vfs-N-size` | Size for corresponding VFS manifest | Same format as vfs-root-size |
+| `vfs-N-espec` | Encoding spec for corresponding VFS manifest | ESpec string |
 
 **Important**: Each `vfs-*` field points to a TVFS manifest file that contains
 the virtual file system structure. These manifests are BLTE-encoded and

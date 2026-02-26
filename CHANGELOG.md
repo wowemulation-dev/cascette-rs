@@ -64,6 +64,17 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   CDN data (14 tests covering header fields, page size shift encoding, ESpec
   table, CKey/EKey page entries, page index sorting, page checksums, round-trip,
   byte-exact round-trip, CKey/EKey lookups, batch lookup, data size calculation)
+- cascette-formats: BuildConfig typed accessors for all Agent.exe build config
+  keys: `build_file_db()`, `client_version()`, `chunk_entries()`,
+  `feature_use_hardlinks()`, `feature_placeholder()`, `install_high_ver()`,
+  `key_layout_index_bits()`, `key_layout_entries()`, `no_frame_encoding()`,
+  `vfs_espec()`, `vfs_root_espec()`
+- cascette-formats: Build config CDN test fixtures (3 files from WoW Classic
+  Era, WoW Classic, and WoW Retail) with manifest.json metadata
+- cascette-formats: Integration tests for build config parsing against real CDN
+  data (14 tests covering parsing, required fields, metadata, build UIDs, hash
+  format, sizes, feature flags, VFS entries, partial priority, validation,
+  round-trip, dual-hash format, raw accessor)
 
 ### Changed
 
@@ -80,6 +91,10 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (replaced fictional structs/methods with real `EncodingFile`, `EncodingBuilder`
   usage). Header `unknown` field renamed to `flags`. Builder example fixed to
   use correct field names and types.
+- docs: Config format documentation updated with missing build config keys
+  (`client-version`, `feature-placeholder`, `feature-use-hardlinks`,
+  `no-frame-encoding`, `vfs-N-espec`) and corrected key-value separator
+  description to ` = ` (space-equals-space)
 - cascette-formats: TVFS header `InvalidHeaderSize` error now shows both actual
   and expected values instead of hardcoded "expected 46"
 - cascette-formats: TVFS header gains `cft_offs_size()`, `est_offs_size()`, and
@@ -88,6 +103,15 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- cascette-formats: `build_partial_priority()` parsed incorrectly for real CDN
+  data. Joined values and split on commas, but CDN format uses space-separated
+  `HASH:PRIORITY` tokens. Now iterates parsed values directly.
+- cascette-formats: `BuildConfig::validate()` rejected configs with boolean
+  flags (`feature-placeholder = true`, `no-frame-encoding = 1`) because
+  non-digit non-hash values failed validation. Now skips feature flags, espec
+  strings, key-layout entries, chunk entries, and other non-hash fields.
+- cascette-formats: Removed typo key `build-playbuild-installer` from
+  `BuildConfig::build()` output ordering
 - cascette-formats: Patch archive rewritten from incorrect flat-entry model to
   block-based format matching real CDN data. Previous implementation used flat
   entries with null-terminated compression strings and rejected extended headers

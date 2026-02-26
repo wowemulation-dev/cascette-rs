@@ -1,0 +1,24 @@
+{
+  "description": "Build config files downloaded from Blizzard CDN for integration testing",
+  "fetched": "2026-02-26",
+  "files": {
+    "wow_classic_era_build_config.txt": {
+      "product": "wow_classic_era",
+      "build_name": "WOW-65989patch1.15.8_ClassicRetail",
+      "build_config_hash": "903cc3552ca1075d5bdc264eab8e2480",
+      "notes": "WoW Classic Era 1.15.8.65989. Has feature-placeholder, vfs entries 1-239."
+    },
+    "wow_classic_build_config.txt": {
+      "product": "wow_classic",
+      "build_name": "WOW-65988patch5.5.3_ClassicRetail",
+      "build_config_hash": "8c0bf563261db21d953517aba9564738",
+      "notes": "WoW Classic 5.5.3.65988. Has feature-placeholder, vfs entries 1-479."
+    },
+    "wow_build_config.txt": {
+      "product": "wow",
+      "build_name": "WOW-66066patch12.0.1_Retail",
+      "build_config_hash": "7b498dd7e196bf4161d631064f617189",
+      "notes": "WoW Retail 12.0.1.66066. Has build-partial-priority, feature-placeholder, vfs entries 1-879."
+    }
+  }
+}
