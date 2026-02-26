@@ -628,15 +628,17 @@ mod tests {
 
         // Encrypt the inner data (simulating nested encryption)
         let spec = EncryptionSpec::salsa20(key_name, iv);
-        let encrypted = encrypt_chunk_with_key(&inner_data, spec, &key, 0)
-            .expect("Encryption should succeed");
+        let encrypted =
+            encrypt_chunk_with_key(&inner_data, spec, &key, 0).expect("Encryption should succeed");
 
         let result = decrypt_chunk_with_keys(&encrypted, &key_store, 0);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("nested encryption"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("nested encryption")
+        );
     }
 }
 

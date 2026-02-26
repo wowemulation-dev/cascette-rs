@@ -253,10 +253,12 @@ mod tests {
         let key_store = cascette_crypto::TactKeyStore::new();
         let result = blte.decompress_with_keys(&key_store);
         assert!(result.is_err());
-        assert!(result
-            .expect_err("Should fail")
-            .to_string()
-            .contains("multi-chunk"));
+        assert!(
+            result
+                .expect_err("Should fail")
+                .to_string()
+                .contains("multi-chunk")
+        );
     }
 
     #[test]

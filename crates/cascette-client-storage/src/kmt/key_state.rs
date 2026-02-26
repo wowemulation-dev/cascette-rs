@@ -790,10 +790,7 @@ mod tests {
 
         // Different keys should produce different hash guards
         // (ignoring the high bit which is always set)
-        assert_ne!(
-            e1.hash_flags & 0x7FFF_FFFF,
-            e2.hash_flags & 0x7FFF_FFFF
-        );
+        assert_ne!(e1.hash_flags & 0x7FFF_FFFF, e2.hash_flags & 0x7FFF_FFFF);
     }
 
     #[test]

@@ -183,11 +183,7 @@ impl BlteBuilder {
     ///
     /// The encrypted payload always starts with an inner compression mode byte.
     /// After decryption, this byte indicates how to decompress the content.
-    fn create_encrypted_chunk(
-        &self,
-        data: Vec<u8>,
-        block_index: usize,
-    ) -> BlteResult<ChunkData> {
+    fn create_encrypted_chunk(&self, data: Vec<u8>, block_index: usize) -> BlteResult<ChunkData> {
         let encryption = self.encryption.as_ref().ok_or_else(|| {
             super::error::BlteError::CompressionError("No encryption config set".to_string())
         })?;
