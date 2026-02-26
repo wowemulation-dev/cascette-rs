@@ -42,11 +42,12 @@ impl SegmentHeader {
     /// `segment_index` is the segment number (0-1022).
     /// `path_hash` is the 16-byte hash of the storage path.
     pub fn generate(segment_index: u16, path_hash: &[u8; 16]) -> Self {
-        let mut headers = std::array::from_fn(|_| LocalHeader::new([0u8; 16], 0));
+        let mut headers =
+            std::array::from_fn(|i| LocalHeader::new([0u8; 16], 0, i * LOCAL_HEADER_SIZE));
 
         for (bucket, header) in headers.iter_mut().enumerate() {
             let key = generate_segment_key(path_hash, segment_index, bucket as u8);
-            *header = LocalHeader::new(key, 0);
+            *header = LocalHeader::new(key, 0, bucket * LOCAL_HEADER_SIZE);
         }
 
         Self { headers }
@@ -55,7 +56,7 @@ impl SegmentHeader {
     /// Create a zeroed segment header (for new/empty segments).
     pub fn zeroed() -> Self {
         Self {
-            headers: std::array::from_fn(|_| LocalHeader::new([0u8; 16], 0)),
+            headers: std::array::from_fn(|i| LocalHeader::new([0u8; 16], 0, i * LOCAL_HEADER_SIZE)),
         }
     }
 
@@ -67,7 +68,8 @@ impl SegmentHeader {
             return None;
         }
 
-        let mut headers = std::array::from_fn(|_| LocalHeader::new([0u8; 16], 0));
+        let mut headers =
+            std::array::from_fn(|i| LocalHeader::new([0u8; 16], 0, i * LOCAL_HEADER_SIZE));
 
         for (i, header) in headers.iter_mut().enumerate() {
             let offset = i * LOCAL_HEADER_SIZE;

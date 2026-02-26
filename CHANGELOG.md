@@ -128,6 +128,16 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- cascette-client-storage: KMT v8 hash guard now computed via Jenkins
+  hashlittle on 33 bytes (`entry[4..37]`, seed 0, OR `0x80000000`),
+  matching Agent.exe `casc::KmtV8::InsertEntry`. Previously used simple
+  XOR which produced incorrect guards.
+- cascette-client-storage: Reconstruction header `checksum_a` computed via
+  Jenkins hashlittle on first 22 bytes with seed `0x3D6BE971`, matching
+  Agent.exe `sub_72c49f`. Previously zeroed.
+- cascette-client-storage: Reconstruction header `checksum_b` computed via
+  XOR accumulation over first 26 bytes with rotating 4-byte index
+  `(base_offset + i) & 3`. Previously zeroed.
 - cascette-formats: BLTE encryption validation: reject single-chunk encrypted
   files (`SingleChunkEncrypted` error) and nested encryption (`NestedEncryption`
   error). Builder now forces multi-chunk header for encrypted content and always

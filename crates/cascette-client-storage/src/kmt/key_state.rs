@@ -19,6 +19,8 @@ use std::path::{Path, PathBuf};
 
 use tracing::debug;
 
+use cascette_crypto::jenkins::hashlittle;
+
 use crate::{Result, StorageError};
 
 /// Per-key residency state.
@@ -209,15 +211,20 @@ pub struct ResidencyEntry {
 }
 
 impl ResidencyEntry {
-    /// Create a new residency entry.
+    /// Create a new residency entry with Jenkins-based hash guard.
+    ///
+    /// Serializes the entry with hash_flags=0, computes the Jenkins hash
+    /// over bytes [4..37] (33 bytes), then stores the result with bit 31 set.
     pub fn new(ekey: [u8; 16], span: ResidencySpan, update_type: ResidencyUpdateType) -> Self {
-        let hash_flags = Self::compute_hash(&ekey);
-        Self {
-            hash_flags,
+        let mut entry = Self {
+            hash_flags: 0,
             ekey,
             span,
             update_type,
-        }
+        };
+        let bytes = entry.to_bytes();
+        entry.hash_flags = Self::compute_hash_guard(&bytes);
+        entry
     }
 
     /// Compute the V8 bucket hash for a 16-byte key.
@@ -231,20 +238,19 @@ impl ResidencyEntry {
         ((xor >> 4) ^ xor) & 0x0F
     }
 
-    /// Compute hash/flags for a key (XOR with high bit set).
-    fn compute_hash(ekey: &[u8; 16]) -> u32 {
-        let mut hash: u32 = 0;
-        // XOR 16 bytes into a u32 (4 bytes at a time)
-        for chunk in ekey.chunks(4) {
-            let val = u32::from_le_bytes([
-                chunk[0],
-                chunk.get(1).copied().unwrap_or(0),
-                chunk.get(2).copied().unwrap_or(0),
-                chunk.get(3).copied().unwrap_or(0),
-            ]);
-            hash ^= val;
-        }
-        hash | 0x8000_0000 // Set high bit for "valid entry"
+    /// Compute the hash guard from serialized entry bytes.
+    ///
+    /// Agent.exe: `JenkinsHashLittle2(&entry[4], 0x21, 0) | 0x80000000`
+    /// Hashes bytes [4..37] (33 bytes: ekey + span + update_type) with seed 0.
+    pub fn compute_hash_guard(entry_bytes: &[u8; RESIDENCY_ENTRY_SIZE]) -> u32 {
+        hashlittle(&entry_bytes[4..37], 0) | 0x8000_0000
+    }
+
+    /// Check if the hash guard matches the entry contents.
+    pub fn validate_hash_guard(&self) -> bool {
+        let bytes = self.to_bytes();
+        let expected = Self::compute_hash_guard(&bytes);
+        self.hash_flags == expected
     }
 
     /// Serialize to 40 bytes.
@@ -756,6 +762,39 @@ impl std::fmt::Debug for ResidencyDb {
 #[allow(clippy::expect_used)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_hash_guard_uses_jenkins() {
+        let ekey = [
+            0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66,
+            0x77, 0x88,
+        ];
+        let entry = ResidencyEntry::new(ekey, ResidencySpan::full(), ResidencyUpdateType::Set);
+
+        // Hash guard should have high bit set
+        assert!(entry.hash_flags & 0x8000_0000 != 0);
+
+        // Should match Jenkins hash of bytes [4..37] with seed 0
+        let bytes = entry.to_bytes();
+        let expected = hashlittle(&bytes[4..37], 0) | 0x8000_0000;
+        assert_eq!(entry.hash_flags, expected);
+
+        // Should pass validation
+        assert!(entry.validate_hash_guard());
+    }
+
+    #[test]
+    fn test_hash_guard_different_keys() {
+        let e1 = ResidencyEntry::new([0x11; 16], ResidencySpan::full(), ResidencyUpdateType::Set);
+        let e2 = ResidencyEntry::new([0x22; 16], ResidencySpan::full(), ResidencyUpdateType::Set);
+
+        // Different keys should produce different hash guards
+        // (ignoring the high bit which is always set)
+        assert_ne!(
+            e1.hash_flags & 0x7FFF_FFFF,
+            e2.hash_flags & 0x7FFF_FFFF
+        );
+    }
 
     #[test]
     fn test_residency_entry_round_trip() {

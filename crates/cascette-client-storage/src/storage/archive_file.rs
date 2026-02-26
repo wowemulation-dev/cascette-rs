@@ -280,8 +280,6 @@ impl ArchiveManager {
         // Build the 30-byte local header
         let blte_size = u32::try_from(blte_data.len())
             .map_err(|e| StorageError::Archive(format!("BLTE data too large: {e}")))?;
-        let header = LocalHeader::new(*encoding_key.as_bytes(), blte_size);
-        let header_bytes = header.to_bytes();
 
         // Combined size: 30-byte header + BLTE data
         let total_size = u32::try_from(LOCAL_HEADER_SIZE + blte_data.len())
@@ -309,6 +307,10 @@ impl ArchiveManager {
             let positions = self.write_positions.read();
             *positions.get(&archive_id).unwrap_or(&0)
         };
+
+        // Build local header with checksums (needs write position for checksum_b)
+        let header = LocalHeader::new(*encoding_key.as_bytes(), blte_size, offset as usize);
+        let header_bytes = header.to_bytes();
 
         // Write local header + BLTE data
         let mut combined = Vec::with_capacity(LOCAL_HEADER_SIZE + blte_data.len());
