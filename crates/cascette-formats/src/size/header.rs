@@ -5,6 +5,13 @@
 //!
 //! - V1: u64 total_size + u8 esize_bytes (19 bytes total)
 //! - V2: 5-byte (40-bit) total_size, esize fixed at 4 (15 bytes total)
+//!
+//! Base header layout (10 bytes):
+//! - Offset 0-1: magic "DS"
+//! - Offset 2: version (1 or 2)
+//! - Offset 3: ekey_size (encoding key bytes per entry, typically 9)
+//! - Offset 4-7: entry_count (u32 BE)
+//! - Offset 8-9: tag_count (u16 BE, number of tags after header)
 
 use crate::size::error::{Result, SizeError};
 use binrw::{BinRead, BinResult, BinWrite};
@@ -17,12 +24,12 @@ pub struct SizeHeaderV1 {
     pub magic: [u8; 2],
     /// Format version (1)
     pub version: u8,
-    /// Flags byte
-    pub flags: u8,
+    /// Encoding key size in bytes per entry (typically 9)
+    pub ekey_size: u8,
     /// Number of entries
     pub entry_count: u32,
-    /// Key size in bits
-    pub key_size_bits: u16,
+    /// Number of tags between header and entries
+    pub tag_count: u16,
     /// Total estimated size across all entries
     pub total_size: u64,
     /// Byte width of esize per entry (1-8)
@@ -36,12 +43,12 @@ pub struct SizeHeaderV2 {
     pub magic: [u8; 2],
     /// Format version (2)
     pub version: u8,
-    /// Flags byte
-    pub flags: u8,
+    /// Encoding key size in bytes per entry (typically 9)
+    pub ekey_size: u8,
     /// Number of entries
     pub entry_count: u32,
-    /// Key size in bits
-    pub key_size_bits: u16,
+    /// Number of tags between header and entries
+    pub tag_count: u16,
     /// Total estimated size as 40-bit value (max ~1TB)
     pub total_size: u64,
 }
@@ -58,31 +65,31 @@ pub enum SizeHeader {
 impl SizeHeader {
     /// Create a new V1 header
     pub fn new_v1(
-        flags: u8,
+        ekey_size: u8,
         entry_count: u32,
-        key_size_bits: u16,
+        tag_count: u16,
         total_size: u64,
         esize_bytes: u8,
     ) -> Self {
         Self::V1(SizeHeaderV1 {
             magic: *b"DS",
             version: 1,
-            flags,
+            ekey_size,
             entry_count,
-            key_size_bits,
+            tag_count,
             total_size,
             esize_bytes,
         })
     }
 
     /// Create a new V2 header
-    pub fn new_v2(flags: u8, entry_count: u32, key_size_bits: u16, total_size: u64) -> Self {
+    pub fn new_v2(ekey_size: u8, entry_count: u32, tag_count: u16, total_size: u64) -> Self {
         Self::V2(SizeHeaderV2 {
             magic: *b"DS",
             version: 2,
-            flags,
+            ekey_size,
             entry_count,
-            key_size_bits,
+            tag_count,
             total_size,
         })
     }
@@ -103,17 +110,20 @@ impl SizeHeader {
         }
     }
 
-    /// Get the key size in bits
-    pub fn key_size_bits(&self) -> u16 {
+    /// Get the number of tags
+    pub fn tag_count(&self) -> u16 {
         match self {
-            Self::V1(h) => h.key_size_bits,
-            Self::V2(h) => h.key_size_bits,
+            Self::V1(h) => h.tag_count,
+            Self::V2(h) => h.tag_count,
         }
     }
 
-    /// Get the key size in bytes (ceiling division of bits / 8)
-    pub fn key_size_bytes(&self) -> usize {
-        (self.key_size_bits() as usize).div_ceil(8)
+    /// Get the encoding key size in bytes per entry
+    pub fn ekey_size(&self) -> u8 {
+        match self {
+            Self::V1(h) => h.ekey_size,
+            Self::V2(h) => h.ekey_size,
+        }
     }
 
     /// Get the byte width of the esize field per entry
@@ -132,14 +142,6 @@ impl SizeHeader {
         match self {
             Self::V1(h) => h.total_size,
             Self::V2(h) => h.total_size,
-        }
-    }
-
-    /// Get the flags byte
-    pub fn flags(&self) -> u8 {
-        match self {
-            Self::V1(h) => h.flags,
-            Self::V2(h) => h.flags,
         }
     }
 
@@ -166,8 +168,9 @@ impl SizeHeader {
             return Err(SizeError::UnsupportedVersion(version));
         }
 
-        if self.key_size_bits() == 0 {
-            return Err(SizeError::InvalidKeySize);
+        let ekey_size = self.ekey_size();
+        if ekey_size == 0 || ekey_size > 16 {
+            return Err(SizeError::InvalidEKeySize(ekey_size));
         }
 
         if let Self::V1(h) = self
@@ -197,7 +200,7 @@ impl BinRead for SizeHeader {
         let version = buf1[0];
 
         reader.read_exact(&mut buf1)?;
-        let flags = buf1[0];
+        let ekey_size = buf1[0];
 
         let mut buf4 = [0u8; 4];
         reader.read_exact(&mut buf4)?;
@@ -205,7 +208,7 @@ impl BinRead for SizeHeader {
 
         let mut buf2 = [0u8; 2];
         reader.read_exact(&mut buf2)?;
-        let key_size_bits = u16::from_be_bytes(buf2);
+        let tag_count = u16::from_be_bytes(buf2);
 
         match version {
             1 => {
@@ -220,9 +223,9 @@ impl BinRead for SizeHeader {
                 Ok(Self::V1(SizeHeaderV1 {
                     magic,
                     version,
-                    flags,
+                    ekey_size,
                     entry_count,
-                    key_size_bits,
+                    tag_count,
                     total_size,
                     esize_bytes,
                 }))
@@ -240,9 +243,9 @@ impl BinRead for SizeHeader {
                 Ok(Self::V2(SizeHeaderV2 {
                     magic,
                     version,
-                    flags,
+                    ekey_size,
                     entry_count,
-                    key_size_bits,
+                    tag_count,
                     total_size,
                 }))
             }
@@ -267,18 +270,18 @@ impl BinWrite for SizeHeader {
             Self::V1(h) => {
                 writer.write_all(&h.magic)?;
                 writer.write_all(&[h.version])?;
-                writer.write_all(&[h.flags])?;
+                writer.write_all(&[h.ekey_size])?;
                 writer.write_all(&h.entry_count.to_be_bytes())?;
-                writer.write_all(&h.key_size_bits.to_be_bytes())?;
+                writer.write_all(&h.tag_count.to_be_bytes())?;
                 writer.write_all(&h.total_size.to_be_bytes())?;
                 writer.write_all(&[h.esize_bytes])?;
             }
             Self::V2(h) => {
                 writer.write_all(&h.magic)?;
                 writer.write_all(&[h.version])?;
-                writer.write_all(&[h.flags])?;
+                writer.write_all(&[h.ekey_size])?;
                 writer.write_all(&h.entry_count.to_be_bytes())?;
-                writer.write_all(&h.key_size_bits.to_be_bytes())?;
+                writer.write_all(&h.tag_count.to_be_bytes())?;
                 // Write 40-bit total_size as 5 bytes BE
                 let bytes = [
                     (h.total_size >> 32) as u8,
@@ -302,45 +305,43 @@ mod tests {
 
     #[test]
     fn test_header_v1_creation() {
-        let header = SizeHeader::new_v1(0, 100, 128, 50000, 4);
+        let header = SizeHeader::new_v1(9, 100, 0, 50000, 4);
 
         assert_eq!(header.version(), 1);
         assert_eq!(header.entry_count(), 100);
-        assert_eq!(header.key_size_bits(), 128);
-        assert_eq!(header.key_size_bytes(), 16);
+        assert_eq!(header.tag_count(), 0);
+        assert_eq!(header.ekey_size(), 9);
         assert_eq!(header.esize_bytes(), 4);
         assert_eq!(header.total_size(), 50000);
-        assert_eq!(header.flags(), 0);
         assert_eq!(header.header_size(), 19);
     }
 
     #[test]
     fn test_header_v2_creation() {
-        let header = SizeHeader::new_v2(0, 200, 128, 100000);
+        let header = SizeHeader::new_v2(9, 200, 0, 100000);
 
         assert_eq!(header.version(), 2);
         assert_eq!(header.entry_count(), 200);
-        assert_eq!(header.key_size_bits(), 128);
-        assert_eq!(header.key_size_bytes(), 16);
+        assert_eq!(header.tag_count(), 0);
+        assert_eq!(header.ekey_size(), 9);
         assert_eq!(header.esize_bytes(), 4); // V2 fixed at 4
         assert_eq!(header.total_size(), 100000);
-        assert_eq!(header.flags(), 0);
         assert_eq!(header.header_size(), 15);
     }
 
     #[test]
-    fn test_key_size_bytes_rounding() {
-        // 128 bits -> 16 bytes (exact)
-        let header = SizeHeader::new_v1(0, 0, 128, 0, 4);
-        assert_eq!(header.key_size_bytes(), 16);
+    fn test_ekey_size_values() {
+        // Standard truncated EKey size
+        let header = SizeHeader::new_v1(9, 0, 0, 0, 4);
+        assert_eq!(header.ekey_size(), 9);
 
-        // 129 bits -> 17 bytes (rounded up)
-        let header = SizeHeader::new_v1(0, 0, 129, 0, 4);
-        assert_eq!(header.key_size_bytes(), 17);
+        // Full EKey
+        let header = SizeHeader::new_v1(16, 0, 0, 0, 4);
+        assert_eq!(header.ekey_size(), 16);
 
-        // 1 bit -> 1 byte
-        let header = SizeHeader::new_v1(0, 0, 1, 0, 4);
-        assert_eq!(header.key_size_bytes(), 1);
+        // Minimum EKey
+        let header = SizeHeader::new_v1(1, 0, 0, 0, 4);
+        assert_eq!(header.ekey_size(), 1);
     }
 
     #[test]
@@ -348,9 +349,9 @@ mod tests {
         let mut data = Vec::new();
         data.extend_from_slice(b"DS"); // magic
         data.push(1); // version
-        data.push(0); // flags
+        data.push(9); // ekey_size
         data.extend_from_slice(&10u32.to_be_bytes()); // entry_count
-        data.extend_from_slice(&128u16.to_be_bytes()); // key_size_bits
+        data.extend_from_slice(&0u16.to_be_bytes()); // tag_count
         data.extend_from_slice(&5000u64.to_be_bytes()); // total_size
         data.push(4); // esize_bytes
 
@@ -360,7 +361,8 @@ mod tests {
 
         assert_eq!(header.version(), 1);
         assert_eq!(header.entry_count(), 10);
-        assert_eq!(header.key_size_bits(), 128);
+        assert_eq!(header.tag_count(), 0);
+        assert_eq!(header.ekey_size(), 9);
         assert_eq!(header.total_size(), 5000);
         assert_eq!(header.esize_bytes(), 4);
     }
@@ -371,9 +373,9 @@ mod tests {
         let mut data = Vec::new();
         data.extend_from_slice(b"DS"); // magic
         data.push(2); // version
-        data.push(0); // flags
+        data.push(9); // ekey_size
         data.extend_from_slice(&10u32.to_be_bytes()); // entry_count
-        data.extend_from_slice(&128u16.to_be_bytes()); // key_size_bits
+        data.extend_from_slice(&0u16.to_be_bytes()); // tag_count
         // 40-bit total_size
         data.push((total >> 32) as u8);
         data.push((total >> 24) as u8);
@@ -387,14 +389,15 @@ mod tests {
 
         assert_eq!(header.version(), 2);
         assert_eq!(header.entry_count(), 10);
-        assert_eq!(header.key_size_bits(), 128);
+        assert_eq!(header.tag_count(), 0);
+        assert_eq!(header.ekey_size(), 9);
         assert_eq!(header.total_size(), total);
         assert_eq!(header.esize_bytes(), 4);
     }
 
     #[test]
     fn test_header_v1_round_trip() {
-        let header = SizeHeader::new_v1(0x05, 42, 128, 999_999, 2);
+        let header = SizeHeader::new_v1(9, 42, 3, 999_999, 2);
         let mut buf = Vec::new();
         let mut cursor = Cursor::new(&mut buf);
         header
@@ -412,7 +415,7 @@ mod tests {
 
     #[test]
     fn test_header_v2_round_trip() {
-        let header = SizeHeader::new_v2(0x03, 1000, 128, 0xAB_CDEF_0123);
+        let header = SizeHeader::new_v2(9, 1000, 2, 0xAB_CDEF_0123);
         let mut buf = Vec::new();
         let mut cursor = Cursor::new(&mut buf);
         header
@@ -433,9 +436,9 @@ mod tests {
         let header = SizeHeader::V1(SizeHeaderV1 {
             magic: *b"XX",
             version: 1,
-            flags: 0,
+            ekey_size: 9,
             entry_count: 0,
-            key_size_bits: 128,
+            tag_count: 0,
             total_size: 0,
             esize_bytes: 4,
         });
@@ -471,9 +474,9 @@ mod tests {
         let header = SizeHeader::V1(SizeHeaderV1 {
             magic: *b"DS",
             version: 1,
-            flags: 0,
+            ekey_size: 9,
             entry_count: 0,
-            key_size_bits: 128,
+            tag_count: 0,
             total_size: 0,
             esize_bytes: 0,
         });
@@ -488,9 +491,9 @@ mod tests {
         let header = SizeHeader::V1(SizeHeaderV1 {
             magic: *b"DS",
             version: 1,
-            flags: 0,
+            ekey_size: 9,
             entry_count: 0,
-            key_size_bits: 128,
+            tag_count: 0,
             total_size: 0,
             esize_bytes: 9,
         });
@@ -501,17 +504,29 @@ mod tests {
     }
 
     #[test]
-    fn test_reject_key_size_bits_zero() {
+    fn test_reject_ekey_size_zero() {
         let header = SizeHeader::new_v1(0, 0, 0, 0, 4);
-        assert!(matches!(header.validate(), Err(SizeError::InvalidKeySize)));
+        assert!(matches!(
+            header.validate(),
+            Err(SizeError::InvalidEKeySize(0))
+        ));
+    }
+
+    #[test]
+    fn test_reject_ekey_size_17() {
+        let header = SizeHeader::new_v1(17, 0, 0, 0, 4);
+        assert!(matches!(
+            header.validate(),
+            Err(SizeError::InvalidEKeySize(17))
+        ));
     }
 
     #[test]
     fn test_header_size_values() {
-        let v1 = SizeHeader::new_v1(0, 0, 128, 0, 4);
+        let v1 = SizeHeader::new_v1(9, 0, 0, 0, 4);
         assert_eq!(v1.header_size(), 19);
 
-        let v2 = SizeHeader::new_v2(0, 0, 128, 0);
+        let v2 = SizeHeader::new_v2(9, 0, 0, 0);
         assert_eq!(v2.header_size(), 15);
     }
 }

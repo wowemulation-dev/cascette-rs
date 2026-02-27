@@ -26,19 +26,24 @@ pub enum SizeError {
     #[error("Invalid eSize byte count '{0}' in size manifest header")]
     InvalidEsizeWidth(u8),
 
-    /// Invalid key hash sentinel value (0x0000 or 0xFFFF)
-    #[error("Invalid key hash sentinel value: 0x{0:04X}")]
-    InvalidKeyHash(u16),
-
-    /// Invalid key size (key_size_bits must be > 0)
-    #[error("Invalid key size: key_size_bits must be > 0")]
-    InvalidKeySize,
+    /// Invalid EKey size (must be 1-16)
+    #[error("Invalid ekey_size: must be 1-16, got {0}")]
+    InvalidEKeySize(u8),
 
     /// Entry count mismatch between header and parsed entries
     #[error("Entry count mismatch: header says {expected}, found {actual}")]
     EntryCountMismatch {
         /// Count from the header
         expected: u32,
+        /// Actual parsed count
+        actual: usize,
+    },
+
+    /// Tag count mismatch between header and parsed tags
+    #[error("Tag count mismatch: header says {expected}, found {actual}")]
+    TagCountMismatch {
+        /// Count from the header
+        expected: u16,
         /// Actual parsed count
         actual: usize,
     },
@@ -96,10 +101,14 @@ mod tests {
         let err = SizeError::InvalidEsizeWidth(0);
         assert!(err.to_string().contains('0'));
 
-        let err = SizeError::InvalidKeyHash(0x0000);
-        assert!(err.to_string().contains("0x0000"));
+        let err = SizeError::InvalidEKeySize(0);
+        assert!(err.to_string().contains('0'));
 
-        let err = SizeError::InvalidKeyHash(0xFFFF);
-        assert!(err.to_string().contains("0xFFFF"));
+        let err = SizeError::TagCountMismatch {
+            expected: 3,
+            actual: 1,
+        };
+        assert!(err.to_string().contains('3'));
+        assert!(err.to_string().contains('1'));
     }
 }

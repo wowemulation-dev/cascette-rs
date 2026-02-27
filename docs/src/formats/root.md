@@ -76,8 +76,8 @@ consistency with Version 2.
 
 **Version Detection Heuristic**: After reading the magic, check the next two
 u32 values. If the first value (header_size) is in range [16, 100) and the
-second value (version) is 2, 3, or 4, the file is v3+. Otherwise treat the
-first value as total_file_count (v2).
+second value (version) is less than 10, the file is v3+. Otherwise treat the
+first value as total_file_count (v2). Version 1 maps to V2 block format.
 
 ### Block Structure
 
@@ -172,20 +172,24 @@ Content flags specify platform, architecture, and file attributes:
 
 ### 32-bit Flags (v2-v3)
 
-| Bit | Flag | Description |
-|-----|------|-------------|
-| 0 | LoadOnWindows | Windows platform |
-| 1 | LoadOnMacOS | macOS platform |
-| 3 | LowViolence | Censored content |
-| 9 | DoNotLoad | Skip file |
-| 10 | UpdatePlugin | Launcher plugin |
-| 11 | Arm64 | ARM64 architecture |
-| 12 | Encrypted | Encrypted content |
-| 13 | NoNameHash | No name hash in block |
-| 14 | UncommonResolution | Non-standard resolution |
-| 15 | Bundle | Bundled content |
-| 16 | NoCompression | Uncompressed |
-| 17 | NoTOCHash | No table of contents hash |
+Values match CascLib (`CascLib.h`), TACTSharp, and WoWDev wiki:
+
+| Value | Flag | Description |
+|-------|------|-------------|
+| 0x00000004 | Install | Install manifest entry |
+| 0x00000008 | LoadOnWindows | Windows platform |
+| 0x00000010 | LoadOnMacOS | macOS platform |
+| 0x00000020 | x86_32 | 32-bit x86 architecture |
+| 0x00000040 | x86_64 | 64-bit x86 architecture |
+| 0x00000080 | LowViolence | Censored content |
+| 0x00000100 | DoNotLoad | Skip file |
+| 0x00000800 | UpdatePlugin | Launcher plugin |
+| 0x00008000 | Arm64 | ARM64 architecture |
+| 0x08000000 | Encrypted | Encrypted content |
+| 0x10000000 | NoNameHash | No name hash in block |
+| 0x20000000 | UncommonResolution | Non-standard resolution |
+| 0x40000000 | Bundle | Bundled content |
+| 0x80000000 | NoCompression | Uncompressed |
 
 ### 40-bit Flags (v4+)
 
@@ -199,13 +203,13 @@ Common combinations:
 
 - `0x00000000`: All platforms, default
 
-- `0x00000001`: Windows only
+- `0x00000008`: Windows only
 
-- `0x00000002`: macOS only
+- `0x00000010`: macOS only
 
-- `0x00001000`: Encrypted content
+- `0x08000000`: Encrypted content
 
-- `0x00002000`: No name hash present
+- `0x10000000`: No name hash present
 
 ## Locale Flags
 
@@ -274,24 +278,23 @@ For named files, Jenkins96 hash (hashlittle2) is used:
 
 ```rust
 fn jenkins96_hash(filename: &str) -> u64 {
-    // Normalize path: uppercase and backslashes to forward slashes
-    let normalized = filename.to_uppercase().replace('\\', "/");
+    // Normalize path: uppercase with backslashes (matching CascLib's
+    // NormalizeFileName_UpperBkSlash)
+    let normalized = filename.to_uppercase().replace('/', "\\");
     let bytes = normalized.as_bytes();
 
-    // Jenkins hashlittle2 with 0xDEADBEEF seed
-    // Initial values: pc = 0, pb = 0 (passed by reference)
-    let (pc, pb) = hashlittle2(bytes, 0, 0);
+    // Jenkins hashlittle2 with pc=0, pb=0
+    let hash = Jenkins96::hash(bytes);
 
-    // WoW swaps the high/low 32-bit halves
-    let high = (hash64 >> 32) as u32;
-    let low = (hash64 & 0xFFFF_FFFF) as u32;
-    (u64::from(low) << 32) | u64::from(high)
+    // Return (pc << 32) | pb directly (no word swap)
+    // Matches CascLib's CalcNormNameHash
+    hash.hash64
 }
 ```
 
 **Important Jenkins96 Details**:
 
-- Paths are normalized to uppercase with forward slashes
+- Paths are normalized to uppercase with backslashes (not forward slashes)
 
 - The hash is 64-bit (8 bytes) not 96-bit despite the name
 
@@ -347,8 +350,9 @@ impl RootFile {
 
 - **Build 30080 (8.2.0)**: Added MFST magic signature (V2)
   - MFST/TSFM magic header with file counts
-  - **17-byte block header**: `num_records, locale_flags, content_flags, unk2, unk3`
+  - **17-byte block header**: `num_records, locale_flags, content_flags_1, content_flags_2, content_flags_3`
   - Field order changed: `locale_flags` moved before `content_flags`
+  - Combined content flags: `content_flags_1 | content_flags_2 | (content_flags_3 << 17)`
   - Separated array format: all ckeys, then all name_hashes
 
 - **Build 50893 (10.1.7)**: Added header_size/version fields (V3)
@@ -377,13 +381,12 @@ fn detect_root_version(data: &[u8]) -> RootVersion {
     let value1 = u32::from_le_bytes(data[4..8].try_into().unwrap());
     let value2 = u32::from_le_bytes(data[8..12].try_into().unwrap());
 
-    // Heuristic: header_size in [16, 100) and version in [2, 4]
+    // Heuristic: header_size in [16, 100) and version < 10
     // indicates v3+ with explicit header_size/version fields
-    if (16..100).contains(&value1) && matches!(value2, 2..=4) {
-        // Version field at offset 8 distinguishes v3 and v4
+    if (16..100).contains(&value1) && value2 < 10 {
         match value2 {
-            4 => RootVersion::V4,
-            _ => RootVersion::V3,
+            4.. => RootVersion::V4,
+            _ => RootVersion::V3, // version 1-3 all use V2/V3 block format
         }
     } else {
         RootVersion::V2 // 30080+, value1 is total_file_count
@@ -429,6 +432,28 @@ implementation.
 5. **Flag interpretation**: Game-specific flag meanings vary
 
 6. **Delta overflow**: Large gaps in FileDataIDs can cause integer overflow
+
+## Implementation Notes
+
+### Version Detection Heuristic
+
+The version detection uses `value2 < 10` to identify extended headers, which is
+broader than the strict `matches!(value2, 1..=4)` check. Version 1 is accepted
+and maps to V2 block format (17-byte header, locale_flags first). This matches
+CascLib and TACTSharp behavior. The heuristic may need tightening if future
+versions use values in the 5-9 range for non-version purposes.
+
+### Block Header Dispatch
+
+The current dispatch is verified correct:
+- Plain V1 files (no MFST/TSFM magic) use the 12-byte header (content_flags
+  first)
+- All MFST/TSFM files (including Classic Era) use the 17-byte header
+  (locale_flags first)
+- V4 files use the 18-byte header (40-bit content flags)
+
+The V2 17-byte format applies to all MFST/TSFM files regardless of the header
+version field value. The 12-byte format is only used for pre-magic V1 files.
 
 ## References
 
