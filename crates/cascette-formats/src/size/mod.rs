@@ -13,7 +13,28 @@
 //! - Versions: 1 (variable esize width) and 2 (fixed 4-byte esize)
 //! - All multi-byte integers: big-endian
 //! - V1 header: 19 bytes, V2 header: 15 bytes
-//! - Entries: encoding key + 16-bit key hash + variable-width esize
+//!
+//! ## Header Layout (10-byte base)
+//!
+//! | Offset | Size | Field | Description |
+//! |--------|------|-------|-------------|
+//! | 0-1 | 2 | magic | "DS" (0x44, 0x53) |
+//! | 2 | 1 | version | 1 or 2 |
+//! | 3 | 1 | ekey_size | Encoding key bytes per entry (typically 9) |
+//! | 4-7 | 4 | entry_count | Number of file entries |
+//! | 8-9 | 2 | tag_count | Number of tags between header and entries |
+//!
+//! ## Entry Layout
+//!
+//! Each entry is `ekey[ekey_size] + esize[esize_bytes]` bytes, with no
+//! additional fields.
+//!
+//! ## Binary Layout
+//!
+//! Header → Tags → Entries
+//!
+//! Tags use the same structure as install and download manifest tags
+//! (`InstallTag`), with null-terminated name, u16 type, and a bit mask.
 //!
 //! # Usage
 //!
@@ -24,9 +45,9 @@
 //! // Build a size manifest
 //! let manifest = SizeManifestBuilder::new()
 //!     .version(2)
-//!     .key_size_bits(128)
-//!     .add_entry(vec![0xAA; 16], 0x1234, 1024)
-//!     .add_entry(vec![0xBB; 16], 0x5678, 2048)
+//!     .ekey_size(9)
+//!     .add_entry(vec![0xAA; 9], 1024)
+//!     .add_entry(vec![0xBB; 9], 2048)
 //!     .build()?;
 //!
 //! // Serialize to bytes
@@ -45,6 +66,13 @@ pub mod error;
 pub mod header;
 pub mod manifest;
 
+use crate::install::InstallTag;
+
+/// Size manifest tag type alias
+///
+/// Size manifests use the same tag structure as install and download manifests.
+pub type SizeTag = InstallTag;
+
 // Re-export main types
 pub use builder::SizeManifestBuilder;
 pub use entry::SizeEntry;
@@ -61,9 +89,9 @@ mod tests {
     fn test_re_exports_accessible() {
         // Verify all public types are accessible through the module re-exports
         let _ = SizeManifestBuilder::new();
-        let header = SizeHeader::new_v2(0, 0, 128, 0);
+        let header = SizeHeader::new_v2(9, 0, 0, 0);
         assert_eq!(header.version(), 2);
-        let entry = SizeEntry::new(vec![0x00; 16], 0x1234, 100);
+        let entry = SizeEntry::new(vec![0x00; 9], 100);
         assert_eq!(entry.esize, 100);
     }
 
@@ -72,9 +100,9 @@ mod tests {
         // Build -> serialize -> parse round-trip
         let manifest = SizeManifestBuilder::new()
             .version(1)
-            .key_size_bits(128)
-            .add_entry(vec![0xAA; 16], 0x1111, 500)
-            .add_entry(vec![0xBB; 16], 0x2222, 700)
+            .ekey_size(9)
+            .add_entry(vec![0xAA; 9], 500)
+            .add_entry(vec![0xBB; 9], 700)
             .build()
             .expect("Should build manifest");
 

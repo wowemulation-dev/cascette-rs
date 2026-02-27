@@ -1,28 +1,33 @@
 //! Main size manifest implementation
 
+use crate::install::InstallTag;
+use crate::size::SizeTag;
 use crate::size::entry::SizeEntry;
 use crate::size::error::{Result, SizeError};
 use crate::size::header::SizeHeader;
 use binrw::{BinRead, BinWrite};
 use std::io::Cursor;
 
-/// Complete size manifest with header and entries
+/// Complete size manifest with header, tags, and entries
 ///
 /// The Size manifest maps encoding keys to estimated file sizes (eSize).
 /// It is used when compressed size is unavailable, enabling disk space
 /// estimation and download progress reporting.
 ///
-/// Binary layout: Header → Entries
+/// Binary layout: Header → Tags → Entries
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SizeManifest {
     /// Version-aware header
     pub header: SizeHeader,
+    /// Tags between header and entries (same format as install/download tags)
+    pub tags: Vec<SizeTag>,
     /// Encoding key to esize entries
     pub entries: Vec<SizeEntry>,
 }
 
-/// Minimum data size to read the base header fields (magic + version + flags +
-/// entry_count + key_size_bits = 10 bytes) plus the V2 extension (5 bytes) = 15
+/// Minimum data size to read the base header fields (magic + version +
+/// ekey_size + entry_count + tag_count = 10 bytes) plus the V2 extension
+/// (5 bytes) = 15
 const MIN_HEADER_SIZE: usize = 15;
 
 /// Minimum V1 header size (base 10 + u64 total_size 8 + u8 esize_bytes 1 = 19)
@@ -56,6 +61,15 @@ impl SizeManifest {
         // Validate header
         header.validate()?;
 
+        // Parse tags (between header and entries)
+        let mut tags = Vec::with_capacity(header.tag_count() as usize);
+        for _ in 0..header.tag_count() {
+            let tag =
+                InstallTag::read_options(&mut cursor, binrw::Endian::Big, header.entry_count())
+                    .map_err(SizeError::from)?;
+            tags.push(tag);
+        }
+
         // Parse entries
         let mut entries = Vec::with_capacity(header.entry_count() as usize);
         for _ in 0..header.entry_count() {
@@ -64,7 +78,11 @@ impl SizeManifest {
             entries.push(entry);
         }
 
-        let manifest = Self { header, entries };
+        let manifest = Self {
+            header,
+            tags,
+            entries,
+        };
 
         // Final validation
         manifest.validate()?;
@@ -84,6 +102,12 @@ impl SizeManifest {
             .write_options(&mut cursor, binrw::Endian::Big, ())
             .map_err(SizeError::from)?;
 
+        // Write tags
+        for tag in &self.tags {
+            tag.write_options(&mut cursor, binrw::Endian::Big, ())
+                .map_err(SizeError::from)?;
+        }
+
         // Write entries
         for entry in &self.entries {
             entry
@@ -98,6 +122,14 @@ impl SizeManifest {
     pub fn validate(&self) -> Result<()> {
         // Validate header
         self.header.validate()?;
+
+        // Validate tag count
+        if self.tags.len() != self.header.tag_count() as usize {
+            return Err(SizeError::TagCountMismatch {
+                expected: self.header.tag_count(),
+                actual: self.tags.len(),
+            });
+        }
 
         // Validate entry count
         if self.entries.len() != self.header.entry_count() as usize {
@@ -141,30 +173,33 @@ impl crate::CascFormat for SizeManifest {
 mod tests {
     use super::*;
     use crate::CascFormat;
+    use crate::install::TagType;
     use crate::size::builder::SizeManifestBuilder;
 
     fn build_v1_manifest_bytes(
+        ekey_size: u8,
         entry_count: u32,
-        key_size_bits: u16,
+        tag_count: u16,
         esize_bytes: u8,
-        entries: &[(Vec<u8>, u16, u64)],
+        entries: &[(Vec<u8>, u64)],
     ) -> Vec<u8> {
-        let total_size: u64 = entries.iter().map(|(_, _, s)| *s).sum();
+        let total_size: u64 = entries.iter().map(|(_, s)| *s).sum();
         let mut data = Vec::new();
 
         // Header
         data.extend_from_slice(b"DS");
         data.push(1); // version
-        data.push(0); // flags
+        data.push(ekey_size);
         data.extend_from_slice(&entry_count.to_be_bytes());
-        data.extend_from_slice(&key_size_bits.to_be_bytes());
+        data.extend_from_slice(&tag_count.to_be_bytes());
         data.extend_from_slice(&total_size.to_be_bytes());
         data.push(esize_bytes);
 
+        // No tags in this helper (tag_count should be 0)
+
         // Entries
-        for (key, hash, esize) in entries {
+        for (key, esize) in entries {
             data.extend_from_slice(key);
-            data.extend_from_slice(&hash.to_be_bytes());
             // Write esize as esize_bytes bytes BE
             for i in (0..esize_bytes as usize).rev() {
                 data.push((esize >> (i * 8)) as u8);
@@ -176,17 +211,14 @@ mod tests {
 
     #[test]
     fn test_parse_complete_v1_manifest() {
-        let entries = vec![
-            (vec![0xAA; 16], 0x1234u16, 1000u64),
-            (vec![0xBB; 16], 0x5678u16, 2000u64),
-        ];
-        let data = build_v1_manifest_bytes(2, 128, 4, &entries);
+        let entries = vec![(vec![0xAA; 9], 1000u64), (vec![0xBB; 9], 2000u64)];
+        let data = build_v1_manifest_bytes(9, 2, 0, 4, &entries);
 
         let manifest = SizeManifest::parse(&data).expect("Should parse manifest");
         assert_eq!(manifest.header.version(), 1);
         assert_eq!(manifest.entries.len(), 2);
-        assert_eq!(manifest.entries[0].key, vec![0xAA; 16]);
-        assert_eq!(manifest.entries[0].key_hash, 0x1234);
+        assert_eq!(manifest.tags.len(), 0);
+        assert_eq!(manifest.entries[0].key, vec![0xAA; 9]);
         assert_eq!(manifest.entries[0].esize, 1000);
         assert_eq!(manifest.entries[1].esize, 2000);
         assert_eq!(manifest.header.total_size(), 3000);
@@ -200,9 +232,9 @@ mod tests {
         // V2 header
         data.extend_from_slice(b"DS");
         data.push(2); // version
-        data.push(0); // flags
+        data.push(9); // ekey_size
         data.extend_from_slice(&1u32.to_be_bytes()); // entry_count
-        data.extend_from_slice(&128u16.to_be_bytes()); // key_size_bits
+        data.extend_from_slice(&0u16.to_be_bytes()); // tag_count
         // 40-bit total_size
         data.push((total >> 32) as u8);
         data.push((total >> 24) as u8);
@@ -210,25 +242,25 @@ mod tests {
         data.push((total >> 8) as u8);
         data.push(total as u8);
 
-        // Entry: key(16) + hash(2) + esize(4)
-        data.extend_from_slice(&[0xCC; 16]);
-        data.extend_from_slice(&0x9ABCu16.to_be_bytes());
+        // Entry: key(9) + esize(4)
+        data.extend_from_slice(&[0xCC; 9]);
         data.extend_from_slice(&500u32.to_be_bytes());
 
         let manifest = SizeManifest::parse(&data).expect("Should parse V2 manifest");
         assert_eq!(manifest.header.version(), 2);
         assert_eq!(manifest.entries.len(), 1);
+        assert_eq!(manifest.tags.len(), 0);
         assert_eq!(manifest.entries[0].esize, 500);
     }
 
     #[test]
     fn test_manifest_round_trip() {
         let entries = vec![
-            (vec![0x11; 16], 0x1111u16, 100u64),
-            (vec![0x22; 16], 0x2222u16, 200u64),
-            (vec![0x33; 16], 0x3333u16, 300u64),
+            (vec![0x11; 9], 100u64),
+            (vec![0x22; 9], 200u64),
+            (vec![0x33; 9], 300u64),
         ];
-        let data = build_v1_manifest_bytes(3, 128, 4, &entries);
+        let data = build_v1_manifest_bytes(9, 3, 0, 4, &entries);
 
         let manifest = SizeManifest::parse(&data).expect("Should parse");
         let rebuilt = manifest.build().expect("Should build");
@@ -238,17 +270,19 @@ mod tests {
 
     #[test]
     fn test_empty_manifest() {
-        let data = build_v1_manifest_bytes(0, 128, 4, &[]);
+        let data = build_v1_manifest_bytes(9, 0, 0, 4, &[]);
         let manifest = SizeManifest::parse(&data).expect("Should parse empty manifest");
         assert_eq!(manifest.entries.len(), 0);
+        assert_eq!(manifest.tags.len(), 0);
         assert_eq!(manifest.header.total_size(), 0);
     }
 
     #[test]
     fn test_validation_count_mismatch() {
         let manifest = SizeManifest {
-            header: SizeHeader::new_v1(0, 5, 128, 0, 4), // claims 5 entries
-            entries: vec![],                             // but has 0
+            header: SizeHeader::new_v1(9, 5, 0, 0, 4), // claims 5 entries
+            tags: vec![],
+            entries: vec![], // but has 0
         };
         assert!(matches!(
             manifest.validate(),
@@ -260,10 +294,27 @@ mod tests {
     }
 
     #[test]
+    fn test_validation_tag_count_mismatch() {
+        let manifest = SizeManifest {
+            header: SizeHeader::new_v1(9, 0, 2, 0, 4), // claims 2 tags
+            tags: vec![],                              // but has 0
+            entries: vec![],
+        };
+        assert!(matches!(
+            manifest.validate(),
+            Err(SizeError::TagCountMismatch {
+                expected: 2,
+                actual: 0
+            })
+        ));
+    }
+
+    #[test]
     fn test_validation_total_size_mismatch() {
         let manifest = SizeManifest {
-            header: SizeHeader::new_v1(0, 1, 128, 9999, 4), // claims total 9999
-            entries: vec![SizeEntry::new(vec![0x00; 16], 0x1234, 100)], // but sum is 100
+            header: SizeHeader::new_v1(9, 1, 0, 9999, 4), // claims total 9999
+            tags: vec![],
+            entries: vec![SizeEntry::new(vec![0x00; 9], 100)], // but sum is 100
         };
         assert!(matches!(
             manifest.validate(),
@@ -288,8 +339,8 @@ mod tests {
 
     #[test]
     fn test_casc_format_trait_round_trip() {
-        let entries = vec![(vec![0xFF; 16], 0x0001u16, 42u64)];
-        let data = build_v1_manifest_bytes(1, 128, 4, &entries);
+        let entries = vec![(vec![0xFF; 9], 42u64)];
+        let data = build_v1_manifest_bytes(9, 1, 0, 4, &entries);
 
         let manifest = <SizeManifest as CascFormat>::parse(&data).expect("CascFormat parse");
         let rebuilt = CascFormat::build(&manifest).expect("CascFormat build");
@@ -300,9 +351,9 @@ mod tests {
     fn test_builder_round_trip() {
         let manifest = SizeManifestBuilder::new()
             .version(1)
-            .key_size_bits(128)
-            .add_entry(vec![0xAA; 16], 0x1234, 500)
-            .add_entry(vec![0xBB; 16], 0x5678, 600)
+            .ekey_size(9)
+            .add_entry(vec![0xAA; 9], 500)
+            .add_entry(vec![0xBB; 9], 600)
             .build()
             .expect("Should build manifest");
 
@@ -313,5 +364,35 @@ mod tests {
         let data = manifest.build().expect("Should serialize");
         let parsed = SizeManifest::parse(&data).expect("Should parse");
         assert_eq!(manifest, parsed);
+    }
+
+    #[test]
+    fn test_manifest_with_tags_round_trip() {
+        let manifest = SizeManifestBuilder::new()
+            .version(2)
+            .ekey_size(9)
+            .add_entry(vec![0xAA; 9], 500)
+            .add_entry(vec![0xBB; 9], 600)
+            .add_tag("Windows".to_string(), TagType::Platform)
+            .tag_file(0, 0)
+            .tag_file(0, 1)
+            .add_tag("x86_64".to_string(), TagType::Architecture)
+            .tag_file(1, 0)
+            .build()
+            .expect("Should build manifest");
+
+        assert_eq!(manifest.header.tag_count(), 2);
+        assert_eq!(manifest.tags.len(), 2);
+
+        let data = manifest.build().expect("Should serialize");
+        let parsed = SizeManifest::parse(&data).expect("Should parse");
+        assert_eq!(manifest, parsed);
+        assert_eq!(parsed.tags.len(), 2);
+        assert_eq!(parsed.tags[0].name, "Windows");
+        assert!(parsed.tags[0].has_file(0));
+        assert!(parsed.tags[0].has_file(1));
+        assert_eq!(parsed.tags[1].name, "x86_64");
+        assert!(parsed.tags[1].has_file(0));
+        assert!(!parsed.tags[1].has_file(1));
     }
 }
