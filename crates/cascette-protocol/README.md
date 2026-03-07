@@ -87,6 +87,7 @@ cargo run --example wow_classic_native
 ```
 
 Features demonstrated:
+
 - Protocol client with automatic fallback (TACT HTTPS -> HTTP -> Ribbit TCP)
 - Version and CDN endpoint queries
 - Build config and CDN config downloads
@@ -107,10 +108,12 @@ It demonstrates the subset of features available in WASM environments.
 ## Platform Support
 
 ### Native (Full Support)
+
 - Linux, macOS, Windows
 - All features available including TCP Ribbit protocol and streaming downloads
 
 ### WASM (Full Support)
+
 - TACT HTTPS/HTTP client via browser Fetch API
 - CDN content downloads with progress tracking
 - Range request downloads with retry logic
@@ -118,6 +121,7 @@ It demonstrates the subset of features available in WASM environments.
 - Certificate chain validation
 
 **Native-only features** (not available in browsers):
+
 - Ribbit TCP protocol (browsers lack raw socket access)
 - Certificate fetching (requires Ribbit TCP)
 - Streaming downloads (WASM uses full download with progress callback)
@@ -126,6 +130,7 @@ It demonstrates the subset of features available in WASM environments.
 ## Dependencies
 
 ### Core
+
 - `tokio` - Async runtime (full features on native, sync primitives on WASM)
 - `reqwest` - HTTP client (rustls on native, Fetch API on WASM)
 - `async-trait` - Async trait support
@@ -138,6 +143,7 @@ It demonstrates the subset of features available in WASM environments.
 - `cascette-crypto` - Hash functions
 
 ### V1 MIME Support
+
 - `mail-parser` - MIME message parsing
 - `cms` - PKCS#7/CMS signature parsing
 - `x509-cert` - X.509 certificate parsing
@@ -145,6 +151,7 @@ It demonstrates the subset of features available in WASM environments.
 - `sha2` - SHA-2 hash functions
 
 ### WASM-specific
+
 - `gloo-timers` - Async sleep for retry backoff
 - `wasm-bindgen-futures` - Async runtime bridge
 - `web-sys` - Browser API access (localStorage)

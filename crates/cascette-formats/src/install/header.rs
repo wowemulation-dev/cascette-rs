@@ -80,7 +80,7 @@ impl InstallHeader {
 
     /// Get the effective content key size for entries.
     ///
-    /// V2 has an explicit field; V1 uses `ckey_length + 4` per Agent.exe.
+    /// V2 has an explicit field; V1 defaults to `ckey_length + 4`.
     pub fn content_key_size(&self) -> u8 {
         self.content_key_size
             .unwrap_or_else(|| self.ckey_length.saturating_add(4))

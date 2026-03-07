@@ -373,6 +373,7 @@ pub mod config;
 pub mod error;
 pub mod mime_parser;
 pub mod optimized;
+pub mod product_config;
 pub mod retry;
 pub mod transport;
 pub mod v1_mime;

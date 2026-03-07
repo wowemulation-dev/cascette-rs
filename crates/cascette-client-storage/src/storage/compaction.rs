@@ -1,6 +1,6 @@
 //! Two-phase compaction for CASC archive segments.
 //!
-//! Implements the compaction pipeline from Agent.exe:
+//! Implements the CASC compaction pipeline:
 //! - Archive merge (flag=0): consolidates fragmented segments
 //! - Extract-compact (flag=1): per-segment span validation and cleanup
 //!
@@ -109,7 +109,7 @@ impl CompactionPlan {
 
 /// Buffered file mover for compaction I/O.
 ///
-/// Sizing follows Agent.exe: `count = min(total >> 17, 16)`,
+/// Sizing: `count = min(total >> 17, 16)`,
 /// `per_buf = total / count`. Minimum total is 128 KiB.
 pub struct CompactionFileMover {
     /// Per-buffer size.

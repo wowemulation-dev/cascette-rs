@@ -97,5 +97,13 @@ required-features = ["local-install"]
 name = "read_archives"
 required-features = ["local-install"]
 
+[[example]]
+name = "local_verification"
+required-features = ["local-install"]
+
+[[example]]
+name = "extract_by_content_key"
+required-features = ["local-install"]
+
 [lints]
 workspace = true

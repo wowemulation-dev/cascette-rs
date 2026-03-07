@@ -279,8 +279,3 @@ Formats not yet tracked for transitions:
 
 - [Format Evolution Analysis Tools](https://github.com/wowemulation-dev/cascette-py)
 
----
-
-*Last Updated*: 2025-08-23
-*Verification Status*: Automated verification scripts created and tested
-*Next Review*: After implementing Rust parsers based on verified formats

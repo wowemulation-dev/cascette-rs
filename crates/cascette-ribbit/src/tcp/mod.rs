@@ -73,7 +73,7 @@ async fn handle_connection(
             let command = command.trim();
             tracing::debug!("Received TCP command from {addr}: {command}");
 
-            let response = handlers::handle_command(command, &state)?;
+            let response = handlers::handle_command(command, &state).await?;
 
             // Write response
             socket.write_all(response.as_bytes()).await?;

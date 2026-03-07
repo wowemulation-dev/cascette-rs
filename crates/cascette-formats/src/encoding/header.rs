@@ -21,8 +21,8 @@ pub struct EncodingHeader {
 
     /// Content key page size in KB (big-endian u16)
     ///
-    /// Agent.exe reads this as two bytes: `(hi << 8 | lo) << 0xa`, which is
-    /// equivalent to `value_u16 * 1024`. The raw value (typically 4) represents
+    /// Stored as two bytes: `(hi << 8 | lo) << 0xa`, which is equivalent to
+    /// `value_u16 * 1024`. The raw value (typically 4) represents
     /// kilobytes; use [`ckey_page_size()`](Self::ckey_page_size) to get the
     /// byte size (typically 4096).
     pub ckey_page_size_kb: u16,
@@ -39,10 +39,7 @@ pub struct EncodingHeader {
     /// Number of encoding key pages
     pub ekey_page_count: u32,
 
-    /// Flags field at offset 0x11 (must be 0)
-    ///
-    /// Agent.exe (`tact::EncodingTable::ParseHeader` at 0x6a23e6) validates
-    /// this field equals 0 and rejects the encoding table otherwise.
+    /// Flags field at offset 0x11 (must be 0).
     pub flags: u8,
 
     /// Size of `ESpec` block at end of file
@@ -66,7 +63,7 @@ impl EncodingHeader {
         }
     }
 
-    /// Validate header fields against Agent.exe constraints
+    /// Validate header fields
     pub fn validate(&self) -> Result<(), EncodingError> {
         if self.version != 1 {
             return Err(EncodingError::UnsupportedVersion(self.version));
@@ -181,8 +178,6 @@ mod tests {
 
     #[test]
     fn test_nonzero_flags_rejected() {
-        // Agent.exe (tact::EncodingTable::ParseHeader at 0x6a23e6) requires
-        // the flags byte at offset 0x11 to be exactly 0.
         let mut h = valid_header();
         h.flags = 1;
         assert!(matches!(h.validate(), Err(EncodingError::InvalidFlags(1))));

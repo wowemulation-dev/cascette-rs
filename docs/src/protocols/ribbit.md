@@ -1,7 +1,6 @@
 # Ribbit Protocol
 
-Ribbit is a TCP-based protocol operating on port 1119 that serves as the
-discovery
+Ribbit is a protocol operating on port 1119 that serves as the discovery
 mechanism for NGDP. It provides version information, CDN endpoints, and
 configuration data for Blizzard products.
 
@@ -78,7 +77,7 @@ sequenceDiagram
 
 | Endpoint | TCP Ribbit | HTTP TACT v1 | HTTPS TACT v2 |
 |----------|------------|---------------|---------------|
-| Summary | `v1/summary` | ✗ | ✗ |
+| Summary | `v1/summary` | ✗ | `/v2/summary` |
 | Product versions | `v1/products/{product}/versions` | `/{product}/versions` | `/{product}/versions` |
 | CDN config | `v1/products/{product}/cdns` | `/{product}/cdns` | `/{product}/cdns` |
 | Background download | `v1/products/{product}/bgdl` | `/{product}/bgdl` | `/{product}/bgdl` |
@@ -493,33 +492,24 @@ Implementations may cache DNS lookups:
 
 ## Product Identifiers
 
-Common product identifiers used with Ribbit:
+Common product identifiers used with Ribbit. For the full list of supported
+products with CDN paths and configuration details, see
+[Supported Products](../products.md).
 
 ### World of Warcraft
 
 - `wow` - Retail
+- `wow_classic` - Classic (Progressing)
+- `wow_classic_era` - Classic Era (the original World of Warcraft from 2004)
+- `wow_classic_titan` - Classic Titan (CN region only, WotLK 3.80.x with upgraded Classic/TBC content for level 80)
+- `wow_anniversary` - 20th Anniversary Edition (progresses through all Classic releases at a faster pace)
 
-- `wow_beta` - Beta
+### Battle.net Platform
 
-- `wow_classic` - Classic
-
-- `wow_classic_era` - Classic Era
-
-- `wow_classic_ptr` - Classic PTR
-
-- `wow_classic_titan` - Classic Titan (CN region only, WotLK 3.80.x with upgraded Classic/TBC raids)
-
-- `wow_anniversary` - Classic Anniversary (TBC 2.5.x, progression through Classic branches on a shortened timeline)
-
-- `wowt` - Public Test Realm
-
-- `wowz` - Internal/Development
-
-### Other Products
-
-- `agent` - Battle.net Agent
-
-- `bna` - Battle.net Application
+- `agent` - Battle.net background service
+- `bna` - Battle.net desktop app
+- `bts` - Battle.net setup (bootstrapper, provides launcher binaries for game products)
+- `catalogs` - Battle.net game catalog (metadata-only)
 
 ## Version Response Fields
 

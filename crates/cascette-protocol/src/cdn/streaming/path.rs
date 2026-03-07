@@ -388,7 +388,7 @@ impl CdnUrlBuilder {
         let hash_dir2 = &hash_lower[2..4];
 
         // Strip trailing slashes from cdn_path to prevent double slashes in URLs.
-        // Agent.exe normalizes cdnPath before URL construction.
+        // The Blizzard Agent normalizes cdnPath before URL construction.
         let normalized_path = cdn_path.trim_end_matches('/');
 
         let url = format!(

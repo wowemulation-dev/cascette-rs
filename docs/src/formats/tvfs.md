@@ -198,14 +198,18 @@ Container Table: Offset 11,882, Size 29,645 bytes
 
 ## Format Analysis Status
 
-**Verified against CascLib and CDN data (WoW Retail, Classic, Classic Era):**
+**Verified against CDN data (WoW Retail, Classic, Classic Era):**
 
 - Header format, magic bytes, flags, and table offsets
 - Path table recursive prefix tree with 0xFF NodeValue markers
 - VFS span-based entries with variable-width CFT offsets
-- CFT fixed-stride entries with flag-dependent fields
-- EST null-terminated encoding spec strings
+- CFT fixed-stride entries with flag-dependent fields (EKey, encoded_size, optional CKey/EST index)
+- EST resolution via encoding table lookup (not a standalone parse pass)
 - Round-trip parse/build produces structurally equivalent output
+
+The file manifest cache is built by iterating the VFS table sequentially
+(not by walking the path table trie). The path table is used only for path-string
+lookup after the cache is built.
 
 ## Usage
 

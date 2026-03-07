@@ -10,7 +10,7 @@ use std::io::Cursor;
 
 use crate::blte::{BlteError, BlteHeader, ChunkData};
 use crate::cdn::streaming::{HttpClient, HttpRange, StreamingError};
-use cascette_crypto::TactKeyStore;
+use cascette_crypto::TactKeyProvider;
 
 /// Configuration for streaming BLTE operations
 #[derive(Debug, Clone)]
@@ -59,7 +59,7 @@ impl<H: HttpClient> StreamingBlteProcessor<H> {
     ///
     /// # Arguments
     /// * `url` - URL of the BLTE content
-    /// * `key_store` - Optional TACT key store for decryption
+    /// * `key_store` - Optional TACT key provider for decryption
     ///
     /// # Returns
     /// Decompressed content bytes
@@ -69,7 +69,7 @@ impl<H: HttpClient> StreamingBlteProcessor<H> {
     pub async fn decompress_from_url(
         &self,
         url: &str,
-        key_store: Option<&TactKeyStore>,
+        key_store: Option<&dyn TactKeyProvider>,
     ) -> Result<Vec<u8>, StreamingError> {
         // First, read the BLTE header to determine structure
         let header_data = self.read_blte_header(url).await?;
@@ -88,7 +88,7 @@ impl<H: HttpClient> StreamingBlteProcessor<H> {
     /// * `url` - URL of the BLTE content
     /// * `chunk_start` - Starting chunk index (0-based)
     /// * `chunk_count` - Number of chunks to decompress
-    /// * `key_store` - Optional TACT key store for decryption
+    /// * `key_store` - Optional TACT key provider for decryption
     ///
     /// # Returns
     /// Decompressed content bytes for the specified chunk range
@@ -97,7 +97,7 @@ impl<H: HttpClient> StreamingBlteProcessor<H> {
         url: &str,
         chunk_start: usize,
         chunk_count: usize,
-        key_store: Option<&TactKeyStore>,
+        key_store: Option<&dyn TactKeyProvider>,
     ) -> Result<Vec<u8>, StreamingError> {
         let header_data = self.read_blte_header(url).await?;
         let header = self.parse_blte_header(&header_data)?;
@@ -184,7 +184,7 @@ impl<H: HttpClient> StreamingBlteProcessor<H> {
         &self,
         url: &str,
         _header: &BlteHeader,
-        key_store: Option<&TactKeyStore>,
+        key_store: Option<&dyn TactKeyProvider>,
     ) -> Result<Vec<u8>, StreamingError> {
         // Calculate header size
         let header_size = 8; // Single chunk header is always 8 bytes
@@ -225,7 +225,7 @@ impl<H: HttpClient> StreamingBlteProcessor<H> {
         &self,
         url: &str,
         header: &BlteHeader,
-        key_store: Option<&TactKeyStore>,
+        key_store: Option<&dyn TactKeyProvider>,
     ) -> Result<Vec<u8>, StreamingError> {
         let extended = header
             .extended
@@ -283,7 +283,7 @@ impl<H: HttpClient> StreamingBlteProcessor<H> {
         header: &BlteHeader,
         chunk_start: usize,
         chunk_count: usize,
-        key_store: Option<&TactKeyStore>,
+        key_store: Option<&dyn TactKeyProvider>,
     ) -> Result<Vec<u8>, StreamingError> {
         let extended = header
             .extended

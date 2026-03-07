@@ -51,6 +51,12 @@ tracing-subscriber.workspace = true
 # CLI and configuration
 clap.workspace = true
 
+# Concurrent data structures (per-product seqn counters)
+dashmap.workspace = true
+
+# File system watching (hot reload)
+notify = "6"
+
 [dev-dependencies]
 # Internal dependencies (for contract tests)
 cascette-protocol = { path = "../cascette-protocol" }
@@ -77,7 +83,7 @@ tls = ["axum-server", "rustls", "tokio-rustls"]
 
 [package.metadata.cargo-machete]
 # These are optional deps behind the 'tls' feature - cargo-machete flags them incorrectly
-ignored = ["axum-server", "rustls", "tokio-rustls"]
+ignored = ["axum-server", "rustls", "tokio-rustls", "notify"]
 
 [lints]
 workspace = true

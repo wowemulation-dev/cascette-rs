@@ -40,6 +40,11 @@ Rust crates for building your own tools:
 - Encryption key management
 - Multi-layer caching
 - Local CASC storage (IDX/KMT indices, data archives, shared memory IPC)
+- Community data import (wago.tools builds, WoWDev listfile, TACT keys)
+- FileDataID resolution and TACT key orchestration
+- Product installation, verification, and repair pipelines
+- Storage maintenance (preservation, garbage collection, compaction)
+- Containerless storage backend for modern Blizzard titles
 
 **WASM Compatible**: Core libraries compile to WebAssembly (`wasm32-unknown-unknown`),
 enabling browser-based tools and web applications. All cryptographic and format
@@ -50,16 +55,6 @@ parsing code uses pure Rust implementations with no C dependencies.
 A Ribbit protocol server for hosting and distributing custom game builds.
 Intended for mod developers and private server operators who need to serve
 their own content to clients.
-
-### Planned
-
-These features are implemented in an internal development branch and are being
-ported incrementally:
-
-- **CLI Tools**: Browse and extract files from local WoW installations, download
-  builds from CDN, mirror builds for archival
-- **Download Agent**: HTTP service (port 1120) for downloading World of Warcraft
-  products with automatic CDN failover
 
 ## Project Status
 
@@ -73,8 +68,9 @@ Python prototyping environment for NGDP/CASC format analysis and verification.
 
 ## Development
 
-This project requires Rust 1.92.0 and mdbook for documentation. You can install
-and manage these dependencies automatically with [mise](https://mise.jdx.dev/):
+This project requires Rust 1.92.0, `protoc` (Protocol Buffers compiler), and
+mdbook for documentation. You can install and manage these dependencies
+automatically with [mise](https://mise.jdx.dev/):
 
 ```bash
 mise install

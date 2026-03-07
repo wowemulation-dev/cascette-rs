@@ -1,0 +1,5 @@
+Name!STRING:0|Path!STRING:0|Hosts!STRING:0|Servers!STRING:0|ConfigPath!STRING:0
+## seqn = 6226474
+us|tpr/wow_classic|blzddist1-a.akamaihd.net blzddist2-a.akamaihd.net|http://us.patch.battle.net:1119/wow_classic|tpr/configs/data
+eu|tpr/wow_classic|eu.cdn.blizzard.com level3.blizzard.com|http://eu.patch.battle.net:1119/wow_classic|tpr/configs/data
+kr|tpr/wow_classic|kr.cdn.blizzard.com level3.blizzard.com|http://kr.patch.battle.net:1119/wow_classic|tpr/configs/data

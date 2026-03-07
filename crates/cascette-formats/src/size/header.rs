@@ -1,263 +1,135 @@
-//! Versioned header for the Size manifest format
+//! Header for the Size manifest (`DS`) format
 //!
-//! The Size manifest header has a 10-byte base that is common across versions,
-//! followed by version-specific extensions:
+//! Source: <https://wowdev.wiki/TACT#Size_manifest>
 //!
-//! - V1: u64 total_size + u8 esize_bytes (19 bytes total)
-//! - V2: 5-byte (40-bit) total_size, esize fixed at 4 (15 bytes total)
+//! Binary layout (15 bytes):
 //!
-//! Base header layout (10 bytes):
-//! - Offset 0-1: magic "DS"
-//! - Offset 2: version (1 or 2)
-//! - Offset 3: ekey_size (encoding key bytes per entry, typically 9)
-//! - Offset 4-7: entry_count (u32 BE)
-//! - Offset 8-9: tag_count (u16 BE, number of tags after header)
+//! | Offset | Size | Field     | Description                              |
+//! |--------|------|-----------|------------------------------------------|
+//! | 0-1    | 2    | signature | `"DS"` (0x44, 0x53)                      |
+//! | 2      | 1    | version   | Format version (1)                       |
+//! | 3      | 1    | ekey_size | EKey length in **bytes** (typically 9)   |
+//! | 4-7    | 4    | num_files | Number of file entries (BE u32)          |
+//! | 8-9    | 2    | num_tags  | Number of tags between header and files  |
+//! | 10-14  | 5    | total_size| Sum of all file esizes (40-bit BE)       |
 
 use crate::size::error::{Result, SizeError};
-use binrw::{BinRead, BinResult, BinWrite};
 use std::io::{Read, Seek, Write};
 
-/// Version 1 size manifest header (19 bytes)
+/// Size manifest header (15 bytes, all multi-byte integers big-endian)
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SizeHeaderV1 {
-    /// Magic bytes "DS"
-    pub magic: [u8; 2],
-    /// Format version (1)
+pub struct SizeHeader {
+    /// Format version. Only version 1 is known in the wild.
     pub version: u8,
-    /// Encoding key size in bytes per entry (typically 9)
+    /// EKey length per entry in bytes. Typically 9.
     pub ekey_size: u8,
-    /// Number of entries
-    pub entry_count: u32,
-    /// Number of tags between header and entries
-    pub tag_count: u16,
-    /// Total estimated size across all entries
+    /// Number of file entries.
+    pub num_files: u32,
+    /// Number of tags between header and file entries.
+    pub num_tags: u16,
+    /// Sum of all per-file esize values (40-bit, max ~1 TB).
     pub total_size: u64,
-    /// Byte width of esize per entry (1-8)
-    pub esize_bytes: u8,
-}
-
-/// Version 2 size manifest header (15 bytes)
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SizeHeaderV2 {
-    /// Magic bytes "DS"
-    pub magic: [u8; 2],
-    /// Format version (2)
-    pub version: u8,
-    /// Encoding key size in bytes per entry (typically 9)
-    pub ekey_size: u8,
-    /// Number of entries
-    pub entry_count: u32,
-    /// Number of tags between header and entries
-    pub tag_count: u16,
-    /// Total estimated size as 40-bit value (max ~1TB)
-    pub total_size: u64,
-}
-
-/// Version-aware size manifest header
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum SizeHeader {
-    /// Version 1 header (19 bytes)
-    V1(SizeHeaderV1),
-    /// Version 2 header (15 bytes)
-    V2(SizeHeaderV2),
 }
 
 impl SizeHeader {
-    /// Create a new V1 header
-    pub fn new_v1(
-        ekey_size: u8,
-        entry_count: u32,
-        tag_count: u16,
-        total_size: u64,
-        esize_bytes: u8,
-    ) -> Self {
-        Self::V1(SizeHeaderV1 {
-            magic: *b"DS",
-            version: 1,
+    /// Construct a header.
+    pub fn new(version: u8, ekey_size: u8, num_files: u32, num_tags: u16, total_size: u64) -> Self {
+        Self {
+            version,
             ekey_size,
-            entry_count,
-            tag_count,
+            num_files,
+            num_tags,
             total_size,
-            esize_bytes,
-        })
-    }
-
-    /// Create a new V2 header
-    pub fn new_v2(ekey_size: u8, entry_count: u32, tag_count: u16, total_size: u64) -> Self {
-        Self::V2(SizeHeaderV2 {
-            magic: *b"DS",
-            version: 2,
-            ekey_size,
-            entry_count,
-            tag_count,
-            total_size,
-        })
-    }
-
-    /// Get the format version
-    pub fn version(&self) -> u8 {
-        match self {
-            Self::V1(h) => h.version,
-            Self::V2(h) => h.version,
         }
     }
 
-    /// Get the number of entries
-    pub fn entry_count(&self) -> u32 {
-        match self {
-            Self::V1(h) => h.entry_count,
-            Self::V2(h) => h.entry_count,
-        }
-    }
+    /// Serialised byte size of the header.
+    pub const SIZE: usize = 15;
 
-    /// Get the number of tags
-    pub fn tag_count(&self) -> u16 {
-        match self {
-            Self::V1(h) => h.tag_count,
-            Self::V2(h) => h.tag_count,
-        }
-    }
-
-    /// Get the encoding key size in bytes per entry
-    pub fn ekey_size(&self) -> u8 {
-        match self {
-            Self::V1(h) => h.ekey_size,
-            Self::V2(h) => h.ekey_size,
-        }
-    }
-
-    /// Get the byte width of the esize field per entry
-    ///
-    /// V1: configurable via `esize_bytes` header field (1-8)
-    /// V2: fixed at 4
-    pub fn esize_bytes(&self) -> u8 {
-        match self {
-            Self::V1(h) => h.esize_bytes,
-            Self::V2(_) => 4,
-        }
-    }
-
-    /// Get the total estimated size across all entries
-    pub fn total_size(&self) -> u64 {
-        match self {
-            Self::V1(h) => h.total_size,
-            Self::V2(h) => h.total_size,
-        }
-    }
-
-    /// Get the header size in bytes
-    pub fn header_size(&self) -> usize {
-        match self {
-            Self::V1(_) => 19,
-            Self::V2(_) => 15,
-        }
-    }
-
-    /// Validate header fields
+    /// Validate header fields.
     pub fn validate(&self) -> Result<()> {
-        let magic = match self {
-            Self::V1(h) => h.magic,
-            Self::V2(h) => h.magic,
+        if self.version == 0 {
+            return Err(SizeError::UnsupportedVersion(self.version));
+        }
+        if self.ekey_size == 0 || self.ekey_size > 16 {
+            return Err(SizeError::InvalidEKeySize(self.ekey_size));
+        }
+        Ok(())
+    }
+
+    /// Read from a byte slice starting at offset 0.
+    ///
+    /// The caller must verify that `data[0..2] == b"DS"` before calling.
+    pub fn parse(data: &[u8]) -> Result<Self> {
+        if data.len() < Self::SIZE {
+            return Err(SizeError::TruncatedData {
+                expected: Self::SIZE,
+                actual: data.len(),
+            });
+        }
+        if &data[0..2] != b"DS" {
+            return Err(SizeError::InvalidMagic([data[0], data[1]]));
+        }
+        let version = data[2];
+        let ekey_size = data[3];
+        let num_files = u32::from_be_bytes([data[4], data[5], data[6], data[7]]);
+        let num_tags = u16::from_be_bytes([data[8], data[9]]);
+        let total_size = (u64::from(data[10]) << 32)
+            | (u64::from(data[11]) << 24)
+            | (u64::from(data[12]) << 16)
+            | (u64::from(data[13]) << 8)
+            | u64::from(data[14]);
+
+        let hdr = Self {
+            version,
+            ekey_size,
+            num_files,
+            num_tags,
+            total_size,
         };
-        if magic != *b"DS" {
-            return Err(SizeError::InvalidMagic(magic));
-        }
+        hdr.validate()?;
+        Ok(hdr)
+    }
 
-        let version = self.version();
-        if version == 0 || version > 2 {
-            return Err(SizeError::UnsupportedVersion(version));
-        }
-
-        let ekey_size = self.ekey_size();
-        if ekey_size == 0 || ekey_size > 16 {
-            return Err(SizeError::InvalidEKeySize(ekey_size));
-        }
-
-        if let Self::V1(h) = self
-            && (h.esize_bytes == 0 || h.esize_bytes > 8)
-        {
-            return Err(SizeError::InvalidEsizeWidth(h.esize_bytes));
-        }
-
+    /// Write to a `Write` sink.
+    pub fn write<W: Write + Seek>(&self, writer: &mut W) -> Result<()> {
+        writer.write_all(b"DS")?;
+        writer.write_all(&[self.version])?;
+        writer.write_all(&[self.ekey_size])?;
+        writer.write_all(&self.num_files.to_be_bytes())?;
+        writer.write_all(&self.num_tags.to_be_bytes())?;
+        // 40-bit total_size as 5 bytes BE
+        writer.write_all(&[
+            (self.total_size >> 32) as u8,
+            (self.total_size >> 24) as u8,
+            (self.total_size >> 16) as u8,
+            (self.total_size >> 8) as u8,
+            self.total_size as u8,
+        ])?;
         Ok(())
     }
 }
 
-impl BinRead for SizeHeader {
+// binrw shims — the manifest uses custom IO to avoid pulling binrw into hot paths,
+// but the rest of the codebase expects these traits for generic serialisation.
+impl binrw::BinRead for SizeHeader {
     type Args<'a> = ();
 
     fn read_options<R: Read + Seek>(
         reader: &mut R,
         _endian: binrw::Endian,
         _args: Self::Args<'_>,
-    ) -> BinResult<Self> {
-        // Read 10-byte base header
-        let mut magic = [0u8; 2];
-        reader.read_exact(&mut magic)?;
-
-        let mut buf1 = [0u8; 1];
-        reader.read_exact(&mut buf1)?;
-        let version = buf1[0];
-
-        reader.read_exact(&mut buf1)?;
-        let ekey_size = buf1[0];
-
-        let mut buf4 = [0u8; 4];
-        reader.read_exact(&mut buf4)?;
-        let entry_count = u32::from_be_bytes(buf4);
-
-        let mut buf2 = [0u8; 2];
-        reader.read_exact(&mut buf2)?;
-        let tag_count = u16::from_be_bytes(buf2);
-
-        match version {
-            1 => {
-                // V1: read u64 total_size + u8 esize_bytes
-                let mut buf8 = [0u8; 8];
-                reader.read_exact(&mut buf8)?;
-                let total_size = u64::from_be_bytes(buf8);
-
-                reader.read_exact(&mut buf1)?;
-                let esize_bytes = buf1[0];
-
-                Ok(Self::V1(SizeHeaderV1 {
-                    magic,
-                    version,
-                    ekey_size,
-                    entry_count,
-                    tag_count,
-                    total_size,
-                    esize_bytes,
-                }))
-            }
-            2 => {
-                // V2: read 5-byte (40-bit) total_size
-                let mut buf5 = [0u8; 5];
-                reader.read_exact(&mut buf5)?;
-                let total_size = (u64::from(buf5[0]) << 32)
-                    | (u64::from(buf5[1]) << 24)
-                    | (u64::from(buf5[2]) << 16)
-                    | (u64::from(buf5[3]) << 8)
-                    | u64::from(buf5[4]);
-
-                Ok(Self::V2(SizeHeaderV2 {
-                    magic,
-                    version,
-                    ekey_size,
-                    entry_count,
-                    tag_count,
-                    total_size,
-                }))
-            }
-            v => Err(binrw::Error::Custom {
-                pos: reader.stream_position().unwrap_or(0),
-                err: Box::new(SizeError::UnsupportedVersion(v)),
-            }),
-        }
+    ) -> binrw::BinResult<Self> {
+        let mut buf = [0u8; Self::SIZE];
+        reader.read_exact(&mut buf)?;
+        Self::parse(&buf).map_err(|e| binrw::Error::Custom {
+            pos: 0,
+            err: Box::new(e),
+        })
     }
 }
 
-impl BinWrite for SizeHeader {
+impl binrw::BinWrite for SizeHeader {
     type Args<'a> = ();
 
     fn write_options<W: Write + Seek>(
@@ -265,268 +137,104 @@ impl BinWrite for SizeHeader {
         writer: &mut W,
         _endian: binrw::Endian,
         _args: Self::Args<'_>,
-    ) -> BinResult<()> {
-        match self {
-            Self::V1(h) => {
-                writer.write_all(&h.magic)?;
-                writer.write_all(&[h.version])?;
-                writer.write_all(&[h.ekey_size])?;
-                writer.write_all(&h.entry_count.to_be_bytes())?;
-                writer.write_all(&h.tag_count.to_be_bytes())?;
-                writer.write_all(&h.total_size.to_be_bytes())?;
-                writer.write_all(&[h.esize_bytes])?;
-            }
-            Self::V2(h) => {
-                writer.write_all(&h.magic)?;
-                writer.write_all(&[h.version])?;
-                writer.write_all(&[h.ekey_size])?;
-                writer.write_all(&h.entry_count.to_be_bytes())?;
-                writer.write_all(&h.tag_count.to_be_bytes())?;
-                // Write 40-bit total_size as 5 bytes BE
-                let bytes = [
-                    (h.total_size >> 32) as u8,
-                    (h.total_size >> 24) as u8,
-                    (h.total_size >> 16) as u8,
-                    (h.total_size >> 8) as u8,
-                    h.total_size as u8,
-                ];
-                writer.write_all(&bytes)?;
-            }
-        }
-        Ok(())
+    ) -> binrw::BinResult<()> {
+        self.write(writer).map_err(|e| binrw::Error::Custom {
+            pos: 0,
+            err: Box::new(e),
+        })
     }
 }
 
 #[cfg(test)]
-#[allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
-    use binrw::io::Cursor;
 
-    #[test]
-    fn test_header_v1_creation() {
-        let header = SizeHeader::new_v1(9, 100, 0, 50000, 4);
-
-        assert_eq!(header.version(), 1);
-        assert_eq!(header.entry_count(), 100);
-        assert_eq!(header.tag_count(), 0);
-        assert_eq!(header.ekey_size(), 9);
-        assert_eq!(header.esize_bytes(), 4);
-        assert_eq!(header.total_size(), 50000);
-        assert_eq!(header.header_size(), 19);
+    fn make_header_bytes(
+        version: u8,
+        ekey_size: u8,
+        num_files: u32,
+        num_tags: u16,
+        total_size: u64,
+    ) -> Vec<u8> {
+        let mut data = Vec::with_capacity(SizeHeader::SIZE);
+        data.extend_from_slice(b"DS");
+        data.push(version);
+        data.push(ekey_size);
+        data.extend_from_slice(&num_files.to_be_bytes());
+        data.extend_from_slice(&num_tags.to_be_bytes());
+        data.push((total_size >> 32) as u8);
+        data.push((total_size >> 24) as u8);
+        data.push((total_size >> 16) as u8);
+        data.push((total_size >> 8) as u8);
+        data.push(total_size as u8);
+        data
     }
 
     #[test]
-    fn test_header_v2_creation() {
-        let header = SizeHeader::new_v2(9, 200, 0, 100000);
-
-        assert_eq!(header.version(), 2);
-        assert_eq!(header.entry_count(), 200);
-        assert_eq!(header.tag_count(), 0);
-        assert_eq!(header.ekey_size(), 9);
-        assert_eq!(header.esize_bytes(), 4); // V2 fixed at 4
-        assert_eq!(header.total_size(), 100000);
-        assert_eq!(header.header_size(), 15);
+    fn test_parse_header() {
+        let data = make_header_bytes(1, 9, 204319, 23, 7_029_657_207);
+        let hdr = SizeHeader::parse(&data).expect("Should parse header");
+        assert_eq!(hdr.version, 1);
+        assert_eq!(hdr.ekey_size, 9);
+        assert_eq!(hdr.num_files, 204319);
+        assert_eq!(hdr.num_tags, 23);
+        assert_eq!(hdr.total_size, 7_029_657_207);
     }
 
     #[test]
-    fn test_ekey_size_values() {
-        // Standard truncated EKey size
-        let header = SizeHeader::new_v1(9, 0, 0, 0, 4);
-        assert_eq!(header.ekey_size(), 9);
-
-        // Full EKey
-        let header = SizeHeader::new_v1(16, 0, 0, 0, 4);
-        assert_eq!(header.ekey_size(), 16);
-
-        // Minimum EKey
-        let header = SizeHeader::new_v1(1, 0, 0, 0, 4);
-        assert_eq!(header.ekey_size(), 1);
-    }
-
-    #[test]
-    fn test_header_v1_parse_from_bytes() {
-        let mut data = Vec::new();
-        data.extend_from_slice(b"DS"); // magic
-        data.push(1); // version
-        data.push(9); // ekey_size
-        data.extend_from_slice(&10u32.to_be_bytes()); // entry_count
-        data.extend_from_slice(&0u16.to_be_bytes()); // tag_count
-        data.extend_from_slice(&5000u64.to_be_bytes()); // total_size
-        data.push(4); // esize_bytes
-
-        let mut cursor = Cursor::new(&data);
-        let header = SizeHeader::read_options(&mut cursor, binrw::Endian::Big, ())
-            .expect("Should parse V1 header");
-
-        assert_eq!(header.version(), 1);
-        assert_eq!(header.entry_count(), 10);
-        assert_eq!(header.tag_count(), 0);
-        assert_eq!(header.ekey_size(), 9);
-        assert_eq!(header.total_size(), 5000);
-        assert_eq!(header.esize_bytes(), 4);
-    }
-
-    #[test]
-    fn test_header_v2_parse_from_bytes() {
-        let total: u64 = 0x12_3456_7890;
-        let mut data = Vec::new();
-        data.extend_from_slice(b"DS"); // magic
-        data.push(2); // version
-        data.push(9); // ekey_size
-        data.extend_from_slice(&10u32.to_be_bytes()); // entry_count
-        data.extend_from_slice(&0u16.to_be_bytes()); // tag_count
-        // 40-bit total_size
-        data.push((total >> 32) as u8);
-        data.push((total >> 24) as u8);
-        data.push((total >> 16) as u8);
-        data.push((total >> 8) as u8);
-        data.push(total as u8);
-
-        let mut cursor = Cursor::new(&data);
-        let header = SizeHeader::read_options(&mut cursor, binrw::Endian::Big, ())
-            .expect("Should parse V2 header");
-
-        assert_eq!(header.version(), 2);
-        assert_eq!(header.entry_count(), 10);
-        assert_eq!(header.tag_count(), 0);
-        assert_eq!(header.ekey_size(), 9);
-        assert_eq!(header.total_size(), total);
-        assert_eq!(header.esize_bytes(), 4);
-    }
-
-    #[test]
-    fn test_header_v1_round_trip() {
-        let header = SizeHeader::new_v1(9, 42, 3, 999_999, 2);
+    fn test_round_trip() {
+        let hdr = SizeHeader::new(1, 9, 1000, 5, 0x0001_2345_6789);
         let mut buf = Vec::new();
-        let mut cursor = Cursor::new(&mut buf);
-        header
-            .write_options(&mut cursor, binrw::Endian::Big, ())
-            .expect("Should write V1 header");
-
-        assert_eq!(buf.len(), 19);
-
-        let mut cursor = Cursor::new(&buf);
-        let parsed = SizeHeader::read_options(&mut cursor, binrw::Endian::Big, ())
-            .expect("Should parse V1 header");
-
-        assert_eq!(header, parsed);
-    }
-
-    #[test]
-    fn test_header_v2_round_trip() {
-        let header = SizeHeader::new_v2(9, 1000, 2, 0xAB_CDEF_0123);
-        let mut buf = Vec::new();
-        let mut cursor = Cursor::new(&mut buf);
-        header
-            .write_options(&mut cursor, binrw::Endian::Big, ())
-            .expect("Should write V2 header");
-
-        assert_eq!(buf.len(), 15);
-
-        let mut cursor = Cursor::new(&buf);
-        let parsed = SizeHeader::read_options(&mut cursor, binrw::Endian::Big, ())
-            .expect("Should parse V2 header");
-
-        assert_eq!(header, parsed);
+        let mut cursor = std::io::Cursor::new(&mut buf);
+        hdr.write(&mut cursor).expect("Should write");
+        assert_eq!(buf.len(), SizeHeader::SIZE);
+        let parsed = SizeHeader::parse(&buf).expect("Should parse");
+        assert_eq!(hdr, parsed);
     }
 
     #[test]
     fn test_reject_bad_magic() {
-        let header = SizeHeader::V1(SizeHeaderV1 {
-            magic: *b"XX",
-            version: 1,
-            ekey_size: 9,
-            entry_count: 0,
-            tag_count: 0,
-            total_size: 0,
-            esize_bytes: 4,
-        });
-        assert!(header.validate().is_err());
-    }
-
-    #[test]
-    fn test_reject_version_0() {
-        let mut data = Vec::new();
-        data.extend_from_slice(b"DS");
-        data.push(0); // version 0
-        data.extend_from_slice(&[0u8; 16]); // padding
-
-        let mut cursor = Cursor::new(&data);
-        let result = SizeHeader::read_options(&mut cursor, binrw::Endian::Big, ());
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_reject_version_3() {
-        let mut data = Vec::new();
-        data.extend_from_slice(b"DS");
-        data.push(3); // version 3
-        data.extend_from_slice(&[0u8; 16]); // padding
-
-        let mut cursor = Cursor::new(&data);
-        let result = SizeHeader::read_options(&mut cursor, binrw::Endian::Big, ());
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_reject_v1_esize_bytes_0() {
-        let header = SizeHeader::V1(SizeHeaderV1 {
-            magic: *b"DS",
-            version: 1,
-            ekey_size: 9,
-            entry_count: 0,
-            tag_count: 0,
-            total_size: 0,
-            esize_bytes: 0,
-        });
+        let mut data = make_header_bytes(1, 9, 0, 0, 0);
+        data[0] = b'X';
         assert!(matches!(
-            header.validate(),
-            Err(SizeError::InvalidEsizeWidth(0))
+            SizeHeader::parse(&data),
+            Err(SizeError::InvalidMagic(_))
         ));
     }
 
     #[test]
-    fn test_reject_v1_esize_bytes_9() {
-        let header = SizeHeader::V1(SizeHeaderV1 {
-            magic: *b"DS",
-            version: 1,
-            ekey_size: 9,
-            entry_count: 0,
-            tag_count: 0,
-            total_size: 0,
-            esize_bytes: 9,
-        });
+    fn test_reject_version_zero() {
+        let data = make_header_bytes(0, 9, 0, 0, 0);
         assert!(matches!(
-            header.validate(),
-            Err(SizeError::InvalidEsizeWidth(9))
+            SizeHeader::parse(&data),
+            Err(SizeError::UnsupportedVersion(0))
         ));
     }
 
     #[test]
     fn test_reject_ekey_size_zero() {
-        let header = SizeHeader::new_v1(0, 0, 0, 0, 4);
+        let data = make_header_bytes(1, 0, 0, 0, 0);
         assert!(matches!(
-            header.validate(),
+            SizeHeader::parse(&data),
             Err(SizeError::InvalidEKeySize(0))
         ));
     }
 
     #[test]
-    fn test_reject_ekey_size_17() {
-        let header = SizeHeader::new_v1(17, 0, 0, 0, 4);
+    fn test_reject_ekey_size_too_large() {
+        let data = make_header_bytes(1, 17, 0, 0, 0);
         assert!(matches!(
-            header.validate(),
+            SizeHeader::parse(&data),
             Err(SizeError::InvalidEKeySize(17))
         ));
     }
 
     #[test]
-    fn test_header_size_values() {
-        let v1 = SizeHeader::new_v1(9, 0, 0, 0, 4);
-        assert_eq!(v1.header_size(), 19);
-
-        let v2 = SizeHeader::new_v2(9, 0, 0, 0);
-        assert_eq!(v2.header_size(), 15);
+    fn test_total_size_40bit_max() {
+        let max40 = 0xFF_FFFF_FFFF_u64;
+        let data = make_header_bytes(1, 9, 0, 0, max40);
+        let hdr = SizeHeader::parse(&data).expect("Should parse");
+        assert_eq!(hdr.total_size, max40);
     }
 }

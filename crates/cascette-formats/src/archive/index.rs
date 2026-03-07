@@ -211,11 +211,9 @@ impl Ord for IndexEntry {
 pub struct IndexFooter {
     /// First 8 bytes of MD5 hash of table of contents
     pub toc_hash: [u8; 8],
-    /// CDN archive index footer version (0 or 1)
+    /// CDN archive index footer version (0 or 1).
     ///
-    /// Agent.exe (`tact::CdnIndexFooterValidator` at 0x6b8168) accepts
-    /// versions 0 and 1. Not to be confused with the local IDX file
-    /// format version (7).
+    /// Not to be confused with the local IDX file format version (7).
     pub version: u8,
     /// Reserved bytes (must be [0, 0])
     pub reserved: [u8; 2],
@@ -232,9 +230,8 @@ pub struct IndexFooter {
     pub ekey_length: u8,
     /// Footer hash length in bytes (always 8)
     pub footer_hash_bytes: u8,
-    /// Total number of data entries (little-endian in on-disk format)
+    /// Total number of data entries (little-endian in on-disk format).
     ///
-    /// Agent.exe reads this as a native LE dereference (`*(arg4 + 8)` on x86).
     /// The number of 4KB chunks is `ceil(element_count / records_per_page)`.
     pub element_count: u32,
     /// First N bytes of MD5 hash of footer fields (N = footer_hash_bytes)
@@ -346,9 +343,8 @@ impl IndexFooter {
             )));
         }
 
-        // Agent.exe accepts hash_size 1..=16 (tact::CdnIndexFooterValidator at 0x6b8168:
-        // `if (eax_9.b u<= 0x10)` — error: "Unsupported CDN index hash size: %u").
-        // CDN archives typically use 16 (full MD5); local IDX uses 9 (truncated).
+        // EKey length must be 1-16. CDN archives typically use 16 (full MD5);
+        // local IDX uses 9 (truncated).
         if self.ekey_length == 0 || self.ekey_length > 16 {
             return Err(ArchiveError::InvalidFormat(format!(
                 "EKey length should be between 1 and 16, got {}",
@@ -532,8 +528,7 @@ impl ArchiveIndex {
         }
 
         // Skip per-block hashes. The correct TOC hash algorithm is
-        // `toc_hash = MD5(toc_keys || block_hashes)[:hash_bytes]`
-        // (from Agent.exe BuildMergedIndex at 0x7118c7).
+        // `toc_hash = MD5(toc_keys || block_hashes)[:hash_bytes]`.
         // Validation is not enforced on parse because Blizzard-generated
         // files may use a different generation path.
         let hash_section_size = chunk_count * footer.footer_hash_bytes as usize;
@@ -1187,8 +1182,7 @@ impl ChunkedArchiveIndex {
         }
 
         // Skip per-block hashes. The correct TOC hash algorithm is
-        // `toc_hash = MD5(toc_keys || block_hashes)[:hash_bytes]`
-        // (from Agent.exe BuildMergedIndex at 0x7118c7).
+        // `toc_hash = MD5(toc_keys || block_hashes)[:hash_bytes]`.
         // Validation is not enforced on parse because Blizzard-generated
         // files may use a different generation path.
         let hash_section_size = chunk_count * footer.footer_hash_bytes as usize;
@@ -1274,8 +1268,7 @@ impl ChunkedArchiveIndex {
 ///
 /// Calculate TOC hash from TOC keys and per-block hashes.
 ///
-/// Algorithm (from Agent.exe `BuildMergedIndex` at 0x7118c7):
-/// `toc_hash = MD5(toc_keys || block_hashes)[:hash_bytes]`
+/// Algorithm: `toc_hash = MD5(toc_keys || block_hashes)[:hash_bytes]`
 pub fn calculate_toc_hash(
     toc_keys: &[Vec<u8>],
     block_hashes: &[Vec<u8>],
@@ -1413,7 +1406,7 @@ mod tests {
 
         // Reset and test ekey_length validation (valid range 1-16)
         footer.version = 1;
-        footer.ekey_length = 8; // Valid: Agent.exe accepts 1-16
+        footer.ekey_length = 8; // Valid: range is 1-16
         assert!(footer.validate_format().is_ok());
 
         footer.ekey_length = 1; // Minimum valid

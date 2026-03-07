@@ -10,6 +10,58 @@ use std::io::BufReader;
 use std::path::Path;
 use std::time::SystemTime;
 
+/// Raw build record for JSON deserialization.
+///
+/// All fields that may be null in the source data are `Option`. Records missing
+/// required fields (`build_config`, `cdn_config`, `build_time`) are filtered
+/// out during loading.
+#[derive(Debug, Clone, Deserialize)]
+struct RawBuildRecord {
+    pub id: u64,
+    pub product: String,
+    pub version: String,
+    pub build: String,
+    pub build_config: Option<String>,
+    pub cdn_config: Option<String>,
+    #[serde(default)]
+    pub keyring: Option<String>,
+    pub product_config: Option<String>,
+    pub build_time: Option<String>,
+    pub encoding_ekey: Option<String>,
+    pub root_ekey: Option<String>,
+    pub install_ekey: Option<String>,
+    pub download_ekey: Option<String>,
+    #[serde(default)]
+    pub cdn_path: Option<String>,
+}
+
+impl RawBuildRecord {
+    /// Convert to a validated `BuildRecord`, returning `None` if required fields are missing.
+    fn into_build_record(self) -> Option<BuildRecord> {
+        /// Normalize empty strings to `None` for optional hash fields.
+        fn non_empty(opt: Option<String>) -> Option<String> {
+            opt.filter(|s| !s.is_empty())
+        }
+
+        Some(BuildRecord {
+            id: self.id,
+            product: self.product,
+            version: self.version,
+            build: self.build,
+            build_config: self.build_config?,
+            cdn_config: self.cdn_config?,
+            keyring: non_empty(self.keyring),
+            product_config: non_empty(self.product_config),
+            build_time: self.build_time?,
+            encoding_ekey: non_empty(self.encoding_ekey),
+            root_ekey: non_empty(self.root_ekey),
+            install_ekey: non_empty(self.install_ekey),
+            download_ekey: non_empty(self.download_ekey),
+            cdn_path: non_empty(self.cdn_path),
+        })
+    }
+}
+
 /// A single game build record with all metadata.
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 pub struct BuildRecord {
@@ -32,6 +84,7 @@ pub struct BuildRecord {
     pub cdn_config: String,
 
     /// `KeyRing` MD5 hash (32 hex characters, nullable)
+    #[serde(default)]
     pub keyring: Option<String>,
 
     /// Product configuration MD5 hash (32 hex characters, nullable)
@@ -40,17 +93,17 @@ pub struct BuildRecord {
     /// ISO 8601 timestamp of build creation
     pub build_time: String,
 
-    /// Encoding file content key (32 hex characters)
-    pub encoding_ekey: String,
+    /// Encoding file content key (32 hex characters, nullable)
+    pub encoding_ekey: Option<String>,
 
-    /// Root file content key (32 hex characters)
-    pub root_ekey: String,
+    /// Root file content key (32 hex characters, nullable)
+    pub root_ekey: Option<String>,
 
-    /// Install file content key (32 hex characters)
-    pub install_ekey: String,
+    /// Install file content key (32 hex characters, nullable)
+    pub install_ekey: Option<String>,
 
-    /// Download file content key (32 hex characters)
-    pub download_ekey: String,
+    /// Download file content key (32 hex characters, nullable)
+    pub download_ekey: Option<String>,
 
     /// Optional product-specific CDN path override (e.g., "tpr/wow")
     /// If None, server uses default path from CLI configuration
@@ -98,11 +151,19 @@ impl BuildRecord {
             self.validate_hash("product_config", config)?;
         }
 
-        // Validate content keys (32 hex characters)
-        self.validate_hash("encoding_ekey", &self.encoding_ekey)?;
-        self.validate_hash("root_ekey", &self.root_ekey)?;
-        self.validate_hash("install_ekey", &self.install_ekey)?;
-        self.validate_hash("download_ekey", &self.download_ekey)?;
+        // Validate content keys (32 hex characters, when present)
+        if let Some(ref ekey) = self.encoding_ekey {
+            self.validate_hash("encoding_ekey", ekey)?;
+        }
+        if let Some(ref ekey) = self.root_ekey {
+            self.validate_hash("root_ekey", ekey)?;
+        }
+        if let Some(ref ekey) = self.install_ekey {
+            self.validate_hash("install_ekey", ekey)?;
+        }
+        if let Some(ref ekey) = self.download_ekey {
+            self.validate_hash("download_ekey", ekey)?;
+        }
 
         // Validate ISO 8601 timestamp format (basic check)
         if !self.build_time.contains('T') || !self.build_time.contains(':') {
@@ -174,7 +235,32 @@ impl BuildDatabase {
         })?;
 
         let reader = BufReader::new(file);
-        let builds: Vec<BuildRecord> = serde_json::from_reader(reader)?;
+        let raw_builds: Vec<RawBuildRecord> = serde_json::from_reader(reader)?;
+
+        if raw_builds.is_empty() {
+            return Err(DatabaseError::EmptyDatabase);
+        }
+
+        // Filter out incomplete records and convert to BuildRecord
+        let total_raw = raw_builds.len();
+        let builds: Vec<BuildRecord> = raw_builds
+            .into_iter()
+            .filter_map(|raw| {
+                let id = raw.id;
+                raw.into_build_record().or_else(|| {
+                    tracing::warn!(
+                        build_id = id,
+                        "Skipping build with missing required fields"
+                    );
+                    None
+                })
+            })
+            .collect();
+
+        let skipped = total_raw - builds.len();
+        if skipped > 0 {
+            tracing::info!("Filtered out {skipped} incomplete build records");
+        }
 
         if builds.is_empty() {
             return Err(DatabaseError::EmptyDatabase);
@@ -218,6 +304,29 @@ impl BuildDatabase {
             .and_then(|builds| builds.first())
     }
 
+    /// Get all builds for a product, sorted by `build_time` (newest first).
+    ///
+    /// Returns an empty slice if the product doesn't exist.
+    #[must_use]
+    pub fn builds_for_product(&self, product: &str) -> &[BuildRecord] {
+        self.builds_by_product
+            .get(product)
+            .map(Vec::as_slice)
+            .unwrap_or(&[])
+    }
+
+    /// Find a specific build by product and build number.
+    ///
+    /// Searches builds for the given product, returning the first match
+    /// where `BuildRecord::build` equals `build_number`. Returns `None`
+    /// if the product doesn't exist or no build matches.
+    #[must_use]
+    pub fn find_build(&self, product: &str, build_number: &str) -> Option<&BuildRecord> {
+        self.builds_by_product
+            .get(product)
+            .and_then(|builds| builds.iter().find(|b| b.build == build_number))
+    }
+
     /// Get all product names in the database.
     pub fn products(&self) -> Vec<&str> {
         self.builds_by_product.keys().map(String::as_str).collect()
@@ -253,10 +362,10 @@ mod tests {
             keyring: None,
             product_config: None,
             build_time: "2024-01-01T00:00:00+00:00".to_string(),
-            encoding_ekey: "aaaabbbbccccddddeeeeffffaaaaffff".to_string(),
-            root_ekey: "bbbbccccddddeeeeffffaaaabbbbcccc".to_string(),
-            install_ekey: "ccccddddeeeeffffaaaabbbbccccdddd".to_string(),
-            download_ekey: "ddddeeeeffffaaaabbbbccccddddeeee".to_string(),
+            encoding_ekey: Some("aaaabbbbccccddddeeeeffffaaaaffff".to_string()),
+            root_ekey: Some("bbbbccccddddeeeeffffaaaabbbbcccc".to_string()),
+            install_ekey: Some("ccccddddeeeeffffaaaabbbbccccdddd".to_string()),
+            download_ekey: Some("ddddeeeeffffaaaabbbbccccddddeeee".to_string()),
             cdn_path: None,
         }
     }
@@ -294,6 +403,57 @@ mod tests {
         assert_eq!(db.total_builds(), 1);
         assert_eq!(db.products().len(), 1);
         assert!(db.latest_build("test_product").is_some());
+    }
+
+    #[test]
+    fn test_find_build_existing() {
+        let mut temp_file = NamedTempFile::new().unwrap();
+        let build1 = BuildRecord {
+            id: 1,
+            build: "100".to_string(),
+            version: "1.0.0.100".to_string(),
+            ..create_test_build()
+        };
+        let build2 = BuildRecord {
+            id: 2,
+            build: "200".to_string(),
+            version: "1.0.0.200".to_string(),
+            build_config: "abcdef1234567890abcdef1234567890".to_string(),
+            cdn_config: "1234567890abcdef1234567890abcdef".to_string(),
+            build_time: "2024-06-01T00:00:00+00:00".to_string(),
+            ..create_test_build()
+        };
+        let json = serde_json::to_string(&vec![build1, build2]).unwrap();
+        temp_file.write_all(json.as_bytes()).unwrap();
+
+        let db = BuildDatabase::from_file(temp_file.path()).unwrap();
+        let found = db.find_build("test_product", "100");
+        assert!(found.is_some());
+        assert_eq!(found.unwrap().version, "1.0.0.100");
+
+        let found2 = db.find_build("test_product", "200");
+        assert!(found2.is_some());
+        assert_eq!(found2.unwrap().version, "1.0.0.200");
+    }
+
+    #[test]
+    fn test_find_build_nonexistent_product() {
+        let mut temp_file = NamedTempFile::new().unwrap();
+        let json = serde_json::to_string(&vec![create_test_build()]).unwrap();
+        temp_file.write_all(json.as_bytes()).unwrap();
+
+        let db = BuildDatabase::from_file(temp_file.path()).unwrap();
+        assert!(db.find_build("nonexistent", "1").is_none());
+    }
+
+    #[test]
+    fn test_find_build_nonexistent_build_number() {
+        let mut temp_file = NamedTempFile::new().unwrap();
+        let json = serde_json::to_string(&vec![create_test_build()]).unwrap();
+        temp_file.write_all(json.as_bytes()).unwrap();
+
+        let db = BuildDatabase::from_file(temp_file.path()).unwrap();
+        assert!(db.find_build("test_product", "999").is_none());
     }
 
     #[test]

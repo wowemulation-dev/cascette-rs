@@ -7,10 +7,11 @@
 use crate::archive::error::{ArchiveError, ArchiveResult};
 use crate::blte::BlteFile;
 use binrw::BinRead;
-use cascette_crypto::TactKeyStore;
+use cascette_crypto::TactKeyProvider;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
+use std::sync::Arc;
 
 /// Location of content within an archive
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -108,7 +109,7 @@ impl<R: Read + Seek> ArchiveFile<R> {
         &mut self,
         offset: u64,
         size: u64,
-        key_store: &TactKeyStore,
+        key_store: &dyn TactKeyProvider,
     ) -> ArchiveResult<Vec<u8>> {
         let blte_data = self.read_at_offset(offset, size)?;
 
@@ -149,8 +150,8 @@ impl ArchiveFile<File> {
 pub struct ArchiveReader<R: Read + Seek> {
     /// Archive file
     archive: ArchiveFile<R>,
-    /// Optional key store for decryption
-    key_store: Option<TactKeyStore>,
+    /// Optional key provider for decryption
+    key_store: Option<Arc<dyn TactKeyProvider>>,
 }
 
 impl<R: Read + Seek> ArchiveReader<R> {
@@ -162,8 +163,8 @@ impl<R: Read + Seek> ArchiveReader<R> {
         }
     }
 
-    /// Create archive reader with key store
-    pub fn with_keys(reader: R, key_store: TactKeyStore) -> Self {
+    /// Create archive reader with key provider
+    pub fn with_keys(reader: R, key_store: Arc<dyn TactKeyProvider>) -> Self {
         Self {
             archive: ArchiveFile::new(reader),
             key_store: Some(key_store),
@@ -182,7 +183,7 @@ impl<R: Read + Seek> ArchiveReader<R> {
 
         if let Some(ref key_store) = self.key_store {
             self.archive
-                .read_blte_at_offset_with_keys(location.offset, location.size, key_store)
+                .read_blte_at_offset_with_keys(location.offset, location.size, &**key_store)
         } else {
             self.archive
                 .read_blte_at_offset(location.offset, location.size)
@@ -224,11 +225,7 @@ impl<R: Read + Seek> ArchiveReader<R> {
             (),
         )?;
 
-        Ok(ContentStream::new(
-            blte,
-            chunk_size,
-            self.key_store.as_ref(),
-        ))
+        Ok(ContentStream::new(blte, chunk_size, self.key_store.clone()))
     }
 
     /// Get current position
@@ -236,8 +233,8 @@ impl<R: Read + Seek> ArchiveReader<R> {
         self.archive.position()
     }
 
-    /// Set key store for decryption
-    pub fn set_key_store(&mut self, key_store: TactKeyStore) {
+    /// Set key provider for decryption
+    pub fn set_key_store(&mut self, key_store: Arc<dyn TactKeyProvider>) {
         self.key_store = Some(key_store);
     }
 }
@@ -250,7 +247,10 @@ impl ArchiveReader<File> {
     }
 
     /// Open archive reader with keys from file path
-    pub fn open_with_keys<P: AsRef<Path>>(path: P, key_store: TactKeyStore) -> ArchiveResult<Self> {
+    pub fn open_with_keys<P: AsRef<Path>>(
+        path: P,
+        key_store: Arc<dyn TactKeyProvider>,
+    ) -> ArchiveResult<Self> {
         let file = File::open(path)?;
         Ok(Self::with_keys(file, key_store))
     }
@@ -265,8 +265,8 @@ pub struct ContentStream {
     /// Chunk size for streaming
     #[allow(dead_code)] // Future streaming optimization
     chunk_size: usize,
-    /// Optional key store for decryption
-    key_store: Option<TactKeyStore>,
+    /// Optional key provider for decryption
+    key_store: Option<Arc<dyn TactKeyProvider>>,
     /// Buffer for decompressed data
     buffer: Vec<u8>,
     /// Current position in buffer
@@ -275,12 +275,12 @@ pub struct ContentStream {
 
 impl ContentStream {
     /// Create new content stream
-    fn new(blte: BlteFile, chunk_size: usize, key_store: Option<&TactKeyStore>) -> Self {
+    fn new(blte: BlteFile, chunk_size: usize, key_store: Option<Arc<dyn TactKeyProvider>>) -> Self {
         Self {
             blte,
             current_chunk: 0,
             chunk_size,
-            key_store: key_store.cloned(),
+            key_store,
             buffer: Vec::new(),
             buffer_position: 0,
         }
@@ -298,7 +298,7 @@ impl ContentStream {
             // Use BLTE's decryption support
             chunk.decompress(self.current_chunk).or_else(|_| {
                 // Try decryption if regular decompression fails
-                crate::blte::decrypt_chunk_with_keys(&chunk.data, key_store, self.current_chunk)
+                crate::blte::decrypt_chunk_with_keys(&chunk.data, &**key_store, self.current_chunk)
             })?
         } else {
             chunk.decompress(self.current_chunk)?
@@ -311,7 +311,7 @@ impl ContentStream {
     /// Read all remaining content
     pub fn read_all(&self) -> ArchiveResult<Vec<u8>> {
         if let Some(ref key_store) = self.key_store {
-            Ok(self.blte.decompress_with_keys(key_store)?)
+            Ok(self.blte.decompress_with_keys(&**key_store)?)
         } else {
             Ok(self.blte.decompress()?)
         }

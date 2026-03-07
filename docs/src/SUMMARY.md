@@ -1,6 +1,7 @@
 # Summary
 
 [Introduction](README.md)
+[Supported Products](products.md)
 [Glossary](glossary.md)
 
 # Formats
@@ -42,6 +43,7 @@
 # Operations
 
 - [Mirroring](operations/mirroring.md)
+- [Launcher Install](operations/launcher-install.md)
 - [References](operations/references.md)
 
 # Development

@@ -127,7 +127,7 @@ struct EKeyEntry {
 **Padding Detection**: EKey pages may contain padding entries that must be
 skipped. Two sentinel patterns indicate padding:
 
-1. `espec_index == 0xFFFFFFFF` (Agent.exe sentinel)
+1. `espec_index == 0xFFFFFFFF` (padding sentinel)
 2. `espec_index == 0` with all key bytes `0x00` (zero-fill padding)
 
 ## Content Resolution Process
@@ -285,44 +285,6 @@ struct CKeyEntry {
 
 Use cases include different regional encryption and progressive quality levels.
 
-## Performance Considerations
-
-### Memory-Mapped Access
-
-For large encoding files (100MB+):
-
-```rust
-use memmap2::MmapOptions;
-
-struct EncodingFile {
-    mmap: Mmap,
-    header: EncodingHeader,
-    // ...
-}
-
-impl EncodingFile {
-    fn open(path: &Path) -> Result<Self> {
-        let file = File::open(path)?;
-        let mmap = unsafe { MmapOptions::new().map(&file)? };
-
-        // Parse header from mmap
-        let header = EncodingHeader::read(&mmap[..22])?;
-
-        Ok(Self { mmap, header })
-    }
-}
-```
-
-### Page Caching
-
-Cache frequently accessed pages:
-
-```rust
-struct PageCache {
-    entries: LruCache<u32, Arc<CKeyPage>>,
-}
-```
-
 ## Validation
 
 ### Checksums
@@ -414,7 +376,7 @@ structure using the same ESpec format as all other files.
 4. **CKey Padding**: Entries with `ekey_count = 0` indicate end of page data
 5. **EKey Padding**: Entries with `espec_index = 0xFFFFFFFF` or all-zero keys
    indicate padding (see Padding Detection above)
-5. **File Size**: Remember to account for the file's own ESpec at the end
+6. **File Size**: Remember to account for the file's own ESpec at the end
 
 ## Real-World Example
 

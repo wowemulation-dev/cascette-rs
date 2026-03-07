@@ -17,6 +17,20 @@
 
 use cascette_protocol::{CdnClient, CdnConfig, ClientConfig, ContentType, RibbitTactClient};
 
+/// Extract a hash field from a BPSV row as a lowercase hex string.
+fn bpsv_hash_field(
+    row: &cascette_formats::bpsv::BpsvRow,
+    name: &str,
+    schema: &cascette_formats::bpsv::BpsvSchema,
+) -> Option<String> {
+    let val = row.get_by_name(name, schema)?;
+    if let Some(bytes) = val.as_hex() {
+        Some(hex::encode(bytes))
+    } else {
+        val.as_string().map(str::to_string)
+    }
+}
+
 /// Main entry point for WASM
 ///
 /// In a real WASM application, this would be called from JavaScript
@@ -70,24 +84,24 @@ pub async fn query_wow_classic() -> Result<(), Box<dyn std::error::Error>> {
             .and_then(|v| v.as_string())
             .unwrap_or("unknown");
 
-        let build_id = row
-            .get_by_name("BuildId", versions.schema())
-            .and_then(|v| v.as_string())
-            .unwrap_or("unknown");
+        let build_id_str;
+        let build_id = {
+            let v = row.get_by_name("BuildId", versions.schema());
+            if let Some(n) = v.and_then(cascette_formats::bpsv::BpsvValue::as_dec) {
+                build_id_str = n.to_string();
+                &*build_id_str
+            } else {
+                "unknown"
+            }
+        };
 
         // Store first region's config hashes for later download
         if build_config_hash.is_empty() {
-            if let Some(hash) = row
-                .get_by_name("BuildConfig", versions.schema())
-                .and_then(|v| v.as_string())
-            {
-                build_config_hash = hash.to_string();
+            if let Some(hash) = bpsv_hash_field(row, "BuildConfig", versions.schema()) {
+                build_config_hash = hash;
             }
-            if let Some(hash) = row
-                .get_by_name("CDNConfig", versions.schema())
-                .and_then(|v| v.as_string())
-            {
-                cdn_config_hash = hash.to_string();
+            if let Some(hash) = bpsv_hash_field(row, "CDNConfig", versions.schema()) {
+                cdn_config_hash = hash;
             }
         }
 

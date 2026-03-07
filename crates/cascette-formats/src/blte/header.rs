@@ -24,8 +24,8 @@ pub enum HeaderFlags {
     /// Extended chunk info (40 bytes per chunk):
     /// compressed_size(4) + decompressed_size(4) + checksum(16) + decompressed_checksum(16)
     ///
-    /// Only observed in the Avowed (aqua) product. Not present in Agent.exe
-    /// 3.13.3 (WoW/Battle.net). Documented on WoWDev wiki as "Block v0x10".
+    /// Only observed in the Avowed (aqua) product. Not used by WoW or
+    /// Battle.net products. Documented on WoWDev wiki as "Block v0x10".
     Extended = 0x10,
 }
 

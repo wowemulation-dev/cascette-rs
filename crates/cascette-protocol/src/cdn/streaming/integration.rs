@@ -56,7 +56,8 @@ use crate::cdn::streaming::{
     error::InputValidator,
     path::{CdnUrlBuilder, ContentType},
 };
-use cascette_crypto::TactKeyStore;
+use cascette_crypto::{TactKeyProvider, TactKeyStore};
+use cascette_formats::archive::ArchiveGroup;
 
 use tracing::{debug, info};
 
@@ -204,6 +205,10 @@ pub struct StreamingCdnResolver<H: HttpClient> {
     cached_indices: HashMap<String, Arc<ArchiveIndex>>,
     // Cached archive group indices
     cached_archive_groups: HashMap<String, Arc<ArchiveIndex>>,
+    /// Ordered archive hashes from CDN config (position = archive_index)
+    archive_hashes: Vec<String>,
+    /// Archive group index for encoding key -> archive routing
+    archive_group: Option<Arc<ArchiveGroup>>,
 }
 
 impl<H: HttpClient + Clone> StreamingCdnResolver<H> {
@@ -225,6 +230,8 @@ impl<H: HttpClient + Clone> StreamingCdnResolver<H> {
             archive_reader,
             cached_indices: HashMap::new(),
             cached_archive_groups: HashMap::new(),
+            archive_hashes: Vec::new(),
+            archive_group: None,
         }
     }
 
@@ -323,7 +330,12 @@ impl<H: HttpClient + Clone> StreamingCdnResolver<H> {
             // Extract content from this archive
             let archive_results = self
                 .archive_reader
-                .extract_multiple(&archive_url, extraction_requests, &index, key_store)
+                .extract_multiple(
+                    &archive_url,
+                    extraction_requests,
+                    &index,
+                    key_store.map(|ks| ks as &dyn TactKeyProvider),
+                )
                 .await?;
 
             // Convert to final result format
@@ -363,7 +375,12 @@ impl<H: HttpClient + Clone> StreamingCdnResolver<H> {
 
         let extraction_result = self
             .archive_reader
-            .extract_by_key(&archive_url, encoding_key, &index, key_store)
+            .extract_by_key(
+                &archive_url,
+                encoding_key,
+                &index,
+                key_store.map(|ks| ks as &dyn TactKeyProvider),
+            )
             .await?;
 
         Ok(ContentResolutionResult {
@@ -432,22 +449,57 @@ impl<H: HttpClient + Clone> StreamingCdnResolver<H> {
         Ok(arc_index)
     }
 
+    /// Load archive hashes and an optional pre-built archive group index.
+    ///
+    /// The archive hashes are the ordered list from `CdnConfig::archives()`.
+    /// The positional index of each hash corresponds to the `archive_index`
+    /// in archive group entries.
+    ///
+    /// If `group` is None, the resolver falls back to the first archive hash
+    /// for all requests.
+    pub fn set_archive_group(&mut self, archive_hashes: Vec<String>, group: Option<ArchiveGroup>) {
+        self.archive_hashes = archive_hashes;
+        self.archive_group = group.map(Arc::new);
+    }
+
     /// Group requests by archive using archive group index
-    #[allow(clippy::unused_self)] // Will use self when archive group index is implemented
     fn group_requests_by_archive(
         &self,
         requests: &[ContentResolutionRequest],
     ) -> HashMap<String, Vec<ContentResolutionRequest>> {
-        // For now, assume all content is in a single archive
-        // In a real implementation, this would use the archive group index
-        // to determine which archive contains each piece of content
+        let mut groups: HashMap<String, Vec<ContentResolutionRequest>> = HashMap::new();
 
-        let mut groups = HashMap::new();
-        let default_archive = "default_archive".to_string();
-
-        groups.insert(default_archive, requests.to_vec());
+        for request in requests {
+            let archive_hash = self.resolve_archive_for_key(&request.encoding_key);
+            groups
+                .entry(archive_hash)
+                .or_default()
+                .push(request.clone());
+        }
 
         groups
+    }
+
+    /// Determine which archive contains the given encoding key.
+    ///
+    /// Looks up the key in the archive group index to find the archive_index,
+    /// then maps it to the corresponding archive hash. Falls back to the first
+    /// archive hash if no group index is loaded or the key is not found.
+    fn resolve_archive_for_key(&self, encoding_key: &[u8]) -> String {
+        if let Some(group) = &self.archive_group
+            && let Some(entry) = group.find_entry(encoding_key)
+        {
+            let idx = entry.archive_index as usize;
+            if idx < self.archive_hashes.len() {
+                return self.archive_hashes[idx].clone();
+            }
+        }
+
+        // Fallback: first archive hash or placeholder
+        self.archive_hashes
+            .first()
+            .cloned()
+            .unwrap_or_else(|| "default_archive".to_string())
     }
 
     /// Build archive URL from hash with input validation
@@ -481,6 +533,8 @@ impl<H: HttpClient + Clone> StreamingCdnResolver<H> {
         // Clear caches when configuration changes
         self.cached_indices.clear();
         self.cached_archive_groups.clear();
+        self.archive_hashes.clear();
+        self.archive_group = None;
     }
 
     /// Update CDN host without clearing all caches (with validation)
@@ -493,6 +547,8 @@ impl<H: HttpClient + Clone> StreamingCdnResolver<H> {
             // Clear caches since URLs will change
             self.cached_indices.clear();
             self.cached_archive_groups.clear();
+            self.archive_hashes.clear();
+            self.archive_group = None;
         }
 
         Ok(())
@@ -507,6 +563,8 @@ impl<H: HttpClient + Clone> StreamingCdnResolver<H> {
     pub fn clear_caches(&mut self) {
         self.cached_indices.clear();
         self.cached_archive_groups.clear();
+        self.archive_hashes.clear();
+        self.archive_group = None;
     }
 
     /// Perform resource cleanup and prepare for shutdown
@@ -796,6 +854,129 @@ mod tests {
 
         assert_eq!(stats.cached_indices_count, 5);
         assert_eq!(stats.cached_archive_groups_count, 2);
+    }
+
+    // Helper to build an ArchiveIndex for testing
+    fn make_test_index(entries: &[(&[u8], u64, u32)]) -> ArchiveIndex {
+        use cascette_formats::archive::ArchiveIndexBuilder;
+        let mut builder = ArchiveIndexBuilder::new();
+        for &(key, offset, size) in entries {
+            builder.add_entry(key.to_vec(), size, offset);
+        }
+        let mut buf = Vec::new();
+        let mut cursor = std::io::Cursor::new(&mut buf);
+        builder.build(&mut cursor).expect("build index")
+    }
+
+    // Helper to build an ArchiveGroup from archive indices
+    fn make_test_archive_group(archives: &[(u16, &ArchiveIndex)]) -> ArchiveGroup {
+        use cascette_formats::archive::ArchiveGroupBuilder;
+        let mut builder = ArchiveGroupBuilder::new();
+        for &(idx, index) in archives {
+            builder.add_archive(idx, index);
+        }
+        let mut buf = Vec::new();
+        builder
+            .build(std::io::Cursor::new(&mut buf))
+            .expect("build archive group")
+    }
+
+    fn make_mock_resolver() -> StreamingCdnResolver<MockTestHttpClient> {
+        let mut mock_client = MockTestHttpClient::new();
+        mock_client.expect_clone().returning(|| {
+            let mut m = MockTestHttpClient::new();
+            m.expect_clone().returning(MockTestHttpClient::new);
+            m
+        });
+        StreamingCdnResolver::with_defaults(mock_client)
+    }
+
+    #[test]
+    fn test_group_requests_without_archive_group() {
+        let mut resolver = make_mock_resolver();
+        resolver.set_archive_group(vec!["aabbccdd".to_string(), "eeff0011".to_string()], None);
+
+        let requests = vec![
+            ContentResolutionRequest {
+                encoding_key: vec![1, 2, 3, 4],
+                expected_size: None,
+                decompress: true,
+            },
+            ContentResolutionRequest {
+                encoding_key: vec![5, 6, 7, 8],
+                expected_size: None,
+                decompress: true,
+            },
+        ];
+
+        let groups = resolver.group_requests_by_archive(&requests);
+        // All requests should go to the first archive hash
+        assert_eq!(groups.len(), 1);
+        assert!(groups.contains_key("aabbccdd"));
+        assert_eq!(groups["aabbccdd"].len(), 2);
+    }
+
+    #[test]
+    fn test_group_requests_with_archive_group() {
+        let mut resolver = make_mock_resolver();
+
+        let key_a: Vec<u8> = vec![0x10; 16];
+        let key_b: Vec<u8> = vec![0x20; 16];
+
+        let idx0 = make_test_index(&[(&key_a, 0, 100)]);
+        let idx1 = make_test_index(&[(&key_b, 0, 200)]);
+        let group = make_test_archive_group(&[(0, &idx0), (1, &idx1)]);
+
+        resolver.set_archive_group(
+            vec!["archive_zero".to_string(), "archive_one".to_string()],
+            Some(group),
+        );
+
+        let requests = vec![
+            ContentResolutionRequest {
+                encoding_key: key_a.clone(),
+                expected_size: None,
+                decompress: true,
+            },
+            ContentResolutionRequest {
+                encoding_key: key_b.clone(),
+                expected_size: None,
+                decompress: true,
+            },
+        ];
+
+        let groups = resolver.group_requests_by_archive(&requests);
+        assert_eq!(groups.len(), 2);
+        assert_eq!(groups["archive_zero"].len(), 1);
+        assert_eq!(groups["archive_zero"][0].encoding_key, key_a);
+        assert_eq!(groups["archive_one"].len(), 1);
+        assert_eq!(groups["archive_one"][0].encoding_key, key_b);
+    }
+
+    #[test]
+    fn test_resolve_archive_for_key_default() {
+        let resolver = make_mock_resolver();
+        // No archive_hashes, no group — should return "default_archive"
+        let result = resolver.resolve_archive_for_key(&[0x01, 0x02]);
+        assert_eq!(result, "default_archive");
+    }
+
+    #[test]
+    fn test_set_archive_group_cleared_on_config_change() {
+        let mut resolver = make_mock_resolver();
+
+        let key: Vec<u8> = vec![0x10; 16];
+        let idx = make_test_index(&[(&key, 0, 100)]);
+        let group = make_test_archive_group(&[(0, &idx)]);
+
+        resolver.set_archive_group(vec!["some_hash".to_string()], Some(group));
+        assert!(resolver.archive_group.is_some());
+        assert!(!resolver.archive_hashes.is_empty());
+
+        // Config change should clear archive group and hashes
+        resolver.update_config(CdnResolutionConfig::default());
+        assert!(resolver.archive_group.is_none());
+        assert!(resolver.archive_hashes.is_empty());
     }
 
     #[test]

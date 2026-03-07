@@ -48,6 +48,9 @@ pub enum ProtocolError {
     #[error("Timeout")]
     Timeout,
 
+    #[error("Truncated response: got {received} bytes, expected {expected}")]
+    TruncatedResponse { received: usize, expected: usize },
+
     #[error("Other error: {0}")]
     Other(String),
 
@@ -68,8 +71,11 @@ impl ProtocolError {
             | Self::ServerError(_)
             | Self::RateLimited { .. }
             | Self::ServiceUnavailable
-            | Self::Timeout => true,
-            Self::Http(e) => e.is_timeout() || e.is_connect(),
+            | Self::Timeout
+            | Self::TruncatedResponse { .. } => true,
+            Self::Http(e) => {
+                e.is_timeout() || e.is_connect() || e.is_body() || e.is_request() || e.is_decode()
+            }
             Self::HttpStatus(status) => {
                 matches!(
                     status,
@@ -96,9 +102,10 @@ impl ProtocolError {
             | Self::ServerError(_)
             | Self::RateLimited { .. }
             | Self::ServiceUnavailable
-            | Self::Timeout => true,
-            // On WASM, is_connect() is not available, only check timeout
-            Self::Http(e) => e.is_timeout(),
+            | Self::Timeout
+            | Self::TruncatedResponse { .. } => true,
+            // On WASM, is_connect() is not available
+            Self::Http(e) => e.is_timeout() || e.is_body() || e.is_request() || e.is_decode(),
             Self::HttpStatus(status) => {
                 matches!(
                     status,

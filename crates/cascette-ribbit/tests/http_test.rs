@@ -30,6 +30,20 @@ fn create_test_db() -> NamedTempFile {
         "install_ekey": "ccccddddeeeeffffaaaabbbbccccdddd",
         "download_ekey": "ddddeeeeffffaaaabbbbccccddddeeee"
     }, {
+        "id": 3,
+        "product": "wow",
+        "version": "1.14.2.42596",
+        "build": "42596",
+        "build_config": "abcdef1234567890abcdef1234567890",
+        "cdn_config": "1234567890abcdef1234567890abcdef",
+        "keyring": null,
+        "product_config": null,
+        "build_time": "2023-12-01T00:00:00+00:00",
+        "encoding_ekey": "11112222333344445555666677778888",
+        "root_ekey": "22223333444455556666777788889999",
+        "install_ekey": "33334444555566667777888899990000",
+        "download_ekey": "44445555666677778888999900001111"
+    }, {
         "id": 2,
         "product": "wowt",
         "version": "11.0.7.58187",
@@ -130,16 +144,16 @@ async fn test_http_versions_endpoint_success() {
     assert!(header.contains("CDNConfig!HEX:16"));
     assert!(header.contains("KeyRing!HEX:16"));
     assert!(header.contains("BuildId!DEC:4"));
-    assert!(header.contains("VersionsName!STRING:0"));
+    assert!(header.contains("VersionsName!String:0"));
 
-    // Should have 7 data rows (one per region)
+    // Should have 5 data rows (one per region)
     let data_line_count = lines
         .iter()
         .filter(|l| !l.is_empty() && !l.contains("Region!STRING") && !l.contains("seqn"))
         .count();
     assert_eq!(
-        data_line_count, 7,
-        "Should have 7 regions (us, eu, cn, kr, tw, sg, xx)"
+        data_line_count, 5,
+        "Should have 5 regions (us, eu, cn, kr, tw)"
     );
 
     // Verify regions are present
@@ -148,8 +162,6 @@ async fn test_http_versions_endpoint_success() {
     assert!(body.contains("cn|"));
     assert!(body.contains("kr|"));
     assert!(body.contains("tw|"));
-    assert!(body.contains("sg|"));
-    assert!(body.contains("xx|"));
 
     // Verify build data
     assert!(body.contains("0123456789abcdef0123456789abcdef")); // build_config
@@ -157,11 +169,12 @@ async fn test_http_versions_endpoint_success() {
     assert!(body.contains("42597")); // build id
     assert!(body.contains("1.14.2.42597")); // version
 
-    // Last line should be sequence number
-    let last_line = lines
-        .last()
-        .expect("Response should have at least one line for sequence number");
-    assert!(last_line.starts_with("## seqn = "));
+    // Sequence number must be on line 2 (between header and data rows)
+    assert!(
+        lines[1].starts_with("## seqn = "),
+        "seqn must appear between header and data rows, got: {}",
+        lines[1]
+    );
 }
 
 #[tokio::test]
@@ -273,12 +286,259 @@ async fn test_http_bgdl_endpoint() {
     assert!(body.contains("Region!STRING:0"));
     assert!(body.contains("BuildConfig!HEX:16"));
 
-    // Should have 7 regions
+    // Should have 5 regions
     assert!(body.contains("us|"));
     assert!(body.contains("eu|"));
     assert!(body.contains("cn|"));
     assert!(body.contains("kr|"));
     assert!(body.contains("tw|"));
-    assert!(body.contains("sg|"));
-    assert!(body.contains("xx|"));
+}
+
+#[tokio::test]
+async fn test_http_v2_summary_endpoint() {
+    let (addr, _state) = start_test_server().await;
+
+    let client = reqwest::Client::new();
+    let response = client
+        .get(format!("http://{addr}/v2/summary"))
+        .send()
+        .await
+        .expect("Failed to query v2 summary endpoint");
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let content_type = response
+        .headers()
+        .get("content-type")
+        .expect("Response should have content-type header")
+        .to_str()
+        .expect("Content-Type header should be valid UTF-8");
+    assert!(content_type.contains("text/plain"));
+
+    let body = response
+        .text()
+        .await
+        .expect("Failed to read summary response body");
+
+    // Verify BPSV header with Flags column
+    let lines: Vec<&str> = body.lines().collect();
+    assert!(!lines.is_empty());
+    assert_eq!(lines[0], "Product!STRING:0|Seqn!DEC:4|Flags!STRING:0");
+
+    // Seqn line between header and data
+    assert!(
+        lines[1].starts_with("## seqn = "),
+        "seqn must appear between header and data rows"
+    );
+
+    // Should contain both test products
+    assert!(body.contains("wow|"));
+    assert!(body.contains("wowt|"));
+}
+
+#[tokio::test]
+async fn test_http_v2_summary_not_found_on_v1_path() {
+    let (addr, _state) = start_test_server().await;
+
+    let client = reqwest::Client::new();
+
+    // /summary (without /v2 prefix) should not match any route
+    let response = client
+        .get(format!("http://{addr}/summary"))
+        .send()
+        .await
+        .expect("Failed to send request");
+
+    // axum returns 404 for unmatched routes
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
+
+// --- Versioned endpoint integration tests ---
+
+#[tokio::test]
+async fn test_http_v2_versioned_versions_endpoint() {
+    let (addr, _state) = start_test_server().await;
+
+    let client = reqwest::Client::new();
+    let response = client
+        .get(format!("http://{addr}/v2/products/wow/versions/42597"))
+        .send()
+        .await
+        .expect("Failed to query versioned versions endpoint");
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = response
+        .text()
+        .await
+        .expect("Failed to read versioned versions response body");
+
+    assert!(body.contains("Region!STRING:0"));
+    assert!(body.contains("42597"));
+    assert!(body.contains("1.14.2.42597"));
+    assert!(body.contains("0123456789abcdef0123456789abcdef"));
+}
+
+#[tokio::test]
+async fn test_http_v2_versioned_versions_older_build() {
+    let (addr, _state) = start_test_server().await;
+
+    let client = reqwest::Client::new();
+    let response = client
+        .get(format!("http://{addr}/v2/products/wow/versions/42596"))
+        .send()
+        .await
+        .expect("Failed to query older versioned build");
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = response
+        .text()
+        .await
+        .expect("Failed to read older build response body");
+
+    // Should return the older build, not the latest
+    assert!(body.contains("42596"));
+    assert!(body.contains("1.14.2.42596"));
+    assert!(body.contains("abcdef1234567890abcdef1234567890"));
+    // Should NOT contain the latest build's config
+    assert!(!body.contains("0123456789abcdef0123456789abcdef"));
+}
+
+#[tokio::test]
+async fn test_http_v2_versioned_versions_not_found() {
+    let (addr, _state) = start_test_server().await;
+
+    let client = reqwest::Client::new();
+    let response = client
+        .get(format!("http://{addr}/v2/products/wow/versions/99999"))
+        .send()
+        .await
+        .expect("Failed to query non-existent build");
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn test_http_v2_versioned_cdns_endpoint() {
+    let (addr, _state) = start_test_server().await;
+
+    let client = reqwest::Client::new();
+    let response = client
+        .get(format!("http://{addr}/v2/products/wow/cdns/42597"))
+        .send()
+        .await
+        .expect("Failed to query versioned cdns endpoint");
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = response
+        .text()
+        .await
+        .expect("Failed to read versioned cdns response body");
+
+    assert!(body.contains("Name!STRING:0"));
+    assert!(body.contains("cdn.test.com"));
+}
+
+#[tokio::test]
+async fn test_http_v2_versioned_bgdl_endpoint() {
+    let (addr, _state) = start_test_server().await;
+
+    let client = reqwest::Client::new();
+    let response = client
+        .get(format!("http://{addr}/v2/products/wow/bgdl/42597"))
+        .send()
+        .await
+        .expect("Failed to query versioned bgdl endpoint");
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = response
+        .text()
+        .await
+        .expect("Failed to read versioned bgdl response body");
+
+    assert!(body.contains("Region!STRING:0"));
+    assert!(body.contains("42597"));
+}
+
+#[tokio::test]
+async fn test_http_v1_versioned_versions_endpoint() {
+    let (addr, _state) = start_test_server().await;
+
+    let client = reqwest::Client::new();
+    let response = client
+        .get(format!("http://{addr}/wow/versions/42597"))
+        .send()
+        .await
+        .expect("Failed to query v1 versioned versions endpoint");
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = response
+        .text()
+        .await
+        .expect("Failed to read v1 versioned versions response body");
+
+    assert!(body.contains("42597"));
+    assert!(body.contains("1.14.2.42597"));
+}
+
+#[tokio::test]
+async fn test_http_v1_versioned_versions_not_found() {
+    let (addr, _state) = start_test_server().await;
+
+    let client = reqwest::Client::new();
+    let response = client
+        .get(format!("http://{addr}/wow/versions/99999"))
+        .send()
+        .await
+        .expect("Failed to query non-existent v1 versioned build");
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn test_http_v1_versioned_cdns_endpoint() {
+    let (addr, _state) = start_test_server().await;
+
+    let client = reqwest::Client::new();
+    let response = client
+        .get(format!("http://{addr}/wow/cdns/42597"))
+        .send()
+        .await
+        .expect("Failed to query v1 versioned cdns endpoint");
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = response
+        .text()
+        .await
+        .expect("Failed to read v1 versioned cdns response body");
+
+    assert!(body.contains("Name!STRING:0"));
+    assert!(body.contains("cdn.test.com"));
+}
+
+#[tokio::test]
+async fn test_http_v1_versioned_bgdl_endpoint() {
+    let (addr, _state) = start_test_server().await;
+
+    let client = reqwest::Client::new();
+    let response = client
+        .get(format!("http://{addr}/wow/bgdl/42597"))
+        .send()
+        .await
+        .expect("Failed to query v1 versioned bgdl endpoint");
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = response
+        .text()
+        .await
+        .expect("Failed to read v1 versioned bgdl response body");
+
+    assert!(body.contains("Region!STRING:0"));
+    assert!(body.contains("42597"));
 }

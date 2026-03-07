@@ -98,6 +98,26 @@ path = "examples/wow_classic_native.rs"
 name = "wow_classic_wasm"
 path = "examples/wow_classic_wasm.rs"
 
+[[example]]
+name = "cdn_protocol_verification"
+path = "examples/cdn_protocol_verification.rs"
+
+[[example]]
+name = "cdn_chain_verification"
+path = "examples/cdn_chain_verification.rs"
+
+[[example]]
+name = "dump_product_info"
+path = "examples/dump_product_info.rs"
+
+[[example]]
+name = "cdn_archive_sizes"
+path = "examples/cdn_archive_sizes.rs"
+
+[[example]]
+name = "build_file_tree"
+path = "examples/build_file_tree.rs"
+
 [package.metadata.cargo-machete]
 # These dependencies are used for V1 MIME format support and other features
 # getrandom_02 is a renamed dep to enable the "js" feature for getrandom 0.2 on WASM

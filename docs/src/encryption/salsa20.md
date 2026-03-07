@@ -209,7 +209,7 @@ impl Salsa20State {
 ```rust
 pub fn decrypt_salsa20(
     ciphertext: &[u8],
-    key: &[u8; 32],
+    key: &[u8; 16],
     nonce: &[u8; 8]
 ) -> Vec<u8> {
     let mut state = Salsa20State::new(key, nonce);
@@ -369,7 +369,7 @@ impl BufferedSalsa20 {
 mod tests {
     #[test]
     fn test_salsa20_encryption() {
-        let key = [0u8; 32];
+        let key = [0u8; 16];
         let nonce = [0u8; 8];
         let plaintext = b"Hello, World!";
 
@@ -540,6 +540,7 @@ The cascette-crypto crate includes hardcoded TACT keys for major WoW expansions:
 - Battle for Azeroth, Shadowlands, The War Within, Classic Era
 
 Keys are stored with redacted debug output to prevent accidental logging.
+
 ## References
 
 - [Salsa20 Specification](https://cr.yp.to/snuffle/spec.pdf)

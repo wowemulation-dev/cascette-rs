@@ -1,12 +1,16 @@
 //! Main download manifest implementation with entries-first parsing
 
+use std::collections::HashMap;
+use std::io::Cursor;
+
+use binrw::{BinRead, BinWrite};
+
 use crate::download::entry::DownloadFileEntry;
 use crate::download::error::{DownloadError, Result};
 use crate::download::header::DownloadHeader;
 use crate::download::priority::{PriorityAnalysis, analyze_priorities};
 use crate::download::tag::DownloadTag;
-use binrw::{BinRead, BinWrite};
-use std::io::Cursor;
+use crate::install::tag::TagType;
 
 /// Complete download manifest with header, entries, and tags
 ///
@@ -202,6 +206,65 @@ impl DownloadManifest {
             .iter()
             .enumerate()
             .filter(|(index, _)| tags.iter().all(|tag| tag.has_file(*index)))
+            .collect()
+    }
+
+    /// Get entries matching a tag query with OR-within-group, AND-between-groups logic.
+    ///
+    /// Tag query logic:
+    /// 1. Tags are grouped by `TagType` (Platform, Architecture, Locale, etc.)
+    /// 2. Within each group: bitmasks are OR'd (entry matches if ANY tag in group matches)
+    /// 3. Between groups: bitmasks are AND'd (entry must match ALL groups)
+    ///
+    /// Tags not found in the manifest are silently ignored within their group.
+    /// If an entire group resolves to no tags, that group is skipped.
+    pub fn entries_by_tag_query(&self, tag_names: &[&str]) -> Vec<(usize, &DownloadFileEntry)> {
+        if tag_names.is_empty() {
+            return self.entries.iter().enumerate().collect();
+        }
+
+        // Group requested tags by TagType
+        let mut groups: HashMap<TagType, Vec<&DownloadTag>> = HashMap::new();
+        for name in tag_names {
+            if let Some(tag) = self.tags.iter().find(|t| t.name == *name) {
+                groups.entry(tag.tag_type).or_default().push(tag);
+            }
+        }
+
+        if groups.is_empty() {
+            return Vec::new();
+        }
+
+        let entry_count = self.entries.len();
+        let mask_len = entry_count.div_ceil(8);
+
+        // Start with all bits set (AND identity)
+        let mut result_mask = vec![0xFFu8; mask_len];
+
+        for group_tags in groups.values() {
+            // OR within group
+            let mut group_mask = vec![0u8; mask_len];
+            for tag in group_tags {
+                for (gm, tb) in group_mask.iter_mut().zip(tag.bit_mask.iter()) {
+                    *gm |= tb;
+                }
+            }
+
+            // AND between groups
+            for (rm, gm) in result_mask.iter_mut().zip(group_mask.iter()) {
+                *rm &= gm;
+            }
+        }
+
+        self.entries
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| {
+                let byte_index = index / 8;
+                let bit_offset = index % 8;
+                byte_index < result_mask.len()
+                    && (result_mask[byte_index] & (0x80 >> bit_offset)) != 0
+            })
             .collect()
     }
 

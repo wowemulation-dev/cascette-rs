@@ -103,3 +103,16 @@ workspace = true
 
 [dev-dependencies]
 tempfile = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }
+
+[[example]]
+name = "memory_cache"
+path = "examples/memory_cache.rs"
+
+[[example]]
+name = "multi_layer_cache"
+path = "examples/multi_layer_cache.rs"
+
+[[example]]
+name = "cache_verification"
+path = "examples/cache_verification.rs"

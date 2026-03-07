@@ -1,0 +1,18 @@
+{
+  "description": "Size manifest (DS) test fixtures from WoW CDN",
+  "source": "Downloaded via cascette-py from Blizzard CDN, BLTE-decompressed and truncated",
+  "fixtures": [
+    {
+      "file": "wow_classic_era_v1_100entries.size",
+      "product": "wow_classic_era",
+      "version": "1.15.8.65989",
+      "format": "V1 (15-byte header, 5-byte entry_size)",
+      "header_version": 1,
+      "ekey_size": 9,
+      "tag_count": 29,
+      "entry_count": 100,
+      "original_entry_count": 219202,
+      "notes": "Truncated from 219,202 entries to 100. Tag bitmasks shortened to match. Original EKey: afe96f2ec1e4eb331981bd1a36b22cbe, CKey: 4648d502acec745311942fe073e2ec4b."
+    }
+  ]
+}

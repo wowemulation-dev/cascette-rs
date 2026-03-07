@@ -101,8 +101,8 @@ impl PatchArchiveBuilder {
 
     /// Sort file entries by target CKey
     ///
-    /// Agent.exe validates blocks are sorted by CKey. Sorting entries
-    /// before building ensures blocks are sorted.
+    /// Blocks must be sorted by CKey. Sorting entries before building
+    /// ensures this constraint is met.
     pub fn sort_entries(&mut self) {
         self.file_entries
             .sort_by(|a, b| a.target_ckey.cmp(&b.target_ckey));

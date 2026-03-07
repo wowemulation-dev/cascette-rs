@@ -11,6 +11,7 @@
 //! Then test with:
 //! ```bash
 //! # HTTP endpoints
+//! curl http://localhost:8080/v2/summary
 //! curl http://localhost:8080/wow/versions
 //! curl http://localhost:8080/wow/cdns
 //! curl http://localhost:8080/wow/bgdl

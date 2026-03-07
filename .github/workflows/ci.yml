@@ -113,6 +113,11 @@ jobs:
           toolchain: 1.92.0
           components: rustfmt, clippy
 
+      - name: Install protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
@@ -174,6 +179,11 @@ jobs:
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest
+
+      - name: Install protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Cache Rust dependencies for ${{ matrix.os }}
         uses: Swatinem/rust-cache@v2
@@ -264,6 +274,11 @@ jobs:
         with:
           toolchain: 1.92.0
 
+      - name: Install protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Cache documentation dependencies
         uses: Swatinem/rust-cache@v2
         with:
@@ -293,6 +308,11 @@ jobs:
         with:
           toolchain: stable
           components: llvm-tools
+
+      - name: Install protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Cache coverage dependencies
         uses: Swatinem/rust-cache@v2

@@ -77,19 +77,28 @@
 #![warn(missing_docs)]
 
 pub mod arc4;
+pub mod armadillo;
 pub mod error;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod generate;
 pub mod jenkins;
 pub mod keys;
 pub mod md5;
+pub mod murmur3;
 pub mod salsa20;
 pub mod store_trait;
 
 pub use error::CryptoError;
+#[cfg(not(target_arch = "wasm32"))]
+pub use generate::{generate_salsa20_iv, generate_tact_key};
 
 // Re-export commonly used types
 pub use arc4::Arc4Cipher;
 pub use jenkins::{Jenkins96, hashlittle, hashlittle2};
 pub use keys::{TactKey, TactKeyStore};
 pub use md5::{ContentKey, EncodingKey, FileDataId};
+pub use murmur3::murmur3_fmix64;
 pub use salsa20::Salsa20Cipher;
-pub use store_trait::{TactKeyIterator, TactKeyProvider, TactKeyStoreConfig, UnifiedKeyStore};
+pub use store_trait::{
+    ChainedKeyProvider, TactKeyIterator, TactKeyProvider, TactKeyStoreConfig, UnifiedKeyStore,
+};

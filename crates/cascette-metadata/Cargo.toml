@@ -1,0 +1,34 @@
+[package]
+name = "cascette-metadata"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "File metadata, content categorization, and TACT key orchestration for NGDP/CASC"
+readme = "README.md"
+keywords = ["casc", "ngdp", "metadata", "filedataid", "tact"]
+categories = ["game-development", "data-structures"]
+
+[dependencies]
+cascette-crypto = { version = "0.2.0", path = "../cascette-crypto" }
+cascette-import = { version = "0.2.0", path = "../cascette-import", features = ["listfile", "tactkeys"], optional = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util", "macros", "rt-multi-thread"] }
+pretty_assertions = { workspace = true }
+tempfile = { workspace = true }
+
+[features]
+default = ["import"]
+import = ["dep:cascette-import"]
+
+[[example]]
+name = "metadata_orchestrator"
+required-features = ["import"]
+
+[lints]
+workspace = true

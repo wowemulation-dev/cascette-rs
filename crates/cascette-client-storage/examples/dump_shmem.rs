@@ -43,7 +43,7 @@ fn main() {
 
     if shmem_files.is_empty() {
         println!("No .shmem files found in {} or parent", data.display());
-        println!("The shmem file is only present while the game client or Agent.exe is running.");
+        println!("The shmem file is only present while the game client or the Blizzard Agent is running.");
         return;
     }
 

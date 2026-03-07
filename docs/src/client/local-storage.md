@@ -244,4 +244,3 @@ Multi-stage pipeline using marker files for crash recovery:
 - [Archives](../formats/archives.md)
 - [Archive Groups](../formats/archive-groups.md)
 - [BLTE Container](../compression/blte.md)
-- [Agent Comparison](../development/agent-comparison.md)

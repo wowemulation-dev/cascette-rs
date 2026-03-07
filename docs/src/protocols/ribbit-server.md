@@ -49,8 +49,8 @@ graph TD
 
 | Flag | Env Var | Default | Description |
 |------|---------|---------|-------------|
-| `--http-bind` | `CASCETTE_RIBBIT_HTTP_BIND` | `0.0.0.0:8080` | HTTP listen address |
-| `--tcp-bind` | `CASCETTE_RIBBIT_TCP_BIND` | `0.0.0.0:1119` | TCP listen address |
+| `--http-bind` | `CASCETTE_RIBBIT_HTTP_BIND` | `127.0.0.1:8080` | HTTP listen address |
+| `--tcp-bind` | `CASCETTE_RIBBIT_TCP_BIND` | `127.0.0.1:1119` | TCP listen address |
 | `--builds` | `CASCETTE_RIBBIT_BUILDS` | `./builds.json` | Path to build database JSON |
 | `--cdn-hosts` | `CASCETTE_RIBBIT_CDN_HOSTS` | `cdn.arctium.tools` | CDN host(s) |
 | `--cdn-path` | `CASCETTE_RIBBIT_CDN_PATH` | `tpr/wow` | CDN base path |

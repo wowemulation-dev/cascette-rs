@@ -14,6 +14,23 @@
 use cascette_protocol::{CdnClient, CdnConfig, ClientConfig, ContentType, RibbitTactClient};
 use std::error::Error;
 
+/// Extract a hash field from a BPSV row as a lowercase hex string.
+///
+/// The Ribbit versions BPSV schema uses `HEX:N` for BuildConfig/CDNConfig,
+/// so those fields parse as `BpsvValue::Hex`, not `BpsvValue::String`.
+fn bpsv_hash_field<'a>(
+    row: &'a cascette_formats::bpsv::BpsvRow,
+    name: &str,
+    schema: &'a cascette_formats::bpsv::BpsvSchema,
+) -> Option<String> {
+    let val = row.get_by_name(name, schema)?;
+    if let Some(bytes) = val.as_hex() {
+        Some(hex::encode(bytes))
+    } else {
+        val.as_string().map(str::to_string)
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     // Initialize tracing for debug output
@@ -46,20 +63,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .and_then(|v| v.as_string())
             .unwrap_or("unknown");
 
+        // BuildId is DEC:4 typed
         let build_id = row
             .get_by_name("BuildId", versions.schema())
-            .and_then(|v| v.as_string())
-            .unwrap_or("unknown");
+            .and_then(cascette_formats::bpsv::BpsvValue::as_dec)
+            .map_or_else(|| "unknown".to_string(), |n| n.to_string());
 
-        let build_config = row
-            .get_by_name("BuildConfig", versions.schema())
-            .and_then(|v| v.as_string())
-            .unwrap_or("unknown");
+        // BuildConfig and CDNConfig are HEX:16 typed — must use as_hex()
+        let build_config = bpsv_hash_field(row, "BuildConfig", versions.schema())
+            .unwrap_or_else(|| "unknown".to_string());
 
-        let cdn_config = row
-            .get_by_name("CDNConfig", versions.schema())
-            .and_then(|v| v.as_string())
-            .unwrap_or("unknown");
+        let cdn_config = bpsv_hash_field(row, "CDNConfig", versions.schema())
+            .unwrap_or_else(|| "unknown".to_string());
 
         println!("  Region: {region}");
         println!("    Version: {version_name}");
@@ -105,14 +120,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Step 5: Get the first region's config hashes for download
     let first_version = versions.rows().first().ok_or("No versions found")?;
 
-    let build_config_hash = first_version
-        .get_by_name("BuildConfig", versions.schema())
-        .and_then(|v| v.as_string())
+    let build_config_hash = bpsv_hash_field(first_version, "BuildConfig", versions.schema())
         .ok_or("Missing BuildConfig")?;
 
-    let cdn_config_hash = first_version
-        .get_by_name("CDNConfig", versions.schema())
-        .and_then(|v| v.as_string())
+    let cdn_config_hash = bpsv_hash_field(first_version, "CDNConfig", versions.schema())
         .ok_or("Missing CDNConfig")?;
 
     // Step 6: Create CDN client and download configurations
@@ -120,7 +131,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Download build config
     println!("Downloading build config ({build_config_hash})...");
-    let build_config_key = hex::decode(build_config_hash)?;
+    let build_config_key = hex::decode(&build_config_hash)?;
     let build_config_data = cdn_client
         .download(&cdn_endpoint, ContentType::Config, &build_config_key)
         .await?;
@@ -128,7 +139,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Download CDN config
     println!("Downloading CDN config ({cdn_config_hash})...");
-    let cdn_config_key = hex::decode(cdn_config_hash)?;
+    let cdn_config_key = hex::decode(&cdn_config_hash)?;
     let cdn_config_data = cdn_client
         .download(&cdn_endpoint, ContentType::Config, &cdn_config_key)
         .await?;

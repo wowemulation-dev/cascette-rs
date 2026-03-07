@@ -341,21 +341,21 @@ mod tests {
             fn tag_type_conversion_bijective(
                 tag_type in tag_type()
             ) {
-                let value = tag_type as u16;
+                let value = tag_type.as_u16();
                 let converted_back = TagType::from_u16(value);
-                prop_assert_eq!(converted_back, Some(tag_type));
+                prop_assert_eq!(converted_back, tag_type);
             }
 
-            /// Test that invalid tag type values return None
+            /// Test that unrecognized tag type values produce Other(value)
             #[test]
-            fn invalid_tag_type_values(
+            fn unknown_tag_type_values(
                 invalid_value in any::<u16>().prop_filter(
                     "Not a valid tag type",
                     |&v| !matches!(v, 0x0001 | 0x0002 | 0x0003 | 0x0004 | 0x0005 | 0x0010 | 0x0020 | 0x0040 | 0x0080 | 0x0100 | 0x0200 | 0x0400 | 0x0800 | 0x1000 | 0x2000 | 0x4000 | 0x8000)
                 )
             ) {
                 let result = TagType::from_u16(invalid_value);
-                prop_assert_eq!(result, None);
+                prop_assert_eq!(result, TagType::Other(invalid_value));
             }
 
             /// Test file size calculations
@@ -641,8 +641,8 @@ mod tests {
         ];
 
         for (tag_type, expected_value) in tag_types {
-            assert_eq!(tag_type as u16, expected_value);
-            assert_eq!(TagType::from_u16(expected_value), Some(tag_type));
+            assert_eq!(tag_type.as_u16(), expected_value);
+            assert_eq!(TagType::from_u16(expected_value), tag_type);
         }
     }
 

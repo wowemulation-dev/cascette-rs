@@ -1,0 +1,5 @@
+patch-index = 4c0fcc3e0db1881e58bb6b3e2b14078d e3acece1a3569956a84ee138dfedb873
+patch-index-size = 13733 5511
+patch = e3fffe04f64007852408b86e44d91e5a
+patch-size = 9901
+build-name = WOW-65989patch1.15.8_ClassicRetail

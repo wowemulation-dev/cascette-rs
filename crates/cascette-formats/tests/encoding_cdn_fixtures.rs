@@ -162,7 +162,7 @@ fn encoding_cdn_ckey_page_entries() {
         }
 
         // First page should have entries sorted by content key
-        // (Agent.exe requires this for binary search)
+        // (required for binary search)
         let first_page = &enc.ckey_pages[0];
         for window in first_page.entries.windows(2) {
             assert!(

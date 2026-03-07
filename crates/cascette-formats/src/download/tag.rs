@@ -90,6 +90,7 @@ impl DownloadTag {
             TagType::Expansion => 14,   // Expansion content
             TagType::Alternate => 15,   // Alternate versions
             TagType::Option => 16,      // Lowest priority - optional content
+            TagType::Other(_) => 17,    // Unrecognized tag types
         }
     }
 
@@ -137,6 +138,7 @@ impl DownloadTag {
             TagType::Expansion => "Expansion pack content",
             TagType::Alternate => "Alternative content versions",
             TagType::Option => "Optional features and content",
+            TagType::Other(_) => "Unrecognized tag type content",
         }
     }
 }

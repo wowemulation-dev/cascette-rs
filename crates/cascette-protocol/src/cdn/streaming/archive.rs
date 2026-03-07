@@ -11,7 +11,7 @@ use crate::cdn::streaming::{
     HttpClient, HttpRange, RangeCoalescer, StreamingConfig, StreamingError,
     blte::{StreamingBlteConfig, StreamingBlteProcessor},
 };
-use cascette_crypto::TactKeyStore;
+use cascette_crypto::TactKeyProvider;
 
 /// Configuration for streaming archive operations
 #[derive(Debug, Clone)]
@@ -103,7 +103,7 @@ impl<H: HttpClient + Clone> StreamingArchiveReader<H> {
     /// * `archive_url` - URL of the archive file
     /// * `offset` - Byte offset within the archive
     /// * `size` - Size of the content to extract
-    /// * `key_store` - Optional TACT key store for decryption
+    /// * `key_store` - Optional TACT key provider for decryption
     ///
     /// # Returns
     /// Raw content bytes from the archive
@@ -112,7 +112,7 @@ impl<H: HttpClient + Clone> StreamingArchiveReader<H> {
         archive_url: &str,
         offset: u64,
         size: u32,
-        key_store: Option<&TactKeyStore>,
+        key_store: Option<&dyn TactKeyProvider>,
     ) -> Result<Vec<u8>, StreamingError> {
         let range = HttpRange::new(offset, offset + u64::from(size) - 1);
         let content = self.http_client.get_range(archive_url, Some(range)).await?;
@@ -134,7 +134,7 @@ impl<H: HttpClient + Clone> StreamingArchiveReader<H> {
     /// * `archive_url` - URL of the archive file
     /// * `requests` - List of content extraction requests
     /// * `index` - CDN index for content lookup
-    /// * `key_store` - Optional TACT key store for decryption
+    /// * `key_store` - Optional TACT key provider for decryption
     ///
     /// # Returns
     /// Map of encoding keys to extracted content
@@ -143,7 +143,7 @@ impl<H: HttpClient + Clone> StreamingArchiveReader<H> {
         archive_url: &str,
         requests: Vec<ArchiveExtractionRequest>,
         index: &ArchiveIndex,
-        key_store: Option<&TactKeyStore>,
+        key_store: Option<&dyn TactKeyProvider>,
     ) -> Result<HashMap<Vec<u8>, ArchiveExtractionResult>, StreamingError> {
         // Look up all entries in the index
         let mut range_requests = Vec::new();
@@ -195,7 +195,7 @@ impl<H: HttpClient + Clone> StreamingArchiveReader<H> {
     /// # Arguments
     /// * `archive_url` - URL of the archive file
     /// * `index` - CDN index containing all content to extract
-    /// * `key_store` - Optional TACT key store for decryption
+    /// * `key_store` - Optional TACT key provider for decryption
     ///
     /// # Returns
     /// Map of encoding keys to extracted content
@@ -203,7 +203,7 @@ impl<H: HttpClient + Clone> StreamingArchiveReader<H> {
         &self,
         archive_url: &str,
         index: &ArchiveIndex,
-        key_store: Option<&TactKeyStore>,
+        key_store: Option<&dyn TactKeyProvider>,
     ) -> Result<HashMap<Vec<u8>, ArchiveExtractionResult>, StreamingError> {
         // Convert all index entries to extraction requests
         let requests: Vec<ArchiveExtractionRequest> = index
@@ -236,7 +236,7 @@ impl<H: HttpClient + Clone> StreamingArchiveReader<H> {
     /// * `archive_url` - URL of the archive file
     /// * `encoding_key` - Encoding key of the content to extract
     /// * `index` - CDN index for content lookup
-    /// * `key_store` - Optional TACT key store for decryption
+    /// * `key_store` - Optional TACT key provider for decryption
     ///
     /// # Returns
     /// Extracted and potentially decompressed content
@@ -245,7 +245,7 @@ impl<H: HttpClient + Clone> StreamingArchiveReader<H> {
         archive_url: &str,
         encoding_key: &[u8],
         index: &ArchiveIndex,
-        key_store: Option<&TactKeyStore>,
+        key_store: Option<&dyn TactKeyProvider>,
     ) -> Result<ArchiveExtractionResult, StreamingError> {
         let entry =
             index
@@ -274,7 +274,7 @@ impl<H: HttpClient + Clone> StreamingArchiveReader<H> {
     fn decompress_blte_data(
         &self,
         data: &[u8],
-        key_store: Option<&TactKeyStore>,
+        key_store: Option<&dyn TactKeyProvider>,
     ) -> Result<Vec<u8>, StreamingError> {
         // Create a temporary BLTE processor for in-memory decompression
         use crate::CascFormat;
@@ -332,14 +332,14 @@ impl<H: HttpClient + Clone> BatchArchiveExtractor<H> {
     ///
     /// # Arguments
     /// * `archive_requests` - List of (archive_url, extraction_requests, index) tuples
-    /// * `key_store` - Optional TACT key store for decryption
+    /// * `key_store` - Optional TACT key provider for decryption
     ///
     /// # Returns
     /// Map of encoding keys to extracted content from all archives
     pub async fn extract_from_archives(
         &self,
         archive_requests: Vec<(&str, Vec<ArchiveExtractionRequest>, &ArchiveIndex)>,
-        key_store: Option<&TactKeyStore>,
+        key_store: Option<&dyn TactKeyProvider>,
     ) -> Result<HashMap<Vec<u8>, ArchiveExtractionResult>, StreamingError> {
         if archive_requests.len() > self.readers.len() {
             return Err(StreamingError::Configuration {

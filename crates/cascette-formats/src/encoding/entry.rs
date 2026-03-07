@@ -134,7 +134,7 @@ impl BinRead for EKeyPageEntry {
         let espec_index = u32::read_options(reader, binrw::Endian::Big, ())?;
 
         // Check for end-of-page padding. Two sentinel patterns exist:
-        // 1. Agent.exe sentinel: espec_index == 0xFFFFFFFF (with any key)
+        // 1. Padding sentinel: espec_index == 0xFFFFFFFF (with any key)
         // 2. Zero-fill padding: all-zero key bytes AND espec_index == 0 (from
         //    pages padded with zeros by builders/tools)
         if espec_index == 0xFFFF_FFFF || (espec_index == 0 && ekey_bytes.iter().all(|&b| b == 0x00))

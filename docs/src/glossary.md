@@ -29,7 +29,6 @@ Numeric identifier for a file, persistent across game versions. Replaced
 filename-based lookups in WoW 8.0+.
 
 - **Size**: 4 bytes (32-bit integer)
-- **Range**: 0 to ~4 million (as of 2024)
 - **MPQ Equivalent**: None - MPQ used filenames exclusively
 - **Example**: `1234567` refers to a specific texture, model, or data file
 
@@ -51,7 +50,7 @@ optional encryption.
 
 - **MPQ Equivalent**: Similar to MPQ's sector-based compression
 - **Key difference**: BLTE supports multiple compression algorithms per file
-- **Compression**: None, zlib, LZMA, LZ4, Zstd
+- **Compression**: None, zlib, LZ4 (LZMA and Zstd exist in the format but are not implemented)
 - **Encryption**: Salsa20, ARC4 (older builds)
 
 ### Encoding File
@@ -161,7 +160,7 @@ Lists available CDN servers and archive hashes.
 Product-wide settings spanning multiple builds.
 
 - **Location**: CDN `/config/{hash}`
-- **Contains**: Decryption keys, feature flags
+- **Contains**: Product-wide settings including launcher resolution and locale configuration
 
 ## Encryption
 
@@ -177,7 +176,7 @@ Encryption key for protected content. Named keys are published, unnamed are secr
 
 Stream cipher used for content encryption in modern builds.
 
-- **Key size**: 256 bits (16-byte key + 16-byte name as nonce)
+- **Key size**: 16 bytes. Uses Salsa20/16-byte-key variant with 4-byte IV.
 - **Replaces**: ARC4 (used in older builds)
 
 ## MPQ to CASC Quick Reference

@@ -48,6 +48,10 @@ pub enum BlteError {
     #[error("unsupported compression mode: 0x{0:02X}")]
     UnsupportedCompressionMode(u8),
 
+    /// Deprecated compression mode (e.g. 'F' recursive BLTE)
+    #[error("deprecated compression mode: 0x{0:02X}")]
+    DeprecatedCompressionMode(u8),
+
     /// Checksum mismatch
     #[error("checksum mismatch: expected {expected}, got {actual}")]
     ChecksumMismatch {
@@ -70,6 +74,13 @@ pub enum BlteError {
     InvalidIvSize {
         /// The invalid size encountered
         actual: u8,
+    },
+
+    /// Recursion limit exceeded (Frame inside Frame)
+    #[error("BLTE frame recursion limit exceeded (max depth {max_depth})")]
+    RecursionLimitExceeded {
+        /// Maximum allowed depth
+        max_depth: usize,
     },
 
     /// Nested encryption (encrypted chunk inside encrypted chunk)

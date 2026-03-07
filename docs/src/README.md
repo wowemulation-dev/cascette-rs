@@ -179,7 +179,7 @@ Formats used in both CDN and local contexts.
 Service discovery components handle version information, CDN endpoint discovery,
 and product configuration metadata:
 
-- [Ribbit Protocol](protocols/ribbit.md) - TCP-based discovery and version information API
+- [Ribbit Protocol](protocols/ribbit.md) - Version information and CDN endpoint discovery API
 
 - [BPSV Format](formats/bpsv.md) - Blizzard Pipe-Separated Values format for API
 responses
@@ -205,7 +205,7 @@ responses
 Immutable, content-addressed files served from CDN:
 
 - [CDN Archives](formats/archives.md) - BLTE containers with game content
-  (`/data/{prefix}/{hash}.archive`)
+  (`/data/{prefix}/{hash}`)
 
 - **CDN Indices** - Maps keys to archive locations
   (`/data/{prefix}/{hash}.index`)
@@ -223,7 +223,7 @@ Immutable, content-addressed files served from CDN:
   (`/data/{prefix}/{hash}`)
 
 - [Patch Archives](formats/patches.md) - Delta patches
-  (`/patch/{prefix}/{hash}.archive`)
+  (`/patch/{prefix}/{hash}`)
 
 - [Patch Indices](formats/patches.md) - Patch archive index
   (`/patch/{prefix}/{hash}.index`)
@@ -281,33 +281,7 @@ Client-side storage structures created and managed by Battle.net:
 
 - **FileDataId** - Persistent file identification across builds
 
-## Format Relationships
-
-### CDN Download Flow
-
-```mermaid
-flowchart TB
-    subgraph Discovery
-        Ribbit["Ribbit (BPSV)"]
-        ProductConfig["Product Config"]
-        CDNConfig["CDN Config"]
-        BuildConfig["Build Config"]
-    end
-
-    subgraph Content
-        Archives["CDN Archives + Indices"]
-        Encoding["Encoding File"]
-        Root["Root File"]
-        Manifests["Install/Download Manifests"]
-    end
-
-    Ribbit --> ProductConfig --> CDNConfig --> BuildConfig
-    BuildConfig --> Archives
-    Archives --> Encoding --> Root
-    Root --> Manifests
-```
-
-### Content Resolution
+## Content Resolution
 
 ```mermaid
 flowchart LR
@@ -340,4 +314,3 @@ flowchart LR
     Location --> Archive --> BLTE
     BLTE --> Decompress --> Raw
 ```
-

@@ -1,0 +1,55 @@
+[package]
+name = "cascette-import"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Community data source integration for NGDP/CASC"
+readme = "README.md"
+keywords = ["casc", "ngdp", "wago", "listfile", "tact"]
+categories = ["network-programming", "game-development", "api-bindings"]
+
+[dependencies]
+thiserror = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+reqwest = { workspace = true, features = ["json"] }
+async-trait = { workspace = true }
+hex = { workspace = true }
+rustls = { workspace = true }
+cascette-crypto = { version = "0.2.0", path = "../cascette-crypto" }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["test-util", "macros", "rt-multi-thread"] }
+pretty_assertions = { workspace = true }
+
+[features]
+default = ["wago", "listfile", "tactkeys", "blizztrack"]
+wago = []
+listfile = []
+tactkeys = []
+blizztrack = []
+
+[[example]]
+name = "import_community_data"
+required-features = ["wago", "listfile", "tactkeys"]
+
+[[example]]
+name = "wago_verification"
+required-features = ["wago"]
+
+[[example]]
+name = "blizztrack_verification"
+required-features = ["blizztrack"]
+
+[[example]]
+name = "listfile_name_lookup"
+required-features = ["listfile"]
+
+[lints]
+workspace = true

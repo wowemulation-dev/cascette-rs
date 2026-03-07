@@ -2,7 +2,7 @@
 //!
 //! Builds a TVFS manifest from a list of files. Produces the binary prefix
 //! tree path table, span-based VFS table, and fixed-stride CFT that CascLib
-//! and Agent.exe expect.
+//! and the Blizzard Agent expect.
 
 use crate::tvfs::{
     TvfsFile,

@@ -151,7 +151,7 @@ impl EncodingFile {
                         }
                         // If we have space but still failed, it might be padding
                         // Check for both sentinel patterns:
-                        // 1. espec_index == 0xFFFFFFFF (Agent.exe sentinel)
+                        // 1. espec_index == 0xFFFFFFFF (padding sentinel)
                         // 2. all-zero key + espec_index == 0 (zero-fill padding)
                         page_cursor.set_position(pos_before);
                         let check_size = ekey_hash_size as usize + 4;

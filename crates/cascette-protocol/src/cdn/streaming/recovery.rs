@@ -73,7 +73,7 @@ pub enum RecoveryStrategy {
 ///
 /// Servers are never permanently excluded. Instead, failure weight accumulates
 /// in `ServerMetrics::total_failure_weight` and reduces the server's selection
-/// score via exponential decay (`0.9^weight`). This matches Agent.exe behavior.
+/// score via exponential decay (`0.9^weight`). This matches Blizzard Agent behavior.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ServerHealth {
     /// Server is healthy and responsive
@@ -314,14 +314,13 @@ pub struct ServerMetrics {
     /// - Other HTTP errors: 1.0
     ///
     /// The server score is multiplied by `0.9^total_failure_weight`,
-    /// matching Agent.exe's exponential decay model.
+    /// matching the Blizzard Agent's exponential decay model.
     pub total_failure_weight: f64,
 }
 
-/// Compute the failure weight for an error, matching Agent.exe backoff weights.
+/// Compute the failure weight for an error.
 ///
-/// | Error | Weight |
-/// Weights match `tact::HandleHttpResponse` from Agent.exe:
+/// Weights are based on observed CDN endpoint backoff behavior:
 ///
 /// | Status Code | Weight |
 /// |-------------|--------|
@@ -517,7 +516,7 @@ impl FailoverManager {
     /// All servers whose unavailability window has expired are candidates.
     /// Selection probability is proportional to each server's score
     /// (which includes exponential decay from failures). This matches
-    /// Agent.exe's randomized linear interpolation approach.
+    /// the Blizzard Agent's randomized linear interpolation approach.
     pub async fn select_best_server(&self, available_servers: &[CdnServer]) -> Option<CdnServer> {
         if available_servers.is_empty() {
             return None;
@@ -635,7 +634,7 @@ impl FailoverManager {
             }
 
             // Apply exponential decay from failure weight
-            // weight = 0.9 ^ total_failure_weight (matches Agent.exe)
+            // weight = 0.9 ^ total_failure_weight (matches Blizzard Agent behavior)
             let decay = 0.9_f64.powf(metrics.total_failure_weight);
             score *= decay;
         }
@@ -1232,7 +1231,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_failure_weight_for_error() {
-        // HTTP 503 should have highest weight (5.0, matching Agent.exe)
+        // HTTP 503 should have highest weight (5.0)
         let err_503 = StreamingError::HttpStatus {
             status_code: 503,
             url: "http://example.com".to_string(),
@@ -1441,7 +1440,7 @@ mod tests {
         let selected = failover_manager.select_best_server(&servers).await;
         assert!(selected.is_some(), "Server should be available after 404");
 
-        // But failure weight should be accumulated (404 = 0.5, matching Agent.exe)
+        // But failure weight should be accumulated (404 = 0.5)
         let metrics = failover_manager.get_all_metrics().await;
         let server_metrics = metrics.get("server1.com").expect("Should have metrics");
         assert!(

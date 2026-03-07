@@ -341,8 +341,7 @@ impl Ord for HeapEntry<'_> {
 /// invariant). Duplicate keys across archives are deduplicated, keeping the
 /// first occurrence (lowest `source_idx`).
 ///
-/// This matches Agent.exe `tact::CdnIndex::BuildMergedIndex` which uses a
-/// binary min-heap for O(N log K) merging where K is the number of indices.
+/// Uses a binary min-heap for O(N log K) merging where K is the number of indices.
 pub fn build_merged<W: Write + Seek>(
     archives: &[(u16, &ArchiveIndex)],
     mut writer: W,

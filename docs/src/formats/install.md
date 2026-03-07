@@ -34,7 +34,7 @@ struct InstallHeader {
     uint32_t entry_count;        // Number of file entries (big-endian)
 
     // Version 2+ fields (6 additional bytes, total 16 bytes)
-    uint8_t  content_key_size;   // Content key size (Agent.exe) / loose file type (CascLib)
+    uint8_t  content_key_size;   // Content key size / loose file type (CascLib)
     uint32_t entry_count_v2;     // Additional entry count (big-endian)
     uint8_t  unknown;            // Unknown byte
 };
@@ -402,39 +402,6 @@ struct UninstallManifest {
     registry_keys: Vec<String>,  // Windows only
 }
 ```
-
-## Parser Implementation Status
-
-### Python Parser (cascette-py)
-
-**Status**: Complete
-
-**Capabilities**:
-
-- Version 1 header parsing with IN magic detection
-
-- Tag extraction with big-endian (MSB-first) bit ordering
-
-- Platform/architecture/locale tag type classification
-
-- File entry parsing with path, content key, and size
-
-- Tag-to-file association via bitmask resolution
-
-- BLTE decompression for compressed manifests
-
-**Verified Against**:
-
-- WoW 11.0.5.57689 (242 entries, 28 tags)
-
-- Multiple WoW Classic builds
-
-- Cross-platform tag validation (Windows, OSX, mobile)
-
-**Known Issues**: None
-
-See <https://github.com/wowemulation-dev/cascette-py> for the Python
-implementation.
 
 ## Version History
 

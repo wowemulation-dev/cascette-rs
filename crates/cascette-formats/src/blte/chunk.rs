@@ -5,7 +5,12 @@ use binrw::{BinRead, BinResult, BinWrite};
 
 use super::error::{BlteError, BlteResult};
 
-/// BLTE compression modes
+/// BLTE compression modes (chunk-level codec bytes).
+///
+/// ESpec types BCPack (`c`) and GDeflate (`g`) are parsed at the encoding
+/// specification layer but do not have known BLTE mode bytes. Encountering
+/// an unknown mode byte at the BLTE level produces
+/// [`BlteError::UnknownCompressionMode`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum CompressionMode {
@@ -17,14 +22,14 @@ pub enum CompressionMode {
     LZ4 = b'4',
     /// Encrypted (mode 'E')
     Encrypted = b'E',
-    /// Frame/Recursive BLTE (mode 'F') - deprecated
-    #[deprecated(since = "0.1.0", note = "Recursive BLTE is deprecated")]
+    /// Recursive BLTE frame (mode 'F', deprecated but handled)
     Frame = b'F',
 }
 
 impl CompressionMode {
-    /// Parse compression mode from byte
-    #[allow(deprecated)]
+    /// Parse compression mode from byte.
+    ///
+    /// Returns `None` for unknown bytes.
     pub fn from_byte(byte: u8) -> Option<Self> {
         match byte {
             b'N' => Some(Self::None),
@@ -203,6 +208,16 @@ mod tests {
         }
 
         assert_eq!(CompressionMode::from_byte(b'X'), None);
+    }
+
+    #[test]
+    fn test_frame_mode_accepted() {
+        // Mode 'F' (recursive BLTE) is deprecated but handled
+        assert_eq!(
+            CompressionMode::from_byte(b'F'),
+            Some(CompressionMode::Frame)
+        );
+        assert_eq!(CompressionMode::Frame.as_byte(), b'F');
     }
 
     #[test]

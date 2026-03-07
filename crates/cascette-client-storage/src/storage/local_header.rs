@@ -10,7 +10,7 @@
 //! | Offset | Size | Field |
 //! |--------|------|-------|
 //! | 0x00   | 16   | Encoding key (reversed byte order) |
-//! | 0x10   | 4    | Size including this 30-byte header (BE) |
+//! | 0x10   | 4    | Encoded size of BLTE data, LE (matches IDX `encoded_size`) |
 //! | 0x14   | 2    | Flags |
 //! | 0x16   | 4    | ChecksumA (Jenkins hash of bytes 0..22) |
 //! | 0x1A   | 4    | ChecksumB (XOR accumulation of bytes 0..26) |
@@ -20,9 +20,7 @@ use cascette_crypto::jenkins::hashlittle;
 /// Size of the local header in bytes.
 pub const LOCAL_HEADER_SIZE: usize = 0x1E; // 30 bytes
 
-/// Jenkins hash seed for reconstruction header checksum_a.
-///
-/// Agent.exe `sub_72c49f`: `hashlittle(&header[0], 0x16, 0x3D6BE971)`
+/// Jenkins hash seed for computing header checksum_a.
 const CHECKSUM_A_SEED: u32 = 0x3D6B_E971;
 
 /// 30-byte local header preceding each BLTE entry in `.data` archives.
@@ -30,8 +28,9 @@ const CHECKSUM_A_SEED: u32 = 0x3D6B_E971;
 pub struct LocalHeader {
     /// Encoding key (16 bytes, reversed byte order).
     pub encoding_key: [u8; 16],
-    /// Total size including this 30-byte header (big-endian on disk).
-    pub size_with_header: u32,
+    /// Encoded size of the BLTE data (little-endian on disk).
+    /// Matches the `encoded_size` field in the IDX entry.
+    pub encoded_size: u32,
     /// Flags (2 bytes).
     pub flags: u16,
     /// Checksum A (4 bytes).
@@ -43,37 +42,32 @@ pub struct LocalHeader {
 impl LocalHeader {
     /// Create a new local header for BLTE data.
     ///
-    /// `encoding_key` is the MD5 of the BLTE-encoded data.
-    /// `blte_size` is the size of the BLTE data (without header).
-    /// `base_offset` is the byte offset of this header within the segment
-    /// header block (used for checksum_b's rotating XOR index).
-    pub fn new(encoding_key: [u8; 16], blte_size: u32, base_offset: usize) -> Self {
-        // Reverse the encoding key for on-disk storage
-        let mut reversed_key = encoding_key;
-        reversed_key.reverse();
+    /// Create a new local header for BLTE data:
+    /// - Only the first 9 bytes of the encoding key are reversed and stored;
+    ///   the remaining 7 bytes are zero-padded.
+    /// - `encoded_size` = BLTE data size (LE on disk).
+    /// - `status` = 1 (normal entry).
+    /// - `jenkins_hash` and `xor_checksum` are both 0 during initial write.
+    ///   They are computed later during header reconstruction.
+    pub fn new(encoding_key: [u8; 16], blte_size: u32, _base_offset: usize) -> Self {
+        // Reverse only the first 9 bytes; zero-pad the rest.
+        // Reference: dynamic.cpp:160-164
+        let mut reversed_key = [0u8; 16];
+        for i in 0..9 {
+            reversed_key[i] = encoding_key[8 - i];
+        }
+        // bytes 9..16 stay zero
 
-        let mut header = Self {
+        Self {
             encoding_key: reversed_key,
-            size_with_header: blte_size + LOCAL_HEADER_SIZE as u32,
-            flags: 0,
-            checksum_a: 0,
-            checksum_b: 0,
-        };
-
-        // Step 1: compute checksum_a from bytes with both checksums zeroed
-        let bytes = header.to_bytes();
-        header.checksum_a = Self::compute_checksum_a(&bytes);
-
-        // Step 2: compute checksum_b from bytes with checksum_a set
-        // (the XOR range 0..26 includes checksum_a at bytes 0x16..0x1A)
-        let bytes = header.to_bytes();
-        header.checksum_b = Self::compute_checksum_b(&bytes, base_offset);
-        header
+            encoded_size: blte_size,
+            flags: 1, // status = 1 (normal entry)
+            checksum_a: 0, // computed during RepairReconstructionHeaders
+            checksum_b: 0, // computed during RepairReconstructionHeaders
+        }
     }
 
     /// Compute checksum_a: Jenkins hash of the first 22 bytes with seed 0x3D6BE971.
-    ///
-    /// Agent.exe `sub_72c49f`: `hashlittle(&header[0], 0x16, 0x3D6BE971)`
     pub fn compute_checksum_a(header_bytes: &[u8; LOCAL_HEADER_SIZE]) -> u32 {
         hashlittle(&header_bytes[..0x16], CHECKSUM_A_SEED)
     }
@@ -105,8 +99,8 @@ impl LocalHeader {
         // Encoding key (16 bytes, already reversed in constructor)
         buf[0x00..0x10].copy_from_slice(&self.encoding_key);
 
-        // Size including header (4 bytes, big-endian)
-        buf[0x10..0x14].copy_from_slice(&self.size_with_header.to_be_bytes());
+        // Encoded size (4 bytes, little-endian)
+        buf[0x10..0x14].copy_from_slice(&self.encoded_size.to_le_bytes());
 
         // Flags (2 bytes)
         buf[0x14..0x16].copy_from_slice(&self.flags.to_le_bytes());
@@ -131,30 +125,34 @@ impl LocalHeader {
         let mut encoding_key = [0u8; 16];
         encoding_key.copy_from_slice(&data[0x00..0x10]);
 
-        let size_with_header = u32::from_be_bytes([data[0x10], data[0x11], data[0x12], data[0x13]]);
+        let encoded_size = u32::from_le_bytes([data[0x10], data[0x11], data[0x12], data[0x13]]);
         let flags = u16::from_le_bytes([data[0x14], data[0x15]]);
         let checksum_a = u32::from_le_bytes([data[0x16], data[0x17], data[0x18], data[0x19]]);
         let checksum_b = u32::from_le_bytes([data[0x1A], data[0x1B], data[0x1C], data[0x1D]]);
 
         Some(Self {
             encoding_key,
-            size_with_header,
+            encoded_size,
             flags,
             checksum_a,
             checksum_b,
         })
     }
 
-    /// Get the original (non-reversed) encoding key.
+    /// Get the original encoding key (first 9 bytes un-reversed).
+    ///
+    /// Only the first 9 bytes are meaningful; bytes 9-15 are zero.
     pub fn original_encoding_key(&self) -> [u8; 16] {
-        let mut key = self.encoding_key;
-        key.reverse();
+        let mut key = [0u8; 16];
+        for i in 0..9 {
+            key[i] = self.encoding_key[8 - i];
+        }
         key
     }
 
-    /// Get the BLTE data size (total size minus header).
+    /// Get the BLTE data size (same as encoded_size).
     pub const fn blte_size(&self) -> u32 {
-        self.size_with_header - LOCAL_HEADER_SIZE as u32
+        self.encoded_size
     }
 }
 
@@ -173,18 +171,21 @@ mod tests {
 
         let header = LocalHeader::new(key, blte_size, 0);
 
-        // Key should be reversed
-        assert_eq!(header.encoding_key[0], 0x10);
-        assert_eq!(header.encoding_key[15], 0x01);
+        // First 9 bytes of key reversed, rest zero-padded
+        assert_eq!(header.encoding_key[0], 0x09); // key[8] reversed to [0]
+        assert_eq!(header.encoding_key[8], 0x01); // key[0] reversed to [8]
+        assert_eq!(header.encoding_key[9], 0x00); // zero-padded
+        assert_eq!(header.encoding_key[15], 0x00);
 
-        // Size includes header
-        assert_eq!(
-            header.size_with_header,
-            blte_size + LOCAL_HEADER_SIZE as u32
-        );
+        // Size is the BLTE data size
+        assert_eq!(header.encoded_size, blte_size);
 
-        // Checksums should be non-zero (computed from content)
-        assert_ne!(header.checksum_a, 0);
+        // Status/flags should be 1 (normal entry)
+        assert_eq!(header.flags, 1);
+
+        // Checksums are 0 during initial write (computed later by repair)
+        assert_eq!(header.checksum_a, 0);
+        assert_eq!(header.checksum_b, 0);
 
         // Round-trip through bytes
         let bytes = header.to_bytes();
@@ -192,7 +193,7 @@ mod tests {
 
         let parsed = LocalHeader::from_bytes(&bytes).expect("parse");
         assert_eq!(parsed.encoding_key, header.encoding_key);
-        assert_eq!(parsed.size_with_header, header.size_with_header);
+        assert_eq!(parsed.encoded_size, header.encoded_size);
         assert_eq!(parsed.flags, header.flags);
         assert_eq!(parsed.checksum_a, header.checksum_a);
         assert_eq!(parsed.checksum_b, header.checksum_b);
@@ -206,7 +207,11 @@ mod tests {
         ];
 
         let header = LocalHeader::new(key, 100, 0);
-        assert_eq!(header.original_encoding_key(), key);
+        let recovered = header.original_encoding_key();
+        // Only first 9 bytes are recoverable
+        assert_eq!(&recovered[..9], &key[..9]);
+        // Rest is zero (original bytes 9-15 are lost)
+        assert_eq!(&recovered[9..], &[0u8; 7]);
     }
 
     #[test]
@@ -219,49 +224,5 @@ mod tests {
     fn test_too_short_data_rejected() {
         let short = [0u8; 20];
         assert!(LocalHeader::from_bytes(&short).is_none());
-    }
-
-    #[test]
-    fn test_checksum_a_uses_jenkins() {
-        let header = LocalHeader::new([0xAA; 16], 1000, 0);
-        let bytes = header.to_bytes();
-
-        // checksum_a should be hashlittle(bytes[0..22], 0x3D6BE971)
-        let expected = hashlittle(&bytes[..0x16], CHECKSUM_A_SEED);
-        assert_eq!(header.checksum_a, expected);
-    }
-
-    #[test]
-    fn test_checksum_b_xor_accumulation() {
-        let header = LocalHeader::new([0xBB; 16], 2000, 0);
-        let bytes = header.to_bytes();
-
-        // checksum_b should be XOR accumulation of first 26 bytes
-        let expected = LocalHeader::compute_checksum_b(&bytes, 0);
-        assert_eq!(header.checksum_b, expected);
-    }
-
-    #[test]
-    fn test_checksums_validate() {
-        let header = LocalHeader::new([0xCC; 16], 3000, 61);
-        assert!(header.validate_checksums(61));
-        // Wrong base_offset should fail checksum_b (61 % 4 != 0)
-        assert!(!header.validate_checksums(0));
-    }
-
-    #[test]
-    fn test_different_offsets_different_checksum_b() {
-        let h0 = LocalHeader::new([0xDD; 16], 500, 0);
-        let h1 = LocalHeader::new([0xDD; 16], 500, 30);
-        let h2 = LocalHeader::new([0xDD; 16], 500, 60);
-
-        // checksum_a should be the same (independent of base_offset)
-        assert_eq!(h0.checksum_a, h1.checksum_a);
-        assert_eq!(h1.checksum_a, h2.checksum_a);
-
-        // checksum_b should differ due to rotating XOR index
-        // (except when base_offsets differ by multiples of 4,
-        // since the rotation is mod 4)
-        assert_ne!(h0.checksum_b, h1.checksum_b);
     }
 }

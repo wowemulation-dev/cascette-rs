@@ -29,7 +29,7 @@ const MAX_CREATE_RETRIES: u32 = 10;
 ///
 /// Uses `CreateFileMappingW` / `MapViewOfFile` for the shared memory
 /// region. The DACL grants full access to Everyone and Anonymous Logon,
-/// with a mandatory label of Medium integrity (matching Agent.exe).
+/// with a mandatory label of Medium integrity.
 pub struct PlatformShmem {
     /// Size of the mapped region.
     size: usize,
@@ -43,7 +43,7 @@ pub struct PlatformShmem {
 impl PlatformShmem {
     /// Create or open a shared memory region.
     ///
-    /// Uses the 10-retry pattern from Agent.exe:
+    /// Uses a 10-retry pattern:
     /// 1. Try `CREATE_NEW` + file mapping
     /// 2. On `ERROR_ALREADY_EXISTS`, try `OPEN_EXISTING`
     /// 3. Repeat up to 10 times with `Sleep(0)` between attempts

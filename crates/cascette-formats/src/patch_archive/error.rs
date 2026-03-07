@@ -74,9 +74,8 @@ pub enum PatchArchiveError {
 
     /// Header hash mismatch
     ///
-    /// Agent.exe computes MD5 of the header region (fixed header + extended
-    /// header + block table) and compares against the content key used to
-    /// fetch the file from CDN.
+    /// The MD5 of the header region (fixed header + extended header + block
+    /// table) must match the content key used to fetch the file from CDN.
     #[error("header hash mismatch: expected {expected}, got {actual}")]
     HeaderHashMismatch {
         /// Expected hash (hex string)
