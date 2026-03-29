@@ -19,10 +19,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
     Router::new()
         // Web UI
         .route("/", axum::routing::get(web::handle_index))
-        .route(
-            "/{product}/builds",
-            axum::routing::get(web::handle_builds),
-        )
+        .route("/{product}/builds", axum::routing::get(web::handle_builds))
         // BPSV API — HTTP v1 (/{product}/...)
         .route(
             "/{product}/versions",
@@ -74,10 +71,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
             axum::routing::get(handlers::handle_versioned_bgdl),
         )
         // Legacy — keep /v2/summary as alias
-        .route(
-            "/v2/summary",
-            axum::routing::get(handlers::handle_summary),
-        )
+        .route("/v2/summary", axum::routing::get(handlers::handle_summary))
         .layer(TraceLayer::new_for_http())
         .layer(CompressionLayer::new())
         .layer(CorsLayer::permissive())

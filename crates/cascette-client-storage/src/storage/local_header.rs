@@ -61,7 +61,7 @@ impl LocalHeader {
         Self {
             encoding_key: reversed_key,
             encoded_size: blte_size,
-            flags: 1, // status = 1 (normal entry)
+            flags: 1,      // status = 1 (normal entry)
             checksum_a: 0, // computed during RepairReconstructionHeaders
             checksum_b: 0, // computed during RepairReconstructionHeaders
         }
@@ -144,8 +144,8 @@ impl LocalHeader {
     /// Only the first 9 bytes are meaningful; bytes 9-15 are zero.
     pub fn original_encoding_key(&self) -> [u8; 16] {
         let mut key = [0u8; 16];
-        for i in 0..9 {
-            key[i] = self.encoding_key[8 - i];
+        for (i, byte) in key.iter_mut().take(9).enumerate() {
+            *byte = self.encoding_key[8 - i];
         }
         key
     }

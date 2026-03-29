@@ -904,7 +904,11 @@ mod tests {
     #[test]
     fn test_set_bucket_header() {
         let mut header = SegmentHeader::zeroed();
-        let key = [0xAA; 16];
+        // Only the first 9 bytes survive the reverse+zero-pad round-trip.
+        let key = [
+            0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00,
+        ];
         let local = LocalHeader::new(key, 1000, 0);
 
         header.set_bucket_header(5, local);
@@ -917,7 +921,11 @@ mod tests {
     #[test]
     fn test_set_bucket_header_masks_to_4_bits() {
         let mut header = SegmentHeader::zeroed();
-        let key = [0xBB; 16];
+        // Only the first 9 bytes survive the reverse+zero-pad round-trip.
+        let key = [
+            0xBB, 0xBB, 0xBB, 0xBB, 0xBB, 0xBB, 0xBB, 0xBB, 0xBB, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00,
+        ];
         let local = LocalHeader::new(key, 500, 0);
 
         // bucket 0x13 should be masked to 0x03
@@ -932,7 +940,17 @@ mod tests {
         let mut header = SegmentHeader::zeroed();
         let key = [0xCC; 16];
         let base_offset = 0;
-        let local = LocalHeader::new(key, 2000, base_offset);
+        let mut local = LocalHeader::new(key, 2000, base_offset);
+
+        // LocalHeader::new leaves checksums at 0. Compute them in the correct
+        // order: checksum_a first (uses bytes[..0x16], before checksum_a
+        // position), then checksum_b (uses bytes[..0x1A], which includes
+        // checksum_a).
+        let bytes_a = local.to_bytes();
+        local.checksum_a = LocalHeader::compute_checksum_a(&bytes_a);
+        // Re-serialize so checksum_a is included in the byte range for checksum_b.
+        let bytes_b = local.to_bytes();
+        local.checksum_b = LocalHeader::compute_checksum_b(&bytes_b, base_offset);
 
         header.set_bucket_header(7, local);
 
@@ -947,8 +965,15 @@ mod tests {
     fn test_multiple_set_bucket_headers_different_buckets() {
         let mut header = SegmentHeader::zeroed();
 
-        let key_a = [0x11; 16];
-        let key_b = [0x22; 16];
+        // Only the first 9 bytes survive the reverse+zero-pad round-trip.
+        let key_a = [
+            0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00,
+        ];
+        let key_b = [
+            0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00,
+        ];
 
         header.set_bucket_header(2, LocalHeader::new(key_a, 100, 0));
         header.set_bucket_header(9, LocalHeader::new(key_b, 200, 0));

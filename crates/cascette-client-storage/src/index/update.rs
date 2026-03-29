@@ -304,7 +304,7 @@ pub struct UpdateSection {
 }
 
 impl UpdateSection {
-    /// Create a new empty update section with minimum capacity (60 pages).
+    /// Create a new empty update section with minimum capacity (12 pages).
     pub fn new() -> Self {
         let capacity_pages = MIN_UPDATE_SECTION_SIZE / UPDATE_PAGE_SIZE;
         Self {
@@ -695,7 +695,7 @@ mod tests {
     #[test]
     fn test_update_section_capacity() {
         let section = UpdateSection::with_capacity(UPDATE_PAGE_SIZE * 2);
-        assert_eq!(section.capacity_pages(), 60); // min 60 pages enforced
+        assert_eq!(section.capacity_pages(), 12); // min 12 pages enforced
 
         let mut section = UpdateSection::with_capacity(UPDATE_PAGE_SIZE * 100);
         assert_eq!(section.capacity_pages(), 100);

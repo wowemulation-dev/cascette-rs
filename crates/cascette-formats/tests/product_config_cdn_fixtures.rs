@@ -53,8 +53,7 @@ fn product_config_wow_retail_round_trip() {
         serde_json::from_str(&text).expect("Should parse product config JSON");
 
     let rebuilt_json = serde_json::to_string(&config).expect("Should serialize");
-    let reparsed: ProductConfig =
-        serde_json::from_str(&rebuilt_json).expect("Should re-parse");
+    let reparsed: ProductConfig = serde_json::from_str(&rebuilt_json).expect("Should re-parse");
 
     assert_eq!(reparsed.all.config.product, config.all.config.product);
     assert_eq!(

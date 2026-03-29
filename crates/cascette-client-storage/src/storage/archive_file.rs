@@ -418,8 +418,9 @@ impl ArchiveManager {
             let mut file = File::create(&path)
                 .map_err(|e| StorageError::Archive(format!("Failed to create archive: {e}")))?;
             let header = vec![0u8; Self::SEGMENT_HEADER_SIZE as usize];
-            std::io::Write::write_all(&mut file, &header)
-                .map_err(|e| StorageError::Archive(format!("Failed to write segment header: {e}")))?;
+            std::io::Write::write_all(&mut file, &header).map_err(|e| {
+                StorageError::Archive(format!("Failed to write segment header: {e}"))
+            })?;
         }
 
         // Open it for memory mapping
@@ -431,7 +432,11 @@ impl ArchiveManager {
             positions.insert(id, Self::SEGMENT_HEADER_SIZE);
         }
 
-        info!("Created new archive {} (segment header: {} bytes)", id, Self::SEGMENT_HEADER_SIZE);
+        info!(
+            "Created new archive {} (segment header: {} bytes)",
+            id,
+            Self::SEGMENT_HEADER_SIZE
+        );
         Ok(())
     }
 
@@ -462,7 +467,8 @@ impl ArchiveManager {
         file.flush()
             .map_err(|e| StorageError::Archive(format!("Failed to flush: {e}")))?;
 
-        // Check if file grew significantly and remap if needed
+        // Remap whenever the file grew beyond the current mmap size so that
+        // subsequent reads see the new data.
         let new_size = self.get_file_size(&archive_path)?;
         let current_size = {
             let archive = self
@@ -473,17 +479,7 @@ impl ArchiveManager {
             archive.size
         };
 
-        // Remap if file grew by more than 64MB or doubled in size
-        let size_threshold = 64 * 1024 * 1024; // 64MB
-        let size_difference = new_size.saturating_sub(current_size);
-        #[allow(clippy::cast_precision_loss)]
-        let size_ratio = if current_size > 0 {
-            new_size as f64 / current_size as f64
-        } else {
-            f64::INFINITY
-        };
-
-        if size_difference > size_threshold || size_ratio > 2.0 {
+        if new_size > current_size {
             debug!(
                 "Remapping archive {} due to size change: {} -> {} bytes",
                 id, current_size, new_size
@@ -1218,8 +1214,13 @@ mod tests {
             .open_archive(archive_id, &archive_path)
             .expect("open");
 
-        // Now write content after the segment header
+        // Now write content after the segment header.
+        // Only the first 9 bytes survive the reverse+zero-pad round-trip.
         let encoding_key = [0xAA; 16];
+        let expected_key = [
+            0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00,
+        ];
         let total_size = 100u32;
         let bucket = bucket_hash(&encoding_key[..9], 0);
 
@@ -1239,7 +1240,7 @@ mod tests {
         let stored = read_back.bucket_header(bucket);
         assert_eq!(
             stored.original_encoding_key(),
-            encoding_key,
+            expected_key,
             "bucket {bucket} should contain the written encoding key"
         );
     }
@@ -1260,10 +1261,18 @@ mod tests {
             .open_archive(archive_id, &archive_path)
             .expect("open");
 
-        // Write a bucket entry
+        // Write a bucket entry with computed checksums.
+        // LocalHeader::new leaves checksums at 0; compute them in the correct
+        // order: checksum_a first (bytes[..0x16]), then checksum_b (bytes[..0x1A]
+        // which includes checksum_a).
         let encoding_key = [0xDD; 16];
+        let base_offset = 0;
         let bucket = bucket_hash(&encoding_key[..9], 0);
-        let local_header = LocalHeader::new(encoding_key, 500, 0);
+        let mut local_header = LocalHeader::new(encoding_key, 500, base_offset);
+        let bytes_a = local_header.to_bytes();
+        local_header.checksum_a = LocalHeader::compute_checksum_a(&bytes_a);
+        let bytes_b = local_header.to_bytes();
+        local_header.checksum_b = LocalHeader::compute_checksum_b(&bytes_b, base_offset);
 
         let mut header = manager.read_segment_header(archive_id).expect("read");
         header.set_bucket_header(bucket, local_header);
@@ -1297,9 +1306,17 @@ mod tests {
             .expect("open");
 
         // Pick two keys that hash to different buckets.
-        // [0x11; 16] -> bucket 0, [0x12; 16] -> bucket 3
+        // Only the first 9 bytes survive the reverse+zero-pad round-trip.
         let key_a = [0x11; 16];
         let key_b = [0x12; 16];
+        let expected_key_a = [
+            0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00,
+        ];
+        let expected_key_b = [
+            0x12, 0x12, 0x12, 0x12, 0x12, 0x12, 0x12, 0x12, 0x12, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00,
+        ];
         let bucket_a = bucket_hash(&key_a[..9], 0);
         let bucket_b = bucket_hash(&key_b[..9], 0);
         assert_ne!(
@@ -1325,12 +1342,12 @@ mod tests {
         let final_header = manager.read_segment_header(archive_id).expect("final read");
         assert_eq!(
             final_header.bucket_header(bucket_a).original_encoding_key(),
-            key_a,
+            expected_key_a,
             "bucket {bucket_a} should contain key_a"
         );
         assert_eq!(
             final_header.bucket_header(bucket_b).original_encoding_key(),
-            key_b,
+            expected_key_b,
             "bucket {bucket_b} should contain key_b"
         );
     }

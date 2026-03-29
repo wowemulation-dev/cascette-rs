@@ -248,10 +248,7 @@ impl BuildDatabase {
             .filter_map(|raw| {
                 let id = raw.id;
                 raw.into_build_record().or_else(|| {
-                    tracing::warn!(
-                        build_id = id,
-                        "Skipping build with missing required fields"
-                    );
+                    tracing::warn!(build_id = id, "Skipping build with missing required fields");
                     None
                 })
             })
@@ -311,8 +308,7 @@ impl BuildDatabase {
     pub fn builds_for_product(&self, product: &str) -> &[BuildRecord] {
         self.builds_by_product
             .get(product)
-            .map(Vec::as_slice)
-            .unwrap_or(&[])
+            .map_or(&[], Vec::as_slice)
     }
 
     /// Find a specific build by product and build number.

@@ -95,7 +95,9 @@ use cascette_formats::encoding::EncodingFile;
 use cascette_formats::install::InstallManifest;
 use cascette_formats::root::RootFile;
 use cascette_formats::size::SizeManifest;
-use cascette_protocol::{CdnClient, CdnConfig, CdnEndpoint, ClientConfig, ContentType, RibbitTactClient};
+use cascette_protocol::{
+    CdnClient, CdnConfig, CdnEndpoint, ClientConfig, ContentType, RibbitTactClient,
+};
 use futures::future::join_all;
 
 // ── Content source abstraction ─────────────────────────────────────────────
@@ -393,11 +395,7 @@ async fn fetch_product_config(
         .await
         .map_err(|e| format!("product config fetch failed: {e}"))?;
     if !resp.status().is_success() {
-        return Err(format!(
-            "product config HTTP {}: {}",
-            resp.status(),
-            url
-        ));
+        return Err(format!("product config HTTP {}: {}", resp.status(), url));
     }
     resp.bytes()
         .await
@@ -480,11 +478,10 @@ async fn resolve_live(args: &[String]) -> ResolvedParams {
             std::process::exit(1);
         });
 
-    let cdn_config_hash =
-        field_as_hex(row, "CDNConfig", versions.schema()).unwrap_or_else(|| {
-            eprintln!("ERROR: CDNConfig field missing from versions");
-            std::process::exit(1);
-        });
+    let cdn_config_hash = field_as_hex(row, "CDNConfig", versions.schema()).unwrap_or_else(|| {
+        eprintln!("ERROR: CDNConfig field missing from versions");
+        std::process::exit(1);
+    });
 
     let product_config_hash = field_as_hex(row, "ProductConfig", versions.schema());
 
@@ -549,8 +546,8 @@ async fn resolve_live(args: &[String]) -> ResolvedParams {
     eprintln!("  CDN host:    {}", cdn_hosts[0]);
     eprintln!();
 
-    let cdn_client = CdnClient::new(client.cache().clone(), CdnConfig::default())
-        .unwrap_or_else(|e| {
+    let cdn_client =
+        CdnClient::new(client.cache().clone(), CdnConfig::default()).unwrap_or_else(|e| {
             eprintln!("ERROR: CDN client init failed: {e}");
             std::process::exit(1);
         });
@@ -676,14 +673,20 @@ async fn main() {
     if args.len() < 2 {
         eprintln!("Usage:");
         eprintln!("  Live:   build_file_tree <product> [region] [--paths]");
-        eprintln!("  Manual: build_file_tree <product> <build_config> <cdn_config> <source> [cdn_path] [options]");
+        eprintln!(
+            "  Manual: build_file_tree <product> <build_config> <cdn_config> <source> [cdn_path] [options]"
+        );
         eprintln!();
-        eprintln!("Live mode queries Ribbit for the current build. Manual mode uses explicit hashes.");
+        eprintln!(
+            "Live mode queries Ribbit for the current build. Manual mode uses explicit hashes."
+        );
         eprintln!();
         eprintln!("Options (manual mode):");
         eprintln!("  --paths                       Print one path/URL per tracked file and exit.");
         eprintln!("  --product-config <hash>       Include the product config file.");
-        eprintln!("  --config-path <path>          ConfigPath for product config (default: tpr/configs/data).");
+        eprintln!(
+            "  --config-path <path>          ConfigPath for product config (default: tpr/configs/data)."
+        );
         eprintln!();
         eprintln!("Examples:");
         eprintln!("  build_file_tree wow_classic_era");
@@ -1423,7 +1426,10 @@ async fn print_paths(
 
     // Product config (always from official Blizzard CDN)
     if let Some(pc_hash) = product_config_hash {
-        println!("{}", product_config_url(official_cdn_host, config_path, pc_hash));
+        println!(
+            "{}",
+            product_config_url(official_cdn_host, config_path, pc_hash)
+        );
     }
 
     // Build config: needed to find all other manifest EKeys.

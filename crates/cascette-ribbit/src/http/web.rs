@@ -11,6 +11,7 @@ use axum::{
     http::StatusCode,
     response::{Html, IntoResponse, Response},
 };
+use std::fmt::Write;
 use std::sync::Arc;
 
 /// Shared CSS embedded in every page.
@@ -457,13 +458,16 @@ pub async fn handle_index(State(state): State<Arc<AppState>>) -> Html<String> {
     let mut html = page_open("cascette-ribbit");
 
     // Header
-    html.push_str(r#"<header>
+    html.push_str(
+        r#"<header>
   <a href="/" class="logo">cascette<span class="logo-accent">&lt;ribbit/&gt;</span></a>
 </header>
-"#);
+"#,
+    );
 
     // Hero
-    html.push_str(r##"<div class="hero">
+    html.push_str(
+        r##"<div class="hero">
   <h1>Ribbit Protocol Server.</h1>
   <p class="hero-body">
     A replacement Ribbit/TACT version service.
@@ -471,21 +475,25 @@ pub async fn handle_index(State(state): State<Arc<AppState>>) -> Html<String> {
   </p>
   <a href="#products" class="cta-link">Browse products &#x2192;</a>
 </div>
-"##);
+"##,
+    );
 
     html.push_str(r#"<hr class="section-divider">"#);
 
     // Stats
     html.push_str(r#"<div class="stat-cards">"#);
-    html.push_str(&format!(
+    let _ = write!(
+        html,
         r#"<div class="stat-card"><div class="stat-label">Products</div><div class="stat-value">{product_count}</div></div>"#
-    ));
-    html.push_str(&format!(
+    );
+    let _ = write!(
+        html,
         r#"<div class="stat-card"><div class="stat-label">Total Builds</div><div class="stat-value">{total_builds}</div></div>"#
-    ));
-    html.push_str(&format!(
+    );
+    let _ = write!(
+        html,
         r#"<div class="stat-card"><div class="stat-label">Uptime</div><div class="stat-value">{uptime}</div></div>"#
-    ));
+    );
     html.push_str("</div>");
 
     html.push_str(r#"<hr class="section-divider">"#);
@@ -523,15 +531,14 @@ pub async fn handle_index(State(state): State<Arc<AppState>>) -> Html<String> {
     for product in &products {
         let latest = db.latest_build(product);
         let build_count = db.builds_for_product(product).len();
-        let version_str = latest
-            .map(|b| escape_html(&b.version))
-            .unwrap_or_default();
+        let version_str = latest.map(|b| escape_html(&b.version)).unwrap_or_default();
         let build_time = latest
             .map(|b| escape_html(&b.build_time))
             .unwrap_or_default();
         let seqn = state.current_seqn(product);
 
-        html.push_str(&format!(
+        let _ = write!(
+            html,
             r#"<a href="/{product}/builds" class="product-card">
   <div class="product-name">{product}</div>
   <div class="product-meta">
@@ -540,13 +547,15 @@ pub async fn handle_index(State(state): State<Arc<AppState>>) -> Html<String> {
     {build_time}
   </div>
 </a>"#
-        ));
+        );
     }
 
     html.push_str("</div></div>"); // product-grid, #products
 
     // Footer
-    html.push_str(r#"<div class="footer-info">cascette-ribbit &middot; Ribbit/TACT protocol server</div>"#);
+    html.push_str(
+        r#"<div class="footer-info">cascette-ribbit &middot; Ribbit/TACT protocol server</div>"#,
+    );
 
     html.push_str(PAGE_CLOSE);
     Html(html)
@@ -573,36 +582,40 @@ pub async fn handle_builds(
     let mut html = page_open(&format!("{product_escaped} builds | cascette-ribbit"));
 
     // Header
-    html.push_str(&format!(
+    let _ = write!(
+        html,
         r#"<header>
   <a href="/" class="logo">cascette<span class="logo-accent">&lt;ribbit/&gt;</span></a>
   <a href="/" class="nav-link">Home</a>
 </header>
 "#
-    ));
+    );
 
     // Title section
-    html.push_str(&format!(
+    let _ = write!(
+        html,
         r#"<h1>{product_escaped}</h1>
 <p class="tagline">{} builds tracked &middot; seqn {seqn}</p>
 "#,
         builds.len()
-    ));
+    );
 
     // CDN info
     if let Some(ref cdn) = cdn_config {
-        html.push_str(&format!(
+        let _ = write!(
+            html,
             r#"<div class="info-box" style="margin:16px 0">
   <strong>CDN</strong>: {} &middot; Path: {} &middot; Config: {}
 </div>"#,
             escape_html(&cdn.hosts),
             escape_html(&cdn.path),
             escape_html(&cdn.config_path),
-        ));
+        );
     }
 
     // BPSV endpoint links
-    html.push_str(&format!(
+    let _ = write!(
+        html,
         r#"<div class="tag-filters">
   <a href="/{product}/versions" class="tag-btn">v1 versions</a>
   <a href="/{product}/cdns" class="tag-btn">v1 cdns</a>
@@ -611,7 +624,7 @@ pub async fn handle_builds(
   <a href="/v2/products/{product}/cdns" class="tag-btn">v2 cdns</a>
   <a href="/v2/products/{product}/bgdl" class="tag-btn">v2 bgdl</a>
 </div>"#
-    ));
+    );
 
     html.push_str(r#"<hr class="section-divider">"#);
 
@@ -624,42 +637,38 @@ pub async fn handle_builds(
         let build_config = escape_html(&build.build_config);
         let cdn_config_hash = escape_html(&build.cdn_config);
 
-        html.push_str(&format!(
+        let _ = write!(
+            html,
             r#"<div class="build-entry">
   <div class="build-time">{build_time}</div>
   <div class="build-version">{version}</div>
   <div class="build-hashes">
     BuildConfig: <code>{build_config}</code><br>
     CDNConfig: <code>{cdn_config_hash}</code>"#
-        ));
+        );
 
         if let Some(ref pc) = build.product_config {
-            html.push_str(&format!(
-                "<br>ProductConfig: <code>{}</code>",
-                escape_html(pc)
-            ));
+            let _ = write!(html, "<br>ProductConfig: <code>{}</code>", escape_html(pc));
         }
         if let Some(ref ek) = build.encoding_ekey {
-            html.push_str(&format!(
-                "<br>Encoding: <code>{}</code>",
-                escape_html(ek)
-            ));
+            let _ = write!(html, "<br>Encoding: <code>{}</code>", escape_html(ek));
         }
         if let Some(ref rk) = build.root_ekey {
-            html.push_str(&format!("<br>Root: <code>{}</code>", escape_html(rk)));
+            let _ = write!(html, "<br>Root: <code>{}</code>", escape_html(rk));
         }
 
         html.push_str("</div>"); // build-hashes
 
         // Tags showing build number and id
-        html.push_str(&format!(
+        let _ = write!(
+            html,
             r#"<div class="build-tags">
     <span class="build-tag">build {}</span>
     <span class="build-tag">id {}</span>
   </div>"#,
             escape_html(&build.build),
             build.id
-        ));
+        );
 
         html.push_str("</div>"); // build-entry
     }
@@ -667,10 +676,11 @@ pub async fn handle_builds(
     html.push_str("</div>"); // build-list
 
     // Footer
-    html.push_str(&format!(
+    let _ = write!(
+        html,
         r#"<div class="footer-info">cascette-ribbit &middot; {product_escaped} &middot; {} builds</div>"#,
         builds.len()
-    ));
+    );
 
     html.push_str(PAGE_CLOSE);
     Ok(Html(html).into_response())

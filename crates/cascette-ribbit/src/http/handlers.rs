@@ -15,9 +15,7 @@ use std::sync::Arc;
 ///
 /// Returns BPSV-formatted summary of all products with their sequence numbers.
 /// Matches the Blizzard TACT v2 summary format at `https://{region}.version.battle.net/v2/summary`.
-pub async fn handle_summary(
-    State(state): State<Arc<AppState>>,
-) -> Result<Response, AppError> {
+pub async fn handle_summary(State(state): State<Arc<AppState>>) -> Result<Response, AppError> {
     tracing::debug!("Handling v2 summary request");
 
     let db = state.database().await;
@@ -31,7 +29,11 @@ pub async fn handle_summary(
             .unwrap_or_default()
             .as_secs()
     } else {
-        products.iter().map(|p| state.current_seqn(p)).max().unwrap_or(0)
+        products
+            .iter()
+            .map(|p| state.current_seqn(p))
+            .max()
+            .unwrap_or(0)
     };
 
     let response = BpsvResponse::summary(&products, seqn);
@@ -164,9 +166,7 @@ pub async fn handle_versioned_versions(
 
     let db = state.database().await;
     let record = db.find_build(&product, &build).ok_or_else(|| {
-        AppError::NotFound(format!(
-            "Build {build} not found for product: {product}"
-        ))
+        AppError::NotFound(format!("Build {build} not found for product: {product}"))
     })?;
 
     let seqn = state.current_seqn(&product);
@@ -202,9 +202,7 @@ pub async fn handle_versioned_cdns(
 
     let db = state.database().await;
     let record = db.find_build(&product, &build).ok_or_else(|| {
-        AppError::NotFound(format!(
-            "Build {build} not found for product: {product}"
-        ))
+        AppError::NotFound(format!("Build {build} not found for product: {product}"))
     })?;
 
     let cdn_config = CdnConfig::resolve_for_build(record, state.cdn_config());
@@ -242,9 +240,7 @@ pub async fn handle_versioned_bgdl(
 
     let db = state.database().await;
     let record = db.find_build(&product, &build).ok_or_else(|| {
-        AppError::NotFound(format!(
-            "Build {build} not found for product: {product}"
-        ))
+        AppError::NotFound(format!("Build {build} not found for product: {product}"))
     })?;
 
     let seqn = state.current_seqn(&product);

@@ -37,10 +37,7 @@ pub async fn write_config_files(
     if let Some(hash) = manifests.build_config.patch_config() {
         let hash = hash.to_string();
         // Check if already cached
-        let patch_path = config_dir
-            .join(&hash[..2])
-            .join(&hash[2..4])
-            .join(&hash);
+        let patch_path = config_dir.join(&hash[..2]).join(&hash[2..4]).join(&hash);
         if !patch_path.exists() {
             // Download from CDN and cache
             if let Some(ref raw_data) = manifests.patch_config_data {

@@ -806,7 +806,7 @@ where
                         break;
                     }
                     Err(e) => {
-                        let err: crate::error::InstallationError = e.into();
+                        let err: crate::error::InstallationError = e;
                         scorer.record_failure(&ep.host, &err);
                     }
                 }

@@ -70,23 +70,21 @@ pub fn country_to_blizzard_region(alpha2: &str) -> &'static str {
 
         // SG region: Southeast Asia, East Asia (except KR/TW/CN), Oceania
         "AU" | "BN" | "FJ" | "GU" | "HK" | "ID" | "JP" | "KH" | "LA" | "MM" | "MN" | "MO"
-        | "MY" | "NC" | "NZ" | "PG" | "PH" | "SG" | "TH" | "VN" | "WS" | "TO" | "TV"
-        | "VU" | "SB" | "MH" | "FM" | "PW" | "KI" | "NR" | "TL" | "BT" | "NP" | "BD"
-        | "LK" | "MV" => "SG",
+        | "MY" | "NC" | "NZ" | "PG" | "PH" | "SG" | "TH" | "VN" | "WS" | "TO" | "TV" | "VU"
+        | "SB" | "MH" | "FM" | "PW" | "KI" | "NR" | "TL" | "BT" | "NP" | "BD" | "LK" | "MV" => "SG",
 
         // EU region: Europe, Africa, Middle East, Central Asia, South Asia (India/Pakistan)
         "AD" | "AE" | "AF" | "AL" | "AM" | "AO" | "AT" | "AZ" | "BA" | "BE" | "BF" | "BG"
-        | "BH" | "BI" | "BJ" | "BW" | "BY" | "CD" | "CF" | "CG" | "CH" | "CI" | "CM"
-        | "CV" | "CY" | "CZ" | "DE" | "DJ" | "DK" | "DZ" | "EE" | "EG" | "EH" | "ER"
-        | "ES" | "ET" | "FI" | "FO" | "FR" | "GA" | "GB" | "GE" | "GH" | "GI" | "GL"
-        | "GM" | "GN" | "GQ" | "GR" | "GW" | "HR" | "HU" | "IE" | "IL" | "IN" | "IQ"
-        | "IR" | "IS" | "IT" | "JO" | "KE" | "KG" | "KZ" | "LB" | "LI" | "LR" | "LS"
-        | "LT" | "LU" | "LV" | "LY" | "MA" | "MC" | "MD" | "ME" | "MG" | "MK" | "ML"
-        | "MR" | "MT" | "MU" | "MW" | "MZ" | "NA" | "NE" | "NG" | "NL" | "NO" | "OM"
-        | "PK" | "PL" | "PS" | "PT" | "QA" | "RE" | "RO" | "RS" | "RU" | "RW" | "SA"
-        | "SC" | "SD" | "SE" | "SI" | "SK" | "SL" | "SM" | "SN" | "SO" | "SS" | "ST"
-        | "SY" | "SZ" | "TD" | "TG" | "TJ" | "TM" | "TN" | "TR" | "TZ" | "UA" | "UG"
-        | "UZ" | "VA" | "XK" | "YE" | "ZA" | "ZM" | "ZW" => "EU",
+        | "BH" | "BI" | "BJ" | "BW" | "BY" | "CD" | "CF" | "CG" | "CH" | "CI" | "CM" | "CV"
+        | "CY" | "CZ" | "DE" | "DJ" | "DK" | "DZ" | "EE" | "EG" | "EH" | "ER" | "ES" | "ET"
+        | "FI" | "FO" | "FR" | "GA" | "GB" | "GE" | "GH" | "GI" | "GL" | "GM" | "GN" | "GQ"
+        | "GR" | "GW" | "HR" | "HU" | "IE" | "IL" | "IN" | "IQ" | "IR" | "IS" | "IT" | "JO"
+        | "KE" | "KG" | "KZ" | "LB" | "LI" | "LR" | "LS" | "LT" | "LU" | "LV" | "LY" | "MA"
+        | "MC" | "MD" | "ME" | "MG" | "MK" | "ML" | "MR" | "MT" | "MU" | "MW" | "MZ" | "NA"
+        | "NE" | "NG" | "NL" | "NO" | "OM" | "PK" | "PL" | "PS" | "PT" | "QA" | "RE" | "RO"
+        | "RS" | "RU" | "RW" | "SA" | "SC" | "SD" | "SE" | "SI" | "SK" | "SL" | "SM" | "SN"
+        | "SO" | "SS" | "ST" | "SY" | "SZ" | "TD" | "TG" | "TJ" | "TM" | "TN" | "TR" | "TZ"
+        | "UA" | "UG" | "UZ" | "VA" | "XK" | "YE" | "ZA" | "ZM" | "ZW" => "EU",
 
         // US region: Americas (default for anything else)
         _ => "US",
@@ -121,38 +119,64 @@ fn timezone_to_alpha2(timezone: &str) -> Option<&'static str> {
         // AO - Angola
         "Africa/Luanda" => "AO",
         // AQ - Antarctica (unaffiliated stations)
-        "Antarctica/DumontDUrville" | "Antarctica/Palmer" | "Antarctica/Rothera"
-        | "Antarctica/Syowa" | "Antarctica/Troll" | "Antarctica/Vostok" => "AQ",
+        "Antarctica/DumontDUrville"
+        | "Antarctica/Palmer"
+        | "Antarctica/Rothera"
+        | "Antarctica/Syowa"
+        | "Antarctica/Troll"
+        | "Antarctica/Vostok" => "AQ",
         // AR - Argentina
-        "America/Argentina/Buenos_Aires" | "America/Buenos_Aires"
-        | "America/Argentina/Catamarca" | "America/Catamarca"
+        "America/Argentina/Buenos_Aires"
+        | "America/Buenos_Aires"
+        | "America/Argentina/Catamarca"
+        | "America/Catamarca"
         | "America/Argentina/ComodRivadavia"
-        | "America/Argentina/Cordoba" | "America/Cordoba" | "America/Rosario"
-        | "America/Argentina/Jujuy" | "America/Jujuy"
+        | "America/Argentina/Cordoba"
+        | "America/Cordoba"
+        | "America/Rosario"
+        | "America/Argentina/Jujuy"
+        | "America/Jujuy"
         | "America/Argentina/La_Rioja"
-        | "America/Argentina/Mendoza" | "America/Mendoza"
-        | "America/Argentina/Rio_Gallegos" | "America/Argentina/Salta"
-        | "America/Argentina/San_Juan" | "America/Argentina/San_Luis"
-        | "America/Argentina/Tucuman" | "America/Argentina/Ushuaia" => "AR",
+        | "America/Argentina/Mendoza"
+        | "America/Mendoza"
+        | "America/Argentina/Rio_Gallegos"
+        | "America/Argentina/Salta"
+        | "America/Argentina/San_Juan"
+        | "America/Argentina/San_Luis"
+        | "America/Argentina/Tucuman"
+        | "America/Argentina/Ushuaia" => "AR",
         // AS - American Samoa
         "Pacific/Pago_Pago" | "Pacific/Samoa" => "AS",
         // AT - Austria
         "Europe/Vienna" => "AT",
         // AU - Australia
-        "Antarctica/Casey" | "Antarctica/Davis" | "Antarctica/Macquarie"
+        "Antarctica/Casey"
+        | "Antarctica/Davis"
+        | "Antarctica/Macquarie"
         | "Antarctica/Mawson"
-        | "Australia/ACT" | "Australia/Canberra" | "Australia/NSW" | "Australia/Sydney"
-        | "Australia/Adelaide" | "Australia/South"
-        | "Australia/Brisbane" | "Australia/Queensland"
-        | "Australia/Broken_Hill" | "Australia/Yancowinna"
+        | "Australia/ACT"
+        | "Australia/Canberra"
+        | "Australia/NSW"
+        | "Australia/Sydney"
+        | "Australia/Adelaide"
+        | "Australia/South"
+        | "Australia/Brisbane"
+        | "Australia/Queensland"
+        | "Australia/Broken_Hill"
+        | "Australia/Yancowinna"
         | "Australia/Currie"
-        | "Australia/Darwin" | "Australia/North"
+        | "Australia/Darwin"
+        | "Australia/North"
         | "Australia/Eucla"
-        | "Australia/Hobart" | "Australia/Tasmania"
-        | "Australia/LHI" | "Australia/Lord_Howe"
+        | "Australia/Hobart"
+        | "Australia/Tasmania"
+        | "Australia/LHI"
+        | "Australia/Lord_Howe"
         | "Australia/Lindeman"
-        | "Australia/Melbourne" | "Australia/Victoria"
-        | "Australia/Perth" | "Australia/West" => "AU",
+        | "Australia/Melbourne"
+        | "Australia/Victoria"
+        | "Australia/Perth"
+        | "Australia/West" => "AU",
         // AW - Aruba
         "America/Aruba" => "AW",
         // AX - Aland Islands
@@ -188,12 +212,23 @@ fn timezone_to_alpha2(timezone: &str) -> Option<&'static str> {
         // BQ - Bonaire
         "America/Kralendijk" => "BQ",
         // BR - Brazil
-        "America/Araguaina" | "America/Bahia" | "America/Belem" | "America/Boa_Vista"
-        | "America/Campo_Grande" | "America/Cuiaba" | "America/Eirunepe"
-        | "America/Fortaleza" | "America/Maceio" | "America/Manaus" | "America/Noronha"
-        | "America/Porto_Velho" | "America/Recife"
-        | "America/Rio_Branco" | "America/Porto_Acre"
-        | "America/Santarem" | "America/Sao_Paulo" => "BR",
+        "America/Araguaina"
+        | "America/Bahia"
+        | "America/Belem"
+        | "America/Boa_Vista"
+        | "America/Campo_Grande"
+        | "America/Cuiaba"
+        | "America/Eirunepe"
+        | "America/Fortaleza"
+        | "America/Maceio"
+        | "America/Manaus"
+        | "America/Noronha"
+        | "America/Porto_Velho"
+        | "America/Recife"
+        | "America/Rio_Branco"
+        | "America/Porto_Acre"
+        | "America/Santarem"
+        | "America/Sao_Paulo" => "BR",
         // BS - Bahamas
         "America/Nassau" => "BS",
         // BT - Bhutan
@@ -205,19 +240,36 @@ fn timezone_to_alpha2(timezone: &str) -> Option<&'static str> {
         // BZ - Belize
         "America/Belize" => "BZ",
         // CA - Canada
-        "America/Atikokan" | "America/Coral_Harbour" | "America/Blanc-Sablon"
-        | "America/Cambridge_Bay" | "America/Creston"
-        | "America/Dawson" | "America/Dawson_Creek"
-        | "America/Edmonton" | "America/Fort_Nelson"
-        | "America/Glace_Bay" | "America/Goose_Bay" | "America/Halifax"
-        | "America/Inuvik" | "America/Iqaluit"
-        | "America/Moncton" | "America/Montreal" | "America/Toronto"
-        | "America/Nipigon" | "America/Pangnirtung"
-        | "America/Rainy_River" | "America/Rankin_Inlet"
-        | "America/Regina" | "America/Resolute"
-        | "America/St_Johns" | "America/Swift_Current"
-        | "America/Thunder_Bay" | "America/Vancouver"
-        | "America/Whitehorse" | "America/Winnipeg" | "America/Yellowknife" => "CA",
+        "America/Atikokan"
+        | "America/Coral_Harbour"
+        | "America/Blanc-Sablon"
+        | "America/Cambridge_Bay"
+        | "America/Creston"
+        | "America/Dawson"
+        | "America/Dawson_Creek"
+        | "America/Edmonton"
+        | "America/Fort_Nelson"
+        | "America/Glace_Bay"
+        | "America/Goose_Bay"
+        | "America/Halifax"
+        | "America/Inuvik"
+        | "America/Iqaluit"
+        | "America/Moncton"
+        | "America/Montreal"
+        | "America/Toronto"
+        | "America/Nipigon"
+        | "America/Pangnirtung"
+        | "America/Rainy_River"
+        | "America/Rankin_Inlet"
+        | "America/Regina"
+        | "America/Resolute"
+        | "America/St_Johns"
+        | "America/Swift_Current"
+        | "America/Thunder_Bay"
+        | "America/Vancouver"
+        | "America/Whitehorse"
+        | "America/Winnipeg"
+        | "America/Yellowknife" => "CA",
         // CC - Cocos Islands
         "Indian/Cocos" => "CC",
         // CD - DR Congo
@@ -237,8 +289,8 @@ fn timezone_to_alpha2(timezone: &str) -> Option<&'static str> {
         // CM - Cameroon
         "Africa/Douala" => "CM",
         // CN - China
-        "Asia/Chongqing" | "Asia/Chungking" | "Asia/Harbin"
-        | "Asia/Kashgar" | "Asia/Urumqi" | "Asia/Shanghai" => "CN",
+        "Asia/Chongqing" | "Asia/Chungking" | "Asia/Harbin" | "Asia/Kashgar" | "Asia/Urumqi"
+        | "Asia/Shanghai" => "CN",
         // CO - Colombia
         "America/Bogota" => "CO",
         // CR - Costa Rica
@@ -288,8 +340,8 @@ fn timezone_to_alpha2(timezone: &str) -> Option<&'static str> {
         // FK - Falkland Islands
         "Atlantic/Stanley" => "FK",
         // FM - Micronesia
-        "Pacific/Chuuk" | "Pacific/Truk" | "Pacific/Yap"
-        | "Pacific/Kosrae" | "Pacific/Pohnpei" | "Pacific/Ponape" => "FM",
+        "Pacific/Chuuk" | "Pacific/Truk" | "Pacific/Yap" | "Pacific/Kosrae" | "Pacific/Pohnpei"
+        | "Pacific/Ponape" => "FM",
         // FO - Faroe Islands
         "Atlantic/Faroe" | "Atlantic/Faeroe" => "FO",
         // FR - France
@@ -311,8 +363,12 @@ fn timezone_to_alpha2(timezone: &str) -> Option<&'static str> {
         // GI - Gibraltar
         "Europe/Gibraltar" => "GI",
         // GL - Greenland
-        "America/Danmarkshavn" | "America/Godthab" | "America/Nuuk"
-        | "America/Scoresbysund" | "America/Ittoqqortoormiit" | "America/Thule" => "GL",
+        "America/Danmarkshavn"
+        | "America/Godthab"
+        | "America/Nuuk"
+        | "America/Scoresbysund"
+        | "America/Ittoqqortoormiit"
+        | "America/Thule" => "GL",
         // GM - Gambia
         "Africa/Banjul" => "GM",
         // GN - Guinea
@@ -379,8 +435,7 @@ fn timezone_to_alpha2(timezone: &str) -> Option<&'static str> {
         // KH - Cambodia
         "Asia/Phnom_Penh" => "KH",
         // KI - Kiribati
-        "Pacific/Enderbury" | "Pacific/Kanton" | "Pacific/Kiritimati"
-        | "Pacific/Tarawa" => "KI",
+        "Pacific/Enderbury" | "Pacific/Kanton" | "Pacific/Kiritimati" | "Pacific/Tarawa" => "KI",
         // KM - Comoros
         "Indian/Comoro" => "KM",
         // KN - Saint Kitts and Nevis
@@ -394,8 +449,8 @@ fn timezone_to_alpha2(timezone: &str) -> Option<&'static str> {
         // KY - Cayman Islands
         "America/Cayman" => "KY",
         // KZ - Kazakhstan
-        "Asia/Almaty" | "Asia/Aqtau" | "Asia/Aqtobe" | "Asia/Atyrau"
-        | "Asia/Oral" | "Asia/Qostanay" | "Asia/Qyzylorda" => "KZ",
+        "Asia/Almaty" | "Asia/Aqtau" | "Asia/Aqtobe" | "Asia/Atyrau" | "Asia/Oral"
+        | "Asia/Qostanay" | "Asia/Qyzylorda" => "KZ",
         // LA - Laos
         "Asia/Vientiane" => "LA",
         // LB - Lebanon
@@ -459,10 +514,18 @@ fn timezone_to_alpha2(timezone: &str) -> Option<&'static str> {
         // MW - Malawi
         "Africa/Blantyre" => "MW",
         // MX - Mexico
-        "America/Bahia_Banderas" | "America/Cancun" | "America/Chihuahua"
-        | "America/Ciudad_Juarez" | "America/Ensenada" | "America/Tijuana"
-        | "America/Hermosillo" | "America/Matamoros" | "America/Mazatlan"
-        | "America/Merida" | "America/Mexico_City" | "America/Monterrey"
+        "America/Bahia_Banderas"
+        | "America/Cancun"
+        | "America/Chihuahua"
+        | "America/Ciudad_Juarez"
+        | "America/Ensenada"
+        | "America/Tijuana"
+        | "America/Hermosillo"
+        | "America/Matamoros"
+        | "America/Mazatlan"
+        | "America/Merida"
+        | "America/Mexico_City"
+        | "America/Monterrey"
         | "America/Ojinaga" => "MX",
         // MY - Malaysia
         "Asia/Kuala_Lumpur" | "Asia/Kuching" => "MY",
@@ -491,8 +554,9 @@ fn timezone_to_alpha2(timezone: &str) -> Option<&'static str> {
         // NU - Niue
         "Pacific/Niue" => "NU",
         // NZ - New Zealand
-        "Antarctica/McMurdo" | "Antarctica/South_Pole"
-        | "Pacific/Auckland" | "Pacific/Chatham" => "NZ",
+        "Antarctica/McMurdo" | "Antarctica/South_Pole" | "Pacific/Auckland" | "Pacific/Chatham" => {
+            "NZ"
+        }
         // OM - Oman
         "Asia/Muscat" => "OM",
         // PA - Panama
@@ -532,15 +596,13 @@ fn timezone_to_alpha2(timezone: &str) -> Option<&'static str> {
         // RS - Serbia
         "Europe/Belgrade" => "RS",
         // RU - Russia
-        "Asia/Anadyr" | "Asia/Barnaul" | "Asia/Chita" | "Asia/Irkutsk"
-        | "Asia/Kamchatka" | "Asia/Khandyga" | "Asia/Krasnoyarsk"
-        | "Asia/Magadan" | "Asia/Novokuznetsk" | "Asia/Novosibirsk"
-        | "Asia/Omsk" | "Asia/Sakhalin" | "Asia/Srednekolymsk"
-        | "Asia/Tomsk" | "Asia/Ust-Nera" | "Asia/Vladivostok"
-        | "Asia/Yakutsk" | "Asia/Yekaterinburg"
-        | "Europe/Astrakhan" | "Europe/Kaliningrad" | "Europe/Kirov"
-        | "Europe/Moscow" | "Europe/Samara" | "Europe/Saratov"
-        | "Europe/Ulyanovsk" | "Europe/Volgograd" => "RU",
+        "Asia/Anadyr" | "Asia/Barnaul" | "Asia/Chita" | "Asia/Irkutsk" | "Asia/Kamchatka"
+        | "Asia/Khandyga" | "Asia/Krasnoyarsk" | "Asia/Magadan" | "Asia/Novokuznetsk"
+        | "Asia/Novosibirsk" | "Asia/Omsk" | "Asia/Sakhalin" | "Asia/Srednekolymsk"
+        | "Asia/Tomsk" | "Asia/Ust-Nera" | "Asia/Vladivostok" | "Asia/Yakutsk"
+        | "Asia/Yekaterinburg" | "Europe/Astrakhan" | "Europe/Kaliningrad" | "Europe/Kirov"
+        | "Europe/Moscow" | "Europe/Samara" | "Europe/Saratov" | "Europe/Ulyanovsk"
+        | "Europe/Volgograd" => "RU",
         // RW - Rwanda
         "Africa/Kigali" => "RW",
         // SA - Saudi Arabia
@@ -621,23 +683,42 @@ fn timezone_to_alpha2(timezone: &str) -> Option<&'static str> {
         // UG - Uganda
         "Africa/Kampala" => "UG",
         // US - United States
-        "America/Adak" | "America/Anchorage" | "America/Boise" | "America/Chicago"
-        | "America/Denver" | "America/Detroit"
-        | "America/Fort_Wayne" | "America/Indiana/Indianapolis" | "America/Indianapolis"
-        | "America/Indiana/Knox" | "America/Knox_IN"
-        | "America/Indiana/Marengo" | "America/Indiana/Petersburg"
-        | "America/Indiana/Tell_City" | "America/Indiana/Vevay"
-        | "America/Indiana/Vincennes" | "America/Indiana/Winamac"
+        "America/Adak"
+        | "America/Anchorage"
+        | "America/Boise"
+        | "America/Chicago"
+        | "America/Denver"
+        | "America/Detroit"
+        | "America/Fort_Wayne"
+        | "America/Indiana/Indianapolis"
+        | "America/Indianapolis"
+        | "America/Indiana/Knox"
+        | "America/Knox_IN"
+        | "America/Indiana/Marengo"
+        | "America/Indiana/Petersburg"
+        | "America/Indiana/Tell_City"
+        | "America/Indiana/Vevay"
+        | "America/Indiana/Vincennes"
+        | "America/Indiana/Winamac"
         | "America/Juneau"
-        | "America/Kentucky/Louisville" | "America/Louisville"
+        | "America/Kentucky/Louisville"
+        | "America/Louisville"
         | "America/Kentucky/Monticello"
-        | "America/Los_Angeles" | "America/Menominee" | "America/Metlakatla"
-        | "America/New_York" | "America/Nome"
-        | "America/North_Dakota/Beulah" | "America/North_Dakota/Center"
+        | "America/Los_Angeles"
+        | "America/Menominee"
+        | "America/Metlakatla"
+        | "America/New_York"
+        | "America/Nome"
+        | "America/North_Dakota/Beulah"
+        | "America/North_Dakota/Center"
         | "America/North_Dakota/New_Salem"
-        | "America/Phoenix" | "America/Shiprock" | "America/Sitka"
+        | "America/Phoenix"
+        | "America/Shiprock"
+        | "America/Sitka"
         | "America/Yakutat"
-        | "Pacific/Honolulu" | "Pacific/Johnston" | "Pacific/Midway"
+        | "Pacific/Honolulu"
+        | "Pacific/Johnston"
+        | "Pacific/Midway"
         | "Pacific/Wake" => "US",
         // UY - Uruguay
         "America/Montevideo" => "UY",
@@ -678,6 +759,7 @@ fn timezone_to_alpha2(timezone: &str) -> Option<&'static str> {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
 

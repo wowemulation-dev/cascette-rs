@@ -142,7 +142,7 @@ impl BpsvResponse {
 impl fmt::Display for BpsvResponse {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Blizzard terminates BPSV responses with a trailing newline.
-        write!(f, "{}\n", self.lines.join("\n"))
+        writeln!(f, "{}", self.lines.join("\n"))
     }
 }
 
