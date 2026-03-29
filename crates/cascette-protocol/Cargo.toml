@@ -57,11 +57,11 @@ cascette-crypto = { version = "0.2.0", path = "../cascette-crypto" }
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 # WASM-compatible tokio - only sync primitives, no runtime (use wasm-bindgen-futures instead)
 # Cannot use workspace = true when overriding default-features
-tokio = { version = "1.49", default-features = false, features = ["sync", "macros"] }
+tokio = { version = "1.50", default-features = false, features = ["sync", "macros"] }
 # WASM-compatible reqwest (uses web-sys/fetch API instead of native sockets)
 reqwest = { version = "0.13", default-features = false, features = ["gzip", "brotli", "deflate", "charset"] }
 # gloo-timers provides WASM-compatible sleep functionality
-gloo-timers = { version = "0.3", features = ["futures"] }
+gloo-timers = { version = "0.4", features = ["futures"] }
 # web-sys for browser APIs (console logging, localStorage for caching)
 web-sys = { version = "0.3", features = ["console", "Window", "Storage"] }
 # WASM-compatible internal dependencies (cascette-crypto, cascette-formats, cascette-cache support WASM)
