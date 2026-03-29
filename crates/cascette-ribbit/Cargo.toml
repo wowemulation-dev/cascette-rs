@@ -55,7 +55,7 @@ clap.workspace = true
 dashmap.workspace = true
 
 # File system watching (hot reload)
-notify = "6"
+notify = "8"
 
 [dev-dependencies]
 # Internal dependencies (for contract tests)

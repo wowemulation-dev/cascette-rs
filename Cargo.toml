@@ -50,7 +50,7 @@ uuid = { version = "1.0", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 
 # System information
-sysinfo = "0.32"
+sysinfo = "0.38"
 
 # Concurrency
 parking_lot = "0.12"
@@ -109,7 +109,7 @@ axum = "0.8"
 tower = { version = "0.5", features = ["util"] }
 tower-http = { version = "0.6", features = ["trace", "cors", "compression-gzip"] }
 http-body-util = "0.1"
-axum-server = { version = "0.7", features = ["tls-rustls-no-provider"] }
+axum-server = { version = "0.8", features = ["tls-rustls-no-provider"] }
 tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
 
 # CLI argument parsing

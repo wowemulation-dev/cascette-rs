@@ -84,7 +84,7 @@ getrandom_02 = { workspace = true, features = ["js"] }
 tempfile = { workspace = true }
 wiremock = { workspace = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-mockall = "0.13"
+mockall = "0.14"
 
 # Crypto provider for reqwest in tests
 rustls = { workspace = true }
