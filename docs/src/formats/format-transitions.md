@@ -164,7 +164,7 @@ size = <content_key> <encoding_key>
 
 ### BLTE Format Evolution
 
-BLTE (Block Table Encoded) compression has remained stable but usage patterns
+BLTE (Block Table Encoding) compression has remained stable but usage patterns
 evolved:
 
 #### Compression Type Usage by Era

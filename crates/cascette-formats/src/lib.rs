@@ -33,7 +33,7 @@
 //! # Supported Formats
 //!
 //! - **BPSV**: Blizzard Pipe-Separated Values for version and configuration data
-//! - **BLTE**: Block Table Encoded format for compressed and encrypted content
+//! - **BLTE**: Block Table Encoding format for compressed and encrypted content
 //! - **Root**: Root file format mapping paths/FileDataIDs to content keys
 //! - **Encoding**: Encoding file format for content key to encoding key mappings
 //! - **Install**: Install manifest format for file tagging and selective installation

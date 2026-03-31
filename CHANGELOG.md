@@ -763,7 +763,7 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - Memory pooling optimized for NGDP file size classes
   - CDN integration with retry logic and range requests
 - cascette-formats crate: Binary format parsers and builders for NGDP/CASC
-  - BLTE: Block Table Encoded format with compression (ZLib, LZ4) and encryption
+  - BLTE: Block Table Encoding format with compression (ZLib, LZ4) and encryption
   - BPSV: Blizzard Pipe-Separated Values for version and config data
   - Archive: Archive index and data file operations for CDN content storage
   - Encoding: Content key to encoding key mappings

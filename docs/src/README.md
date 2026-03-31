@@ -128,7 +128,7 @@ NGDP uses metadata files to manage content:
 
 ### BLTE Format
 
-BLTE (Block Table Encoded) is the container format for game data. It supports:
+BLTE (Block Table Encoding) is the container format for game data. It supports:
 
 - Block-based compression
 

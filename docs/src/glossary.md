@@ -43,7 +43,7 @@ files by name.
 
 ## File Formats
 
-### BLTE (Block Table Encoded)
+### BLTE (Block Table Encoding)
 
 Container format that wraps all CASC content. Provides compression and
 optional encryption.

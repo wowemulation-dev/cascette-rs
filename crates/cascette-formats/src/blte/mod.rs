@@ -1,4 +1,4 @@
-//! BLTE (Block Table Encoded) format implementation
+//! BLTE (Block Table Encoding) format implementation
 //!
 //! BLTE is NGDP's container format for compressed and optionally encrypted content.
 //! It provides block-based compression, encryption support, and efficient streaming
