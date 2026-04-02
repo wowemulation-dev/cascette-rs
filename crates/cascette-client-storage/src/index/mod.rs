@@ -1044,7 +1044,9 @@ impl IndexManager {
             storage_offset_length: index.header.location_size,
             ekey_length: index.header.key_size,
             file_offset_bits: index.header.segment_bits,
-            segment_size: 1u64 << u64::from(index.header.segment_bits),
+            // Total addressable space: single-segment size (1 << offset_bits)
+            // multiplied by max archive count (256 for 8-bit archive index).
+            segment_size: (1u64 << u64::from(index.header.segment_bits)) * 256,
         };
 
         let mut header_bytes = Vec::new();

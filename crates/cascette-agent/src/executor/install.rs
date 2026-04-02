@@ -209,19 +209,30 @@ pub async fn execute(
     // --- Bootstrapper + launcher binary resolution ---
     // Resolve both bts operations: bootstrapper (setup binary, Region==product_tag)
     // and launcher binary (Region==bootstrapper_branch=="launcher").
-    let (bootstrapper_config, launcher_binary_config) = resolve_bts_configs(
-        state,
-        &operation.product_code,
-        &endpoints,
-        product_config_hash.as_deref(),
-        config_path.as_deref(),
-        &region,
-        &locale,
-        &install_path,
-        platform.as_deref(),
-        architecture.as_deref(),
-    )
-    .await;
+    // Skip for historical/pinned builds: BTS resolution fetches current live
+    // versions which would overwrite the game's .build.info with BTS metadata.
+    let is_historical = custom_build_config.is_some() && custom_cdn_config.is_some();
+    let (bootstrapper_config, launcher_binary_config) = if is_historical {
+        info!(
+            product = %operation.product_code,
+            "skipping BTS/launcher resolution for historical build"
+        );
+        (None, None)
+    } else {
+        resolve_bts_configs(
+            state,
+            &operation.product_code,
+            &endpoints,
+            product_config_hash.as_deref(),
+            config_path.as_deref(),
+            &region,
+            &locale,
+            &install_path,
+            platform.as_deref(),
+            architecture.as_deref(),
+        )
+        .await
+    };
 
     // Create progress bridge
     let (bridge, flush_handle) = ProgressBridge::new(operation.operation_id, state);

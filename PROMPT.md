@@ -64,23 +64,26 @@ rm -rf ~/Downloads/wine_wow_classic_1137
 Only proceed to step 1 after confirming all processes are stopped and state is
 cleared.
 
-### 1. Sync the local CDN mirror
+### 1. Choose CDN source
 
-The local mirror at `/run/media/danielsreichenbach/NGDP/mirrors/cdn.blizzard.com/`
-is populated from the frankfurt server (`tactic.wowemu.dev`). It is fully
-synchronized for `wow_classic` and `wow_classic_era`. Only new builds are added
-incrementally, so syncs are fast once the mirror is current.
+Ask the user which CDN source to use. Three options:
 
-First, confirm the drive is mounted:
+| Option | Value for `CASCETTE_AGENT_CDN_HOSTS` | Notes |
+|--------|--------------------------------------|-------|
+| **Local mirror** | `localhost:8000` | Requires NGDP drive mounted + `range_http_server.py` |
+| **Project mirror** | `https://tactic.wowemu.dev` | Remote, always available |
+| **Custom** | user-provided URL | Any HTTP/HTTPS endpoint serving TACT data |
+
+Do not default to community CDNs or Blizzard's CDN for test runs.
+
+**If local mirror is selected**, confirm the drive is mounted and start
+the HTTP server:
 
 ```bash
 mount | grep NGDP
 ```
 
-If it is not mounted, mount it before continuing.
-
-Then sync from the server. `rsync -u` skips files already present on the
-destination, making incremental syncs quick:
+Sync incrementally if needed:
 
 ```bash
 rsync -avzru -e ssh \
@@ -89,8 +92,15 @@ rsync -avzru -e ssh \
   --exclude lost+found
 ```
 
-Files for products not covered by the mirror fall back automatically to
-community mirrors and the official Blizzard CDN.
+Start the range HTTP server:
+
+```bash
+python3 ~/Repos/github.com/wowemulation-dev/cascette-rs/tools/range_http_server.py \
+  /run/media/$(whoami)/NGDP/mirrors/cdn.blizzard.com 8000
+```
+
+Run with `run_in_background: true`. Do **not** use `python3 -m http.server`
+-- it ignores Range headers and serves full files.
 
 ### 2. Prepare the environment
 
@@ -132,41 +142,22 @@ cd ~/Repos/github.com/wowemulation-dev/cascette-rs
 cargo build --release -p cascette-agent
 ```
 
-Serve the local CDN mirror over HTTP **with Range request support**. The
-mirror lives at `/run/media/$(whoami)/NGDP/mirrors/cdn.blizzard.com/`.
-Run this as a background process (no shell redirects) so its request log
-is visible in the task output:
-
-```bash
-python3 ~/Repos/github.com/wowemulation-dev/cascette-rs/tools/range_http_server.py \
-  /run/media/$(whoami)/NGDP/mirrors/cdn.blizzard.com 8000
-```
-
-Run this command with `run_in_background: true` in the Bash tool. The
-server logs every request to stderr; these appear in the task output and
-can be read later with `TaskOutput`.
-
-The server takes a root directory as its first argument — no `cd` needed.
-It uses a thread pool (16 workers by default) to handle the agent's
-concurrent connections. Pass `--threads N` to adjust.
-
-Do **not** use `python3 -m http.server` — it is single-threaded, ignores
-Range headers, and returns full files (HTTP 200), which causes every
-byte-range archive fetch to download the entire ~1 GiB archive instead of
-the requested slice.
-
-Then start the agent as a background process, pointing it at the local
-mirror. Do **not** use shell redirects (`> file 2>&1`) — let stdout/stderr
-flow into the task output so logs are observable via `TaskOutput`:
+Start the agent using the CDN host chosen in step 1. Do **not** use shell
+redirects (`> file 2>&1`) -- let stdout/stderr flow into the task output
+so logs are observable via `TaskOutput`:
 
 ```bash
 cd ~/Repos/github.com/wowemulation-dev/cascette-rs
 
 RUST_LOG=cascette_agent=debug,cascette_installation=debug,cascette_protocol::cdn=debug \
-  CASCETTE_AGENT_CDN_HOSTS=localhost:8000 \
+  CASCETTE_AGENT_CDN_HOSTS=<chosen CDN host> \
   ./target/release/cascette-agent \
   --loglevel=debug
 ```
+
+Replace `<chosen CDN host>` with the value from step 1 (e.g.,
+`localhost:8000` or `https://tactic.wowemu.dev`). The agent auto-detects
+`localhost` and `127.*` as HTTP (plain); bare hostnames default to HTTPS.
 
 Run this command with `run_in_background: true` in the Bash tool. After
 starting, wait a moment then confirm it is listening:
@@ -175,19 +166,11 @@ starting, wait a moment then confirm it is listening:
 curl -s http://127.0.0.1:1120/agent | jq .
 ```
 
-`CASCETTE_AGENT_CDN_HOSTS=localhost:8000` prepends the local mirror before the
-community mirrors and official Blizzard CDN. Files missing from the mirror fall
-back automatically — a partial mirror is fine.
-
 The `cascette_protocol::cdn=debug` log target enables per-request logging in
 the CDN client. Every HTTP request logs the target URL and host; responses
 log the status code and byte count. Failover events are logged at `warn`
-level. Use this to verify that requests hit the local mirror and do not
+level. Use this to verify that requests hit the expected host and do not
 silently fall through to remote CDN endpoints.
-
-The agent auto-detects `localhost` and `127.*` as HTTP (plain), so no `http://`
-prefix is required. For remote mirrors you can use `http://host:port` or
-`https://host` explicitly; bare hostnames default to HTTPS.
 
 ### 4. Register and install
 
@@ -237,18 +220,17 @@ redirects. Their logs (stdout/stderr) are captured by the task runner and
 can be read at any time with `TaskOutput`. Use this to inspect CDN
 requests, failover warnings, and progress updates.
 
-**Verify CDN override is working:** Check that requests hit the local mirror
-(`localhost:8000`) and do not fall through to remote endpoints. The CDN
-client logs every request at `debug` level with the target host. Read the
-agent's task output to confirm:
+**Verify CDN override is working:** Check that requests hit the chosen CDN
+host and do not fall through to unintended endpoints. The CDN client logs
+every request at `debug` level with the target host. Read the agent's task
+output to confirm:
 
-- CDN requests target `localhost:8000`
+- CDN requests target the chosen host
 - No failover warnings appear (these indicate the file is missing from the
-  local mirror and fell through to a remote endpoint)
-- The HTTP server's task output shows corresponding request lines
+  chosen host and fell through to a remote endpoint)
 
-If requests target a host other than `localhost:8000` without a preceding
-failover warning, the CDN host override is not applied correctly.
+If requests target an unexpected host without a preceding failover warning,
+the CDN host override is not applied correctly.
 
 ### 6. Compare results
 
@@ -377,7 +359,7 @@ command with `run_in_background: true` in the Bash tool:
 
 ```bash
 RUST_LOG=cascette_agent=debug,cascette_installation=debug,cascette_protocol::cdn=debug \
-  CASCETTE_AGENT_CDN_HOSTS=localhost:8000 \
+  CASCETTE_AGENT_CDN_HOSTS=<chosen CDN host> \
   ./target/release/cascette-agent \
   --loglevel=debug
 ```
@@ -435,7 +417,7 @@ command with `run_in_background: true` in the Bash tool:
 
 ```bash
 RUST_LOG=cascette_agent=debug,cascette_installation=debug,cascette_protocol::cdn=debug \
-  CASCETTE_AGENT_CDN_HOSTS=localhost:8000 \
+  CASCETTE_AGENT_CDN_HOSTS=<chosen CDN host> \
   ./target/release/cascette-agent \
   --loglevel=debug
 ```
