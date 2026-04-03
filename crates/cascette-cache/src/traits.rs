@@ -24,7 +24,7 @@ use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
 // Instant is not available on WASM
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
 use std::time::Instant;
 
 // ============================================================================
@@ -32,7 +32,7 @@ use std::time::Instant;
 // ============================================================================
 
 /// Core async cache trait
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
 #[async_trait]
 pub trait AsyncCache<K: CacheKey>: Send + Sync {
     /// Returns None if expired.
@@ -66,7 +66,7 @@ pub trait AsyncCache<K: CacheKey>: Send + Sync {
 // ============================================================================
 
 /// Core async cache trait for WASM (single-threaded, no Send/Sync).
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
 #[async_trait(?Send)]
 pub trait AsyncCache<K: CacheKey> {
     /// Returns None if expired.
@@ -100,7 +100,7 @@ pub trait AsyncCache<K: CacheKey> {
 // ============================================================================
 
 /// Cache entry metadata. Native only (uses `std::time::Instant`).
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CacheEntry<V> {
     pub value: V,
@@ -110,7 +110,7 @@ pub struct CacheEntry<V> {
     pub size_bytes: usize,
 }
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
 impl<V> CacheEntry<V> {
     pub fn new(value: V, size_bytes: usize) -> Self {
         Self {
@@ -219,7 +219,7 @@ pub enum EvictionPolicy {
 // ============================================================================
 
 /// Pre-populate cache from the underlying data source. Native only.
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
 #[async_trait]
 pub trait CacheWarming<K: CacheKey> {
     /// Returns the number of entries loaded.
@@ -231,7 +231,7 @@ pub trait CacheWarming<K: CacheKey> {
 }
 
 /// Persist cache to disk across restarts. Native only.
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
 #[async_trait]
 pub trait CachePersistence {
     async fn save(&self) -> CacheResult<()>;
@@ -240,7 +240,7 @@ pub trait CachePersistence {
 }
 
 /// Hierarchical cache with multiple layers (L1, L2, etc.). Native only.
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
 #[async_trait]
 pub trait MultiLayerCache<K: CacheKey>: AsyncCache<K> {
     fn layer_count(&self) -> usize;
@@ -251,7 +251,7 @@ pub trait MultiLayerCache<K: CacheKey>: AsyncCache<K> {
 }
 
 /// Cache event notifications. Native only.
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
 #[async_trait]
 pub trait CacheListener<K: CacheKey> {
     async fn on_put(&self, key: &K, size_bytes: usize);
@@ -262,7 +262,7 @@ pub trait CacheListener<K: CacheKey> {
 }
 
 /// Cache metrics for monitoring. Native only.
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
 #[async_trait]
 pub trait CacheMetrics {
     async fn hit_rate(&self) -> f64;

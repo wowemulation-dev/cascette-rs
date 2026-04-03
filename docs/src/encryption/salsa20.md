@@ -540,6 +540,7 @@ The cascette-crypto crate includes hardcoded TACT keys for major WoW expansions:
 - Battle for Azeroth, Shadowlands, The War Within, Classic Era
 
 Keys are stored with redacted debug output to prevent accidental logging.
+
 ## References
 
 - [Salsa20 Specification](https://cr.yp.to/snuffle/spec.pdf)

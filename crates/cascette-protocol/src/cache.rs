@@ -19,7 +19,7 @@ use crate::error::Result;
 // Native platform implementation (full caching support)
 // ============================================================================
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
 mod native {
     use super::{CacheConfig, CacheError, CacheStats, Duration, Result};
     use bytes::Bytes;
@@ -36,10 +36,26 @@ mod native {
     static SHARED_RUNTIME: OnceLock<Runtime> = OnceLock::new();
 
     /// Get or create the shared runtime for cache operations
+    #[cfg(not(all(
+        target_arch = "wasm32",
+        any(target_os = "unknown", target_os = "none", target_os = "wasi")
+    )))]
     fn get_shared_runtime() -> &'static Runtime {
         #[allow(clippy::expect_used)]
         SHARED_RUNTIME.get_or_init(|| {
             tokio::runtime::Builder::new_multi_thread()
+                .worker_threads(1)
+                .enable_all()
+                .thread_name("cascette-cache-runtime")
+                .build()
+                .expect("Failed to create shared cache runtime")
+        })
+    }
+    #[cfg(all(target_arch = "wasm32", target_os = "wasi"))]
+    fn get_shared_runtime() -> &'static Runtime {
+        #[allow(clippy::expect_used)]
+        SHARED_RUNTIME.get_or_init(|| {
+            tokio::runtime::Builder::new_current_thread()
                 .worker_threads(1)
                 .enable_all()
                 .thread_name("cascette-cache-runtime")
@@ -236,7 +252,7 @@ mod native {
 // WASM platform implementation (LocalStorage-based caching)
 // ============================================================================
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
 mod wasm {
     use super::{CacheConfig, CacheError, CacheStats, Duration, Result};
     use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
@@ -539,10 +555,10 @@ mod wasm {
 // Public exports
 // ============================================================================
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
 pub use native::ProtocolCache;
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
 pub use wasm::ProtocolCache;
 
 /// Cache statistics for monitoring

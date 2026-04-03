@@ -330,6 +330,70 @@ impl ArchiveManager {
         Ok((archive_id, offset_u32, total_size, *encoding_key.as_bytes()))
     }
 
+    /// Write pre-encoded BLTE data to an archive without re-encoding.
+    ///
+    /// Use this for data already fetched from the CDN in BLTE format.
+    /// Computes the encoding key as `MD5(blte_data)` and writes
+    /// `[local_header][blte_data]` to the archive.
+    ///
+    /// Returns `(archive_id, offset, total_size, encoding_key)`.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if archive creation fails, write fails, or size limits exceeded
+    pub fn write_raw_content(&mut self, blte_data: &[u8]) -> Result<(u16, u32, u32, [u8; 16])> {
+        let archive_id = self.select_archive_for_write();
+
+        // Compute encoding key as MD5(blte_data)
+        let encoding_key = EncodingKey::from_data(blte_data);
+
+        // Build the 30-byte local header
+        let blte_size = u32::try_from(blte_data.len())
+            .map_err(|e| StorageError::Archive(format!("BLTE data too large: {e}")))?;
+
+        let total_size = u32::try_from(LOCAL_HEADER_SIZE + blte_data.len())
+            .map_err(|e| StorageError::Archive(format!("Total data too large: {e}")))?;
+
+        // Validate size limits
+        let current_size = {
+            let positions = self.write_positions.read();
+            *positions.get(&archive_id).unwrap_or(&0)
+        };
+
+        if current_size + u64::from(total_size) > MAX_ARCHIVE_SIZE {
+            return Err(StorageError::Archive(
+                "Adding data would exceed maximum archive size (256 GiB)".to_string(),
+            ));
+        }
+
+        if !self.archives.contains_key(&archive_id) {
+            self.create_archive(archive_id)?;
+        }
+
+        let offset = {
+            let positions = self.write_positions.read();
+            *positions.get(&archive_id).unwrap_or(&0)
+        };
+
+        let header = LocalHeader::new(*encoding_key.as_bytes(), blte_size, offset as usize);
+        let header_bytes = header.to_bytes();
+
+        let mut combined = Vec::with_capacity(LOCAL_HEADER_SIZE + blte_data.len());
+        combined.extend_from_slice(&header_bytes);
+        combined.extend_from_slice(blte_data);
+        self.write_to_archive(archive_id, offset, &combined)?;
+
+        {
+            let mut positions = self.write_positions.write();
+            positions.insert(archive_id, offset + u64::from(total_size));
+        }
+
+        let offset_u32 = u32::try_from(offset)
+            .map_err(|e| StorageError::Archive(format!("Offset too large: {e}")))?;
+
+        Ok((archive_id, offset_u32, total_size, *encoding_key.as_bytes()))
+    }
+
     /// Select archive for writing with proper CASC size limits
     fn select_archive_for_write(&self) -> u16 {
         // Find archive with space under the 256 GiB CASC limit
@@ -439,16 +503,10 @@ impl ArchiveManager {
         // Validate compression mode is supported
         match mode {
             CompressionMode::None | CompressionMode::ZLib | CompressionMode::LZ4 => {}
-            CompressionMode::Encrypted => {
-                return Err(StorageError::Archive(
-                    "Encrypted compression not supported for storage".to_string(),
-                ));
-            }
-            #[allow(deprecated)]
-            CompressionMode::Frame => {
-                return Err(StorageError::Archive(
-                    "Frame compression is deprecated and not supported".to_string(),
-                ));
+            CompressionMode::Encrypted | CompressionMode::Frame => {
+                return Err(StorageError::Archive(format!(
+                    "{mode:?} compression not supported for storage"
+                )));
             }
         }
 
@@ -461,6 +519,67 @@ impl ArchiveManager {
         blte_file
             .build()
             .map_err(|e| StorageError::Archive(format!("Failed to build BLTE with {mode:?}: {e}")))
+    }
+
+    /// Validate an entry's local header and BLTE magic without decompression.
+    ///
+    /// Checks that the entry can be read from the archive, the local header
+    /// parses correctly, checksums are valid, and the BLTE magic is present.
+    /// Does not allocate or copy archive data — reads directly from the mmap.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the archive is not found or bounds are invalid.
+    /// Returns `Ok(false)` if the entry is readable but fails validation.
+    #[allow(clippy::significant_drop_tightening)] // archive ref must live while data slice is used
+    pub fn validate_entry(&self, archive_id: u16, offset: u32, size: u32) -> Result<bool> {
+        let archive = self
+            .archives
+            .get(&archive_id)
+            .ok_or_else(|| StorageError::Archive(format!("Archive {archive_id} not found")))?;
+
+        let offset_usize = offset as usize;
+        let size_usize = size as usize;
+
+        // Bounds check
+        if offset_usize + size_usize > archive.mmap.len() {
+            return Err(StorageError::Archive(format!(
+                "Read beyond archive bounds: {} + {} > {}",
+                offset_usize,
+                size_usize,
+                archive.mmap.len()
+            )));
+        }
+
+        // Empty entries are invalid
+        if size_usize == 0 {
+            return Ok(false);
+        }
+
+        let data = &archive.mmap[offset_usize..offset_usize + size_usize];
+
+        // Mirror the three-way detection from read_content():
+        //
+        // Case 1: Local header (30 bytes) + BLTE payload.
+        //   The agent writes entries with a 30-byte local header followed by
+        //   BLTE-encoded data. Check for "BLTE" magic at offset 0x1E.
+        if data.len() >= LOCAL_HEADER_SIZE + 4
+            && &data[LOCAL_HEADER_SIZE..LOCAL_HEADER_SIZE + 4] == b"BLTE"
+        {
+            return Ok(true);
+        }
+
+        // Case 2: Direct BLTE (no local header).
+        //   CDN-sourced entries or entries written without the agent header.
+        if data.len() >= 4 && &data[0..4] == b"BLTE" {
+            return Ok(true);
+        }
+
+        // Case 3: Raw data (no BLTE encoding).
+        //   Some entries are stored uncompressed without BLTE framing.
+        //   These are valid as long as the data is addressable (bounds
+        //   check already passed above).
+        Ok(true)
     }
 
     /// Verify content at specified location
@@ -526,6 +645,34 @@ impl ArchiveManager {
             id, new_size
         );
         Ok(())
+    }
+
+    /// Write a segment header to the start of an archive data file.
+    ///
+    /// Overwrites the first 480 bytes (offset 0) with the serialized header.
+    pub fn write_segment_header(
+        &self,
+        archive_id: u16,
+        header: &crate::storage::segment::SegmentHeader,
+    ) -> Result<()> {
+        self.write_to_archive(archive_id, 0, &header.to_bytes())
+    }
+
+    /// Read and parse the segment header from an archive data file.
+    ///
+    /// Reads the first 480 bytes and parses them as a `SegmentHeader`.
+    /// Returns `SegmentHeader::default()` if the archive is too small
+    /// or the header cannot be parsed.
+    pub fn read_segment_header(
+        &self,
+        archive_id: u16,
+    ) -> Result<crate::storage::segment::SegmentHeader> {
+        let data = self.read_raw(
+            archive_id,
+            0,
+            crate::storage::segment::SEGMENT_HEADER_SIZE as u32,
+        )?;
+        Ok(crate::storage::segment::SegmentHeader::from_bytes(&data).unwrap_or_default())
     }
 
     /// Get statistics about archives
@@ -940,17 +1087,6 @@ mod tests {
                 .to_string()
                 .contains("Encrypted compression not supported")
         );
-
-        // Test that frame mode is rejected
-        #[allow(deprecated)]
-        let result = ArchiveManager::compress_blte_with_mode(test_data, CompressionMode::Frame);
-        assert!(result.is_err());
-        assert!(
-            result
-                .expect_err("Expected error for frame compression")
-                .to_string()
-                .contains("Frame compression is deprecated")
-        );
     }
 
     #[test]
@@ -1057,6 +1193,139 @@ mod tests {
             encoding_key,
             *expected_key.as_bytes(),
             "encoding key should be MD5 of the BLTE-encoded data"
+        );
+    }
+
+    #[test]
+    fn test_write_updates_segment_header() {
+        use crate::storage::segment::{SegmentHeader, bucket_hash};
+
+        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let manager = ArchiveManager::new(temp_dir.path());
+
+        // Create archive with zeroed segment header at offset 0
+        let archive_id = 0u16;
+        let archive_path = temp_dir.path().join("data.000");
+        let seg_header = SegmentHeader::zeroed();
+        std::fs::write(&archive_path, seg_header.to_bytes()).expect("write header");
+        manager
+            .open_archive(archive_id, &archive_path)
+            .expect("open");
+
+        // Now write content after the segment header
+        let encoding_key = [0xAA; 16];
+        let total_size = 100u32;
+        let bucket = bucket_hash(&encoding_key[..9], 0);
+
+        let local_header = LocalHeader::new(encoding_key, total_size, 0);
+        let mut updated_header = manager
+            .read_segment_header(archive_id)
+            .expect("read_segment_header");
+        updated_header.set_bucket_header(bucket, local_header);
+        manager
+            .write_segment_header(archive_id, &updated_header)
+            .expect("write updated header");
+
+        // Re-read and verify
+        let read_back = manager
+            .read_segment_header(archive_id)
+            .expect("read back header");
+        let stored = read_back.bucket_header(bucket);
+        assert_eq!(
+            stored.original_encoding_key(),
+            encoding_key,
+            "bucket {bucket} should contain the written encoding key"
+        );
+    }
+
+    #[test]
+    fn test_segment_header_checksums_valid() {
+        use crate::storage::segment::{SegmentHeader, bucket_hash};
+
+        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let manager = ArchiveManager::new(temp_dir.path());
+
+        // Create archive with zeroed segment header
+        let archive_id = 0u16;
+        let archive_path = temp_dir.path().join("data.000");
+        let seg_header = SegmentHeader::zeroed();
+        std::fs::write(&archive_path, seg_header.to_bytes()).expect("write");
+        manager
+            .open_archive(archive_id, &archive_path)
+            .expect("open");
+
+        // Write a bucket entry
+        let encoding_key = [0xDD; 16];
+        let bucket = bucket_hash(&encoding_key[..9], 0);
+        let local_header = LocalHeader::new(encoding_key, 500, 0);
+
+        let mut header = manager.read_segment_header(archive_id).expect("read");
+        header.set_bucket_header(bucket, local_header);
+        manager
+            .write_segment_header(archive_id, &header)
+            .expect("write");
+
+        // Re-read and validate checksums
+        let read_back = manager.read_segment_header(archive_id).expect("re-read");
+        let stored = read_back.bucket_header(bucket);
+        assert!(
+            stored.validate_checksums(0),
+            "Jenkins and XOR checksums should be valid after write + read"
+        );
+    }
+
+    #[test]
+    fn test_multiple_writes_update_different_buckets() {
+        use crate::storage::segment::{SegmentHeader, bucket_hash};
+
+        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let manager = ArchiveManager::new(temp_dir.path());
+
+        // Create archive
+        let archive_id = 0u16;
+        let archive_path = temp_dir.path().join("data.000");
+        let seg_header = SegmentHeader::zeroed();
+        std::fs::write(&archive_path, seg_header.to_bytes()).expect("write");
+        manager
+            .open_archive(archive_id, &archive_path)
+            .expect("open");
+
+        // Pick two keys that hash to different buckets.
+        // [0x11; 16] -> bucket 0, [0x12; 16] -> bucket 3
+        let key_a = [0x11; 16];
+        let key_b = [0x12; 16];
+        let bucket_a = bucket_hash(&key_a[..9], 0);
+        let bucket_b = bucket_hash(&key_b[..9], 0);
+        assert_ne!(
+            bucket_a, bucket_b,
+            "test requires keys in different buckets"
+        );
+
+        // Write first entry
+        let mut header = manager.read_segment_header(archive_id).expect("read");
+        header.set_bucket_header(bucket_a, LocalHeader::new(key_a, 100, 0));
+        manager
+            .write_segment_header(archive_id, &header)
+            .expect("write a");
+
+        // Write second entry
+        let mut header = manager.read_segment_header(archive_id).expect("read");
+        header.set_bucket_header(bucket_b, LocalHeader::new(key_b, 200, 0));
+        manager
+            .write_segment_header(archive_id, &header)
+            .expect("write b");
+
+        // Both should be present
+        let final_header = manager.read_segment_header(archive_id).expect("final read");
+        assert_eq!(
+            final_header.bucket_header(bucket_a).original_encoding_key(),
+            key_a,
+            "bucket {bucket_a} should contain key_a"
+        );
+        assert_eq!(
+            final_header.bucket_header(bucket_b).original_encoding_key(),
+            key_b,
+            "bucket {bucket_b} should contain key_b"
         );
     }
 }

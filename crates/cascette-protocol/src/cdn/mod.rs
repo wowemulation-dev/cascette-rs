@@ -279,21 +279,42 @@ impl CdnClient {
         length: u64,
     ) -> Result<Vec<u8>> {
         let url = Self::build_url(endpoint, content_type, key);
+        let range_header = format!("bytes={}-{}", offset, offset + length - 1);
 
-        let response = self
-            .http_client
-            .inner()
-            .get(&url)
-            .header("Range", format!("bytes={}-{}", offset, offset + length - 1))
-            .send()
-            .await?;
+        let retry_policy = RetryPolicy::default();
 
-        match response.status() {
-            reqwest::StatusCode::PARTIAL_CONTENT | reqwest::StatusCode::OK => {
-                Ok(response.bytes().await?.to_vec())
-            }
-            _ => Err(ProtocolError::RangeNotSupported),
-        }
+        retry_policy
+            .execute(|| {
+                let url = url.clone();
+                let range_header = range_header.clone();
+                async move {
+                    let response = self
+                        .http_client
+                        .inner()
+                        .get(&url)
+                        .header("Range", &range_header)
+                        .send()
+                        .await?;
+
+                    match response.status() {
+                        reqwest::StatusCode::PARTIAL_CONTENT | reqwest::StatusCode::OK => {
+                            Ok(response.bytes().await?.to_vec())
+                        }
+                        reqwest::StatusCode::RANGE_NOT_SATISFIABLE => {
+                            Err(ProtocolError::RangeNotSupported)
+                        }
+                        reqwest::StatusCode::TOO_MANY_REQUESTS => {
+                            let retry_after = parse_retry_after(&response);
+                            Err(ProtocolError::RateLimited { retry_after })
+                        }
+                        status if status.is_server_error() => {
+                            Err(ProtocolError::ServerError(status))
+                        }
+                        status => Err(ProtocolError::HttpStatus(status)),
+                    }
+                }
+            })
+            .await
     }
 
     /// Download with progress callback
@@ -485,6 +506,112 @@ impl CdnClient {
         }
     }
 
+    /// Download content trying multiple CDN endpoints in order.
+    ///
+    /// On any failure (network error, HTTP error, body read error), immediately
+    /// tries the next endpoint with no delay. This matches the failover strategy
+    /// used by Agent.exe and TACTSharp: iterate CDN hosts on failure, don't retry
+    /// the same broken host with backoff.
+    ///
+    /// Returns the data from the first endpoint that succeeds, or the last error
+    /// if all endpoints fail.
+    pub async fn download_from_endpoints(
+        &self,
+        endpoints: &[CdnEndpoint],
+        content_type: ContentType,
+        key: &[u8],
+    ) -> Result<Vec<u8>> {
+        let hex_key = hex::encode(key);
+
+        // Cache key is content-based, independent of which CDN serves it.
+        // Use the first endpoint's path (all endpoints for the same product share
+        // the same path, e.g. "tpr/wow").
+        let cdn_path = endpoints
+            .first()
+            .map_or("tpr/wow", |e| normalize_cdn_path(&e.path));
+        let cache_key = format!(
+            "cdn/{}/{}/{}/{}/{}",
+            cdn_path,
+            content_type,
+            &hex_key[..2],
+            &hex_key[2..4],
+            hex_key
+        );
+
+        // Check cache first
+        if let Some(cached) = self.cache.get_bytes(&cache_key)? {
+            tracing::debug!("CDN cache hit for {}", hex_key);
+            return Ok(cached);
+        }
+
+        let mut last_error = ProtocolError::AllHostsFailed;
+
+        for endpoint in endpoints {
+            let url = Self::build_url(endpoint, content_type, key);
+            match self.download_once(&url).await {
+                Ok(data) => {
+                    self.cache.store_bytes(&cache_key, &data)?;
+                    return Ok(data);
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "CDN {} failed for {}: {}, trying next host",
+                        endpoint.host,
+                        hex_key,
+                        e
+                    );
+                    last_error = e;
+                    // Immediate failover to next endpoint, no backoff
+                }
+            }
+        }
+
+        Err(last_error)
+    }
+
+    /// Single download attempt with no retry. Used by `download_from_endpoints`
+    /// for instant host failover.
+    ///
+    /// Verifies received bytes against the Content-Length header when present.
+    /// CDN proxies (Cloudflare) can drop connections mid-transfer under load,
+    /// returning partial bodies with HTTP 200 status.
+    async fn download_once(&self, url: &str) -> Result<Vec<u8>> {
+        let response = self.http_client.inner().get(url).send().await?;
+
+        if response.status().is_success() {
+            let expected_len = response.content_length();
+            let data = response.bytes().await?.to_vec();
+
+            // Verify body completeness when Content-Length is present.
+            // CDN proxies can terminate connections mid-transfer, giving us
+            // a truncated body that passes the HTTP layer without error.
+            if let Some(expected) = expected_len {
+                let expected = expected as usize;
+                if data.len() != expected {
+                    tracing::warn!(
+                        "truncated response from {}: got {} bytes, expected {}",
+                        url,
+                        data.len(),
+                        expected,
+                    );
+                    return Err(ProtocolError::TruncatedResponse {
+                        received: data.len(),
+                        expected,
+                    });
+                }
+            }
+
+            Ok(data)
+        } else if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
+            let retry_after = parse_retry_after(&response);
+            Err(ProtocolError::RateLimited { retry_after })
+        } else if response.status().is_server_error() {
+            Err(ProtocolError::ServerError(response.status()))
+        } else {
+            Err(ProtocolError::HttpStatus(response.status()))
+        }
+    }
+
     async fn download_with_retry(&self, url: &str) -> Result<Vec<u8>> {
         let retry_policy = RetryPolicy::default();
 
@@ -512,20 +639,19 @@ impl CdnClient {
         row: &cascette_formats::bpsv::BpsvRow,
         schema: &cascette_formats::bpsv::BpsvSchema,
     ) -> Result<CdnEndpoint> {
+        // Use get_raw_by_name() to handle both v1 (untyped) and v2 (typed) BPSV
+        // responses without depending on the parsed BpsvValue variant.
         let hosts_raw = row
-            .get_by_name("Hosts", schema)
-            .and_then(|v| v.as_string())
+            .get_raw_by_name("Hosts", schema)
             .ok_or_else(|| ProtocolError::Parse("Missing Hosts field".to_string()))?;
 
         let path = row
-            .get_by_name("Path", schema)
-            .and_then(|v| v.as_string())
+            .get_raw_by_name("Path", schema)
             .ok_or_else(|| ProtocolError::Parse("Missing Path field".to_string()))?;
 
         // ProductPath is optional (newer products)
         let product_path = row
-            .get_by_name("ProductPath", schema)
-            .and_then(|v| v.as_string())
+            .get_raw_by_name("ProductPath", schema)
             .map(std::string::ToString::to_string);
 
         // Hosts field can contain space-separated multiple hosts; use the first one.

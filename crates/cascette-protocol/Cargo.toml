@@ -68,8 +68,6 @@ web-sys = { version = "0.3", features = ["console", "Window", "Storage"] }
 cascette-crypto = { version = "0.2.0", path = "../cascette-crypto" }
 cascette-formats = { version = "0.2.0", path = "../cascette-formats" }
 cascette-cache = { version = "0.2.0", path = "../cascette-cache" }
-# js-sys for Date.now() timestamp access
-js-sys = "0.3"
 
 # Browser WASM (wasm32-unknown-unknown) — not WASI
 [target.'cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))'.dependencies]
@@ -79,6 +77,8 @@ wasm-bindgen-futures = "0.4"
 getrandom = { workspace = true, features = ["wasm_js"] }
 # getrandom 0.2 (transitive from rsa 0.9) needs js for browser crypto
 getrandom_02 = { workspace = true, features = ["js"] }
+# js-sys for Date.now() timestamp access
+js-sys = "0.3"
 
 [dev-dependencies]
 tempfile = { workspace = true }
@@ -97,6 +97,26 @@ path = "examples/wow_classic_native.rs"
 [[example]]
 name = "wow_classic_wasm"
 path = "examples/wow_classic_wasm.rs"
+
+[[example]]
+name = "cdn_protocol_verification"
+path = "examples/cdn_protocol_verification.rs"
+
+[[example]]
+name = "cdn_chain_verification"
+path = "examples/cdn_chain_verification.rs"
+
+[[example]]
+name = "dump_product_info"
+path = "examples/dump_product_info.rs"
+
+[[example]]
+name = "cdn_archive_sizes"
+path = "examples/cdn_archive_sizes.rs"
+
+[[example]]
+name = "build_file_tree"
+path = "examples/build_file_tree.rs"
 
 [package.metadata.cargo-machete]
 # These dependencies are used for V1 MIME format support and other features

@@ -1,71 +1,99 @@
 //! Install manifest tag system with bit mask operations
 
-use crate::install::error::InstallError;
 use binrw::{BinRead, BinResult, BinWrite};
 use std::io::{Read, Seek, Write};
 
 /// Tag types used to categorize files in install manifests
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[repr(u16)]
 pub enum TagType {
-    /// Platform tag (Windows, Mac, etc.)
-    Platform = 0x0001,
-    /// Architecture tag (x86, `x86_64`, etc.)
-    Architecture = 0x0002,
-    /// Locale tag (enUS, deDE, etc.)
-    Locale = 0x0003,
-    /// Category tag (base, optional, etc.)
-    Category = 0x0004,
-    /// Unknown tag type (commonly seen in manifests)
-    Unknown = 0x0005,
-    /// Component tag (game, launcher, etc.)
-    Component = 0x0010,
-    /// Version tag (live, ptr, beta, etc.)
-    Version = 0x0020,
-    /// Optimization tag (retail, debug, etc.)
-    Optimization = 0x0040,
-    /// Region tag (US, EU, KR, etc.)
-    Region = 0x0080,
-    /// Device tag (desktop, mobile, etc.)
-    Device = 0x0100,
-    /// Mode tag (online, offline, etc.)
-    Mode = 0x0200,
-    /// Branch tag (main, experimental, etc.)
-    Branch = 0x0400,
-    /// Content tag (cinematics, audio, etc.)
-    Content = 0x0800,
-    /// Feature tag (graphics, physics, etc.)
-    Feature = 0x1000,
-    /// Expansion tag (base, expansion1, etc.)
-    Expansion = 0x2000,
-    /// Alternate tag (alternate content version)
-    Alternate = 0x4000,
-    /// Option tag (optional features)
-    Option = 0x8000,
+    /// Platform tag (Windows, Mac, etc.) — 0x0001
+    Platform,
+    /// Architecture tag (x86, `x86_64`, etc.) — 0x0002
+    Architecture,
+    /// Locale tag (enUS, deDE, etc.) — 0x0003
+    Locale,
+    /// Category tag (base, optional, etc.) — 0x0004
+    Category,
+    /// Unknown tag type (commonly seen in manifests) — 0x0005
+    Unknown,
+    /// Component tag (game, launcher, etc.) — 0x0010
+    Component,
+    /// Version tag (live, ptr, beta, etc.) — 0x0020
+    Version,
+    /// Optimization tag (retail, debug, etc.) — 0x0040
+    Optimization,
+    /// Region tag (US, EU, KR, etc.) — 0x0080
+    Region,
+    /// Device tag (desktop, mobile, etc.) — 0x0100
+    Device,
+    /// Mode tag (online, offline, etc.) — 0x0200
+    Mode,
+    /// Branch tag (main, experimental, etc.) — 0x0400
+    Branch,
+    /// Content tag (cinematics, audio, etc.) — 0x0800
+    Content,
+    /// Feature tag (graphics, physics, etc.) — 0x1000
+    Feature,
+    /// Expansion tag (base, expansion1, etc.) — 0x2000
+    Expansion,
+    /// Alternate tag (alternate content version) — 0x4000
+    Alternate,
+    /// Option tag (optional features) — 0x8000
+    Option,
+    /// Unrecognized tag type (stores the raw u16 value)
+    Other(u16),
 }
 
 impl TagType {
     /// Convert from raw u16 value
-    pub fn from_u16(value: u16) -> Option<Self> {
+    ///
+    /// Returns a known variant when possible, or `Other(value)` for
+    /// unrecognized tag types. This ensures forward compatibility with
+    /// manifests that use tag type values not yet in our enum.
+    pub fn from_u16(value: u16) -> Self {
         match value {
-            0x0001 => Some(Self::Platform),
-            0x0002 => Some(Self::Architecture),
-            0x0003 => Some(Self::Locale),
-            0x0004 => Some(Self::Category),
-            0x0005 => Some(Self::Unknown),
-            0x0010 => Some(Self::Component),
-            0x0020 => Some(Self::Version),
-            0x0040 => Some(Self::Optimization),
-            0x0080 => Some(Self::Region),
-            0x0100 => Some(Self::Device),
-            0x0200 => Some(Self::Mode),
-            0x0400 => Some(Self::Branch),
-            0x0800 => Some(Self::Content),
-            0x1000 => Some(Self::Feature),
-            0x2000 => Some(Self::Expansion),
-            0x4000 => Some(Self::Alternate),
-            0x8000 => Some(Self::Option),
-            _ => None,
+            0x0001 => Self::Platform,
+            0x0002 => Self::Architecture,
+            0x0003 => Self::Locale,
+            0x0004 => Self::Category,
+            0x0005 => Self::Unknown,
+            0x0010 => Self::Component,
+            0x0020 => Self::Version,
+            0x0040 => Self::Optimization,
+            0x0080 => Self::Region,
+            0x0100 => Self::Device,
+            0x0200 => Self::Mode,
+            0x0400 => Self::Branch,
+            0x0800 => Self::Content,
+            0x1000 => Self::Feature,
+            0x2000 => Self::Expansion,
+            0x4000 => Self::Alternate,
+            0x8000 => Self::Option,
+            v => Self::Other(v),
+        }
+    }
+
+    /// Convert to raw u16 value
+    pub fn as_u16(self) -> u16 {
+        match self {
+            Self::Platform => 0x0001,
+            Self::Architecture => 0x0002,
+            Self::Locale => 0x0003,
+            Self::Category => 0x0004,
+            Self::Unknown => 0x0005,
+            Self::Component => 0x0010,
+            Self::Version => 0x0020,
+            Self::Optimization => 0x0040,
+            Self::Region => 0x0080,
+            Self::Device => 0x0100,
+            Self::Mode => 0x0200,
+            Self::Branch => 0x0400,
+            Self::Content => 0x0800,
+            Self::Feature => 0x1000,
+            Self::Expansion => 0x2000,
+            Self::Alternate => 0x4000,
+            Self::Option => 0x8000,
+            Self::Other(v) => v,
         }
     }
 }
@@ -216,10 +244,7 @@ impl BinRead for InstallTag {
 
         // Read tag type (big-endian)
         let tag_type_value = u16::read_options(reader, binrw::Endian::Big, ())?;
-        let tag_type = TagType::from_u16(tag_type_value).ok_or_else(|| binrw::Error::Custom {
-            pos: reader.stream_position().unwrap_or(0),
-            err: Box::new(InstallError::InvalidTagType(tag_type_value)),
-        })?;
+        let tag_type = TagType::from_u16(tag_type_value);
 
         // Read bit mask
         let bit_mask_size = (entry_count as usize).div_ceil(8);
@@ -248,7 +273,9 @@ impl BinWrite for InstallTag {
         writer.write_all(&[0])?;
 
         // Write tag type (big-endian)
-        (self.tag_type as u16).write_options(writer, binrw::Endian::Big, ())?;
+        self.tag_type
+            .as_u16()
+            .write_options(writer, binrw::Endian::Big, ())?;
 
         // Write bit mask
         writer.write_all(&self.bit_mask)?;
@@ -291,12 +318,12 @@ mod tests {
         ];
 
         for (tag_type, expected_value) in tag_types {
-            assert_eq!(tag_type as u16, expected_value);
-            assert_eq!(TagType::from_u16(expected_value), Some(tag_type));
+            assert_eq!(tag_type.as_u16(), expected_value);
+            assert_eq!(TagType::from_u16(expected_value), tag_type);
         }
 
-        // Test invalid tag type
-        assert_eq!(TagType::from_u16(0x9999), None);
+        // Test unknown tag type
+        assert_eq!(TagType::from_u16(0x9999), TagType::Other(0x9999));
     }
 
     #[test]
@@ -453,7 +480,7 @@ mod tests {
     }
 
     #[test]
-    fn test_invalid_tag_type() {
+    fn test_unknown_tag_type() {
         let data = [
             b't',
             b'e',
@@ -461,7 +488,7 @@ mod tests {
             b't',
             0, // Tag name "test\0"
             0x99,
-            0x99,        // Invalid tag type
+            0x99,        // Unknown tag type
             0b0000_0001, // Bit mask
         ];
 
@@ -471,11 +498,10 @@ mod tests {
             8, // entry_count
         );
 
-        assert!(result.is_err());
-        assert!(matches!(
-            result.expect_err("Test operation should fail"),
-            binrw::Error::Custom { .. }
-        ));
+        let tag = result.expect("unknown tag types should parse successfully");
+        assert_eq!(tag.name, "test");
+        assert_eq!(tag.tag_type, TagType::Other(0x9999));
+        assert_eq!(tag.tag_type.as_u16(), 0x9999);
     }
 
     #[test]

@@ -20,9 +20,7 @@ use cascette_crypto::jenkins::hashlittle;
 /// Size of the local header in bytes.
 pub const LOCAL_HEADER_SIZE: usize = 0x1E; // 30 bytes
 
-/// Jenkins hash seed for reconstruction header checksum_a.
-///
-/// Agent.exe `sub_72c49f`: `hashlittle(&header[0], 0x16, 0x3D6BE971)`
+/// Jenkins hash seed for computing header checksum_a.
 const CHECKSUM_A_SEED: u32 = 0x3D6B_E971;
 
 /// 30-byte local header preceding each BLTE entry in `.data` archives.
@@ -72,8 +70,6 @@ impl LocalHeader {
     }
 
     /// Compute checksum_a: Jenkins hash of the first 22 bytes with seed 0x3D6BE971.
-    ///
-    /// Agent.exe `sub_72c49f`: `hashlittle(&header[0], 0x16, 0x3D6BE971)`
     pub fn compute_checksum_a(header_bytes: &[u8; LOCAL_HEADER_SIZE]) -> u32 {
         hashlittle(&header_bytes[..0x16], CHECKSUM_A_SEED)
     }

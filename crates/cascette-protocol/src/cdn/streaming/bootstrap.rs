@@ -8,6 +8,7 @@ use super::{
     http::CdnServer,
 };
 use crate::bpsv::{BpsvRow, BpsvSchema};
+use crate::client::region::Region;
 use std::collections::HashMap;
 
 /// CDN bootstrap configuration from Ribbit responses
@@ -101,10 +102,11 @@ impl CdnBootstrap {
                     .insert(cdn_entry.name.clone(), cdn_entry.path.clone());
             }
 
-            // Add to preferred hosts list
-            for host in cdn_entry.hosts.split_whitespace() {
-                if !bootstrap.preferred_hosts.contains(&host.to_string()) {
-                    bootstrap.preferred_hosts.push(host.to_string());
+            // Add to preferred hosts list (strip query parameters)
+            for host_entry in cdn_entry.hosts.split_whitespace() {
+                let hostname = host_entry.split_once('?').map_or(host_entry, |(h, _)| h);
+                if !bootstrap.preferred_hosts.contains(&hostname.to_string()) {
+                    bootstrap.preferred_hosts.push(hostname.to_string());
                 }
             }
         }
@@ -162,25 +164,60 @@ impl CdnBootstrap {
         })
     }
 
-    /// Parse CDN hosts from space-separated host list
+    /// Parse CDN hosts from space-separated host list.
+    ///
+    /// Host entries may include query parameters matching Agent.exe behavior:
+    /// - `fallback=1` — marks the server as a fallback (deprioritized)
+    /// - `strict=1` — prevents fallback to other server groups
+    /// - `maxhosts=N` — limits the number of hosts used from this group
+    ///
+    /// Example input: `level3.blizzard.com?fallback=1&maxhosts=3 edgecast.blizzard.com`
     fn parse_cdn_hosts(hosts_str: &str) -> Vec<CdnServer> {
         let mut servers = Vec::new();
-        let mut priority = 10; // Start with high priority
+        let mut priority = 10;
 
-        for host in hosts_str.split_whitespace() {
-            if host.is_empty() {
+        for host_entry in hosts_str.split_whitespace() {
+            if host_entry.is_empty() {
                 continue;
             }
 
-            // Determine if server supports HTTPS based on host patterns
-            let supports_https = host.contains("blizzard.com")
-                || host.contains("battle.net")
-                || host.contains("wago.tools");
+            // Split hostname from query parameters
+            let (hostname, params) = match host_entry.split_once('?') {
+                Some((h, p)) => (h, Some(p)),
+                None => (host_entry, None),
+            };
 
-            let server = CdnServer::new(host.to_string(), supports_https, priority);
+            let supports_https = hostname.contains("blizzard.com")
+                || hostname.contains("battle.net")
+                || hostname.contains("wago.tools");
+
+            let mut server = CdnServer::new(hostname.to_string(), supports_https, priority);
+
+            // Parse query parameters matching Agent.exe behavior
+            if let Some(params_str) = params {
+                for param in params_str.split('&') {
+                    if let Some((key, value)) = param.split_once('=') {
+                        match key {
+                            "fallback" => server.is_fallback = value == "1",
+                            "strict" => server.strict = value == "1",
+                            "maxhosts" => {
+                                if let Ok(n) = value.parse::<u32>() {
+                                    server.max_hosts = Some(n.max(1));
+                                }
+                            }
+                            _ => {} // Ignore unknown parameters
+                        }
+                    }
+                }
+            }
+
+            // Fallback servers get lower priority
+            if server.is_fallback {
+                server.priority += 1000;
+            }
 
             servers.push(server);
-            priority += 10; // Decrease priority for subsequent servers
+            priority += 10;
         }
 
         servers
@@ -288,6 +325,31 @@ impl CdnBootstrap {
             preferred_hosts,
             is_official: false,
         }
+    }
+
+    /// Create bootstrap from region CDN base URL (last-resort fallback).
+    ///
+    /// Used when Ribbit is unreachable and no CDN host list is available.
+    /// Constructs a single-server bootstrap using the region's CDN download
+    /// endpoint (e.g., `us.patch.battle.net:1119`).
+    pub fn from_region(region: &Region) -> Self {
+        let mut bootstrap = Self::new();
+        let url = region.cdn_base_url();
+
+        let host = url
+            .trim_start_matches("http://")
+            .trim_start_matches("https://")
+            .split(':')
+            .next()
+            .unwrap_or(url);
+
+        bootstrap.servers.push(CdnServer::new(
+            host.to_string(),
+            url.starts_with("https"),
+            50,
+        ));
+        bootstrap.preferred_hosts.push(host.to_string());
+        bootstrap
     }
 
     /// Validate bootstrap configuration
@@ -486,5 +548,113 @@ mod tests {
         assert_eq!(stats.http_servers, 1);
         assert_eq!(stats.total_paths, 1);
         assert!(stats.is_official);
+    }
+
+    #[test]
+    fn test_parse_cdn_hosts_with_query_params() {
+        let hosts = "level3.blizzard.com?fallback=1&strict=1&maxhosts=3";
+        let servers = CdnBootstrap::parse_cdn_hosts(hosts);
+
+        assert_eq!(servers.len(), 1);
+        assert_eq!(servers[0].host, "level3.blizzard.com");
+        assert!(servers[0].is_fallback);
+        assert!(servers[0].strict);
+        assert_eq!(servers[0].max_hosts, Some(3));
+        assert!(servers[0].supports_https);
+    }
+
+    #[test]
+    fn test_parse_cdn_hosts_mixed() {
+        let hosts =
+            "level3.blizzard.com?fallback=1 edgecast.blizzard.com cdn.example.org?maxhosts=2";
+        let servers = CdnBootstrap::parse_cdn_hosts(hosts);
+
+        assert_eq!(servers.len(), 3);
+
+        // First: fallback with query params
+        assert_eq!(servers[0].host, "level3.blizzard.com");
+        assert!(servers[0].is_fallback);
+        assert!(!servers[0].strict);
+        assert_eq!(servers[0].max_hosts, None);
+
+        // Second: plain hostname, no params
+        assert_eq!(servers[1].host, "edgecast.blizzard.com");
+        assert!(!servers[1].is_fallback);
+        assert!(!servers[1].strict);
+        assert_eq!(servers[1].max_hosts, None);
+
+        // Third: non-blizzard host with maxhosts
+        assert_eq!(servers[2].host, "cdn.example.org");
+        assert!(!servers[2].supports_https);
+        assert_eq!(servers[2].max_hosts, Some(2));
+    }
+
+    #[test]
+    fn test_parse_cdn_hosts_invalid_maxhosts() {
+        let hosts = "level3.blizzard.com?maxhosts=abc";
+        let servers = CdnBootstrap::parse_cdn_hosts(hosts);
+
+        assert_eq!(servers.len(), 1);
+        assert_eq!(servers[0].host, "level3.blizzard.com");
+        assert_eq!(servers[0].max_hosts, None); // Invalid value ignored
+    }
+
+    #[test]
+    fn test_parse_cdn_hosts_maxhosts_zero_clamped() {
+        let hosts = "level3.blizzard.com?maxhosts=0";
+        let servers = CdnBootstrap::parse_cdn_hosts(hosts);
+
+        assert_eq!(servers[0].max_hosts, Some(1)); // Clamped to minimum of 1
+    }
+
+    #[test]
+    fn test_parse_cdn_hosts_fallback_priority() {
+        let hosts = "primary.blizzard.com secondary.blizzard.com?fallback=1";
+        let servers = CdnBootstrap::parse_cdn_hosts(hosts);
+
+        assert_eq!(servers.len(), 2);
+        // Primary server gets base priority
+        assert_eq!(servers[0].priority, 10);
+        assert!(!servers[0].is_fallback);
+
+        // Fallback server gets base priority + 1000 offset
+        assert!(servers[1].is_fallback);
+        assert_eq!(servers[1].priority, 1020); // 20 (base) + 1000 (fallback)
+    }
+
+    #[test]
+    fn test_region_cdn_base_urls() {
+        assert_eq!(Region::US.cdn_base_url(), "http://us.patch.battle.net:1119");
+        assert_eq!(Region::EU.cdn_base_url(), "http://eu.patch.battle.net:1119");
+        assert_eq!(Region::KR.cdn_base_url(), "http://kr.patch.battle.net:1119");
+        assert_eq!(Region::TW.cdn_base_url(), "http://tw.patch.battle.net:1119");
+        assert_eq!(
+            Region::CN.cdn_base_url(),
+            "http://cn.patch.battlenet.com.cn:1119"
+        );
+        assert_eq!(Region::SG.cdn_base_url(), "http://sg.patch.battle.net:1119");
+    }
+
+    #[test]
+    fn test_bootstrap_from_region() {
+        let bootstrap = CdnBootstrap::from_region(&Region::US);
+        assert_eq!(bootstrap.servers.len(), 1);
+        assert_eq!(bootstrap.servers[0].host, "us.patch.battle.net");
+        assert!(!bootstrap.servers[0].supports_https); // HTTP URL
+        assert_eq!(bootstrap.servers[0].priority, 50);
+        assert!(!bootstrap.is_official);
+        assert!(
+            bootstrap
+                .preferred_hosts
+                .contains(&"us.patch.battle.net".to_string())
+        );
+    }
+
+    #[test]
+    fn test_bootstrap_from_region_cn() {
+        let bootstrap = CdnBootstrap::from_region(&Region::CN);
+        assert_eq!(bootstrap.servers.len(), 1);
+        assert_eq!(bootstrap.servers[0].host, "cn.patch.battlenet.com.cn");
+        assert!(!bootstrap.servers[0].supports_https);
     }
 }

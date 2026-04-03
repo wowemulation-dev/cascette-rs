@@ -540,6 +540,7 @@ validates version equals 7 and warns on unexpected versions.
 | Entry Size | Variable (24 typical) | Fixed 18 bytes |
 | Location | CDN download | Client Data/ directory |
 | Crate | cascette-formats | cascette-client-storage |
+
 ## References
 
 - See [Encoding Documentation](encoding.md) for key lookup

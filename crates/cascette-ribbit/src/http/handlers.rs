@@ -24,14 +24,12 @@ pub async fn handle_versions(
 ) -> Result<Response, AppError> {
     tracing::debug!("Handling versions request for product: {}", product);
 
-    // Get latest build for product
-    let build = state
-        .database()
+    let db = state.database().await;
+    let build = db
         .latest_build(&product)
         .ok_or_else(|| AppError::NotFound(format!("Product not found: {product}")))?;
 
-    // Generate BPSV response
-    let seqn = state.current_seqn();
+    let seqn = state.current_seqn(&product);
     let response = BpsvResponse::versions(build, seqn);
 
     Ok((
@@ -58,17 +56,14 @@ pub async fn handle_cdns(
 ) -> Result<Response, AppError> {
     tracing::debug!("Handling cdns request for product: {}", product);
 
-    // Verify product exists
-    let build = state
-        .database()
+    let db = state.database().await;
+    let build = db
         .latest_build(&product)
         .ok_or_else(|| AppError::NotFound(format!("Product not found: {product}")))?;
 
-    // Resolve CDN config for this product (uses product-specific path if available)
     let cdn_config = CdnConfig::resolve_for_build(build, state.cdn_config());
 
-    // Generate BPSV response
-    let seqn = state.current_seqn();
+    let seqn = state.current_seqn(&product);
     let response = BpsvResponse::cdns(&cdn_config, seqn);
 
     Ok((
@@ -95,14 +90,12 @@ pub async fn handle_bgdl(
 ) -> Result<Response, AppError> {
     tracing::debug!("Handling bgdl request for product: {}", product);
 
-    // Get latest build for product
-    let build = state
-        .database()
+    let db = state.database().await;
+    let build = db
         .latest_build(&product)
         .ok_or_else(|| AppError::NotFound(format!("Product not found: {product}")))?;
 
-    // Generate BPSV response (bgdl uses same format as versions)
-    let seqn = state.current_seqn();
+    let seqn = state.current_seqn(&product);
     let response = BpsvResponse::bgdl(build, seqn);
 
     Ok((

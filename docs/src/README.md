@@ -340,4 +340,3 @@ flowchart LR
     Location --> Archive --> BLTE
     BLTE --> Decompress --> Raw
 ```
-

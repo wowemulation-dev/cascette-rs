@@ -93,14 +93,18 @@ mod header;
 pub mod parser;
 
 pub use builder::PatchIndexBuilder;
-pub use entry::PatchIndexEntry;
+pub use entry::{
+    PatchIndexEntry, PatchIndexEntryV2, PatchIndexEntryV3, V3_FLAG_HAS_DECODED_SIZE,
+    V3_FLAG_HAS_ORIGINAL_EKEY, V3_FLAG_HAS_ORIGINAL_EKEY_OFFSET,
+};
 pub use error::{PatchIndexError, PatchIndexResult};
 pub use header::{BlockDescriptor, PatchIndexHeader};
+pub use parser::{BLOCK_TYPE_V2, BLOCK_TYPE_V3};
 
 /// Complete parsed Patch Index
 ///
 /// Contains the file header with block descriptors and all parsed entries
-/// from block type 2 (primary entry block).
+/// from block types 2 (V1), 6 (V2), and 10 (V3).
 #[derive(Debug, Clone)]
 pub struct PatchIndex {
     /// File header including block descriptors
@@ -109,8 +113,17 @@ pub struct PatchIndex {
     /// Entry key size in bytes (typically 16 for MD5)
     pub key_size: u8,
 
-    /// Parsed entries from block type 2
+    /// Parsed entries from block type 2 (V1)
     pub entries: Vec<PatchIndexEntry>,
+
+    /// Parsed entries from block type 6 (V2)
+    pub entries_v2: Vec<PatchIndexEntryV2>,
+
+    /// Parsed entries from block type 10 (V3)
+    pub entries_v3: Vec<PatchIndexEntryV3>,
+
+    /// Shared ESpec string table from V2/V3 blocks
+    pub espec_table: Option<String>,
 }
 
 impl PatchIndex {
@@ -145,15 +158,44 @@ impl PatchIndex {
         keys.dedup();
         keys
     }
+
+    /// Find V2 entries by target EKey
+    pub fn find_v2_by_target_ekey(&self, target_ekey: &[u8; 16]) -> Vec<&PatchIndexEntryV2> {
+        self.entries_v2
+            .iter()
+            .filter(|e| &e.target_ekey == target_ekey)
+            .collect()
+    }
+
+    /// Find V3 entries by target EKey
+    pub fn find_v3_by_target_ekey(&self, target_ekey: &[u8; 16]) -> Vec<&PatchIndexEntryV3> {
+        self.entries_v3
+            .iter()
+            .filter(|e| &e.base.target_ekey == target_ekey)
+            .collect()
+    }
+
+    /// Whether this index contains any V2 or V3 entries
+    pub fn has_extended_entries(&self) -> bool {
+        !self.entries_v2.is_empty() || !self.entries_v3.is_empty()
+    }
+
+    /// Total entry count across all versions
+    pub fn total_entry_count(&self) -> usize {
+        self.entries.len() + self.entries_v2.len() + self.entries_v3.len()
+    }
 }
 
 impl crate::CascFormat for PatchIndex {
     fn parse(data: &[u8]) -> Result<Self, Box<dyn std::error::Error>> {
-        let (header, key_size, entries) = parser::parse_patch_index(data)?;
+        let parsed = parser::parse_patch_index_full(data)?;
         Ok(Self {
-            header,
-            key_size,
-            entries,
+            header: parsed.header,
+            key_size: parsed.key_size,
+            entries: parsed.entries,
+            entries_v2: parsed.entries_v2,
+            entries_v3: parsed.entries_v3,
+            espec_table: parsed.espec_table,
         })
     }
 
@@ -221,6 +263,10 @@ mod tests {
         // Unique patch keys
         let uniq = index.unique_patch_ekeys();
         assert_eq!(uniq.len(), 2);
+
+        // No extended entries in V1-only index
+        assert!(!index.has_extended_entries());
+        assert_eq!(index.total_entry_count(), 3);
     }
 
     #[test]

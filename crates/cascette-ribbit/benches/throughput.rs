@@ -17,6 +17,7 @@ use std::hint::black_box;
 use std::io::Write;
 use std::sync::Arc;
 use tempfile::NamedTempFile;
+use tokio::runtime::Runtime;
 
 /// Create test database with multiple products and builds.
 fn create_test_db() -> NamedTempFile {
@@ -44,6 +45,8 @@ fn create_test_db() -> NamedTempFile {
 
 /// Benchmark BPSV response generation.
 fn bench_bpsv_generation(c: &mut Criterion) {
+    let rt = Runtime::new().expect("Failed to create Tokio runtime for benchmark");
+
     let db_file = create_test_db();
     let config = ServerConfig {
         http_bind: "127.0.0.1:8080"
@@ -60,10 +63,13 @@ fn bench_bpsv_generation(c: &mut Criterion) {
     };
 
     let state = Arc::new(AppState::new(&config).expect("Failed to initialize benchmark AppState"));
-    let build = state
-        .database()
+
+    // Snapshot the database Arc once before the benchmarks — no lock contention inside loops.
+    let db = rt.block_on(state.database());
+    let build = db
         .latest_build("wow")
         .expect("Failed to get latest build for benchmark");
+    let products: Vec<&str> = db.products();
 
     let mut group = c.benchmark_group("bpsv_generation");
 
@@ -86,7 +92,6 @@ fn bench_bpsv_generation(c: &mut Criterion) {
     });
 
     group.bench_function(BenchmarkId::new("summary", "all"), |b| {
-        let products: Vec<&str> = state.database().products();
         b.iter(|| {
             let response =
                 cascette_ribbit::BpsvResponse::summary(black_box(&products), black_box(1730534400));

@@ -174,12 +174,11 @@ LZ4HC (high compression) format:
 
 **Format discrepancy**: The WoWDev wiki describes a different LZ4 format with
 `headerVersion` (1 byte), 64-bit big-endian size, `blockShift` (1 byte, range
-5-16), and multiple sub-blocks of `1 << blockShift` bytes each. Agent.exe
-3.13.3 uses the 8-byte LE prefix + single block format documented above.
-`tact::Codec::DecodeLZ4` at 0x6f5fdb is a stub in Agent.exe 3.13.3 (returns
-error 5), so the LZ4 format cannot be fully verified from this binary version.
-cascette-rs matches the Agent.exe format. The wiki format may apply to a newer
-protocol version or a different product.
+5-16), and multiple sub-blocks of `1 << blockShift` bytes each. The Blizzard
+agent uses the 8-byte LE prefix + single block format documented above, and
+its LZ4 decoder is a stub returning error 5 (not implemented in that version).
+cascette-rs matches the observed wire format. The wiki format may apply to a
+newer protocol version or a different product.
 
 ## Encryption Format
 
@@ -504,6 +503,7 @@ Analysis and decompression tool supports:
 
 See <https://github.com/wowemulation-dev/cascette-py> for the Python
 implementation.
+
 ## References
 
 - [wowdev.wiki BLTE documentation](https://wowdev.wiki/CASC#BLTE)

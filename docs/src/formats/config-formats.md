@@ -408,15 +408,14 @@ key-4eb4869f95f23b53 = c9316739348dcc033aa8112f9a3acf5d
 
 ### Validation
 
-Agent.exe (`tact::ConfigReader::ValidateKeyringConfig` at 0x6e7020) requires
-at least one key entry. Duplicate key IDs with different values produce a
-warning and the duplicate is ignored (first entry wins).
+At least one key entry is required. Duplicate key IDs with different values
+produce a warning and the duplicate is ignored (first entry wins).
 
 ### Usage
 
-Keys are loaded into a hash map by `tact::KeyGetter::LoadKeyring`. During BLTE
-decryption, the 8-byte key ID from the encrypted block header is used to look
-up the 16-byte Salsa20 decryption key.
+Keys are loaded into a hash map. During BLTE decryption, the 8-byte key ID
+from the encrypted block header is used to look up the 16-byte Salsa20
+decryption key.
 
 ### Distribution
 

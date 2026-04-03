@@ -1,0 +1,51 @@
+[package]
+name = "cascette-maintenance"
+description = "Maintenance operations for local CASC installations"
+keywords = ["casc", "ngdp", "maintenance", "compaction", "storage"]
+readme = "README.md"
+categories = ["filesystem", "game-development"]
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# Internal dependencies
+cascette-client-storage = { version = "0.2.0", path = "../cascette-client-storage" }
+cascette-crypto = { version = "0.2.0", path = "../cascette-crypto" }
+cascette-installation = { version = "0.2.0", path = "../cascette-installation" }
+cascette-protocol = { version = "0.2.0", path = "../cascette-protocol" }
+
+# Workspace dependencies
+async-trait = { workspace = true }
+hex = { workspace = true }
+md5 = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = [
+  "fs",
+  "io-util",
+  "sync",
+  "rt-multi-thread",
+] }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util", "macros", "rt-multi-thread"] }
+pretty_assertions = { workspace = true }
+tempfile = { workspace = true }
+
+[features]
+local-install = []
+
+[[example]]
+name = "maintenance_analysis"
+required-features = ["local-install"]
+
+[[example]]
+name = "maintenance_verification"
+required-features = ["local-install"]
+
+[lints]
+workspace = true

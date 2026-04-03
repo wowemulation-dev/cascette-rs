@@ -1,7 +1,10 @@
 //! BPSV (Blizzard Pipe-Separated Values) response generation.
 //!
 //! BPSV is a text format used by Blizzard's NGDP system for metadata exchange.
-//! Format: Header line with column definitions, followed by data rows, optional seqn footer.
+//! Format: Header line with column definitions, seqn line, then data rows.
+//!
+//! The real Blizzard server emits the sequence number between the header row and
+//! the first data row, not at the end of the document.
 
 use crate::config::CdnConfig;
 use crate::database::BuildRecord;
@@ -40,6 +43,9 @@ impl BpsvResponse {
                 .to_string(),
         );
 
+        // Sequence number between header and data rows (Blizzard format)
+        lines.push(format!("## seqn = {seqn}"));
+
         // Data rows for each region (same build across all regions)
         // Real Blizzard API uses 7 regions: us, eu, cn, kr, tw, sg, xx
         let product_config = build.product_config.as_deref().unwrap_or("");
@@ -50,9 +56,6 @@ impl BpsvResponse {
                 build.build_config, build.cdn_config, build.build, build.version
             ));
         }
-
-        // Sequence number footer
-        lines.push(format!("## seqn = {seqn}"));
 
         Self {
             response_type: BpsvResponseType::Versions,
@@ -71,6 +74,9 @@ impl BpsvResponse {
                 .to_string(),
         );
 
+        // Sequence number between header and data rows (Blizzard format)
+        lines.push(format!("## seqn = {seqn}"));
+
         // Data rows for each region (same CDN config across all regions)
         for region in ["us", "eu", "kr", "tw", "cn"] {
             lines.push(format!(
@@ -78,9 +84,6 @@ impl BpsvResponse {
                 cdn_config.path, cdn_config.hosts, cdn_config.servers, cdn_config.config_path
             ));
         }
-
-        // Sequence number footer
-        lines.push(format!("## seqn = {seqn}"));
 
         Self {
             response_type: BpsvResponseType::Cdns,
@@ -100,15 +103,16 @@ impl BpsvResponse {
     /// Create summary response listing all products.
     #[must_use]
     pub fn summary(products: &[&str], seqn: u64) -> Self {
-        let mut lines = vec!["Product!STRING:0|Seqn!DEC:4".to_string()];
+        let mut lines = vec![
+            "Product!STRING:0|Seqn!DEC:4".to_string(),
+            // Sequence number between header and data rows (Blizzard format)
+            format!("## seqn = {seqn}"),
+        ];
 
         // Data rows for each product
         for product in products {
             lines.push(format!("{product}|{seqn}"));
         }
-
-        // Sequence number footer
-        lines.push(format!("## seqn = {seqn}"));
 
         Self {
             response_type: BpsvResponseType::Summary,
@@ -169,8 +173,14 @@ mod tests {
         assert!(text.contains("us|596c212114208f0f849c6b6e596e6680"));
         assert!(text.contains("## seqn = 1730534400"));
 
-        // Should have 7 regions + header + footer = 9 lines
-        assert_eq!(text.lines().count(), 9);
+        // Should have header + seqn + 7 regions = 9 lines
+        let lines: Vec<&str> = text.lines().collect();
+        assert_eq!(lines.len(), 9);
+
+        // seqn must appear on line 2 (between header and data rows)
+        assert!(lines[0].starts_with("Region!"), "line 0 is the header");
+        assert_eq!(lines[1], "## seqn = 1730534400");
+        assert!(lines[2].starts_with("us|"));
     }
 
     #[test]

@@ -127,7 +127,7 @@ struct EKeyEntry {
 **Padding Detection**: EKey pages may contain padding entries that must be
 skipped. Two sentinel patterns indicate padding:
 
-1. `espec_index == 0xFFFFFFFF` (Agent.exe sentinel)
+1. `espec_index == 0xFFFFFFFF` (padding sentinel)
 2. `espec_index == 0` with all key bytes `0x00` (zero-fill padding)
 
 ## Content Resolution Process
@@ -414,7 +414,7 @@ structure using the same ESpec format as all other files.
 4. **CKey Padding**: Entries with `ekey_count = 0` indicate end of page data
 5. **EKey Padding**: Entries with `espec_index = 0xFFFFFFFF` or all-zero keys
    indicate padding (see Padding Detection above)
-5. **File Size**: Remember to account for the file's own ESpec at the end
+6. **File Size**: Remember to account for the file's own ESpec at the end
 
 ## Real-World Example
 

@@ -1,0 +1,176 @@
+syntax = "proto2";
+
+package proto_database;
+
+option optimize_for = SPEED;
+
+enum LanguageOption {
+  LANGOPTION_NONE = 0;
+  LANGOPTION_TEXT = 1;
+  LANGOPTION_SPEECH = 2;
+  LANGOPTION_TEXT_AND_SPEECH = 3;
+}
+
+enum LanguageSettingType {
+  LANGSETTING_NONE = 0;
+  LANGSETTING_SINGLE = 1;
+  LANGSETTING_SIMPLE = 2;
+  LANGSETTING_ADVANCED = 3;
+}
+
+enum ShortcutOption {
+  SHORTCUT_NONE = 0;
+  SHORTCUT_USER = 1;
+  SHORTCUT_ALL_USERS = 2;
+}
+
+enum Operation {
+  OP_NONE = -1;
+  OP_UPDATE = 0;
+  OP_BACKFILL = 1;
+  OP_REPAIR = 2;
+  OP_UNINSTALL = 3;
+}
+
+message LanguageSetting {
+  optional string language = 1;
+  optional .proto_database.LanguageOption option = 2;
+}
+
+message UserSettings {
+  optional string install_path = 1;
+  optional string play_region = 2;
+  optional .proto_database.ShortcutOption desktop_shortcut = 3;
+  optional .proto_database.ShortcutOption startmenu_shortcut = 4;
+  optional .proto_database.LanguageSettingType language_settings = 5;
+  optional string selected_text_language = 6;
+  optional string selected_speech_language = 7;
+  repeated .proto_database.LanguageSetting languages = 8;
+  optional string additional_tags = 9;
+  optional string version_branch = 10;
+  optional string account_country = 11;
+  optional string geo_ip_country = 12;
+  optional string game_subfolder = 13;
+}
+
+message BuildProgressDetails {
+  optional string targetKey = 1;
+  repeated uint64 writtenOffset = 6;
+  repeated uint64 downloadBaseline = 7;
+}
+
+message InstallHandshake {
+  optional string product = 1;
+  optional string uid = 2;
+  optional .proto_database.UserSettings settings = 3;
+  optional uint32 priority = 4;
+}
+
+message BuildConfig {
+  optional string region = 1;
+  optional string buildConfig = 2;
+}
+
+message BaseProductState {
+  optional bool installed = 1;
+  optional bool playable = 2;
+  optional bool updateComplete = 3;
+  optional bool backgroundDownloadAvailable = 4;
+  optional bool backgroundDownloadComplete = 5;
+  optional string currentVersion = 6;
+  optional string currentVersionStr = 7;
+  repeated .proto_database.BuildConfig installedBuildConfig = 8;
+  repeated .proto_database.BuildConfig backgroundDownloadBuildConfig = 9;
+  optional string decryptionKey = 10;
+  repeated string completedInstallActions = 11;
+  repeated string completedBuildKeys = 12;
+  repeated string completedBgdlKeys = 13;
+  optional string activeBuildKey = 14;
+  optional string activeBgdlKey = 15;
+  optional string activeInstallKey = 16;
+  optional string activeTagString = 17;
+  optional string incompleteBuildKey = 18;
+  optional string activeKeyringKey = 19;
+  optional string incompleteKeyringKey = 20;
+  optional int64 lastPlayedTimestamp = 21;
+}
+
+message BackfillProgress {
+  optional double progress = 1;
+  optional bool backgrounddownload = 2;
+  optional bool paused = 3;
+  optional uint64 downloadLimit = 4;
+  optional uint64 remaining = 5 [default = 0];
+  optional .proto_database.BuildProgressDetails details = 6;
+}
+
+message RepairProgress {
+  optional double progress = 1;
+}
+
+message UpdateProgress {
+  optional string lastDiscSetUsed = 1;
+  optional double progress = 2;
+  optional bool discIgnored = 3;
+  optional uint64 totalToDownload = 4 [default = 0];
+  optional uint64 downloadRemaining = 5 [default = 0];
+  optional .proto_database.BuildProgressDetails details = 6;
+}
+
+message CachedProductState {
+  optional .proto_database.BaseProductState baseProductState = 1;
+  optional .proto_database.BackfillProgress backfillProgress = 2;
+  optional .proto_database.RepairProgress repairProgress = 3;
+  optional .proto_database.UpdateProgress updateProgress = 4;
+}
+
+message ProductOperations {
+  optional .proto_database.Operation activeOperation = 1 [default = OP_NONE];
+  optional uint64 priority = 2;
+}
+
+message ProductInstall {
+  optional string uid = 1;
+  optional string productCode = 2;
+  optional .proto_database.UserSettings settings = 3;
+  optional .proto_database.CachedProductState cachedProductState = 4;
+  optional .proto_database.ProductOperations productOperations = 5;
+  optional string productFamily = 6;
+  optional bool hidden = 7 [default = false];
+  optional string persistentJsonStorage = 8;
+}
+
+message SharedComponent {
+  required .proto_database.ProductInstall base = 1;
+  repeated string dependentUid = 2;
+}
+
+message ProductConfig {
+  optional string productCode = 1;
+  optional string metadataHash = 2;
+}
+
+message ActiveProcess {
+  optional string processName = 1;
+  optional int32 pid = 2;
+  repeated string uri = 3;
+}
+
+message DownloadSettings {
+  optional int64 downloadLimit = 1 [default = -1];
+  optional int64 backfillLimit = 2 [default = -1];
+  optional bool backfillLimitUsesDefault = 3;
+}
+
+message Database {
+  repeated .proto_database.ProductInstall productInstall = 1;
+  repeated .proto_database.InstallHandshake activeInstalls = 2;
+  repeated .proto_database.ActiveProcess activeProcesses = 3;
+  repeated .proto_database.ProductConfig productConfigs = 4;
+  optional .proto_database.DownloadSettings downloadSettings = 5;
+  optional uint64 versionSummarySeqn = 6;
+  repeated string priorityUidList = 7;
+  repeated .proto_database.SharedComponent sharedComponents = 8;
+}
+
+

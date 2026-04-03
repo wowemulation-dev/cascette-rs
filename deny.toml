@@ -28,6 +28,9 @@ ignore = [
     # Pulled in by axum-server 0.7.x. Not a security issue, just a deprecation.
     # Will be resolved when axum-server updates its dependency.
     "RUSTSEC-2025-0134",
+    # RUSTSEC-2024-0436: paste crate no longer maintained.
+    # Pulled in by turso_core. No upgrade path available upstream.
+    "RUSTSEC-2024-0436",
 ]
 
 # License compliance
@@ -44,6 +47,8 @@ allow = [
     "Unlicense",
     "ISC",                    # Used by ring, untrusted (security crates)
     "CDLA-Permissive-2.0",    # Used by webpki-roots (CA certificate data)
+    "CC0-1.0",                # Used by notify (pulled in by cascette-ribbit watch module)
+    "MPL-2.0",                # Used by option-ext via dirs via cascette-crypto
 ]
 confidence-threshold = 0.8
 

@@ -20,10 +20,10 @@ use std::fmt::Write as _;
 /// # Errors
 ///
 /// Returns `ProtocolError` if the command is invalid or processing fails.
-pub fn handle_v1_command(command: &str, state: &AppState) -> Result<String, ProtocolError> {
+pub async fn handle_v1_command(command: &str, state: &AppState) -> Result<String, ProtocolError> {
     // Special case: v1/summary endpoint
     if command == "v1/summary" {
-        return Ok(handle_summary(state));
+        return Ok(handle_summary(state).await);
     }
 
     // Parse command format: v1/products/{product}/{endpoint}
@@ -38,13 +38,12 @@ pub fn handle_v1_command(command: &str, state: &AppState) -> Result<String, Prot
     let product = parts[2];
     let endpoint = parts[3];
 
-    // Get build for product
-    let build = state
-        .database()
+    let db = state.database().await;
+    let build = db
         .latest_build(product)
         .ok_or_else(|| ProtocolError::InvalidCommand(format!("Product not found: {product}")))?;
 
-    let seqn = state.current_seqn();
+    let seqn = state.current_seqn(product);
 
     // Generate appropriate BPSV response
     let bpsv = match endpoint {
@@ -67,10 +66,22 @@ pub fn handle_v1_command(command: &str, state: &AppState) -> Result<String, Prot
 
 /// Handle v1/summary command (TCP v1 only).
 ///
-/// Returns list of all available products.
-fn handle_summary(state: &AppState) -> String {
-    let products = state.database().products();
-    let seqn = state.current_seqn();
+/// Returns list of all available products with their seqn values.
+async fn handle_summary(state: &AppState) -> String {
+    let db = state.database().await;
+    let products = db.products();
+
+    // Use the first product's seqn as the summary seqn (or a fallback timestamp)
+    let seqn = products.first().map_or_else(
+        || {
+            use std::time::{SystemTime, UNIX_EPOCH};
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs()
+        },
+        |p| state.current_seqn(p),
+    );
 
     let bpsv = BpsvResponse::summary(&products, seqn);
 
@@ -150,7 +161,7 @@ mod tests {
     #[tokio::test]
     async fn test_v1_versions() {
         let state = create_test_state();
-        let result = handle_v1_command("v1/products/test_product/versions", &state);
+        let result = handle_v1_command("v1/products/test_product/versions", &state).await;
         assert!(result.is_ok());
         let response = result.unwrap();
         assert!(response.contains("MIME-Version: 1.0"));
@@ -162,7 +173,7 @@ mod tests {
     #[tokio::test]
     async fn test_v1_summary() {
         let state = create_test_state();
-        let result = handle_v1_command("v1/summary", &state);
+        let result = handle_v1_command("v1/summary", &state).await;
         assert!(result.is_ok());
         let response = result.unwrap();
         assert!(response.contains("MIME-Version: 1.0"));

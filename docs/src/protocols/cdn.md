@@ -695,4 +695,3 @@ Implement efficient caching:
   mismatches and retry from an alternate CDN
 - **Encryption Keys**: CASC uses static community-maintained keys; see
   [Salsa20 Encryption](../encryption/salsa20.md) for key management details
-

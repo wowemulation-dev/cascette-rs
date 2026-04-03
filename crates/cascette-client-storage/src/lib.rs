@@ -193,19 +193,16 @@ pub const INDICES_DIR: &str = "indices";
 /// Residency container subdirectory.
 ///
 /// CASC stores the residency tracking database in `Data/residency/`.
-/// Created by `tact::ResidencyContainerInit`.
 pub const RESIDENCY_DIR: &str = "residency";
 
 /// E-header cache subdirectory (preservation set).
 ///
 /// CASC stores the e-header cache in `Data/ecache/`.
-/// Created by `casc::PreservationSet::CreateEHeaderCache`.
 pub const ECACHE_DIR: &str = "ecache";
 
 /// Hard link container subdirectory.
 ///
 /// CASC stores the hard link trie directory in `Data/hardlink/`.
-/// Created by `tact::HardLinkContainerInit`.
 pub const HARDLINK_DIR: &str = "hardlink";
 
 // =============================================================================

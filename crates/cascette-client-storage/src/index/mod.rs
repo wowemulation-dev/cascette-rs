@@ -17,6 +17,7 @@ use crate::validation::BinaryFormatValidator;
 use crate::{Result, StorageError};
 use binrw::Endian;
 use binrw::{BinRead, BinReaderExt, BinResult, BinWrite, BinWriterExt};
+use cascette_crypto::jenkins::hashlittle;
 use cascette_crypto::{ContentKey, EncodingKey};
 use std::collections::BTreeMap;
 use std::fs::File;
@@ -85,6 +86,285 @@ pub struct GuardedBlockHeader {
     pub block_size: u32,
     /// Jenkins hash for validation
     pub block_hash: u32,
+}
+
+/// Index file format version
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IndexVersion {
+    /// Pre-2015 format: flat 48-byte header, two entry blocks, no update section
+    V5,
+    /// Current format: guarded blocks, single entry block, LSM-tree update section
+    V7,
+}
+
+/// V5 index header size in bytes
+const V5_HEADER_SIZE: usize = 48;
+
+/// V5 index entry size (same as V7)
+const V5_ENTRY_SIZE: usize = 18;
+
+/// IDX V5 header (48 bytes, flat layout, LE for multi-byte fields)
+///
+/// Used by pre-2015 CASC titles. No guarded blocks, no update section.
+/// Two entry blocks follow the header immediately.
+#[derive(Debug, Clone)]
+pub struct IndexHeaderV5 {
+    /// Must be 0x0005
+    pub index_version: u16,
+    /// Bucket index (0x00-0x0F)
+    pub bucket_index: u8,
+    /// Padding byte
+    pub padding: u8,
+    /// Unknown field at offset 0x04
+    pub field_4: u32,
+    /// Must be non-zero
+    pub field_8: u64,
+    /// Segment size
+    pub segment_size: u64,
+    /// Must be 4
+    pub encoded_size_length: u8,
+    /// Must be 5
+    pub storage_offset_length: u8,
+    /// Must be 9
+    pub ekey_length: u8,
+    /// File offset bits
+    pub file_offset_bits: u8,
+    /// Entry count in block 1
+    pub ekey_count1: u32,
+    /// Entry count in block 2
+    pub ekey_count2: u32,
+    /// Jenkins hash of block 1 data (seed 0)
+    pub keys_hash1: u32,
+    /// Jenkins hash of block 2 data (seed 0)
+    pub keys_hash2: u32,
+    /// Jenkins hash of header with this field zeroed (seed 0)
+    pub header_hash: u32,
+}
+
+/// Read and validate a V5 index header from raw bytes.
+///
+/// Reads 48 bytes flat (LE for multi-byte fields), validates version,
+/// field sizes, and the header self-hash.
+fn read_v5_index_header(data: &[u8]) -> Result<IndexHeaderV5> {
+    if data.len() < V5_HEADER_SIZE {
+        return Err(StorageError::Index(format!(
+            "V5 header too small: {} bytes (need {})",
+            data.len(),
+            V5_HEADER_SIZE
+        )));
+    }
+
+    let header_bytes = &data[..V5_HEADER_SIZE];
+
+    let index_version = u16::from_le_bytes([header_bytes[0], header_bytes[1]]);
+    if index_version != 5 {
+        return Err(StorageError::Index(format!(
+            "V5 header version mismatch: expected 5, got {index_version}"
+        )));
+    }
+
+    let bucket_index = header_bytes[2];
+    let padding = header_bytes[3];
+    let field_4 = u32::from_le_bytes([
+        header_bytes[4],
+        header_bytes[5],
+        header_bytes[6],
+        header_bytes[7],
+    ]);
+    let field_8 = u64::from_le_bytes([
+        header_bytes[8],
+        header_bytes[9],
+        header_bytes[10],
+        header_bytes[11],
+        header_bytes[12],
+        header_bytes[13],
+        header_bytes[14],
+        header_bytes[15],
+    ]);
+    if field_8 == 0 {
+        return Err(StorageError::Index(
+            "V5 header field_8 must be non-zero".to_string(),
+        ));
+    }
+
+    let segment_size = u64::from_le_bytes([
+        header_bytes[16],
+        header_bytes[17],
+        header_bytes[18],
+        header_bytes[19],
+        header_bytes[20],
+        header_bytes[21],
+        header_bytes[22],
+        header_bytes[23],
+    ]);
+
+    let encoded_size_length = header_bytes[0x18];
+    let storage_offset_length = header_bytes[0x19];
+    let ekey_length = header_bytes[0x1A];
+    let file_offset_bits = header_bytes[0x1B];
+
+    if encoded_size_length != 4 {
+        return Err(StorageError::Index(format!(
+            "V5 encoded_size_length must be 4, got {encoded_size_length}"
+        )));
+    }
+    if storage_offset_length != 5 {
+        return Err(StorageError::Index(format!(
+            "V5 storage_offset_length must be 5, got {storage_offset_length}"
+        )));
+    }
+    if ekey_length != 9 {
+        return Err(StorageError::Index(format!(
+            "V5 ekey_length must be 9, got {ekey_length}"
+        )));
+    }
+
+    let ekey_count1 = u32::from_le_bytes([
+        header_bytes[0x1C],
+        header_bytes[0x1D],
+        header_bytes[0x1E],
+        header_bytes[0x1F],
+    ]);
+    let ekey_count2 = u32::from_le_bytes([
+        header_bytes[0x20],
+        header_bytes[0x21],
+        header_bytes[0x22],
+        header_bytes[0x23],
+    ]);
+    let keys_hash1 = u32::from_le_bytes([
+        header_bytes[0x24],
+        header_bytes[0x25],
+        header_bytes[0x26],
+        header_bytes[0x27],
+    ]);
+    let keys_hash2 = u32::from_le_bytes([
+        header_bytes[0x28],
+        header_bytes[0x29],
+        header_bytes[0x2A],
+        header_bytes[0x2B],
+    ]);
+    let header_hash = u32::from_le_bytes([
+        header_bytes[0x2C],
+        header_bytes[0x2D],
+        header_bytes[0x2E],
+        header_bytes[0x2F],
+    ]);
+
+    // Verify header self-hash: zero the hash field, compute Jenkins hash
+    let mut check_bytes = [0u8; V5_HEADER_SIZE];
+    check_bytes.copy_from_slice(header_bytes);
+    check_bytes[0x2C] = 0;
+    check_bytes[0x2D] = 0;
+    check_bytes[0x2E] = 0;
+    check_bytes[0x2F] = 0;
+
+    let computed_hash = hashlittle(&check_bytes, 0);
+    if computed_hash != header_hash {
+        return Err(StorageError::Index(format!(
+            "V5 header hash mismatch: expected 0x{header_hash:08x}, computed 0x{computed_hash:08x}"
+        )));
+    }
+
+    Ok(IndexHeaderV5 {
+        index_version,
+        bucket_index,
+        padding,
+        field_4,
+        field_8,
+        segment_size,
+        encoded_size_length,
+        storage_offset_length,
+        ekey_length,
+        file_offset_bits,
+        ekey_count1,
+        ekey_count2,
+        keys_hash1,
+        keys_hash2,
+        header_hash,
+    })
+}
+
+/// Load entries from V5 index data (two entry blocks after header).
+///
+/// Block 1 starts at offset 48, has `ekey_count1 * 18` bytes.
+/// Block 2 starts after block 1, has `ekey_count2 * 18` bytes.
+/// Verifies per-block Jenkins hashes with seed 0.
+fn load_v5_entries(data: &[u8], header: &IndexHeaderV5) -> Result<Vec<IndexEntry>> {
+    let block1_size = header.ekey_count1 as usize * V5_ENTRY_SIZE;
+    let block2_size = header.ekey_count2 as usize * V5_ENTRY_SIZE;
+    let block1_start = V5_HEADER_SIZE;
+    let block2_start = block1_start + block1_size;
+    let total_needed = block2_start + block2_size;
+
+    if data.len() < total_needed {
+        return Err(StorageError::Index(format!(
+            "V5 data too small: {} bytes (need {} for {} + {} entries)",
+            data.len(),
+            total_needed,
+            header.ekey_count1,
+            header.ekey_count2
+        )));
+    }
+
+    let block1_data = &data[block1_start..block1_start + block1_size];
+    let block2_data = &data[block2_start..block2_start + block2_size];
+
+    // Verify block hashes
+    let computed_hash1 = hashlittle(block1_data, 0);
+    if computed_hash1 != header.keys_hash1 {
+        return Err(StorageError::Index(format!(
+            "V5 block 1 hash mismatch: expected 0x{:08x}, computed 0x{computed_hash1:08x}",
+            header.keys_hash1
+        )));
+    }
+
+    let computed_hash2 = hashlittle(block2_data, 0);
+    if computed_hash2 != header.keys_hash2 {
+        return Err(StorageError::Index(format!(
+            "V5 block 2 hash mismatch: expected 0x{:08x}, computed 0x{computed_hash2:08x}",
+            header.keys_hash2
+        )));
+    }
+
+    // Parse entries from both blocks
+    let mut entries = Vec::with_capacity((header.ekey_count1 + header.ekey_count2) as usize);
+
+    for block_data in [block1_data, block2_data] {
+        let mut offset = 0;
+        while offset + V5_ENTRY_SIZE <= block_data.len() {
+            let entry_bytes = &block_data[offset..offset + V5_ENTRY_SIZE];
+            // Skip empty entries (all-zero key)
+            if entry_bytes[..9].iter().any(|&b| b != 0) {
+                let mut cursor = Cursor::new(entry_bytes);
+                let entry = IndexEntry::read_be(&mut cursor)
+                    .map_err(|e| StorageError::Index(format!("V5 entry parse failed: {e}")))?;
+                entries.push(entry);
+            }
+            offset += V5_ENTRY_SIZE;
+        }
+    }
+
+    Ok(entries)
+}
+
+/// Parse bucket and version from V5 index filename.
+///
+/// Pattern: `data.i{bucket_hex}{version_hex}` (e.g., `data.i0a`).
+/// Bucket is the first hex digit, version is the second.
+fn parse_v5_index_filename(filename: &str) -> Option<(u8, u8)> {
+    let name = filename.strip_prefix("data.i")?;
+    if name.len() != 2 {
+        return None;
+    }
+
+    let bucket = u8::from_str_radix(&name[0..1], 16).ok()?;
+    let version = u8::from_str_radix(&name[1..2], 16).ok()?;
+
+    if bucket > 0x0F {
+        return None;
+    }
+
+    Some((bucket, version))
 }
 
 /// IDX Journal header v2 for local CASC storage
@@ -255,11 +535,14 @@ pub struct IndexManager {
 
 /// Individual index file data
 struct IndexFile {
-    /// Index file header
+    /// Index file format version
+    #[allow(dead_code)]
+    version: IndexVersion,
+    /// Index file header (V7 only, placeholder for V5)
     header: IndexHeader,
     /// Sorted entries for binary search (L1)
     entries: Vec<IndexEntry>,
-    /// Append-only update section (L0, LSM-tree)
+    /// Append-only update section (L0, LSM-tree; empty for V5)
     update_section: UpdateSection,
 }
 
@@ -293,15 +576,25 @@ impl IndexManager {
             let path = entry.path();
 
             if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                // Parse index file names using official CASC format
+                // Try V7 format first (*.idx)
                 if let Some((bucket, version)) = Self::parse_index_filename(name) {
                     debug!(
-                        "Loading index file bucket {:02x} version {:06x} from {}",
+                        "Loading V7 index file bucket {:02x} version {:06x} from {}",
                         bucket,
                         version,
                         path.display()
                     );
                     self.load_index(bucket, &path)?;
+                }
+                // Try V5 format (data.i*)
+                else if let Some((bucket, version)) = parse_v5_index_filename(name) {
+                    debug!(
+                        "Loading V5 index file bucket {:01x} version {:01x} from {}",
+                        bucket,
+                        version,
+                        path.display()
+                    );
+                    self.load_v5_index(bucket, &path)?;
                 }
             }
         }
@@ -410,23 +703,6 @@ impl IndexManager {
         entries
     }
 
-    /// Debug print first few entries (only for bucket 0)
-    fn debug_print_entries(entries: &[IndexEntry], id: u8) {
-        if !entries.is_empty() && id == 0 {
-            eprintln!("DEBUG: Index {id:02x} first 3 entries (before sort):");
-            for (i, entry) in entries.iter().take(3).enumerate() {
-                eprintln!(
-                    "  {}: key={}, archive={}, offset={}, size={}",
-                    i,
-                    hex::encode(entry.key),
-                    entry.archive_id(),
-                    entry.archive_offset(),
-                    entry.size
-                );
-            }
-        }
-    }
-
     /// Load a specific index file (V2 format with guarded blocks)
     ///
     /// Reads the sorted section, then attempts to parse the update section
@@ -452,9 +728,6 @@ impl IndexManager {
 
         // Parse entries from raw data
         let mut entries = Self::parse_entries(&entry_data, &header, entry_size);
-
-        // Debug output for first bucket
-        Self::debug_print_entries(&entries, id);
 
         // Sort entries by key for binary search
         entries.sort_by_key(|e| e.key);
@@ -497,9 +770,52 @@ impl IndexManager {
         self.indices.insert(
             id,
             IndexFile {
+                version: IndexVersion::V7,
                 header,
                 entries,
                 update_section,
+            },
+        );
+
+        Ok(())
+    }
+
+    /// Load a V5 index file (flat 48-byte header, two entry blocks, no update section)
+    ///
+    /// # Errors
+    ///
+    /// Returns error if file cannot be opened, read, or parsed
+    pub fn load_v5_index(&mut self, id: u8, path: &Path) -> Result<()> {
+        let data = std::fs::read(path)
+            .map_err(|e| StorageError::Index(format!("Failed to read V5 index: {e}")))?;
+
+        let header = read_v5_index_header(&data)?;
+        let mut entries = load_v5_entries(&data, &header)?;
+
+        entries.sort_by_key(|e| e.key);
+
+        debug!("Loaded {} entries from V5 index {:02x}", entries.len(), id);
+
+        // Create a placeholder V7 header for compatibility with lookup/save code
+        let compat_header = IndexHeader {
+            data_size: 0,
+            data_hash: 0,
+            version: 5,
+            bucket: header.bucket_index,
+            unused: 0,
+            length_size: header.encoded_size_length,
+            location_size: header.storage_offset_length,
+            key_size: header.ekey_length,
+            segment_bits: header.file_offset_bits,
+        };
+
+        self.indices.insert(
+            id,
+            IndexFile {
+                version: IndexVersion::V5,
+                header: compat_header,
+                entries,
+                update_section: UpdateSection::new(),
             },
         );
 
@@ -591,6 +907,7 @@ impl IndexManager {
 
         // Ensure bucket exists
         self.indices.entry(index_id).or_insert_with(|| IndexFile {
+            version: IndexVersion::V7,
             header: IndexHeader {
                 data_size: 16,
                 data_hash: 0,
@@ -1718,6 +2035,310 @@ mod tests {
         assert_eq!(entry2.archive_id(), 2);
         assert_eq!(entry2.archive_offset(), 0x2000);
         assert_eq!(entry2.size, 2048);
+    }
+
+    // =========================================================================
+    // V5 index tests
+    // =========================================================================
+
+    /// Build a valid V5 header as raw bytes. Helper for V5 tests.
+    fn build_v5_header(
+        bucket: u8,
+        field_8: u64,
+        ekey_count1: u32,
+        ekey_count2: u32,
+        block1_data: &[u8],
+        block2_data: &[u8],
+    ) -> Vec<u8> {
+        use cascette_crypto::jenkins::hashlittle as jh;
+
+        let mut hdr = vec![0u8; V5_HEADER_SIZE];
+        // index_version = 5 (LE u16)
+        hdr[0..2].copy_from_slice(&5u16.to_le_bytes());
+        // bucket_index
+        hdr[2] = bucket;
+        // padding
+        hdr[3] = 0;
+        // field_4
+        hdr[4..8].copy_from_slice(&0u32.to_le_bytes());
+        // field_8
+        hdr[8..16].copy_from_slice(&field_8.to_le_bytes());
+        // segment_size
+        hdr[16..24].copy_from_slice(&(1u64 << 30).to_le_bytes());
+        // encoded_size_length
+        hdr[0x18] = 4;
+        // storage_offset_length
+        hdr[0x19] = 5;
+        // ekey_length
+        hdr[0x1A] = 9;
+        // file_offset_bits
+        hdr[0x1B] = 30;
+        // ekey_count1
+        hdr[0x1C..0x20].copy_from_slice(&ekey_count1.to_le_bytes());
+        // ekey_count2
+        hdr[0x20..0x24].copy_from_slice(&ekey_count2.to_le_bytes());
+        // keys_hash1
+        hdr[0x24..0x28].copy_from_slice(&jh(block1_data, 0).to_le_bytes());
+        // keys_hash2
+        hdr[0x28..0x2C].copy_from_slice(&jh(block2_data, 0).to_le_bytes());
+        // header_hash: zero the field, compute, then store
+        hdr[0x2C..0x30].copy_from_slice(&[0; 4]);
+        let header_hash = jh(&hdr, 0);
+        hdr[0x2C..0x30].copy_from_slice(&header_hash.to_le_bytes());
+
+        hdr
+    }
+
+    /// Serialize an IndexEntry to 18 bytes (BE key+location, LE size).
+    fn entry_to_bytes(entry: &IndexEntry) -> Vec<u8> {
+        let mut data = Vec::new();
+        let mut cursor = Cursor::new(&mut data);
+        entry
+            .write_be(&mut cursor)
+            .expect("IndexEntry serialization should succeed");
+        data
+    }
+
+    #[test]
+    fn test_v5_parse_v5_index_filename() {
+        // Valid filenames
+        assert_eq!(parse_v5_index_filename("data.i0a"), Some((0, 0x0a)));
+        assert_eq!(parse_v5_index_filename("data.iff"), Some((0x0f, 0x0f)));
+        assert_eq!(parse_v5_index_filename("data.i00"), Some((0, 0)));
+        assert_eq!(parse_v5_index_filename("data.i5c"), Some((5, 0x0c)));
+
+        // Invalid filenames
+        assert_eq!(parse_v5_index_filename("data.idx"), None); // 3 chars after prefix
+        assert_eq!(parse_v5_index_filename("data.i0"), None); // too short
+        assert_eq!(parse_v5_index_filename("data.i0ag"), None); // too long
+        assert_eq!(parse_v5_index_filename("foo.i0a"), None); // wrong prefix
+        assert_eq!(parse_v5_index_filename("000000000a.idx"), None); // V7 format
+        assert_eq!(parse_v5_index_filename("data.ixz"), None); // invalid hex
+    }
+
+    #[test]
+    fn test_v5_header_parse() {
+        let block1: Vec<u8> = vec![0xAA; 18]; // 1 entry block
+        let block2: Vec<u8> = vec![0xBB; 18]; // 1 entry block
+        let hdr = build_v5_header(3, 0x42, 1, 1, &block1, &block2);
+
+        let parsed = read_v5_index_header(&hdr).expect("V5 header parse should succeed");
+
+        assert_eq!(parsed.index_version, 5);
+        assert_eq!(parsed.bucket_index, 3);
+        assert_eq!(parsed.field_8, 0x42);
+        assert_eq!(parsed.encoded_size_length, 4);
+        assert_eq!(parsed.storage_offset_length, 5);
+        assert_eq!(parsed.ekey_length, 9);
+        assert_eq!(parsed.ekey_count1, 1);
+        assert_eq!(parsed.ekey_count2, 1);
+    }
+
+    #[test]
+    fn test_v5_header_hash_validation() {
+        let block1: Vec<u8> = vec![];
+        let block2: Vec<u8> = vec![];
+        let hdr = build_v5_header(0, 1, 0, 0, &block1, &block2);
+
+        // Correct hash passes
+        assert!(read_v5_index_header(&hdr).is_ok());
+
+        // Corrupt the header hash
+        let mut bad = hdr;
+        bad[0x2C] ^= 0xFF;
+        let err = read_v5_index_header(&bad).expect_err("Should fail with corrupt hash");
+        assert!(
+            err.to_string().contains("header hash mismatch"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn test_v5_field_validation() {
+        let empty: Vec<u8> = vec![];
+
+        // Wrong version (set to 7 instead of 5)
+        let mut hdr = build_v5_header(0, 1, 0, 0, &empty, &empty);
+        hdr[0..2].copy_from_slice(&7u16.to_le_bytes());
+        assert!(
+            read_v5_index_header(&hdr)
+                .expect_err("wrong version")
+                .to_string()
+                .contains("version mismatch")
+        );
+
+        // Zero field_8
+        let mut hdr = vec![0u8; V5_HEADER_SIZE];
+        hdr[0..2].copy_from_slice(&5u16.to_le_bytes());
+        // field_8 stays zero
+        hdr[0x18] = 4;
+        hdr[0x19] = 5;
+        hdr[0x1A] = 9;
+        assert!(
+            read_v5_index_header(&hdr)
+                .expect_err("zero field_8")
+                .to_string()
+                .contains("field_8 must be non-zero")
+        );
+
+        // Wrong encoded_size_length (3 instead of 4)
+        let mut hdr = build_v5_header(0, 1, 0, 0, &empty, &empty);
+        hdr[0x18] = 3;
+        // Re-compute header hash after modification
+        hdr[0x2C..0x30].copy_from_slice(&[0; 4]);
+        let hash = hashlittle(&hdr, 0);
+        hdr[0x2C..0x30].copy_from_slice(&hash.to_le_bytes());
+        assert!(
+            read_v5_index_header(&hdr)
+                .expect_err("wrong encoded_size_length")
+                .to_string()
+                .contains("encoded_size_length must be 4")
+        );
+
+        // Wrong storage_offset_length (6 instead of 5)
+        let mut hdr = build_v5_header(0, 1, 0, 0, &empty, &empty);
+        hdr[0x19] = 6;
+        hdr[0x2C..0x30].copy_from_slice(&[0; 4]);
+        let hash = hashlittle(&hdr, 0);
+        hdr[0x2C..0x30].copy_from_slice(&hash.to_le_bytes());
+        assert!(
+            read_v5_index_header(&hdr)
+                .expect_err("wrong storage_offset_length")
+                .to_string()
+                .contains("storage_offset_length must be 5")
+        );
+
+        // Wrong ekey_length (16 instead of 9)
+        let mut hdr = build_v5_header(0, 1, 0, 0, &empty, &empty);
+        hdr[0x1A] = 16;
+        hdr[0x2C..0x30].copy_from_slice(&[0; 4]);
+        let hash = hashlittle(&hdr, 0);
+        hdr[0x2C..0x30].copy_from_slice(&hash.to_le_bytes());
+        assert!(
+            read_v5_index_header(&hdr)
+                .expect_err("wrong ekey_length")
+                .to_string()
+                .contains("ekey_length must be 9")
+        );
+    }
+
+    #[test]
+    fn test_v5_entry_blocks() {
+        let e1 = IndexEntry::new([1, 2, 3, 4, 5, 6, 7, 8, 9], 1, 0x100, 512);
+        let e2 = IndexEntry::new([0xA, 0xB, 0xC, 0xD, 0xE, 0xF, 1, 2, 3], 2, 0x200, 1024);
+        let e3 = IndexEntry::new(
+            [0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99],
+            3,
+            0x300,
+            2048,
+        );
+
+        let block1_data: Vec<u8> = [entry_to_bytes(&e1), entry_to_bytes(&e2)].concat();
+        let block2_data: Vec<u8> = entry_to_bytes(&e3);
+
+        let hdr = build_v5_header(5, 1, 2, 1, &block1_data, &block2_data);
+
+        let mut file_data = hdr;
+        file_data.extend_from_slice(&block1_data);
+        file_data.extend_from_slice(&block2_data);
+
+        let header = read_v5_index_header(&file_data).expect("header parse should succeed");
+        let entries = load_v5_entries(&file_data, &header).expect("entry load should succeed");
+
+        assert_eq!(entries.len(), 3);
+        assert_eq!(entries[0].key, e1.key);
+        assert_eq!(entries[0].archive_id(), 1);
+        assert_eq!(entries[0].size, 512);
+        assert_eq!(entries[1].key, e2.key);
+        assert_eq!(entries[2].key, e3.key);
+        assert_eq!(entries[2].size, 2048);
+    }
+
+    #[test]
+    fn test_v5_block_hash_validation() {
+        let e1 = IndexEntry::new([1, 2, 3, 4, 5, 6, 7, 8, 9], 1, 0x100, 512);
+        let block1_data = entry_to_bytes(&e1);
+        let block2_data: Vec<u8> = vec![];
+
+        let hdr = build_v5_header(0, 1, 1, 0, &block1_data, &block2_data);
+        let mut file_data = hdr;
+        file_data.extend_from_slice(&block1_data);
+
+        // Valid data passes
+        let header = read_v5_index_header(&file_data).expect("header should parse");
+        assert!(load_v5_entries(&file_data, &header).is_ok());
+
+        // Corrupt one entry byte
+        let corrupt_offset = V5_HEADER_SIZE + 2;
+        file_data[corrupt_offset] ^= 0xFF;
+        let err =
+            load_v5_entries(&file_data, &header).expect_err("should fail with corrupt block data");
+        assert!(
+            err.to_string().contains("block 1 hash mismatch"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn test_v5_load_roundtrip() {
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+
+        // Build V5 entries
+        let e1 = IndexEntry::new(
+            [0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF, 0x00],
+            1,
+            0x1000,
+            1024,
+        );
+        let e2 = IndexEntry::new(
+            [0xFE, 0xDC, 0xBA, 0x98, 0x76, 0x54, 0x32, 0x10, 0xFE],
+            2,
+            0x2000,
+            2048,
+        );
+
+        let block1_data: Vec<u8> = [entry_to_bytes(&e1), entry_to_bytes(&e2)].concat();
+        let block2_data: Vec<u8> = vec![];
+
+        // Use bucket 5 so the filename is data.i50
+        let hdr = build_v5_header(5, 1, 2, 0, &block1_data, &block2_data);
+        let mut file_data = hdr;
+        file_data.extend_from_slice(&block1_data);
+
+        // Write to data.i50 (bucket 5, version 0)
+        let path = temp_dir.path().join("data.i50");
+        std::fs::write(&path, &file_data).expect("write V5 file");
+
+        // Load via IndexManager
+        let mut manager = IndexManager::new(temp_dir.path());
+        manager
+            .load_v5_index(5, &path)
+            .expect("load_v5_index should succeed");
+
+        // Verify entries are accessible via lookup
+        // The bucket for lookup is determined by the key's XOR hash, not
+        // the file bucket. So we search by iterating entries instead.
+        let stats = manager.stats();
+        assert_eq!(stats.total_entries, 2);
+
+        // Verify both entries exist in the index
+        let all_entries: Vec<_> = manager.iter_entries().collect();
+        assert_eq!(all_entries.len(), 2);
+
+        // Verify entry data
+        let found_e1 = all_entries.iter().find(|(_, e)| e.key == e1.key);
+        assert!(found_e1.is_some(), "entry e1 should be found");
+        let (_, found) = found_e1.expect("just checked");
+        assert_eq!(found.archive_id(), 1);
+        assert_eq!(found.archive_offset(), 0x1000);
+        assert_eq!(found.size, 1024);
+
+        let found_e2 = all_entries.iter().find(|(_, e)| e.key == e2.key);
+        assert!(found_e2.is_some(), "entry e2 should be found");
+        let (_, found) = found_e2.expect("just checked");
+        assert_eq!(found.archive_id(), 2);
+        assert_eq!(found.archive_offset(), 0x2000);
+        assert_eq!(found.size, 2048);
     }
 }
 

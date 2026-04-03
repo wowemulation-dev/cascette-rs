@@ -446,6 +446,7 @@ versions use values in the 5-9 range for non-version purposes.
 ### Block Header Dispatch
 
 The current dispatch is verified correct:
+
 - Plain V1 files (no MFST/TSFM magic) use the 12-byte header (content_flags
   first)
 - All MFST/TSFM files (including Classic Era) use the 17-byte header

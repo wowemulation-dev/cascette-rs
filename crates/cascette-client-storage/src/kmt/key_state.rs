@@ -240,8 +240,8 @@ impl ResidencyEntry {
 
     /// Compute the hash guard from serialized entry bytes.
     ///
-    /// Agent.exe: `JenkinsHashLittle2(&entry[4], 0x21, 0) | 0x80000000`
-    /// Hashes bytes [4..37] (33 bytes: ekey + span + update_type) with seed 0.
+    /// Hashes bytes [4..37] (33 bytes: ekey + span + update_type) with seed 0,
+    /// then sets bit 31: `hashlittle(entry[4..37], 0) | 0x80000000`.
     pub fn compute_hash_guard(entry_bytes: &[u8; RESIDENCY_ENTRY_SIZE]) -> u32 {
         hashlittle(&entry_bytes[4..37], 0) | 0x8000_0000
     }

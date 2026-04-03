@@ -49,3 +49,31 @@ default = []
 
 [lints]
 workspace = true
+
+[[example]]
+name = "parse_build_config"
+path = "examples/parse_build_config.rs"
+
+[[example]]
+name = "blte_encoding"
+path = "examples/blte_encoding.rs"
+
+[[example]]
+name = "manifests"
+path = "examples/manifests.rs"
+
+[[example]]
+name = "encoding_table"
+path = "examples/encoding_table.rs"
+
+[[example]]
+name = "root_file"
+path = "examples/root_file.rs"
+
+[[example]]
+name = "archive_index"
+path = "examples/archive_index.rs"
+
+[[example]]
+name = "binary_patches"
+path = "examples/binary_patches.rs"

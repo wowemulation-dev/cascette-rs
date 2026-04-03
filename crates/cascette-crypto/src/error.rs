@@ -30,4 +30,8 @@ pub enum CryptoError {
     /// Invalid key format
     #[error("Invalid key format: {0}")]
     InvalidKeyFormat(String),
+
+    /// OS CSPRNG failed to produce random bytes
+    #[error("Random generation failed: {0}")]
+    RandomGenerationFailed(String),
 }

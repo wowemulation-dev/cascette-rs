@@ -69,8 +69,7 @@ struct PatchArchiveHeader {  // 10 bytes, big-endian
 
 **Flags**:
 
-- **Bit 0 (0x01)**: Plain data mode (informational, Agent.exe logs but
-  does not reject)
+- **Bit 0 (0x01)**: Plain data mode (informational, logged but not rejected)
 - **Bit 1 (0x02)**: Extended header present with encoding info. All
   known CDN patch manifests have this flag set.
 
@@ -103,8 +102,7 @@ struct BlockTableEntry {  // file_key_size + 20 bytes per entry
 };
 ```
 
-The block table is sorted by `last_file_ckey`. Agent.exe validates sort
-order using `_memcmp` during parsing.
+The block table is sorted by `last_file_ckey`. Sort order is validated during parsing.
 
 ### Block Data
 
@@ -259,7 +257,6 @@ while let Some((diff_size, extra_size, seek_offset)) = control_entries.next()? {
 ### Format Characteristics
 
 - **Little-Endian Header**: All header fields use little-endian byte order
-  (verified against Agent.exe `tact::BsPatch::ParseHeader` at 0x6fbd1c)
 
 - **Signed Integers**: Control block uses signed 64-bit little-endian integers
   for sizes and offsets

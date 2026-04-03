@@ -4,6 +4,8 @@ use crate::error::ServerError;
 use crate::server::AppState;
 use axum::Router;
 use std::net::SocketAddr;
+#[cfg(feature = "tls")]
+use std::path::Path;
 use std::sync::Arc;
 use tower_http::compression::CompressionLayer;
 use tower_http::cors::CorsLayer;
@@ -46,6 +48,42 @@ pub async fn start_server(bind_addr: SocketAddr, state: Arc<AppState>) -> Result
     axum::serve(listener, app)
         .await
         .map_err(|e| ServerError::Shutdown(format!("HTTP server error: {e}")))?;
+
+    Ok(())
+}
+
+/// Start HTTPS server with TLS using rustls (ring provider).
+///
+/// Loads the certificate chain and private key from PEM files, initialises
+/// the ring-backed rustls provider, and serves using [`axum_server`].
+///
+/// # Errors
+///
+/// Returns `ServerError` if TLS configuration or server binding fails.
+#[cfg(feature = "tls")]
+pub async fn start_tls_server(
+    bind_addr: SocketAddr,
+    state: Arc<AppState>,
+    cert_path: &Path,
+    key_path: &Path,
+) -> Result<(), ServerError> {
+    use axum_server::tls_rustls::RustlsConfig;
+
+    // Install the ring crypto provider once per process (idempotent if already installed).
+    let _ = rustls::crypto::ring::default_provider().install_default();
+
+    let tls_config = RustlsConfig::from_pem_file(cert_path, key_path)
+        .await
+        .map_err(|e| ServerError::Tls(format!("Failed to load TLS cert/key: {e}")))?;
+
+    let app = create_router(state);
+
+    tracing::info!("HTTPS server listening on {}", bind_addr);
+
+    axum_server::bind_rustls(bind_addr, tls_config)
+        .serve(app.into_make_service())
+        .await
+        .map_err(|e| ServerError::Tls(format!("HTTPS server error: {e}")))?;
 
     Ok(())
 }

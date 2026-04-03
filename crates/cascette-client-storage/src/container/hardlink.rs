@@ -478,13 +478,8 @@ impl HardLinkContainer {
 
     /// Create a hard link from `source` to the trie path derived from `key`.
     ///
-    /// CASC `tact::HardLinkContainer::CreateLink`:
     /// - Rejects zero keys (returns error code 3)
-    /// - Delegates to `casc::TrieDirectory::CreateLink`
-    /// - `casc::HardLink::CreateLink` wraps `CreateHardLinkA`
-    ///
-    /// The 3-retry delete pattern is from
-    /// `tact::VerifyHardLinkFileState::Execute` with 5-second delays.
+    /// - Retries up to 3 times with 5-second delays on failure
     pub fn create_link(&self, key: &[u8; 16], source: &Path, destination: &Path) -> Result<()> {
         if !self.supported {
             return Err(StorageError::Config(

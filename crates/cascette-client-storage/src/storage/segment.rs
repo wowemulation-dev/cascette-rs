@@ -99,6 +99,16 @@ impl SegmentHeader {
         &self.headers[bucket as usize & 0x0F]
     }
 
+    /// Set the reconstruction header for a specific bucket.
+    pub fn set_bucket_header(&mut self, bucket: u8, header: LocalHeader) {
+        self.headers[(bucket as usize) & 0x0F] = header;
+    }
+
+    /// Get a mutable reference to the reconstruction header for a specific bucket.
+    pub fn get_bucket_header(&self, bucket: u8) -> &LocalHeader {
+        &self.headers[(bucket as usize) & 0x0F]
+    }
+
     /// Get the encoding key for a specific bucket's reconstruction header.
     ///
     /// Returns the original (non-reversed) key.
@@ -245,6 +255,120 @@ pub fn decode_storage_offset(archive_id: u16, archive_offset: u32) -> (u16, u32)
     (archive_id, archive_offset)
 }
 
+// ---------------------------------------------------------------------------
+// Free space tracking
+// ---------------------------------------------------------------------------
+
+/// A contiguous free byte range within a segment.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FreeSpan {
+    /// Byte offset within the segment's data file.
+    pub offset: u32,
+    /// Length of the free range in bytes.
+    pub length: u32,
+}
+
+impl FreeSpan {
+    /// End offset (exclusive).
+    pub fn end(&self) -> u32 {
+        self.offset.saturating_add(self.length)
+    }
+}
+
+/// Per-segment free list with coalescing insert and first-fit allocation.
+///
+/// Spans are kept sorted by offset. Adjacent or overlapping spans are
+/// merged on insert to prevent fragmentation.
+#[derive(Debug, Clone, Default)]
+pub struct FreeList {
+    spans: Vec<FreeSpan>,
+}
+
+impl FreeList {
+    /// Create an empty free list.
+    pub fn new() -> Self {
+        Self { spans: Vec::new() }
+    }
+
+    /// Number of tracked free spans.
+    pub fn span_count(&self) -> usize {
+        self.spans.len()
+    }
+
+    /// Total free bytes across all spans.
+    pub fn total_free(&self) -> u64 {
+        self.spans.iter().map(|s| u64::from(s.length)).sum()
+    }
+
+    /// Insert a free span, coalescing with adjacent or overlapping neighbors.
+    pub fn insert(&mut self, offset: u32, length: u32) {
+        if length == 0 {
+            return;
+        }
+
+        let new_end = offset.saturating_add(length);
+
+        // Find insertion point (sorted by offset).
+        let pos = self.spans.partition_point(|s| s.offset < offset);
+
+        // Determine merge range: which existing spans overlap or touch the new one.
+        let mut merge_start = pos;
+        let mut merge_end = pos;
+
+        // Check left neighbor
+        if merge_start > 0 && self.spans[merge_start - 1].end() >= offset {
+            merge_start -= 1;
+        }
+
+        // Check right neighbors
+        while merge_end < self.spans.len() && self.spans[merge_end].offset <= new_end {
+            merge_end += 1;
+        }
+
+        if merge_start < merge_end {
+            // Merge: compute the union of all overlapping/adjacent spans + new span.
+            let combined_offset = self.spans[merge_start].offset.min(offset);
+            let combined_end = self.spans[merge_end - 1].end().max(new_end);
+            self.spans[merge_start] = FreeSpan {
+                offset: combined_offset,
+                length: combined_end - combined_offset,
+            };
+            // Remove the spans that were merged (all except merge_start).
+            if merge_end - merge_start > 1 {
+                self.spans.drain(merge_start + 1..merge_end);
+            }
+        } else {
+            // No overlap: insert at position.
+            self.spans.insert(pos, FreeSpan { offset, length });
+        }
+    }
+
+    /// Try to allocate `size` bytes using first-fit.
+    ///
+    /// Returns the offset of the allocated block, or `None` if no span
+    /// is large enough.
+    pub fn allocate(&mut self, size: u32) -> Option<u32> {
+        for i in 0..self.spans.len() {
+            if self.spans[i].length >= size {
+                let offset = self.spans[i].offset;
+                if self.spans[i].length == size {
+                    self.spans.remove(i);
+                } else {
+                    self.spans[i].offset += size;
+                    self.spans[i].length -= size;
+                }
+                return Some(offset);
+            }
+        }
+        None
+    }
+
+    /// Get the free spans (for inspection/testing).
+    pub fn spans(&self) -> &[FreeSpan] {
+        &self.spans
+    }
+}
+
 /// Allocation result from `SegmentAllocator::allocate`.
 #[derive(Debug, Clone, Copy)]
 pub struct Allocation {
@@ -262,6 +386,8 @@ pub struct Allocation {
 pub struct SegmentAllocator {
     /// All known segments, indexed by segment index.
     segments: Vec<SegmentInfo>,
+    /// Per-segment free lists for space reclamation.
+    free_lists: Vec<FreeList>,
     /// Per-bucket RwLock for concurrent KMT access.
     ///
     /// Each bucket's index file can be flushed independently.
@@ -279,6 +405,7 @@ impl SegmentAllocator {
     pub fn new(base_path: std::path::PathBuf, path_hash: [u8; 16], max_segments: u16) -> Self {
         Self {
             segments: Vec::new(),
+            free_lists: Vec::new(),
             bucket_locks: std::array::from_fn(|_| parking_lot::RwLock::new(())),
             max_segments: max_segments.min(MAX_SEGMENTS),
             path_hash,
@@ -346,12 +473,36 @@ impl SegmentAllocator {
 
     /// Allocate space in a segment for `size` bytes.
     ///
+    /// When `use_free_list` is true, free lists are checked first (first-fit
+    /// across all segments) before falling back to bump allocation.
+    ///
     /// Strategy:
-    /// 1. Try thawed segments in order
-    /// 2. If none have space, create a new segment
-    /// 3. Returns error if MAX_SEGMENTS reached
-    pub fn allocate(&mut self, size: u64) -> crate::Result<Allocation> {
-        // Try existing thawed segments
+    /// 1. If `use_free_list`, try free lists across all segments
+    /// 2. Try thawed segments in order (bump allocation)
+    /// 3. If none have space, create a new segment
+    /// 4. Returns error if MAX_SEGMENTS reached
+    pub fn allocate(&mut self, size: u64, use_free_list: bool) -> crate::Result<Allocation> {
+        let size32 = u32::try_from(size).map_err(|_| {
+            crate::StorageError::Archive("allocation size exceeds u32 range".into())
+        })?;
+
+        // Try free lists first
+        if use_free_list {
+            for (idx, free_list) in self.free_lists.iter_mut().enumerate() {
+                if let Some(offset) = free_list.allocate(size32) {
+                    return Ok(Allocation {
+                        segment_index: u16::try_from(idx).map_err(|_| {
+                            crate::StorageError::Archive(
+                                "segment index exceeds u16 range".to_string(),
+                            )
+                        })?,
+                        file_offset: offset,
+                    });
+                }
+            }
+        }
+
+        // Try existing thawed segments (bump allocation)
         for info in &mut self.segments {
             if info.has_space_for(size) {
                 let offset = info.write_position;
@@ -394,6 +545,7 @@ impl SegmentAllocator {
         let offset = info.write_position;
         info.write_position += size;
         self.segments.push(info);
+        self.free_lists.push(FreeList::new());
 
         Ok(Allocation {
             segment_index: new_index,
@@ -401,6 +553,24 @@ impl SegmentAllocator {
                 crate::StorageError::Archive("segment offset exceeds u32 range".to_string())
             })?,
         })
+    }
+
+    /// Return a byte range to the free list for a given segment.
+    ///
+    /// The span will be coalesced with adjacent free spans automatically.
+    pub fn free_span(&mut self, segment_index: u16, offset: u32, length: u32) {
+        let idx = segment_index as usize;
+        // Grow free_lists to cover this segment index.
+        while self.free_lists.len() <= idx {
+            self.free_lists.push(FreeList::new());
+        }
+        self.free_lists[idx].insert(offset, length);
+        // TODO: sync free space table to shmem when shared memory is active
+    }
+
+    /// Get the free list for a segment (for inspection).
+    pub fn free_list(&self, segment_index: u16) -> Option<&FreeList> {
+        self.free_lists.get(segment_index as usize)
     }
 
     /// Freeze a segment (make it read-only).
@@ -616,12 +786,12 @@ mod tests {
         let mut alloc = SegmentAllocator::new(dir.path().to_path_buf(), path_hash, 10);
 
         // First allocation creates a new segment
-        let a1 = alloc.allocate(1024).expect("alloc1");
+        let a1 = alloc.allocate(1024, false).expect("alloc1");
         assert_eq!(a1.segment_index, 0);
         assert_eq!(a1.file_offset, SEGMENT_HEADER_SIZE as u32);
 
         // Second allocation in the same segment
-        let a2 = alloc.allocate(2048).expect("alloc2");
+        let a2 = alloc.allocate(2048, false).expect("alloc2");
         assert_eq!(a2.segment_index, 0);
         assert_eq!(a2.file_offset, SEGMENT_HEADER_SIZE as u32 + 1024);
 
@@ -637,11 +807,11 @@ mod tests {
 
         // Fill first segment almost completely
         let remaining = SEGMENT_SIZE - SEGMENT_HEADER_SIZE as u64;
-        let a1 = alloc.allocate(remaining).expect("alloc big");
+        let a1 = alloc.allocate(remaining, false).expect("alloc big");
         assert_eq!(a1.segment_index, 0);
 
         // Next allocation must create a new segment
-        let a2 = alloc.allocate(1024).expect("alloc overflow");
+        let a2 = alloc.allocate(1024, false).expect("alloc overflow");
         assert_eq!(a2.segment_index, 1);
         assert_eq!(a2.file_offset, SEGMENT_HEADER_SIZE as u32);
 
@@ -656,11 +826,11 @@ mod tests {
 
         // Fill two segments
         let remaining = SEGMENT_SIZE - SEGMENT_HEADER_SIZE as u64;
-        alloc.allocate(remaining).expect("seg0");
-        alloc.allocate(remaining).expect("seg1");
+        alloc.allocate(remaining, false).expect("seg0");
+        alloc.allocate(remaining, false).expect("seg1");
 
         // Third segment should fail
-        let result = alloc.allocate(1024);
+        let result = alloc.allocate(1024, false);
         assert!(result.is_err());
     }
 
@@ -670,7 +840,7 @@ mod tests {
         let path_hash = [0x12; 16];
         let mut alloc = SegmentAllocator::new(dir.path().to_path_buf(), path_hash, 10);
 
-        alloc.allocate(1024).expect("alloc");
+        alloc.allocate(1024, false).expect("alloc");
 
         // Segment 0 starts thawed
         assert_eq!(
@@ -687,7 +857,7 @@ mod tests {
 
         // Can't allocate in frozen segment
         // But there's space, so allocator creates segment 1
-        let a = alloc.allocate(512).expect("alloc after freeze");
+        let a = alloc.allocate(512, false).expect("alloc after freeze");
         assert_eq!(a.segment_index, 1);
 
         // Thaw segment 0
@@ -706,11 +876,11 @@ mod tests {
         // Create some segment files
         {
             let mut alloc = SegmentAllocator::new(dir.path().to_path_buf(), path_hash, 10);
-            alloc.allocate(1024).expect("alloc0");
+            alloc.allocate(1024, false).expect("alloc0");
             alloc
-                .allocate(SEGMENT_SIZE - SEGMENT_HEADER_SIZE as u64)
+                .allocate(SEGMENT_SIZE - SEGMENT_HEADER_SIZE as u64, false)
                 .expect("fill0");
-            alloc.allocate(2048).expect("alloc1");
+            alloc.allocate(2048, false).expect("alloc1");
         }
 
         // Reload
@@ -731,5 +901,214 @@ mod tests {
         let (seg2, off2) = decode_storage_offset(seg, off);
         assert_eq!(seg2, 42);
         assert_eq!(off2, 0x1234);
+    }
+
+    #[test]
+    fn test_set_bucket_header() {
+        let mut header = SegmentHeader::zeroed();
+        let key = [0xAA; 16];
+        let local = LocalHeader::new(key, 1000, 0);
+
+        header.set_bucket_header(5, local);
+
+        let stored = header.bucket_header(5);
+        assert_eq!(stored.original_encoding_key(), key);
+        assert_eq!(stored.size_with_header, 1000 + LOCAL_HEADER_SIZE as u32);
+    }
+
+    #[test]
+    fn test_set_bucket_header_masks_to_4_bits() {
+        let mut header = SegmentHeader::zeroed();
+        let key = [0xBB; 16];
+        let local = LocalHeader::new(key, 500, 0);
+
+        // bucket 0x13 should be masked to 0x03
+        header.set_bucket_header(0x13, local);
+
+        let stored = header.bucket_header(3);
+        assert_eq!(stored.original_encoding_key(), key);
+    }
+
+    #[test]
+    fn test_segment_header_checksums_valid_after_set() {
+        let mut header = SegmentHeader::zeroed();
+        let key = [0xCC; 16];
+        let base_offset = 0;
+        let local = LocalHeader::new(key, 2000, base_offset);
+
+        header.set_bucket_header(7, local);
+
+        let stored = header.bucket_header(7);
+        assert!(
+            stored.validate_checksums(base_offset),
+            "Jenkins and XOR checksums should be valid after set_bucket_header"
+        );
+    }
+
+    #[test]
+    fn test_multiple_set_bucket_headers_different_buckets() {
+        let mut header = SegmentHeader::zeroed();
+
+        let key_a = [0x11; 16];
+        let key_b = [0x22; 16];
+
+        header.set_bucket_header(2, LocalHeader::new(key_a, 100, 0));
+        header.set_bucket_header(9, LocalHeader::new(key_b, 200, 0));
+
+        // Both should be present
+        assert_eq!(header.bucket_header(2).original_encoding_key(), key_a);
+        assert_eq!(header.bucket_header(9).original_encoding_key(), key_b);
+
+        // Round-trip through bytes should preserve both
+        let bytes = header.to_bytes();
+        let parsed = SegmentHeader::from_bytes(&bytes).expect("parse");
+
+        assert_eq!(parsed.bucket_header(2).original_encoding_key(), key_a);
+        assert_eq!(parsed.bucket_header(9).original_encoding_key(), key_b);
+    }
+
+    // --- Free list tests ---
+
+    #[test]
+    fn test_free_list_insert_and_allocate() {
+        let mut fl = FreeList::new();
+        fl.insert(100, 50);
+        assert_eq!(fl.span_count(), 1);
+        assert_eq!(fl.total_free(), 50);
+
+        // First-fit allocation
+        let offset = fl.allocate(30).expect("alloc 30");
+        assert_eq!(offset, 100);
+        assert_eq!(fl.total_free(), 20);
+
+        // Remaining span starts at 130, length 20
+        assert_eq!(fl.spans()[0].offset, 130);
+        assert_eq!(fl.spans()[0].length, 20);
+    }
+
+    #[test]
+    fn test_free_list_exact_fit() {
+        let mut fl = FreeList::new();
+        fl.insert(200, 100);
+        let offset = fl.allocate(100).expect("exact fit");
+        assert_eq!(offset, 200);
+        assert_eq!(fl.span_count(), 0);
+    }
+
+    #[test]
+    fn test_free_list_no_fit() {
+        let mut fl = FreeList::new();
+        fl.insert(0, 10);
+        assert!(fl.allocate(20).is_none());
+    }
+
+    #[test]
+    fn test_free_list_coalesce_adjacent() {
+        let mut fl = FreeList::new();
+        fl.insert(100, 50); // [100..150)
+        fl.insert(150, 50); // [150..200) — adjacent to first
+
+        // Should coalesce into one span [100..200)
+        assert_eq!(fl.span_count(), 1);
+        assert_eq!(fl.spans()[0].offset, 100);
+        assert_eq!(fl.spans()[0].length, 100);
+    }
+
+    #[test]
+    fn test_free_list_coalesce_overlapping() {
+        let mut fl = FreeList::new();
+        fl.insert(100, 60); // [100..160)
+        fl.insert(140, 60); // [140..200) — overlaps
+
+        assert_eq!(fl.span_count(), 1);
+        assert_eq!(fl.spans()[0].offset, 100);
+        assert_eq!(fl.spans()[0].length, 100);
+    }
+
+    #[test]
+    fn test_free_list_coalesce_bridge() {
+        let mut fl = FreeList::new();
+        fl.insert(100, 20); // [100..120)
+        fl.insert(200, 20); // [200..220)
+        assert_eq!(fl.span_count(), 2);
+
+        // Insert span that bridges both: [120..200)
+        fl.insert(120, 80);
+        assert_eq!(fl.span_count(), 1);
+        assert_eq!(fl.spans()[0].offset, 100);
+        assert_eq!(fl.spans()[0].length, 120);
+    }
+
+    #[test]
+    fn test_free_list_sorted_order() {
+        let mut fl = FreeList::new();
+        fl.insert(300, 10);
+        fl.insert(100, 10);
+        fl.insert(200, 10);
+
+        assert_eq!(fl.span_count(), 3);
+        assert_eq!(fl.spans()[0].offset, 100);
+        assert_eq!(fl.spans()[1].offset, 200);
+        assert_eq!(fl.spans()[2].offset, 300);
+    }
+
+    #[test]
+    fn test_free_list_zero_length_ignored() {
+        let mut fl = FreeList::new();
+        fl.insert(100, 0);
+        assert_eq!(fl.span_count(), 0);
+    }
+
+    #[test]
+    fn test_segment_allocator_free_span() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path_hash = [0xAB; 16];
+        let mut alloc = SegmentAllocator::new(dir.path().to_path_buf(), path_hash, 10);
+
+        // Allocate to create segment 0
+        let a = alloc.allocate(1024, false).expect("alloc");
+        assert_eq!(a.segment_index, 0);
+
+        // Free the allocated span
+        alloc.free_span(0, a.file_offset, 1024);
+
+        let fl = alloc.free_list(0).expect("free list for seg 0");
+        assert_eq!(fl.total_free(), 1024);
+    }
+
+    #[test]
+    fn test_segment_allocator_allocate_from_free_list() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path_hash = [0xCD; 16];
+        let mut alloc = SegmentAllocator::new(dir.path().to_path_buf(), path_hash, 10);
+
+        // Allocate and free a block
+        let a = alloc.allocate(2048, false).expect("alloc");
+        alloc.free_span(a.segment_index, a.file_offset, 2048);
+
+        // Allocate with free list enabled — should reuse the freed block
+        let b = alloc.allocate(1024, true).expect("alloc from free list");
+        assert_eq!(b.segment_index, a.segment_index);
+        assert_eq!(b.file_offset, a.file_offset);
+
+        // Free list should have remaining 1024 bytes
+        let fl = alloc.free_list(0).expect("free list");
+        assert_eq!(fl.total_free(), 1024);
+    }
+
+    #[test]
+    fn test_segment_allocator_allocate_falls_through_when_free_list_too_small() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path_hash = [0xEF; 16];
+        let mut alloc = SegmentAllocator::new(dir.path().to_path_buf(), path_hash, 10);
+
+        // Allocate and free a small block
+        let a = alloc.allocate(100, false).expect("alloc");
+        alloc.free_span(a.segment_index, a.file_offset, 100);
+
+        // Request more than the free span — should fall through to bump allocation
+        let b = alloc.allocate(200, true).expect("bump alloc");
+        // Should be placed after the first allocation's bump position
+        assert!(b.file_offset > a.file_offset);
     }
 }

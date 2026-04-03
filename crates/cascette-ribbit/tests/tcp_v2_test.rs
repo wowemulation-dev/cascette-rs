@@ -77,7 +77,7 @@ async fn start_test_server() -> (SocketAddr, Arc<AppState>) {
                 {
                     let command = command.trim();
                     if let Ok(response) =
-                        cascette_ribbit::tcp::handlers::handle_command(command, &state)
+                        cascette_ribbit::tcp::handlers::handle_command(command, &state).await
                     {
                         let socket = reader.into_inner();
                         let _ = socket.write_all(response.as_bytes()).await;
@@ -170,11 +170,12 @@ async fn test_tcp_v2_versions_command() {
     assert!(response.contains("42597"));
     assert!(response.contains("1.14.2.42597"));
 
-    // Last line should be sequence number
-    let last_line = lines
-        .last()
-        .expect("Response should have at least one line for sequence number");
-    assert!(last_line.starts_with("## seqn = "));
+    // Sequence number must be on line 2 (between header and data rows)
+    assert!(
+        lines[1].starts_with("## seqn = "),
+        "seqn must appear between header and data rows, got: {}",
+        lines[1]
+    );
 }
 
 #[tokio::test]

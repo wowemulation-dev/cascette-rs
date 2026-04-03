@@ -14,8 +14,7 @@ pub const ZBSDIFF1_SIGNATURE: u64 = u64::from_le_bytes(*b"ZBSDIFF1");
 
 /// ZBSDIFF1 header structure (32 bytes, little-endian)
 ///
-/// All integer fields are little-endian, matching the original bsdiff format
-/// and verified against Agent.exe `tact::BsPatch::ParseHeader` at 0x6fbd1c.
+/// All integer fields are little-endian, matching the original bsdiff format.
 #[derive(Debug, Clone, PartialEq, Eq, BinRead, BinWrite)]
 #[br(little)]
 #[bw(little)]

@@ -39,10 +39,7 @@ pub struct EncodingHeader {
     /// Number of encoding key pages
     pub ekey_page_count: u32,
 
-    /// Flags field at offset 0x11 (must be 0)
-    ///
-    /// Agent.exe (`tact::EncodingTable::ParseHeader` at 0x6a23e6) validates
-    /// this field equals 0 and rejects the encoding table otherwise.
+    /// Flags field at offset 0x11 (must be 0).
     pub flags: u8,
 
     /// Size of `ESpec` block at end of file
@@ -66,7 +63,7 @@ impl EncodingHeader {
         }
     }
 
-    /// Validate header fields against Agent.exe constraints
+    /// Validate header fields
     pub fn validate(&self) -> Result<(), EncodingError> {
         if self.version != 1 {
             return Err(EncodingError::UnsupportedVersion(self.version));
@@ -181,8 +178,6 @@ mod tests {
 
     #[test]
     fn test_nonzero_flags_rejected() {
-        // Agent.exe (tact::EncodingTable::ParseHeader at 0x6a23e6) requires
-        // the flags byte at offset 0x11 to be exactly 0.
         let mut h = valid_header();
         h.flags = 1;
         assert!(matches!(h.validate(), Err(EncodingError::InvalidFlags(1))));

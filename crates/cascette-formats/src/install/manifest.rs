@@ -1,10 +1,12 @@
 //! Install manifest main structure and parsing logic
 
+use std::collections::HashMap;
+
 use crate::install::{
     entry::InstallFileEntry,
     error::{InstallError, Result},
     header::InstallHeader,
-    tag::InstallTag,
+    tag::{InstallTag, TagType},
 };
 use binrw::{BinRead, BinWrite, io::Cursor};
 
@@ -198,6 +200,70 @@ impl InstallManifest {
             .iter()
             .enumerate()
             .filter(|(index, _)| tags.iter().any(|tag| tag.has_file(*index)))
+            .collect()
+    }
+
+    /// Get files matching a tag query with OR-within-group, AND-between-groups logic.
+    ///
+    /// Tag query logic:
+    /// 1. Tags are grouped by `TagType` (Platform, Architecture, Locale, etc.)
+    /// 2. Within each group: bitmasks are OR'd (file matches if ANY tag in group matches)
+    /// 3. Between groups: bitmasks are AND'd (file must match ALL groups)
+    ///
+    /// This allows multi-locale installs (e.g., `["enUS", "deDE"]`) where a file
+    /// tagged with either locale is included, while still requiring platform AND
+    /// architecture to match.
+    ///
+    /// Tags not found in the manifest are silently ignored within their group.
+    /// If an entire group resolves to no tags, that group is skipped (no filter).
+    pub fn get_files_for_tag_query(&self, tag_names: &[&str]) -> Vec<(usize, &InstallFileEntry)> {
+        if tag_names.is_empty() {
+            return self.entries.iter().enumerate().collect();
+        }
+
+        // Group requested tags by TagType
+        let mut groups: HashMap<TagType, Vec<&InstallTag>> = HashMap::new();
+        for name in tag_names {
+            if let Some(tag) = self.find_tag(name) {
+                groups.entry(tag.tag_type).or_default().push(tag);
+            }
+        }
+
+        if groups.is_empty() {
+            return Vec::new();
+        }
+
+        let entry_count = self.entries.len();
+        let mask_len = entry_count.div_ceil(8);
+
+        // Start with all bits set (AND identity)
+        let mut result_mask = vec![0xFFu8; mask_len];
+
+        for group_tags in groups.values() {
+            // OR within group: start with all bits clear (OR identity)
+            let mut group_mask = vec![0u8; mask_len];
+            for tag in group_tags {
+                for (gm, tb) in group_mask.iter_mut().zip(tag.bit_mask.iter()) {
+                    *gm |= tb;
+                }
+            }
+
+            // AND between groups
+            for (rm, gm) in result_mask.iter_mut().zip(group_mask.iter()) {
+                *rm &= gm;
+            }
+        }
+
+        // Collect entries where bits are set
+        self.entries
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| {
+                let byte_index = index / 8;
+                let bit_offset = index % 8;
+                byte_index < result_mask.len()
+                    && (result_mask[byte_index] & (0x80 >> bit_offset)) != 0
+            })
             .collect()
     }
 
@@ -661,5 +727,151 @@ mod tests {
         // Test with version 3 (unsupported)
         let data = [b'I', b'N', 3, 16, 0, 0, 0, 0, 0, 0]; // Version 3
         assert!(InstallManifest::parse(&data).is_err());
+    }
+
+    /// Build a manifest with multi-locale tags for tag query testing.
+    ///
+    /// Layout:
+    /// - Tags: Windows (Platform), x86_64 (Arch), enUS (Locale), deDE (Locale)
+    /// - File 0: Windows + x86_64 + enUS          (English-only binary)
+    /// - File 1: Windows + x86_64 + deDE          (German-only binary)
+    /// - File 2: Windows + x86_64 + enUS + deDE   (shared binary, both locales)
+    /// - File 3: Windows + x86_64                  (locale-independent)
+    fn create_multi_locale_manifest() -> InstallManifest {
+        InstallManifestBuilder::new()
+            .add_tag("Windows".to_string(), TagType::Platform)
+            .add_tag("x86_64".to_string(), TagType::Architecture)
+            .add_tag("enUS".to_string(), TagType::Locale)
+            .add_tag("deDE".to_string(), TagType::Locale)
+            .add_file(
+                "Locale\\enUS\\strings.db2".to_string(),
+                ContentKey::from_hex("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1").unwrap(),
+                100,
+            )
+            .add_file(
+                "Locale\\deDE\\strings.db2".to_string(),
+                ContentKey::from_hex("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa2").unwrap(),
+                200,
+            )
+            .add_file(
+                "Interface\\SharedUI.blp".to_string(),
+                ContentKey::from_hex("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa3").unwrap(),
+                300,
+            )
+            .add_file(
+                "WoW.exe".to_string(),
+                ContentKey::from_hex("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa4").unwrap(),
+                400,
+            )
+            // File 0: enUS only
+            .associate_file_with_tag(0, "Windows")
+            .unwrap()
+            .associate_file_with_tag(0, "x86_64")
+            .unwrap()
+            .associate_file_with_tag(0, "enUS")
+            .unwrap()
+            // File 1: deDE only
+            .associate_file_with_tag(1, "Windows")
+            .unwrap()
+            .associate_file_with_tag(1, "x86_64")
+            .unwrap()
+            .associate_file_with_tag(1, "deDE")
+            .unwrap()
+            // File 2: both locales
+            .associate_file_with_tag(2, "Windows")
+            .unwrap()
+            .associate_file_with_tag(2, "x86_64")
+            .unwrap()
+            .associate_file_with_tag(2, "enUS")
+            .unwrap()
+            .associate_file_with_tag(2, "deDE")
+            .unwrap()
+            // File 3: locale-independent
+            .associate_file_with_tag(3, "Windows")
+            .unwrap()
+            .associate_file_with_tag(3, "x86_64")
+            .unwrap()
+            .build()
+            .unwrap()
+    }
+
+    #[test]
+    fn test_tag_query_single_locale() {
+        let manifest = create_multi_locale_manifest();
+
+        // Single locale: enUS → files 0, 2 (enUS-tagged)
+        // Locale-independent file 3 is excluded because the Locale group
+        // requires at least one locale tag to match.
+        let files = manifest.get_files_for_tag_query(&["Windows", "x86_64", "enUS"]);
+        let paths: Vec<&str> = files.iter().map(|(_, e)| e.path.as_str()).collect();
+        assert!(paths.contains(&"Locale\\enUS\\strings.db2"));
+        assert!(paths.contains(&"Interface\\SharedUI.blp"));
+        assert!(!paths.contains(&"Locale\\deDE\\strings.db2"));
+    }
+
+    #[test]
+    fn test_tag_query_multi_locale_or_within_group() {
+        let manifest = create_multi_locale_manifest();
+
+        // Multi-locale: enUS + deDE → files 0, 1, 2 (OR within Locale group)
+        // File 3 is excluded because the Locale group requires a locale match.
+        let files = manifest.get_files_for_tag_query(&["Windows", "x86_64", "enUS", "deDE"]);
+        let paths: Vec<&str> = files.iter().map(|(_, e)| e.path.as_str()).collect();
+        assert!(paths.contains(&"Locale\\enUS\\strings.db2"), "enUS file");
+        assert!(paths.contains(&"Locale\\deDE\\strings.db2"), "deDE file");
+        assert!(paths.contains(&"Interface\\SharedUI.blp"), "shared file");
+        assert!(
+            !paths.contains(&"WoW.exe"),
+            "locale-independent excluded by locale group"
+        );
+    }
+
+    #[test]
+    fn test_tag_query_vs_old_and_behavior() {
+        let manifest = create_multi_locale_manifest();
+
+        // Old AND behavior: enUS AND deDE → only file 2 (both bits set)
+        let and_files = manifest.get_files_for_tags(&["Windows", "x86_64", "enUS", "deDE"]);
+        assert_eq!(
+            and_files.len(),
+            1,
+            "AND returns only the file with both locale bits"
+        );
+        assert_eq!(and_files[0].1.path, "Interface\\SharedUI.blp");
+
+        // New tag query: enUS OR deDE (within Locale group) → files 0, 1, 2
+        let query_files = manifest.get_files_for_tag_query(&["Windows", "x86_64", "enUS", "deDE"]);
+        assert_eq!(
+            query_files.len(),
+            3,
+            "tag query returns files matching either locale"
+        );
+    }
+
+    #[test]
+    fn test_tag_query_no_tags_returns_all() {
+        let manifest = create_multi_locale_manifest();
+        let files = manifest.get_files_for_tag_query(&[]);
+        assert_eq!(files.len(), 4);
+    }
+
+    #[test]
+    fn test_tag_query_unknown_tags_ignored() {
+        let manifest = create_multi_locale_manifest();
+
+        // Unknown tag "Mac" is silently ignored; Platform group has no matches
+        // so Platform group is skipped entirely
+        let files = manifest.get_files_for_tag_query(&["Mac"]);
+        // No Platform group tags matched → groups is empty → returns empty
+        assert!(files.is_empty());
+    }
+
+    #[test]
+    fn test_tag_query_platform_only() {
+        let manifest = create_multi_locale_manifest();
+
+        // Only platform tag → all Windows files (all 4)
+        let files = manifest.get_files_for_tag_query(&["Windows"]);
+        assert_eq!(files.len(), 4, "all files are Windows-tagged");
     }
 }

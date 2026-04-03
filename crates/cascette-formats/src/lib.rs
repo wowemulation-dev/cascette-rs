@@ -118,6 +118,15 @@ pub mod install;
 ///
 /// See the [`patch_archive`] module for detailed usage examples.
 pub mod patch_archive;
+/// Patch chain types for constructing patch application sequences
+///
+/// This module provides data types for representing patch chains -- sequences
+/// of patch steps needed to transform a file from one encoding key to another.
+/// Chain construction uses graph traversal with cycle detection and length limits
+/// matching agent.exe behavior.
+///
+/// See the [`patch_chain`] module for detailed usage examples.
+pub mod patch_chain;
 /// Patch Index format for mapping patch blobs to source/target file pairs
 ///
 /// This module provides parsing and building support for the Patch Index

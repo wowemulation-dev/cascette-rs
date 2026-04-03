@@ -2,7 +2,8 @@
 
 use super::chunk::CompressionMode;
 use super::error::{BlteError, BlteResult};
-use cascette_crypto::TactKeyStore;
+use crate::CascFormat;
+use cascette_crypto::TactKeyProvider;
 use cascette_crypto::salsa20::{decrypt_salsa20, encrypt_salsa20};
 use flate2::Compression;
 use flate2::read::{ZlibDecoder, ZlibEncoder};
@@ -14,6 +15,12 @@ use std::io::Read;
 /// compression bombs. WoW's largest individual files are typically under
 /// 100 MB, so 1 GB provides ample headroom while preventing abuse.
 pub const MAX_DECOMPRESSION_SIZE: usize = 1024 * 1024 * 1024;
+
+/// Maximum recursion depth for Frame (F) codec.
+///
+/// Agent.exe handles one level of recursion. Deeper nesting is not observed
+/// in practice and is rejected to prevent stack overflow.
+const MAX_FRAME_DEPTH: usize = 1;
 
 /// Compress data using specified mode
 pub fn compress_chunk(data: &[u8], mode: CompressionMode) -> BlteResult<Vec<u8>> {
@@ -31,11 +38,10 @@ pub fn compress_chunk(data: &[u8], mode: CompressionMode) -> BlteResult<Vec<u8>>
             // LZ4 compression: 8-byte LE decompressed size prefix + single LZ4 block.
             //
             // The WoWDev wiki describes a different format with headerVersion,
-            // BE size, and blockShift for sub-blocks. However, Agent.exe 3.13.3
-            // (`tact::Codec::DecodeLZ4` at 0x6f5fdb) is a stub that returns
-            // error 5 — LZ4 decompression is not implemented in that binary.
-            // This implementation uses the 8-byte LE prefix format observed in
-            // real WoW BLTE data.
+            // BE size, and blockShift for sub-blocks. The Blizzard agent has LZ4
+            // as a stub returning error 5 — LZ4 decompression is not implemented
+            // there. This implementation uses the 8-byte LE prefix format observed
+            // in real WoW BLTE data.
             let decompressed_size = data.len() as u64;
 
             // Pre-allocate with worst-case size (LZ4 worst case is ~1.06x original size)
@@ -58,15 +64,27 @@ pub fn compress_chunk(data: &[u8], mode: CompressionMode) -> BlteResult<Vec<u8>>
                 "Use encrypt_chunk_with_key for encryption mode".to_string(),
             ))
         }
-        #[allow(deprecated)]
-        CompressionMode::Frame => Err(super::error::BlteError::UnsupportedCompressionMode(
-            mode.as_byte(),
+        CompressionMode::Frame => Err(BlteError::CompressionError(
+            "Frame (recursive BLTE) compression is not supported".to_string(),
         )),
     }
 }
 
 /// Decompress chunk data
 pub fn decompress_chunk(data: &[u8], mode: CompressionMode) -> BlteResult<Vec<u8>> {
+    decompress_chunk_recursive(data, mode, 0)
+}
+
+/// Decompress chunk data with recursion depth tracking.
+///
+/// Frame (F) chunks contain a complete BLTE file as their payload. This
+/// function limits recursion to `MAX_FRAME_DEPTH` levels to prevent stack
+/// overflow from maliciously nested containers.
+fn decompress_chunk_recursive(
+    data: &[u8],
+    mode: CompressionMode,
+    depth: usize,
+) -> BlteResult<Vec<u8>> {
     match mode {
         CompressionMode::None => Ok(data.to_vec()),
         CompressionMode::ZLib => {
@@ -149,10 +167,28 @@ pub fn decompress_chunk(data: &[u8], mode: CompressionMode) -> BlteResult<Vec<u8
                 "Use decrypt_chunk_with_keys for encrypted chunks".to_string(),
             ))
         }
-        #[allow(deprecated)]
-        CompressionMode::Frame => Err(super::error::BlteError::UnsupportedCompressionMode(
-            mode.as_byte(),
-        )),
+        CompressionMode::Frame => {
+            // Frame codec: chunk payload is a complete BLTE container.
+            // Parse the inner BLTE and decompress it, enforcing depth limit.
+            if depth >= MAX_FRAME_DEPTH {
+                return Err(BlteError::RecursionLimitExceeded {
+                    max_depth: MAX_FRAME_DEPTH,
+                });
+            }
+
+            let inner_blte = super::BlteFile::parse(data).map_err(|e| {
+                BlteError::CompressionError(format!("Failed to parse inner BLTE frame: {e}"))
+            })?;
+
+            // Decompress all inner chunks with incremented depth
+            let mut result = Vec::new();
+            for (index, chunk) in inner_blte.chunks.iter().enumerate() {
+                let decompressed = decompress_chunk_recursive(&chunk.data, chunk.mode, depth + 1)?;
+                let _ = index;
+                result.extend_from_slice(&decompressed);
+            }
+            Ok(result)
+        }
     }
 }
 
@@ -614,6 +650,74 @@ mod tests {
     }
 
     #[test]
+    fn test_frame_decompression() {
+        use crate::CascFormat;
+        use crate::blte::BlteFile;
+
+        // Create an inner BLTE file with uncompressed data
+        let inner_data = b"Hello from inside a Frame chunk!";
+        let inner_blte = BlteFile::single_chunk(inner_data.to_vec(), CompressionMode::None)
+            .expect("inner BLTE creation should succeed");
+        let inner_bytes = inner_blte.build().expect("inner BLTE build should succeed");
+
+        // Decompress as Frame codec
+        let result = decompress_chunk(&inner_bytes, CompressionMode::Frame);
+        assert!(result.is_ok(), "Frame decompression failed: {:?}", result);
+        assert_eq!(result.unwrap(), inner_data);
+    }
+
+    #[test]
+    fn test_frame_with_compressed_inner() {
+        use crate::CascFormat;
+        use crate::blte::BlteFile;
+
+        // Create inner BLTE with ZLib compression
+        let inner_data = b"ZLib-compressed data inside a Frame chunk for testing";
+        let inner_blte = BlteFile::single_chunk(inner_data.to_vec(), CompressionMode::ZLib)
+            .expect("inner BLTE creation should succeed");
+        let inner_bytes = inner_blte.build().expect("inner BLTE build should succeed");
+
+        let result = decompress_chunk(&inner_bytes, CompressionMode::Frame);
+        assert!(result.is_ok(), "Frame decompression failed: {:?}", result);
+        assert_eq!(result.unwrap(), inner_data);
+    }
+
+    #[test]
+    fn test_frame_recursion_depth_guard() {
+        use crate::CascFormat;
+        use crate::blte::BlteFile;
+        use crate::blte::chunk::ChunkData;
+
+        // Create an inner BLTE that itself has a Frame chunk (F-inside-F)
+        let leaf_data = b"leaf data";
+        let leaf_blte = BlteFile::single_chunk(leaf_data.to_vec(), CompressionMode::None)
+            .expect("leaf BLTE should succeed");
+        let leaf_bytes = leaf_blte.build().expect("leaf build should succeed");
+
+        // Build a middle BLTE with a Frame chunk containing the leaf
+        let middle_chunk =
+            ChunkData::from_compressed(CompressionMode::Frame, leaf_bytes.clone(), None);
+        let middle_blte =
+            BlteFile::multi_chunk(vec![middle_chunk]).expect("middle BLTE should succeed");
+        let middle_bytes = middle_blte.build().expect("middle build should succeed");
+
+        // Decompress the middle as a Frame — this is F(F(N)), depth 2, should fail
+        let result = decompress_chunk(&middle_bytes, CompressionMode::Frame);
+        assert!(result.is_err(), "Should reject F-inside-F");
+        assert!(
+            result.unwrap_err().to_string().contains("recursion limit"),
+            "Error should mention recursion limit"
+        );
+    }
+
+    #[test]
+    fn test_frame_compress_rejected() {
+        let data = b"Cannot produce Frame-encoded data";
+        let result = compress_chunk(data, CompressionMode::Frame);
+        assert!(result.is_err());
+    }
+
+    #[test]
     fn test_decrypt_nested_encryption_rejected() {
         let key_name = 0x1234_5678_90AB_CDEF;
         let iv = [0x11, 0x22, 0x33, 0x44];
@@ -747,7 +851,7 @@ pub fn encrypt_chunk_with_key(
 /// Expects data without the 0x45 mode byte
 pub fn decrypt_chunk_with_keys(
     data: &[u8],
-    key_store: &TactKeyStore,
+    key_store: &dyn TactKeyProvider,
     block_index: usize,
 ) -> BlteResult<Vec<u8>> {
     if data.len() < 17 {
@@ -784,9 +888,12 @@ pub fn decrypt_chunk_with_keys(
     offset += 8;
 
     // Look up key
-    let key = key_store.get(key_name).ok_or_else(|| {
-        BlteError::CompressionError(format!("Encryption key not found: 0x{key_name:016X}"))
-    })?;
+    let key = key_store
+        .get_key(key_name)
+        .map_err(|e| BlteError::CompressionError(format!("Key lookup failed: {e}")))?
+        .ok_or_else(|| {
+            BlteError::CompressionError(format!("Encryption key not found: 0x{key_name:016X}"))
+        })?;
 
     if data.len() < offset + 1 {
         return Err(BlteError::CompressionError(
@@ -830,7 +937,7 @@ pub fn decrypt_chunk_with_keys(
     let decrypted_data = match encryption_type {
         0x53 => {
             // Salsa20 decryption (accepts 4 or 8 byte IV)
-            decrypt_salsa20(encrypted_data, key, iv, block_index).map_err(|e| {
+            decrypt_salsa20(encrypted_data, &key, iv, block_index).map_err(|e| {
                 BlteError::CompressionError(format!("Salsa20 decryption failed: {e}"))
             })?
         }

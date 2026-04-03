@@ -92,7 +92,7 @@ async fn start_test_server() -> (SocketAddr, Arc<AppState>) {
                 {
                     let command = command.trim();
                     if let Ok(response) =
-                        cascette_ribbit::tcp::handlers::handle_command(command, &state)
+                        cascette_ribbit::tcp::handlers::handle_command(command, &state).await
                     {
                         let socket = reader.into_inner();
                         let _ = socket.write_all(response.as_bytes()).await;

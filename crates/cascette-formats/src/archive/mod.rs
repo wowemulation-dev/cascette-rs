@@ -169,8 +169,7 @@ pub mod constants {
     /// Typical truncated key size for local IDX entries (9 bytes)
     ///
     /// This is the common truncated `EKey` size in local CASC storage indices.
-    /// CDN archive indices typically use full 16-byte keys. Agent.exe accepts
-    /// any `hash_size` in `1..=16` (`tact::CdnIndexFooterValidator` at 0x6b8168).
+    /// CDN archive indices typically use full 16-byte keys; valid range is 1-16.
     pub const TYPICAL_TRUNCATED_KEY_SIZE: u8 = 0x09;
 
     /// Expected segment size log2 (4KB chunks)

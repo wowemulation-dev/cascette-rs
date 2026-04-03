@@ -3,6 +3,8 @@
 //! This module defines a common interface for different TACT key storage backends,
 //! allowing for pluggable storage implementations while maintaining API compatibility.
 
+use std::collections::HashSet;
+
 use crate::error::CryptoError;
 use crate::keys::{TactKey, TactKeyStore};
 
@@ -184,6 +186,87 @@ impl TactKeyProvider for TactKeyStore {
     }
 }
 
+/// Chain-of-responsibility key provider.
+///
+/// Tries multiple [`TactKeyProvider`] backends in order, returning the first
+/// hit. This matches Agent.exe's `KeyGetter::LookupKey` pattern where keys are
+/// looked up across in-memory cache, Armadillo files, and keyring config.
+///
+/// Mutations (`add_key`, `remove_key`) operate on the primary (first) provider
+/// only. An empty chain returns `Ok(None)` for lookups and errors for mutations.
+pub struct ChainedKeyProvider {
+    providers: Vec<Box<dyn TactKeyProvider>>,
+}
+
+impl ChainedKeyProvider {
+    /// Create a chain with a single primary provider.
+    pub fn new(primary: Box<dyn TactKeyProvider>) -> Self {
+        Self {
+            providers: vec![primary],
+        }
+    }
+
+    /// Create an empty chain with no providers.
+    pub fn empty() -> Self {
+        Self {
+            providers: Vec::new(),
+        }
+    }
+
+    /// Append a fallback provider to the chain.
+    ///
+    /// Providers are tried in insertion order: the first added via [`new`](Self::new)
+    /// is the primary, subsequent ones added via `push` are fallbacks.
+    pub fn push(&mut self, provider: Box<dyn TactKeyProvider>) {
+        self.providers.push(provider);
+    }
+}
+
+impl TactKeyProvider for ChainedKeyProvider {
+    fn get_key(&self, id: u64) -> Result<Option<[u8; 16]>, CryptoError> {
+        for provider in &self.providers {
+            if let Some(key) = provider.get_key(id)? {
+                return Ok(Some(key));
+            }
+        }
+        Ok(None)
+    }
+
+    fn add_key(&mut self, key: TactKey) -> Result<(), CryptoError> {
+        match self.providers.first_mut() {
+            Some(primary) => primary.add_key(key),
+            None => Err(CryptoError::InvalidKeyFormat(
+                "no providers in chain".to_string(),
+            )),
+        }
+    }
+
+    fn remove_key(&mut self, id: u64) -> Result<Option<[u8; 16]>, CryptoError> {
+        match self.providers.first_mut() {
+            Some(primary) => primary.remove_key(id),
+            None => Ok(None),
+        }
+    }
+
+    fn key_count(&self) -> Result<usize, CryptoError> {
+        let mut total = 0;
+        for provider in &self.providers {
+            total += provider.key_count()?;
+        }
+        Ok(total)
+    }
+
+    fn list_key_ids(&self) -> Result<Vec<u64>, CryptoError> {
+        let mut seen = HashSet::new();
+        for provider in &self.providers {
+            for id in provider.list_key_ids()? {
+                seen.insert(id);
+            }
+        }
+        Ok(seen.into_iter().collect())
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
@@ -303,5 +386,99 @@ mod tests {
             .expect("Listing key IDs should succeed");
         ids.sort_unstable();
         assert_eq!(ids, vec![0x1234, 0x5678]);
+    }
+
+    // --- ChainedKeyProvider tests ---
+
+    #[allow(clippy::unnecessary_box_returns)]
+    fn make_store_with(keys: &[(u64, [u8; 16])]) -> Box<TestKeyStore> {
+        let mut store = TestKeyStore::new();
+        for &(id, key) in keys {
+            store.keys.insert(id, key);
+        }
+        Box::new(store)
+    }
+
+    #[test]
+    fn chained_fallthrough_to_secondary() {
+        let primary = make_store_with(&[]);
+        let secondary = make_store_with(&[(0xAAAA, [0x11; 16])]);
+
+        let mut chain = ChainedKeyProvider::new(primary);
+        chain.push(secondary);
+
+        let result = chain.get_key(0xAAAA).unwrap();
+        assert_eq!(result, Some([0x11; 16]));
+    }
+
+    #[test]
+    fn chained_primary_wins() {
+        let primary = make_store_with(&[(0xAAAA, [0x11; 16])]);
+        let secondary = make_store_with(&[(0xAAAA, [0x22; 16])]);
+
+        let mut chain = ChainedKeyProvider::new(primary);
+        chain.push(secondary);
+
+        let result = chain.get_key(0xAAAA).unwrap();
+        assert_eq!(result, Some([0x11; 16]));
+    }
+
+    #[test]
+    fn chained_add_key_goes_to_primary() {
+        let primary = make_store_with(&[]);
+        let secondary = make_store_with(&[]);
+
+        let mut chain = ChainedKeyProvider::new(primary);
+        chain.push(secondary);
+
+        chain.add_key(TactKey::new(0xBBBB, [0x33; 16])).unwrap();
+
+        // Key is in primary (first provider)
+        assert_eq!(
+            chain.providers[0].get_key(0xBBBB).unwrap(),
+            Some([0x33; 16])
+        );
+        // Key is not in secondary
+        assert_eq!(chain.providers[1].get_key(0xBBBB).unwrap(), None);
+    }
+
+    #[test]
+    fn chained_missing_from_all() {
+        let primary = make_store_with(&[(0xAAAA, [0x11; 16])]);
+        let secondary = make_store_with(&[(0xBBBB, [0x22; 16])]);
+
+        let mut chain = ChainedKeyProvider::new(primary);
+        chain.push(secondary);
+
+        assert_eq!(chain.get_key(0xCCCC).unwrap(), None);
+    }
+
+    #[test]
+    fn chained_empty_chain() {
+        let chain = ChainedKeyProvider::empty();
+
+        assert_eq!(chain.get_key(0xAAAA).unwrap(), None);
+        assert_eq!(chain.key_count().unwrap(), 0);
+        assert!(chain.list_key_ids().unwrap().is_empty());
+    }
+
+    #[test]
+    fn chained_empty_add_key_errors() {
+        let mut chain = ChainedKeyProvider::empty();
+        let result = chain.add_key(TactKey::new(0xAAAA, [0x11; 16]));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn chained_list_key_ids_deduplicates() {
+        let primary = make_store_with(&[(0xAAAA, [0x11; 16]), (0xBBBB, [0x22; 16])]);
+        let secondary = make_store_with(&[(0xBBBB, [0x33; 16]), (0xCCCC, [0x44; 16])]);
+
+        let mut chain = ChainedKeyProvider::new(primary);
+        chain.push(secondary);
+
+        let mut ids = chain.list_key_ids().unwrap();
+        ids.sort_unstable();
+        assert_eq!(ids, vec![0xAAAA, 0xBBBB, 0xCCCC]);
     }
 }

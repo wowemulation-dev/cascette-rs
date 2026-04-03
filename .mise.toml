@@ -27,3 +27,4 @@ mdbook = "latest"
 # ── Profiling ─────────────────────────────────
 "cargo:flamegraph" = "latest"
 "cargo:inferno" = "latest"
+protobuf = "latest"

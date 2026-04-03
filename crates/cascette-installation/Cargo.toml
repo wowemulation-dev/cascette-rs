@@ -1,0 +1,61 @@
+[package]
+name = "cascette-installation"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "CASC installation pipeline: install, extract, verify, and repair operations"
+readme = "README.md"
+keywords = ["casc", "ngdp", "installation", "download", "pipeline"]
+categories = ["game-development", "filesystem"]
+
+[dependencies]
+# Internal dependencies
+cascette-protocol = { version = "0.2.0", path = "../cascette-protocol" }
+cascette-formats = { version = "0.2.0", path = "../cascette-formats" }
+cascette-client-storage = { version = "0.2.0", path = "../cascette-client-storage" }
+cascette-crypto = { version = "0.2.0", path = "../cascette-crypto" }
+cascette-cache = { version = "0.2.0", path = "../cascette-cache" }
+cascette-proto = { version = "0.2.0", path = "../cascette-proto" }
+
+# Workspace dependencies
+thiserror = { workspace = true }
+tokio = { workspace = true, features = [
+  "fs",
+  "io-util",
+  "sync",
+  "rt-multi-thread",
+] }
+futures = { workspace = true }
+tracing = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+hex = { workspace = true }
+async-trait = { workspace = true }
+dashmap = { workspace = true }
+md5 = { workspace = true }
+binrw = { workspace = true }
+prost = { workspace = true }
+rand = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util", "macros", "rt-multi-thread"] }
+tempfile = { workspace = true }
+pretty_assertions = { workspace = true }
+
+[features]
+local-install = []
+
+[[example]]
+name = "install_product"
+required-features = ["local-install"]
+
+[[example]]
+name = "verify_installation"
+required-features = ["local-install"]
+
+[lints]
+workspace = true

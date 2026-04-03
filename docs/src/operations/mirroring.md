@@ -386,7 +386,7 @@ Key implementations examined:
 
 - **rustycasc**: Rust implementation with type safety
 
-- **BlizzTrack**: Production monitoring with database persistence
+- **BlizzTrack**: Production monitoring with REST API, covers all TACT products including `agent` and `bna`
 
 - **blizztools**: Rust CLI for NGDP operations
 
@@ -527,9 +527,11 @@ python rebuild_metadata.py /mirror
 
 ### Monitoring Services
 
-- **BlizzTrack**: Real-time build tracking
+- **BlizzTrack**: Real-time build tracking with a public REST API covering all
+  TACT products. See [References](references.md#blizztrack) for endpoint details.
 
-- **Wago.tools**: API for build information
+- **Wago.tools**: Build database for WoW products. See [References](references.md#wagotools)
+  for details.
 
 ### Community
 

@@ -31,7 +31,7 @@ pub use header::{BlteHeader, ChunkInfo, HeaderFlags};
 
 use binrw::io::{Read, Seek, SeekFrom, Write};
 use binrw::{BinRead, BinResult, BinWrite};
-use cascette_crypto::TactKeyStore;
+use cascette_crypto::TactKeyProvider;
 
 /// Complete BLTE file structure
 #[derive(Debug, Clone)]
@@ -144,7 +144,7 @@ impl BlteFile {
     ///
     /// Performance: Pre-allocates the output buffer based on the total
     /// decompressed size from chunk headers or chunk metadata.
-    pub fn decompress_with_keys(&self, key_store: &TactKeyStore) -> BlteResult<Vec<u8>> {
+    pub fn decompress_with_keys(&self, key_store: &dyn TactKeyProvider) -> BlteResult<Vec<u8>> {
         // Single-chunk encrypted BLTE is not valid. The spec requires
         // encrypted content to use the extended header with a chunk table.
         if self.header.is_single_chunk()
@@ -164,6 +164,13 @@ impl BlteFile {
             let decompressed = if chunk.mode == CompressionMode::Encrypted {
                 // Decrypt encrypted chunks
                 decrypt_chunk_with_keys(&chunk.data, key_store, index)?
+            } else if chunk.mode == CompressionMode::Frame {
+                // Frame: inner BLTE that may contain encrypted chunks
+                use crate::CascFormat;
+                let inner_blte = BlteFile::parse(&chunk.data).map_err(|e| {
+                    BlteError::CompressionError(format!("Failed to parse inner BLTE frame: {e}"))
+                })?;
+                inner_blte.decompress_with_keys(key_store)?
             } else {
                 // Regular decompression for non-encrypted chunks
                 chunk.decompress(index)?
@@ -283,7 +290,7 @@ mod tests {
         use proptest::prelude::*;
         use proptest::test_runner::TestCaseError;
 
-        /// Generate arbitrary compression modes (excluding deprecated Frame mode)
+        /// Generate arbitrary compression modes
         fn compression_mode() -> impl Strategy<Value = CompressionMode> {
             prop_oneof![
                 Just(CompressionMode::None),

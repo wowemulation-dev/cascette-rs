@@ -23,6 +23,106 @@ use crate::storage::archive_file::ArchiveManager;
 use crate::storage::segment::SegmentAllocator;
 use crate::{Result, StorageError};
 
+// --- Shared memory support (unix / windows only) ---
+
+/// Handle to an active shared memory region and its parsed control block.
+///
+/// On drop, removes our PID from the tracking table and writes the
+/// updated control block back to the mapped region.
+#[cfg(any(unix, target_os = "windows"))]
+struct ShmemHandle {
+    platform: crate::shmem::PlatformShmem,
+    control_block: crate::shmem::ShmemControlBlock,
+    /// Our PID if we registered in the PID tracking table.
+    pid_slot: Option<u32>,
+}
+
+#[cfg(any(unix, target_os = "windows"))]
+impl Drop for ShmemHandle {
+    fn drop(&mut self) {
+        // Remove our PID from the tracking table before releasing.
+        if let Some(pid) = self.pid_slot {
+            if let Some(pt) = self.control_block.pid_tracking_mut() {
+                pt.remove_process(pid);
+            }
+            // Write the updated control block back to the mapped region.
+            self.control_block.to_mapped(self.platform.as_mut_slice());
+        }
+    }
+}
+
+/// Attempt to initialize a shared memory region for the container.
+///
+/// Returns `None` (without error) when shmem should be skipped
+/// (e.g. path is on a network drive).
+///
+/// Returns `Err` when shmem setup fails in a way the caller should
+/// know about (e.g. validation failure).
+#[cfg(any(unix, target_os = "windows"))]
+fn open_shmem(
+    storage_path: &std::path::Path,
+    access_mode: AccessMode,
+) -> Result<Option<ShmemHandle>> {
+    use crate::shmem::control_block::v5_file_size;
+    use crate::shmem::{PlatformShmem, ShmemControlBlock, is_network_drive, shmem_name_from_path};
+
+    if is_network_drive(storage_path) {
+        debug!("skipping shmem: storage path is on a network drive");
+        return Ok(None);
+    }
+
+    let name = shmem_name_from_path(storage_path);
+    let size = v5_file_size(true); // v5 with PID tracking
+
+    let mut platform = PlatformShmem::open_or_create(&name, size)?;
+
+    // Try to parse an existing control block from the mapped memory.
+    let mut control_block = match ShmemControlBlock::from_mapped(platform.as_slice()) {
+        Some(cb) if cb.is_initialized() => cb,
+        _ => {
+            // Fresh or corrupt region — initialize a new v5 control block.
+            let mut cb = ShmemControlBlock::new_v5_with_pid_tracking(4);
+            // data_size is the usable payload after the header.
+            let header_size = cb.file_size();
+            let data_size = size.saturating_sub(header_size);
+            cb.initialize(data_size as u32);
+            cb.to_mapped(platform.as_mut_slice());
+            cb
+        }
+    };
+
+    control_block
+        .validate_for_bind()
+        .map_err(|msg| StorageError::SharedMemory(msg.to_string()))?;
+
+    // Register our PID for tracking if in read-write mode.
+    let pid_slot = if access_mode.can_write() {
+        if let Some(pt) = control_block.pid_tracking_mut() {
+            let pid = std::process::id();
+            // mode: 5 = read-write, 2 = read-only (matching CASC convention)
+            let mode = if access_mode.can_write() { 5 } else { 2 };
+            if pt.add_process(pid, mode).is_some() {
+                // Write the updated tracking back.
+                control_block.to_mapped(platform.as_mut_slice());
+                Some(pid)
+            } else {
+                warn!("shmem PID tracking table full, proceeding without PID registration");
+                None
+            }
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    Ok(Some(ShmemHandle {
+        platform,
+        control_block,
+        pid_slot,
+    }))
+}
+
 /// Dynamic container for read-write CASC archive storage.
 ///
 /// Configuration fields:
@@ -73,6 +173,16 @@ pub struct DynamicContainer {
     /// When set, read and write operations touch the key to keep
     /// recently-accessed data from being evicted.
     lru: Option<Arc<RwLock<LruManager>>>,
+    /// Shared memory handle for multi-process coordination.
+    ///
+    /// Wrapped in `Mutex` because `open()` takes `&self` but needs
+    /// to initialize the shmem handle.
+    ///
+    /// Only available on platforms that support POSIX or Windows shmem.
+    /// Set to `None` when `shared_memory` is false, on unsupported
+    /// platforms, or when the storage path is on a network drive.
+    #[cfg(any(unix, target_os = "windows"))]
+    shmem: parking_lot::Mutex<Option<ShmemHandle>>,
 }
 
 /// Maximum number of archive segments .
@@ -232,6 +342,8 @@ impl DynamicContainer {
             segment_allocator: RwLock::new(segment_allocator),
             residency: b.residency,
             lru: b.lru,
+            #[cfg(any(unix, target_os = "windows"))]
+            shmem: parking_lot::Mutex::new(None),
         })
     }
 
@@ -276,6 +388,22 @@ impl DynamicContainer {
         // Load existing segments.
         self.segment_allocator.write().load_existing()?;
 
+        // Initialize shared memory if enabled.
+        #[cfg(any(unix, target_os = "windows"))]
+        if self.shared_memory {
+            match open_shmem(&self.storage_path, self.access_mode) {
+                Ok(handle) => {
+                    if handle.is_some() {
+                        debug!("shmem initialized for {}", self.storage_path.display());
+                    }
+                    *self.shmem.lock() = handle;
+                }
+                Err(e) => {
+                    warn!("shmem initialization failed, continuing without: {e}");
+                }
+            }
+        }
+
         let entry_count = self.index.read().entry_count();
         let archive_count = self.archive.read().stats().archive_count;
         let segment_count = self.segment_allocator.read().segment_count();
@@ -312,9 +440,39 @@ impl DynamicContainer {
         self.max_segment_size
     }
 
-    /// Check if shared memory is enabled.
+    /// Check if shared memory is enabled in the configuration.
     pub const fn shared_memory_enabled(&self) -> bool {
         self.shared_memory
+    }
+
+    /// Check if a shared memory region is currently active.
+    ///
+    /// Returns `true` when shmem was enabled, the platform supports it,
+    /// and initialization succeeded during `open()`.
+    pub fn shmem_active(&self) -> bool {
+        #[cfg(any(unix, target_os = "windows"))]
+        {
+            self.shmem.lock().is_some()
+        }
+        #[cfg(not(any(unix, target_os = "windows")))]
+        {
+            false
+        }
+    }
+
+    /// Get the shmem protocol version if a shared memory region is active.
+    pub fn shmem_version(&self) -> Option<u8> {
+        #[cfg(any(unix, target_os = "windows"))]
+        {
+            self.shmem
+                .lock()
+                .as_ref()
+                .map(|h| h.control_block.version())
+        }
+        #[cfg(not(any(unix, target_os = "windows")))]
+        {
+            None
+        }
     }
 
     /// Check if free space reclamation is enabled.
@@ -351,28 +509,50 @@ impl DynamicContainer {
         index.flush_all_updates()
     }
 
+    /// Mark a key's byte span as non-resident in the residency database
+    /// and set the KMT entry status to `DataNonResident` (7).
+    ///
+    /// Shared helper used by both `handle_truncated_read` and `remove_span`.
+    fn mark_entry_non_resident(&self, key: &[u8; 16], offset: i32, length: i32) {
+        if let Some(Err(e)) = self
+            .residency
+            .as_ref()
+            .map(|r| r.mark_span_non_resident(key, offset, length))
+        {
+            warn!(
+                "failed to mark span non-resident for key {}: {e}",
+                hex::encode(&key[..9])
+            );
+        }
+
+        let ekey = EncodingKey::from_bytes(*key);
+        let mut index = self.index.write();
+        index.update_entry_status(&ekey, UpdateStatus::DataNonResident);
+    }
+
     /// Handle a truncated read by marking the affected span as
     /// non-resident and updating the KMT entry status.
     ///
     /// Called when `read_content` fails due to the archive being
-    /// shorter than the entry's recorded size.
-    fn handle_truncated_read(&self, key: &[u8; 16], archive_offset: u32, entry_size: u32) {
-        // Mark span non-resident in residency container
-        if let Some(ref residency) = self.residency {
-            let offset = i32::try_from(archive_offset).unwrap_or(i32::MAX);
-            let length = i32::try_from(entry_size).unwrap_or(i32::MAX);
-            if let Err(e) = residency.mark_span_non_resident(key, offset, length) {
-                warn!(
-                    "failed to mark span non-resident for key {}: {e}",
-                    hex::encode(&key[..9])
-                );
-            }
-        }
+    /// shorter than the entry's recorded size. When free space
+    /// reclamation is enabled, returns the span to the segment's
+    /// free list.
+    fn handle_truncated_read(
+        &self,
+        key: &[u8; 16],
+        archive_id: u16,
+        archive_offset: u32,
+        entry_size: u32,
+    ) {
+        let offset = i32::try_from(archive_offset).unwrap_or(i32::MAX);
+        let length = i32::try_from(entry_size).unwrap_or(i32::MAX);
+        self.mark_entry_non_resident(key, offset, length);
 
-        // Update KMT entry status to DATA_NON_RESIDENT (7)
-        let ekey = EncodingKey::from_bytes(*key);
-        let mut index = self.index.write();
-        index.update_entry_status(&ekey, UpdateStatus::DataNonResident);
+        if self.free_space_reclaim {
+            self.segment_allocator
+                .write()
+                .free_span(archive_id, archive_offset, entry_size);
+        }
     }
 
     /// Get the number of indexed entries.
@@ -382,9 +562,9 @@ impl DynamicContainer {
 
     /// Remove a byte span from an archive entry.
     ///
-    /// CASC's `casc::Dynamic::RemoveSpan` adjusts the
-    /// offset by +0x1E (LOCAL_HEADER_SIZE) to account for the local header
-    /// before the BLTE data. It silently succeeds on FILE_NOT_FOUND and
+    /// CASC's `casc::Dynamic::RemoveSpan` adjusts the offset by +0x1E
+    /// (`LOCAL_HEADER_SIZE`) to account for the local header before the
+    /// BLTE data. It silently succeeds on FILE_NOT_FOUND and
     /// PATH_NOT_FOUND errors.
     pub fn remove_span(&self, key: &[u8; 16], offset: u64, length: u64) -> Result<()> {
         if !self.access_mode.can_write() {
@@ -393,16 +573,41 @@ impl DynamicContainer {
             ));
         }
 
-        // Agent adjusts offset by +0x1E before calling the span removal.
-        // Span removal is part of maintenance operations (deferred).
-        // This is a no-op matching Agent's behavior of silently
-        // succeeding when the file is not found.
+        // Adjust offset by +0x1E (local header size) matching Agent behavior.
+        let adjusted_offset = offset.saturating_add(0x1E);
+
         debug!(
-            "remove_span: key={}, offset={:#x}+0x1E, length={:#x} (no-op)",
+            "remove_span: key={}, offset={:#x} (adjusted {:#x}), length={:#x}",
             hex::encode(&key[..9]),
             offset,
+            adjusted_offset,
             length
         );
+
+        // Look up entry in KMT. Silently succeed if not found,
+        // matching Agent's FILE_NOT_FOUND / PATH_NOT_FOUND behavior.
+        let ekey = EncodingKey::from_bytes(*key);
+        let entry = { self.index.read().lookup(&ekey) };
+        let Some(entry) = entry else {
+            debug!(
+                "remove_span: key {} not in index, silently succeeding",
+                hex::encode(&key[..9])
+            );
+            return Ok(());
+        };
+
+        let span_offset = i32::try_from(adjusted_offset).unwrap_or(i32::MAX);
+        let span_length = i32::try_from(length).unwrap_or(i32::MAX);
+        self.mark_entry_non_resident(key, span_offset, span_length);
+
+        // Return the entry's space to the free list for reuse.
+        if self.free_space_reclaim {
+            self.segment_allocator.write().free_span(
+                entry.archive_id(),
+                entry.archive_offset(),
+                entry.size,
+            );
+        }
 
         Ok(())
     }
@@ -466,7 +671,7 @@ impl Container for DynamicContainer {
 
                         // Truncation tracking: mark span non-resident and
                         // update KMT entry status to DATA_NON_RESIDENT (7).
-                        self.handle_truncated_read(key, archive_offset, entry_size);
+                        self.handle_truncated_read(key, archive_id, archive_offset, entry_size);
 
                         return Err(StorageError::TruncatedRead(format!(
                             "key {}: archive file truncated",
@@ -531,6 +736,26 @@ impl Container for DynamicContainer {
                 offset,
                 total_size,
             )?;
+        }
+
+        // Update reconstruction header for this archive.
+        // The segment header at offset 0 of each data file contains 16
+        // reconstruction headers (one per KMT bucket). After writing new
+        // content, update the bucket slot so the index can be rebuilt
+        // from data files alone.
+        //
+        // Only update when content is placed after the 480-byte header
+        // region. When SegmentAllocator manages writes, content always
+        // starts at offset >= SEGMENT_HEADER_SIZE. Direct ArchiveManager
+        // writes that start at offset 0 have no header region to update.
+        if offset as usize >= crate::storage::segment::SEGMENT_HEADER_SIZE {
+            let bucket = crate::storage::segment::bucket_hash(&encoding_key[..9], 0);
+            let local_header =
+                crate::storage::local_header::LocalHeader::new(encoding_key, total_size, 0);
+            let archive = self.archive.read();
+            let mut seg_header = archive.read_segment_header(archive_id).unwrap_or_default();
+            seg_header.set_bucket_header(bucket, local_header);
+            archive.write_segment_header(archive_id, &seg_header)?;
         }
 
         // Touch LRU cache to keep this key from eviction.
@@ -869,5 +1094,222 @@ mod tests {
             .await
             .expect("write2");
         assert_eq!(container.entry_count(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_remove_span_missing_key_succeeds() {
+        let dir = tempdir().expect("tempdir");
+        let container = DynamicContainer::new(
+            AccessMode::ReadWrite,
+            dir.path().to_path_buf(),
+            false,
+            100,
+            1024 * 1024 * 1024,
+            false,
+        )
+        .expect("create");
+
+        container.open().await.expect("open");
+
+        // Key not in index: remove_span should silently succeed.
+        let key = [0x42u8; 16];
+        assert!(container.remove_span(&key, 0, 1024).is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_remove_span_marks_non_resident() {
+        let dir = tempdir().expect("tempdir");
+        let container = DynamicContainer::new(
+            AccessMode::ReadWrite,
+            dir.path().to_path_buf(),
+            false,
+            100,
+            1024 * 1024 * 1024,
+            false,
+        )
+        .expect("create");
+
+        container.open().await.expect("open");
+
+        let key = [0xAAu8; 16];
+        container.write(&key, b"some data").await.expect("write");
+
+        // Entry exists, remove_span should succeed and mark non-resident.
+        assert!(container.remove_span(&key, 0, 100).is_ok());
+
+        // After remove_span the entry still exists in the index
+        // (remove_span marks status, it does not delete the entry).
+        assert!(container.entry_count() > 0);
+    }
+
+    #[tokio::test]
+    async fn test_handle_truncated_read_marks_non_resident() {
+        let dir = tempdir().expect("tempdir");
+        let container = DynamicContainer::new(
+            AccessMode::ReadWrite,
+            dir.path().to_path_buf(),
+            false,
+            100,
+            1024 * 1024 * 1024,
+            false,
+        )
+        .expect("create");
+
+        container.open().await.expect("open");
+
+        let key = [0xBBu8; 16];
+        container.write(&key, b"payload").await.expect("write");
+
+        // Calling handle_truncated_read should not panic.
+        container.handle_truncated_read(&key, 0, 0, 100);
+
+        // Entry should still be in the index.
+        assert!(container.entry_count() > 0);
+    }
+
+    // --- Shared memory tests ---
+
+    #[test]
+    fn test_shmem_not_created_when_disabled() {
+        let dir = tempdir().expect("tempdir");
+        let container = DynamicContainer::new(
+            AccessMode::ReadWrite,
+            dir.path().to_path_buf(),
+            false, // shared_memory disabled
+            100,
+            1024 * 1024 * 1024,
+            false,
+        )
+        .expect("create");
+
+        assert!(!container.shared_memory_enabled());
+        assert!(!container.shmem_active());
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    #[ignore = "requires /dev/shm"]
+    async fn test_shmem_initialization() {
+        let dir = tempdir().expect("tempdir");
+        let container = DynamicContainer::new(
+            AccessMode::ReadWrite,
+            dir.path().to_path_buf(),
+            true, // shared_memory enabled
+            100,
+            1024 * 1024 * 1024,
+            false,
+        )
+        .expect("create");
+
+        container.open().await.expect("open");
+
+        assert!(container.shared_memory_enabled());
+        assert!(container.shmem_active());
+        assert_eq!(container.shmem_version(), Some(5));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    #[ignore = "requires /dev/shm"]
+    #[allow(clippy::significant_drop_tightening)]
+    async fn test_shmem_pid_tracking() {
+        let dir = tempdir().expect("tempdir");
+        let container = DynamicContainer::new(
+            AccessMode::ReadWrite,
+            dir.path().to_path_buf(),
+            true,
+            100,
+            1024 * 1024 * 1024,
+            false,
+        )
+        .expect("create");
+
+        container.open().await.expect("open");
+
+        // Verify our PID is in the tracking table.
+        let our_pid = std::process::id();
+        {
+            let guard = container.shmem.lock();
+            let handle = guard.as_ref().expect("shmem should be active");
+            let pt = handle
+                .control_block
+                .pid_tracking()
+                .expect("v5 has pid tracking");
+            assert!(
+                pt.pids.contains(&our_pid),
+                "our PID ({our_pid}) should be in the tracking table"
+            );
+            assert_eq!(pt.total_count, 1);
+            assert_eq!(pt.writer_count, 1);
+        }
+
+        // Drop the container and verify PID is removed by re-reading
+        // the shmem region.
+        let shmem_name = crate::shmem::shmem_name_from_path(dir.path());
+        let size = crate::shmem::control_block::v5_file_size(true);
+        drop(container);
+
+        // Re-open the shmem to check PID was removed.
+        let platform =
+            crate::shmem::PlatformShmem::open_or_create(&shmem_name, size).expect("reopen shmem");
+        let cb = crate::shmem::ShmemControlBlock::from_mapped(platform.as_slice())
+            .expect("parse control block");
+        let pt = cb.pid_tracking().expect("v5 has pid tracking");
+        assert!(
+            !pt.pids.contains(&our_pid),
+            "our PID should have been removed on drop"
+        );
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    #[ignore = "requires /dev/shm"]
+    async fn test_shmem_validates_on_bind() {
+        use crate::shmem::control_block::v5_file_size;
+        use crate::shmem::{PlatformShmem, ShmemControlBlock, shmem_name_from_path};
+
+        let dir = tempdir().expect("tempdir");
+
+        // Pre-create a shmem region with exclusive access set (simulates
+        // another process holding exclusive lock).
+        let name = shmem_name_from_path(dir.path());
+        let size = v5_file_size(true);
+        let mut platform = PlatformShmem::open_or_create(&name, size).expect("create shmem");
+
+        let mut cb = ShmemControlBlock::new_v5_with_pid_tracking(4);
+        cb.initialize(1024);
+        cb.set_exclusive(true); // Block binding
+        cb.to_mapped(platform.as_mut_slice());
+        drop(platform);
+
+        // Now try to open a container — shmem bind should fail, but
+        // open() logs a warning and continues without shmem.
+        let container = DynamicContainer::new(
+            AccessMode::ReadWrite,
+            dir.path().to_path_buf(),
+            true,
+            100,
+            1024 * 1024 * 1024,
+            false,
+        )
+        .expect("create");
+
+        container.open().await.expect("open should succeed");
+
+        // Shmem should NOT be active because validation rejected exclusive access.
+        assert!(!container.shmem_active());
+    }
+
+    #[test]
+    fn test_shmem_skipped_on_network_drive() {
+        // We cannot easily simulate a network drive in a unit test.
+        // Instead, verify that is_network_drive returns false for /tmp
+        // (a local path), which means shmem would NOT be skipped.
+        #[cfg(unix)]
+        {
+            assert!(!crate::shmem::is_network_drive(std::path::Path::new(
+                "/tmp"
+            )));
+        }
     }
 }

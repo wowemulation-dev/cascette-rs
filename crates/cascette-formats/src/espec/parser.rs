@@ -780,6 +780,143 @@ mod tests {
     }
 
     #[test]
+    fn test_codec_id() {
+        // None → codec 0
+        assert_eq!(ESpec::None.codec_id(), Some(0));
+
+        // ZLib default/MPQ/ZLib → codec 2
+        assert_eq!(
+            ESpec::ZLib {
+                level: None,
+                variant: None,
+                window_bits: None,
+            }
+            .codec_id(),
+            Some(2)
+        );
+        assert_eq!(
+            ESpec::ZLib {
+                level: Some(6),
+                variant: Some(ZLibVariant::MPQ),
+                window_bits: None,
+            }
+            .codec_id(),
+            Some(2)
+        );
+        assert_eq!(
+            ESpec::ZLib {
+                level: Some(6),
+                variant: Some(ZLibVariant::ZLib),
+                window_bits: None,
+            }
+            .codec_id(),
+            Some(2)
+        );
+
+        // LZ4HC → codec 3
+        assert_eq!(
+            ESpec::ZLib {
+                level: Some(6),
+                variant: Some(ZLibVariant::LZ4HC),
+                window_bits: None,
+            }
+            .codec_id(),
+            Some(3)
+        );
+
+        // BCPack → codec 4
+        assert_eq!(ESpec::BCPack { bcn: None }.codec_id(), Some(4));
+        assert_eq!(ESpec::BCPack { bcn: Some(3) }.codec_id(), Some(4));
+
+        // GDeflate → codec 5
+        assert_eq!(ESpec::GDeflate { level: None }.codec_id(), Some(5));
+        assert_eq!(ESpec::GDeflate { level: Some(8) }.codec_id(), Some(5));
+
+        // Structural types → None
+        assert_eq!(
+            ESpec::Encrypted {
+                key: "0123456789ABCDEF".to_string(),
+                iv: vec![0x01, 0x02, 0x03, 0x04],
+                spec: Box::new(ESpec::None),
+            }
+            .codec_id(),
+            None
+        );
+        assert_eq!(
+            ESpec::BlockTable {
+                chunks: vec![BlockChunk {
+                    size_spec: None,
+                    spec: ESpec::None,
+                }],
+            }
+            .codec_id(),
+            None
+        );
+    }
+
+    #[test]
+    fn test_blte_compression_mode() {
+        use crate::blte::CompressionMode;
+
+        // None → CompressionMode::None
+        assert_eq!(
+            ESpec::None.blte_compression_mode(),
+            Some(CompressionMode::None)
+        );
+
+        // ZLib default → CompressionMode::ZLib
+        assert_eq!(
+            ESpec::ZLib {
+                level: Some(6),
+                variant: None,
+                window_bits: None,
+            }
+            .blte_compression_mode(),
+            Some(CompressionMode::ZLib)
+        );
+
+        // ZLib MPQ → CompressionMode::ZLib
+        assert_eq!(
+            ESpec::ZLib {
+                level: Some(6),
+                variant: Some(ZLibVariant::MPQ),
+                window_bits: None,
+            }
+            .blte_compression_mode(),
+            Some(CompressionMode::ZLib)
+        );
+
+        // LZ4HC variant → CompressionMode::LZ4
+        assert_eq!(
+            ESpec::ZLib {
+                level: Some(6),
+                variant: Some(ZLibVariant::LZ4HC),
+                window_bits: None,
+            }
+            .blte_compression_mode(),
+            Some(CompressionMode::LZ4)
+        );
+
+        // BCPack/GDeflate → None (BLTE mode bytes unknown)
+        assert_eq!(ESpec::BCPack { bcn: Some(3) }.blte_compression_mode(), None);
+        assert_eq!(
+            ESpec::GDeflate { level: Some(6) }.blte_compression_mode(),
+            None
+        );
+
+        // Structural types → None
+        assert_eq!(
+            ESpec::Encrypted {
+                key: "0123456789ABCDEF".to_string(),
+                iv: vec![0x01, 0x02, 0x03, 0x04],
+                spec: Box::new(ESpec::None),
+            }
+            .blte_compression_mode(),
+            None
+        );
+    }
+
+    #[test]
     fn test_validate() {
         // Valid specs
         assert!(ESpec::validate("n"));

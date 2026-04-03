@@ -40,10 +40,11 @@ internal configuration.
 
 This format is documented on [wowdev.wiki](https://wowdev.wiki/TACT) as the
 "Download Size" manifest. The wiki documents version 1 from an older Agent build
-(6700). The TACT 3.13.3 agent binary supports versions 1 and 2. The wiki's
-"EKey Size" byte at offset 3 corresponds to the `flags` field described below.
-The version 2 format with its 40-bit total size field is not documented on the
-wiki.
+(6700). The version 2 format with its 40-bit total size field is not documented
+on the wiki. The wiki's "EKey Size" byte at offset 3 corresponds to the
+`key_size_bits` field described below. Note that the wiki treats this as a
+byte count, but the field stores *bits* (e.g., 72 for 9-byte keys). The wiki
+does not document the tag section between header and entries.
 
 ## File Structure
 
@@ -52,6 +53,7 @@ The Size manifest is BLTE-encoded and contains:
 ```text
 [BLTE Container]
   [Header]
+  [Tags]       (0 or more, same format as install manifest tags)
   [Entries]
 ```
 
@@ -65,13 +67,21 @@ All multi-byte integers are big-endian.
 struct SizeManifestHeader {
     char     magic[2];           // "DS" (0x44, 0x53)
     uint8_t  version;            // Version (1 or 2)
-    uint8_t  flags;              // Flags byte
+    uint8_t  key_size_bits;      // Encoding key width in bits (e.g. 72 = 9 bytes)
     uint32_t entry_count;        // Number of entries (big-endian)
-    uint16_t key_size_bits;      // Key size in bits (big-endian)
+    uint16_t tag_count;          // Number of tags (big-endian)
 
     // Version-specific fields follow
 };
 ```
+
+| Offset | Size | Field | Description |
+|--------|------|-------|-------------|
+| 0 | 2 | `magic` | "DS" (0x44 0x53) |
+| 2 | 1 | `version` | Format version (1 or 2) |
+| 3 | 1 | `key_size_bits` | Encoding key width in **bits** (e.g. 72 = 9 bytes; byte count = `(bits + 7) >> 3`) |
+| 4 | 4 | `entry_count` | Number of entries (big-endian) |
+| 8 | 2 | `tag_count` | Number of tags after header (big-endian) |
 
 #### Version 1 Header Extension (offset 10)
 
@@ -83,6 +93,11 @@ struct SizeManifestHeaderV1 {
 };
 // Total header size: 19 bytes (0x13)
 ```
+
+| Offset | Size | Field | Description |
+|--------|------|-------|-------------|
+| 10 | 8 | `total_size` | Sum of all entry esize values (big-endian) |
+| 18 | 1 | `esize_bytes` | Byte width of esize per entry (1-8) |
 
 The `esize_bytes` field determines how many bytes each entry's size value
 occupies. Valid values are 1 through 8. Invalid values produce: "Invalid eSize
@@ -98,6 +113,10 @@ struct SizeManifestHeaderV2 {
 // Total header size: 15 bytes (0x0F)
 ```
 
+| Offset | Size | Field | Description |
+|--------|------|-------|-------------|
+| 10 | 5 | `total_size` | Sum of all entry esize values, 40-bit big-endian (max ~1TB) |
+
 Version 2 fixes `esize_bytes` at 4 (32-bit sizes per entry). The total size
 uses a 40-bit integer (5 bytes), reducing header size compared to version 1.
 
@@ -105,35 +124,55 @@ uses a 40-bit integer (5 bytes), reducing header size compared to version 1.
 
 The parser validates two minimum sizes:
 
-1. **15 bytes** (0x0F) -- enough to read magic, version, entry_count, and
-   key_size_bits
-2. **19 bytes** (0x13) -- full version 1 header (version 2 headers are shorter
-   and pass this check)
+1. **15 bytes** (0x0F) -- enough to read the base header plus the shorter V2
+   extension
+2. **19 bytes** (0x13) -- required for version 1 headers (checked after reading
+   the version byte)
 
-If the data is too small: "Detected truncated size manifest. Only got %u bytes,
-but minimum header size is %u bytes."
+If the data is too small: "Truncated data: expected {expected} bytes, got
+{actual} bytes"
+
+### Tags
+
+Tags appear between the header and entries. The tag count is specified by the
+`tag_count` field in the header. Tags use the same binary format as install
+manifest tags (`InstallTag`), consisting of:
+
+- A null-terminated name string
+- A 2-byte type field (big-endian)
+- A bitmask indicating which entries the tag applies to
+
+Tags are used for platform and architecture filtering (e.g., "Windows",
+"x86_64"), allowing the client to select entries relevant to the target system.
+
+When `tag_count` is 0, no tags are present and entries follow the header
+directly.
 
 ### Entry Format
 
-Entries are stored sequentially after the header:
+Entries are stored sequentially after the tags:
 
 ```c
 struct SizeManifestEntry {
-    uint8_t  key[];              // Encoding key, null-terminated
-    uint16_t key_hash;           // 16-bit hash/identifier (big-endian)
-    uint8_t  esize[];            // Estimated size (esize_bytes width, big-endian)
+    uint8_t  ekey[ekey_byte_count]; // Encoding key: (key_size_bits+7)>>3 bytes
+    uint8_t  null_term;             // Null terminator (0x00) after the key
+    uint16_t key_hash;              // 2-byte big-endian hash identifier
+    uint8_t  esize[esize_bytes];    // Estimated size (variable width, big-endian)
 };
 ```
 
-The key field length in bytes is `(key_size_bits + 7) / 8`, which rounds the
-bit count up to the nearest byte. The key is stored as a null-terminated byte
-string within this field.
+| Field | Size | Description |
+|-------|------|-------------|
+| `ekey` | `(key_size_bits+7)>>3` bytes | Encoding key (raw bytes) |
+| `null_term` | 1 byte | Null terminator (0x00) |
+| `key_hash` | 2 bytes BE | 16-bit hash identifier; 0x0000 and 0xFFFF are reserved |
+| `esize` | `esize_bytes` bytes | Estimated file size (big-endian, zero-extended to u64) |
 
-#### Key Hash Validation
+The key length in bytes is computed from the header's `key_size_bits` field as
+`(key_size_bits + 7) >> 3`. The entry stride is `key_bytes + 1 + 2 + esize_bytes`.
 
-The 2-byte `key_hash` field after the key is validated. Values `0x0000` and
-`0xFFFF` are treated as invalid sentinel values and cause the parser to reject
-the entry.
+`key_hash` values 0x0000 and 0xFFFF are reserved sentinels; the parser rejects
+entries with these values.
 
 #### Entry Size Field
 
@@ -143,6 +182,9 @@ The `esize` field width depends on the version:
 |---------|-------------|--------|
 | 1 | `esize_bytes` from header (1-8) | Variable |
 | 2 | 4 bytes (fixed) | Hardcoded |
+
+The esize value is read as a big-endian unsigned integer and zero-extended to
+a u64 for internal representation.
 
 ## Version History
 
@@ -169,23 +211,28 @@ The Size manifest is one of six manifest types in TACT:
 The parser validates manifests at parse time and via an explicit `validate()`
 method:
 
+- Magic bytes must be "DS"
+- Version must be 1 or 2
+- `key_size_bits` must produce a byte count of 1-16 (i.e., `key_size_bits` in 1-128)
+- V1 `esize_bytes` must be 1-8
+- Tag count matches the header's `tag_count` field
 - Entry count matches the header's `entry_count` field
 - Sum of all entry esize values matches the header's `total_size` field
-- `key_size_bits` must be > 0
-- Key hash sentinel values (0x0000, 0xFFFF) are rejected
+- Each entry's key length matches `(key_size_bits + 7) >> 3`
 
 ## Error Messages
 
-| Condition | Message |
-|-----------|---------|
-| Truncated data | "Detected truncated size manifest. Only got %u bytes, but minimum header size is %u bytes." |
-| Bad magic | "Invalid magic string in size manifest." |
-| Bad version | "Unsupported size manifest version: %u. This client only supports non-zero versions <= %u" |
-| Bad esize width | "Invalid eSize byte count '%u' in size manifest header." |
-| Zero key size | "Invalid key size: key_size_bits must be > 0" |
-| Bad key hash | "Invalid key hash sentinel value: 0x{value:04X}" |
-| Entry count mismatch | "Entry count mismatch: header says {expected}, found {actual}" |
-| Total size mismatch | "Total size mismatch: header says {expected}, sum of esizes is {actual}" |
+| Condition | Error |
+|-----------|-------|
+| Bad magic | `InvalidMagic` -- "Invalid magic: expected 'DS', got {bytes}" |
+| Bad version | `UnsupportedVersion` -- "Unsupported version: {version}" |
+| Truncated data | `TruncatedData` -- "Truncated data: expected {expected} bytes, got {actual} bytes" |
+| Bad esize width (V1) | `InvalidEsizeWidth` -- "Invalid eSize byte count '{n}' in size manifest header" |
+| Bad key_size_bits | `InvalidEKeySize` -- "Invalid key_size_bits: must be 1-128 (1-16 bytes), got {n}" |
+| Reserved key_hash | `InvalidKeyHash` -- entry `key_hash` is 0x0000 or 0xFFFF |
+| Tag count mismatch | `TagCountMismatch` -- "Tag count mismatch: header says {expected}, found {actual}" |
+| Entry count mismatch | `EntryCountMismatch` -- "Entry count mismatch: header says {expected}, found {actual}" |
+| Total size mismatch | `TotalSizeMismatch` -- "Total size mismatch: header says {expected}, sum of esizes is {actual}" |
 
 ## Implementation Status
 
@@ -197,6 +244,6 @@ The implementation provides:
 - Manual `BinRead`/`BinWrite` implementations for headers and entries
 - Variable-width esize field support (1-8 bytes for V1, fixed 4 bytes for V2)
 - 40-bit total_size handling for V2 headers
-- Key hash sentinel validation (rejects 0x0000 and 0xFFFF)
+- Tag support using the same `InstallTag` format as install/download manifests
+- Builder pattern with tag construction via `add_tag()` and `tag_file()`
 - `CascFormat` trait implementation for round-trip support
-- Builder pattern for constructing manifests

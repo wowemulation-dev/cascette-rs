@@ -1,10 +1,17 @@
 [workspace]
 resolver = "2"
 members = [
+    "crates/cascette-agent",
     "crates/cascette-cache",
     "crates/cascette-client-storage",
+    "crates/cascette-containerless",
     "crates/cascette-crypto",
     "crates/cascette-formats",
+    "crates/cascette-import",
+    "crates/cascette-installation",
+    "crates/cascette-maintenance",
+    "crates/cascette-metadata",
+    "crates/cascette-proto",
     "crates/cascette-protocol",
     "crates/cascette-ribbit",
 ]
@@ -38,8 +45,19 @@ getrandom = "0.4"
 # Remove this when rsa upgrades to rand 0.10 / getrandom 0.4.
 getrandom_02 = { package = "getrandom", version = "0.2" }
 
+# Identifiers and time
+uuid = { version = "1.0", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+
+# System information
+sysinfo = "0.32"
+
 # Concurrency
 parking_lot = "0.12"
+tokio-util = "0.7"
+
+# Database
+turso = { version = "0.4", default-features = false }
 
 # Memory-mapped I/O
 memmap2 = "0.9"
@@ -64,6 +82,10 @@ futures = "0.3"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
+# Protobuf
+prost = "0.14"
+prost-types = "0.14"
+
 # Cryptography
 sha2 = "0.10"
 digest = "0.10"
@@ -84,7 +106,9 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 
 # HTTP server framework
 axum = "0.8"
+tower = { version = "0.5", features = ["util"] }
 tower-http = { version = "0.6", features = ["trace", "cors", "compression-gzip"] }
+http-body-util = "0.1"
 axum-server = { version = "0.7", features = ["tls-rustls-no-provider"] }
 tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
 
@@ -93,6 +117,9 @@ clap = { version = "4.5", features = ["derive", "env", "color"] }
 
 # Application error handling (binary crates)
 anyhow = "1.0"
+
+# Platform abstractions
+libc = "0.2"
 
 # Testing
 pretty_assertions = "1.4"

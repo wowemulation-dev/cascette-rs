@@ -134,8 +134,7 @@ pub struct BlockSizeSpec {
 
 /// `ZLib` compression variant
 ///
-/// Agent.exe (`tact::ESpec::GetCodecId` at 0x6be389) assigns different
-/// codec IDs based on the variant:
+/// Different codec IDs are assigned based on the variant:
 /// - MPQ/ZLib → codec ID 2
 /// - LZ4HC → codec ID 3
 ///
@@ -194,6 +193,55 @@ impl ESpec {
     /// Validate that an `ESpec` string is syntactically correct
     pub fn validate(input: &str) -> bool {
         Self::parse(input).is_ok()
+    }
+
+    /// Codec ID for this ESpec.
+    ///
+    /// - 0 = None (pass-through)
+    /// - 2 = ZLib/MPQ
+    /// - 3 = LZ4HC
+    /// - 4 = BCPack
+    /// - 5 = GDeflate
+    ///
+    /// Returns `None` for encryption and block table specs (structural,
+    /// not codec-level).
+    #[must_use]
+    pub fn codec_id(&self) -> Option<u8> {
+        match self {
+            Self::None => Some(0),
+            Self::ZLib { variant, .. } => match variant {
+                Some(ZLibVariant::LZ4HC) => Some(3),
+                _ => Some(2),
+            },
+            Self::BCPack { .. } => Some(4),
+            Self::GDeflate { .. } => Some(5),
+            Self::Encrypted { .. } | Self::BlockTable { .. } => None,
+        }
+    }
+
+    /// BLTE compression mode byte for this ESpec.
+    ///
+    /// Returns the [`CompressionMode`] that should be written in the BLTE
+    /// chunk header when encoding data with this spec. Returns `None` for:
+    /// - Encryption (uses `E` mode with inner codec after decryption)
+    /// - Block table (delegates to per-chunk specs)
+    /// - BCPack/GDeflate (BLTE mode bytes not yet identified)
+    ///
+    /// [`CompressionMode`]: crate::blte::CompressionMode
+    #[must_use]
+    pub fn blte_compression_mode(&self) -> Option<crate::blte::CompressionMode> {
+        use crate::blte::CompressionMode;
+        match self {
+            Self::None => Some(CompressionMode::None),
+            Self::ZLib { variant, .. } => match variant {
+                Some(ZLibVariant::LZ4HC) => Some(CompressionMode::LZ4),
+                _ => Some(CompressionMode::ZLib),
+            },
+            Self::BCPack { .. }
+            | Self::GDeflate { .. }
+            | Self::Encrypted { .. }
+            | Self::BlockTable { .. } => None,
+        }
     }
 }
 

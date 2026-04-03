@@ -318,10 +318,9 @@ pub struct ServerMetrics {
     pub total_failure_weight: f64,
 }
 
-/// Compute the failure weight for an error, matching Agent.exe backoff weights.
+/// Compute the failure weight for an error.
 ///
-/// | Error | Weight |
-/// Weights match `tact::HandleHttpResponse` from Agent.exe:
+/// Weights are based on observed CDN endpoint backoff behavior:
 ///
 /// | Status Code | Weight |
 /// |-------------|--------|

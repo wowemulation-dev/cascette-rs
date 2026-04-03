@@ -10,14 +10,14 @@
 use std::time::Duration;
 
 // Platform-specific imports
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
 use std::{
     sync::atomic::{AtomicU64, AtomicUsize, Ordering},
     time::{Instant, SystemTime, UNIX_EPOCH},
 };
 
 /// Get current time in milliseconds since Unix epoch (native)
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
 fn current_time_ms() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -26,7 +26,7 @@ fn current_time_ms() -> u64 {
 }
 
 /// Get current time in milliseconds since Unix epoch (WASM)
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
 fn current_time_ms() -> u64 {
     js_sys::Date::now() as u64
 }
@@ -34,17 +34,17 @@ fn current_time_ms() -> u64 {
 // Use cache-aligned atomics to reduce false sharing
 // Cache-aligned atomic types for native platforms only
 // Used by AtomicCacheMetrics to reduce false sharing between threads
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
 #[repr(align(64))] // Cache line alignment
 #[derive(Debug)]
 struct CacheAlignedAtomicU64(AtomicU64);
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
 #[repr(align(64))] // Cache line alignment
 #[derive(Debug)]
 struct CacheAlignedAtomicUsize(AtomicUsize);
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
 impl CacheAlignedAtomicU64 {
     fn new(value: u64) -> Self {
         Self(AtomicU64::new(value))
@@ -78,7 +78,7 @@ impl CacheAlignedAtomicU64 {
     }
 }
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
 impl CacheAlignedAtomicUsize {
     fn new(value: usize) -> Self {
         Self(AtomicUsize::new(value))
@@ -260,7 +260,7 @@ impl Default for CacheStats {
 ///
 /// Note: This type is only available on native platforms due to its use of
 /// `std::time::Instant` for high-precision timing.
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
 #[derive(Debug)]
 pub struct AtomicCacheMetrics {
     // Group frequently updated counters together in separate cache lines
@@ -290,7 +290,7 @@ pub struct AtomicCacheMetrics {
     created_at_ms: u64,
 }
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
 impl AtomicCacheMetrics {
     pub fn new() -> Self {
         Self {
@@ -543,7 +543,7 @@ impl FastCacheMetrics {
 // ============================================================================
 
 /// Aggregated statistics from multiple cache layers.
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MultiLayerStats {
     pub layer_stats: Vec<CacheStats>,
@@ -551,7 +551,7 @@ pub struct MultiLayerStats {
     pub promotion_stats: PromotionStats,
 }
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
 impl MultiLayerStats {
     pub fn new(layers: usize) -> Self {
         Self {
@@ -585,7 +585,7 @@ impl MultiLayerStats {
     }
 }
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PromotionStats {
     pub total_promotions: u64,
@@ -593,7 +593,7 @@ pub struct PromotionStats {
     pub layer_promotions: std::collections::HashMap<(usize, usize), u64>,
 }
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
 impl PromotionStats {
     pub fn new() -> Self {
         Self {
@@ -622,14 +622,14 @@ impl PromotionStats {
     }
 }
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
 impl Default for PromotionStats {
     fn default() -> Self {
         Self::new()
     }
 }
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PerformanceMetrics {
     pub get_metrics: OperationMetrics,
@@ -638,7 +638,7 @@ pub struct PerformanceMetrics {
     pub eviction_metrics: OperationMetrics,
 }
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
 impl PerformanceMetrics {
     pub fn new() -> Self {
         Self {
@@ -650,14 +650,14 @@ impl PerformanceMetrics {
     }
 }
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
 impl Default for PerformanceMetrics {
     fn default() -> Self {
         Self::new()
     }
 }
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OperationMetrics {
     pub operation_name: String,
@@ -669,7 +669,7 @@ pub struct OperationMetrics {
     pub p99_duration: Duration,
 }
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
 impl OperationMetrics {
     pub fn new(operation_name: impl Into<String>) -> Self {
         Self {
@@ -713,7 +713,7 @@ impl OperationMetrics {
 }
 
 #[cfg(test)]
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
 #[allow(clippy::panic)]
 #[allow(clippy::expect_used)]
 #[allow(clippy::unwrap_used)]

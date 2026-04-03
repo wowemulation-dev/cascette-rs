@@ -13,11 +13,11 @@ use crate::tcp::{v1, v2};
 /// # Errors
 ///
 /// Returns `ProtocolError` if the command is invalid or processing fails.
-pub fn handle_command(command: &str, state: &AppState) -> Result<String, ProtocolError> {
+pub async fn handle_command(command: &str, state: &AppState) -> Result<String, ProtocolError> {
     if command.starts_with("v1/") {
-        v1::handle_v1_command(command, state)
+        v1::handle_v1_command(command, state).await
     } else if command.starts_with("v2/") {
-        v2::handle_v2_command(command, state)
+        v2::handle_v2_command(command, state).await
     } else {
         Err(ProtocolError::InvalidCommand(format!(
             "Unknown protocol version: {command}"
@@ -53,14 +53,14 @@ mod tests {
     #[tokio::test]
     async fn test_invalid_command() {
         let state = create_test_state();
-        let result = handle_command("invalid", &state);
+        let result = handle_command("invalid", &state).await;
         assert!(result.is_err());
     }
 
     #[tokio::test]
     async fn test_v2_versions_command() {
         let state = create_test_state();
-        let result = handle_command("v2/products/test_product/versions", &state);
+        let result = handle_command("v2/products/test_product/versions", &state).await;
         assert!(result.is_ok());
         let response = result.unwrap();
         assert!(response.contains("Region!STRING"));

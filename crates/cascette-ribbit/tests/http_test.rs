@@ -157,11 +157,12 @@ async fn test_http_versions_endpoint_success() {
     assert!(body.contains("42597")); // build id
     assert!(body.contains("1.14.2.42597")); // version
 
-    // Last line should be sequence number
-    let last_line = lines
-        .last()
-        .expect("Response should have at least one line for sequence number");
-    assert!(last_line.starts_with("## seqn = "));
+    // Sequence number must be on line 2 (between header and data rows)
+    assert!(
+        lines[1].starts_with("## seqn = "),
+        "seqn must appear between header and data rows, got: {}",
+        lines[1]
+    );
 }
 
 #[tokio::test]

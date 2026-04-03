@@ -17,7 +17,7 @@ use crate::server::AppState;
 /// # Errors
 ///
 /// Returns `ProtocolError` if the command is invalid or processing fails.
-pub fn handle_v2_command(command: &str, state: &AppState) -> Result<String, ProtocolError> {
+pub async fn handle_v2_command(command: &str, state: &AppState) -> Result<String, ProtocolError> {
     // Parse command format: v2/products/{product}/{endpoint}
     let parts: Vec<&str> = command.split('/').collect();
 
@@ -30,13 +30,12 @@ pub fn handle_v2_command(command: &str, state: &AppState) -> Result<String, Prot
     let product = parts[2];
     let endpoint = parts[3];
 
-    // Get build for product
-    let build = state
-        .database()
+    let db = state.database().await;
+    let build = db
         .latest_build(product)
         .ok_or_else(|| ProtocolError::InvalidCommand(format!("Product not found: {product}")))?;
 
-    let seqn = state.current_seqn();
+    let seqn = state.current_seqn(product);
 
     // Generate appropriate BPSV response
     let response = match endpoint {
@@ -84,7 +83,7 @@ mod tests {
     #[tokio::test]
     async fn test_v2_versions() {
         let state = create_test_state();
-        let result = handle_v2_command("v2/products/test_product/versions", &state);
+        let result = handle_v2_command("v2/products/test_product/versions", &state).await;
         assert!(result.is_ok());
         let response = result.unwrap();
         assert!(response.contains("Region!STRING"));
@@ -94,7 +93,7 @@ mod tests {
     #[tokio::test]
     async fn test_v2_cdns() {
         let state = create_test_state();
-        let result = handle_v2_command("v2/products/test_product/cdns", &state);
+        let result = handle_v2_command("v2/products/test_product/cdns", &state).await;
         assert!(result.is_ok());
         let response = result.unwrap();
         assert!(response.contains("Name!STRING"));
@@ -104,21 +103,21 @@ mod tests {
     #[tokio::test]
     async fn test_v2_bgdl() {
         let state = create_test_state();
-        let result = handle_v2_command("v2/products/test_product/bgdl", &state);
+        let result = handle_v2_command("v2/products/test_product/bgdl", &state).await;
         assert!(result.is_ok());
     }
 
     #[tokio::test]
     async fn test_v2_invalid_format() {
         let state = create_test_state();
-        let result = handle_v2_command("v2/invalid", &state);
+        let result = handle_v2_command("v2/invalid", &state).await;
         assert!(result.is_err());
     }
 
     #[tokio::test]
     async fn test_v2_product_not_found() {
         let state = create_test_state();
-        let result = handle_v2_command("v2/products/nonexistent/versions", &state);
+        let result = handle_v2_command("v2/products/nonexistent/versions", &state).await;
         assert!(result.is_err());
     }
 }

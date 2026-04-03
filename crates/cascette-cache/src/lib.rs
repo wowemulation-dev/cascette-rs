@@ -261,25 +261,25 @@ pub mod traits;
 // ============================================================================
 // Native-only modules (require tokio::time, filesystem, or other native features)
 // ============================================================================
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
 pub mod cdn;
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
 pub mod disk_cache;
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
 pub mod integration;
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
 pub mod memory;
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
 pub mod memory_cache;
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
 pub mod multi_layer;
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
 pub mod ngdp;
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
 pub mod streaming;
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
 pub mod validation;
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
 pub mod zerocopy;
 
 // ============================================================================
@@ -287,7 +287,7 @@ pub mod zerocopy;
 // ============================================================================
 #[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
 pub mod indexed_db_cache;
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
 pub mod local_storage_cache;
 
 // ============================================================================
@@ -301,13 +301,13 @@ pub use simd::{
 };
 pub use stats::{CacheStats, FastCacheMetrics};
 // Native-only stats exports
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
 pub use stats::{AtomicCacheMetrics, MultiLayerStats, PerformanceMetrics};
 // Platform-independent trait exports
 pub use traits::{AsyncCache, EvictionPolicy, InvalidationStrategy};
 
 // Native-only trait exports
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
 pub use traits::{
     CacheEntry, CacheListener, CacheMetrics, CachePersistence, CacheWarming, MultiLayerCache,
 };
@@ -315,37 +315,37 @@ pub use traits::{
 // ============================================================================
 // Native-only re-exports
 // ============================================================================
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
 pub use memory::{AccessPattern, ContentTypeHint, MemoryPool, MemoryPoolStats, SizedMemoryPool};
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
 pub use streaming::{
     ContentStream, StreamingCache, StreamingConfig, StreamingProcessor, StreamingStats,
 };
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
 pub use validation::{
     Md5ValidationHooks, NgdpBytes, NgdpValidationHooks, NoOpValidationHooks, ValidationHooks,
     ValidationMetrics, ValidationResult,
 };
 
 // Re-export native cache implementations
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
 pub use disk_cache::DiskCache;
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
 pub use integration::{ArchiveOps, BlteBlockOps, EncodingFileOps, FormatConfig, RootFileOps};
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
 pub use memory_cache::MemoryCache;
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
 pub use multi_layer::{LayerStats, MultiLayerCacheImpl, MultiLayerStats as MultiLayerStatsV2};
 
 // Re-export NGDP-specific cache implementations (native only)
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
 pub use ngdp::{
     ArchiveCache, ArchiveMetadata, BlockMetadata, BlteBlockCache, ContentAddressedCache,
     ContentValidationMetrics, NgdpResolutionCache, NgdpResolutionConfig, ResolutionMetrics,
 };
 
 // Re-export CDN integration components (native only)
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
 pub use cdn::{
     CdnArchiveCache, CdnBackedCache, CdnCacheBuilder, CdnCacheStack, CdnClient, CdnConfig,
     CdnContentCache, CdnMetrics, CdnNgdpResolutionCache,
@@ -356,7 +356,7 @@ pub use cdn::{
 // ============================================================================
 #[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
 pub use indexed_db_cache::{IndexedDbCache, IndexedDbCacheConfig};
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
 pub use local_storage_cache::{LocalStorageCache, LocalStorageCacheConfig};
 
 // ============================================================================
@@ -380,7 +380,7 @@ pub mod prelude {
     };
 
     // Native-only exports
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
     pub use crate::{
         ArchiveCache, BlteBlockCache, CacheEntry, ContentAddressedCache, DiskCache, MemoryCache,
         MultiLayerCacheImpl, NgdpResolutionCache,

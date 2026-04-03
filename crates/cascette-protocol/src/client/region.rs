@@ -55,6 +55,21 @@ impl Region {
         }
     }
 
+    /// CDN download base URL for this region.
+    ///
+    /// Used when CDN hosts are not available from Ribbit/BPSV and the client
+    /// needs to construct CDN URLs from the region alone (last-resort fallback).
+    pub fn cdn_base_url(&self) -> &'static str {
+        match self {
+            Self::US => "http://us.patch.battle.net:1119",
+            Self::EU => "http://eu.patch.battle.net:1119",
+            Self::KR => "http://kr.patch.battle.net:1119",
+            Self::TW => "http://tw.patch.battle.net:1119",
+            Self::CN => "http://cn.patch.battlenet.com.cn:1119",
+            Self::SG => "http://sg.patch.battle.net:1119",
+        }
+    }
+
     /// Ribbit TCP address (`host:port`) for this region (port 1119).
     ///
     /// Used by [`RibbitClient::for_region()`](super::RibbitClient::for_region).
@@ -159,5 +174,36 @@ mod tests {
         assert_eq!(Region::US.to_string(), "us");
         assert_eq!(Region::CN.to_string(), "cn");
         assert_eq!(Region::SG.to_string(), "sg");
+    }
+
+    #[test]
+    fn test_cdn_base_urls() {
+        // Non-China regions use battle.net
+        assert_eq!(Region::US.cdn_base_url(), "http://us.patch.battle.net:1119");
+        assert_eq!(Region::EU.cdn_base_url(), "http://eu.patch.battle.net:1119");
+        assert_eq!(Region::KR.cdn_base_url(), "http://kr.patch.battle.net:1119");
+        assert_eq!(Region::TW.cdn_base_url(), "http://tw.patch.battle.net:1119");
+        assert_eq!(Region::SG.cdn_base_url(), "http://sg.patch.battle.net:1119");
+
+        // China uses battlenet.com.cn
+        assert_eq!(
+            Region::CN.cdn_base_url(),
+            "http://cn.patch.battlenet.com.cn:1119"
+        );
+    }
+
+    #[test]
+    fn test_cdn_base_url_matches_tact_http() {
+        // cdn_base_url should return the same URLs as tact_http_url
+        for region in [
+            Region::US,
+            Region::EU,
+            Region::KR,
+            Region::TW,
+            Region::CN,
+            Region::SG,
+        ] {
+            assert_eq!(region.cdn_base_url(), region.tact_http_url());
+        }
     }
 }
