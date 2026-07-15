@@ -512,6 +512,59 @@ impl CdnClient {
         Ok(data)
     }
 
+    /// Download a patch archive index file (`.index` under `/patch/` path).
+    pub async fn download_patch_archive_index(
+        &self,
+        endpoint: &CdnEndpoint,
+        archive_key: &str,
+    ) -> Result<Vec<u8>> {
+        let cache_key = format!(
+            "cdn/{}/patch/{}/{}/{}.index",
+            normalize_cdn_path(&endpoint.path),
+            &archive_key[..2],
+            &archive_key[2..4],
+            archive_key
+        );
+
+        if let Some(cached) = self.cache.get_bytes(&cache_key)? {
+            tracing::debug!("CDN cache hit for patch archive index {}", archive_key);
+            return Ok(cached);
+        }
+
+        let scheme = endpoint.scheme.as_deref().unwrap_or("https");
+        let base_path = normalize_cdn_path(&endpoint.path);
+        let url = format!(
+            "{}://{}/{}/patch/{}/{}/{}.index",
+            scheme,
+            endpoint.host,
+            base_path,
+            &archive_key[..2],
+            &archive_key[2..4],
+            archive_key
+        );
+
+        tracing::debug!(
+            host = %endpoint.host,
+            archive_key = %archive_key,
+            "CDN request: GET {} (patch archive index)",
+            url
+        );
+
+        let data = self.download_with_retry(&url).await?;
+
+        tracing::debug!(
+            host = %endpoint.host,
+            archive_key = %archive_key,
+            bytes = data.len(),
+            "CDN response: {} bytes (patch archive index)",
+            data.len()
+        );
+
+        self.cache.store_bytes(&cache_key, &data)?;
+
+        Ok(data)
+    }
+
     /// Get the CDN configuration
     pub fn config(&self) -> &CdnConfig {
         &self.config

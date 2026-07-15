@@ -93,6 +93,18 @@ pub async fn execute(
         .and_then(serde_json::Value::as_str)
         .map(ToString::to_string);
 
+    // Optional install mode. "loose_only" produces only the loose files +
+    // root metadata; the wow client bootstraps CASC content from the CDN
+    // on first launch. Default ("full") matches Agent.exe output.
+    let install_mode = match params
+        .get("mode")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("full")
+    {
+        "loose_only" => cascette_installation::InstallMode::LooseOnly,
+        _ => cascette_installation::InstallMode::Full,
+    };
+
     // Transition to Downloading (metadata resolution + download phase)
     operation.transition_to(OperationState::Downloading)?;
     state.queue.update(operation).await?;
@@ -205,6 +217,7 @@ pub async fn execute(
         architecture.as_deref(),
     );
     install_config.key_store = Some(key_provider);
+    install_config.mode = install_mode;
 
     // --- Bootstrapper + launcher binary resolution ---
     // Resolve both bts operations: bootstrapper (setup binary, Region==product_tag)

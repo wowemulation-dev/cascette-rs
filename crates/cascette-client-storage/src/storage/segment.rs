@@ -42,12 +42,21 @@ impl SegmentHeader {
     /// `segment_index` is the segment number (0-1022).
     /// `path_hash` is the 16-byte hash of the storage path.
     pub fn generate(segment_index: u16, path_hash: &[u8; 16]) -> Self {
-        let mut headers =
-            std::array::from_fn(|i| LocalHeader::new([0u8; 16], 0, i * LOCAL_HEADER_SIZE));
+        let seg_base = u64::from(segment_index) * SEGMENT_SIZE;
+        // Reconstruction headers use encoded_size = 0x1E (30, the header
+        // size itself). ValidateDataIntegrity checks this value and skips
+        // the entire segment if it is not exactly 0x1E.
+        let enc_size = LOCAL_HEADER_SIZE as u32;
+
+        let mut headers = std::array::from_fn(|i| {
+            let global_offset = seg_base as usize + i * LOCAL_HEADER_SIZE;
+            LocalHeader::new([0u8; 16], enc_size, global_offset)
+        });
 
         for (bucket, header) in headers.iter_mut().enumerate() {
             let key = generate_segment_key(path_hash, segment_index, bucket as u8);
-            *header = LocalHeader::new(key, 0, bucket * LOCAL_HEADER_SIZE);
+            let global_offset = seg_base as usize + bucket * LOCAL_HEADER_SIZE;
+            *header = LocalHeader::new(key, enc_size, global_offset);
         }
 
         Self { headers }

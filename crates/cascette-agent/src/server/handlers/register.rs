@@ -78,6 +78,11 @@ pub struct RegisterRequest {
     pub platform: Option<String>,
     /// Target architecture override (cascette extension, e.g., "x86_64", "arm64").
     pub architecture: Option<String>,
+    /// Install mode (cascette extension). One of `"full"` (default) or
+    /// `"loose_only"`. The latter writes only loose files plus root metadata
+    /// and lets the wow client bootstrap CASC content from the CDN on first
+    /// launch.
+    pub mode: Option<String>,
 }
 
 /// POST /register -- register a product with the agent.
@@ -210,6 +215,7 @@ pub async fn post_register(
             "cdn_config": body.cdn_config,
             "platform": body.platform,
             "architecture": body.architecture,
+            "mode": body.mode,
         });
 
         let operation = Operation::new(

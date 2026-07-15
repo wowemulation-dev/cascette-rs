@@ -63,7 +63,7 @@ impl HttpClient {
             .connect_timeout(Duration::from_secs(10)) // Fast connect timeout
             // Network optimizations
             .tcp_nodelay(true) // Disable Nagle for low-latency
-            .tcp_keepalive(Duration::from_secs(60)) // Keep connections alive
+            .tcp_keepalive(Duration::from_mins(1)) // Keep connections alive
             // TLS - use rustls for security and WASM compatibility
             .use_rustls_tls()
             .https_only(false) // Allow HTTP for some NGDP endpoints
@@ -271,7 +271,7 @@ impl Default for HttpConfig {
             timeout: Duration::from_secs(45),
             connect_timeout: Duration::from_secs(10),
             tcp_nodelay: true,
-            tcp_keepalive: Some(Duration::from_secs(60)),
+            tcp_keepalive: Some(Duration::from_mins(1)),
             http_version: HttpVersion::Http1Only,
             enable_compression: true, // Compress protocol responses
             max_redirects: 5,         // Matches the Blizzard Agent default
@@ -283,9 +283,9 @@ impl HttpConfig {
     /// Configuration optimized for high-throughput NGDP workloads
     pub fn high_performance() -> Self {
         Self {
-            pool_idle_timeout: Duration::from_secs(60),
+            pool_idle_timeout: Duration::from_mins(1),
             pool_max_idle_per_host: 50, // More connections for throughput
-            timeout: Duration::from_secs(120),
+            timeout: Duration::from_mins(2),
             connect_timeout: Duration::from_secs(5), // Fast connect for high perf
             tcp_nodelay: true,
             tcp_keepalive: Some(Duration::from_secs(30)),

@@ -44,7 +44,7 @@ impl ListfileProvider {
     pub fn new(cache_dir: PathBuf) -> ImportResult<Self> {
         crate::ensure_crypto_provider();
         let client = Client::builder()
-            .timeout(Duration::from_secs(120))
+            .timeout(Duration::from_mins(2))
             .user_agent(format!("cascette-import/{}", env!("CARGO_PKG_VERSION")))
             .build()
             .map_err(ImportError::Network)?;
@@ -63,7 +63,7 @@ impl ListfileProvider {
                     requires_auth: false,
                 },
                 rate_limit: Some(10),
-                cache_ttl: Duration::from_secs(86400),
+                cache_ttl: Duration::from_hours(24),
             },
             client,
             cache_dir,

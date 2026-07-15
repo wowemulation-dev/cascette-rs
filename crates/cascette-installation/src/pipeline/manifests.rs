@@ -50,4 +50,17 @@ pub struct BuildManifests {
     /// The client reads the patch config from `Data/config/` to determine
     /// update availability. Without it, the client contacts the CDN.
     pub patch_config_data: Option<Vec<u8>>,
+
+    /// Raw BLTE bytes for bootstrap files that must be written to local
+    /// CASC storage. The client resolves these from the build config and
+    /// expects them indexed in the local IDX files:
+    /// - encoding file (CKey->EKey mapping table)
+    /// - install manifest
+    /// - download manifest
+    /// - root file (FDID->CKey mapping)
+    ///
+    /// Each entry is `(label, ekey_hex, blte_data)`. The ekey comes from
+    /// the build config or encoding file resolution -- not recomputed from
+    /// the BLTE bytes, since CDN re-encoding can change the MD5.
+    pub bootstrap_blte: Vec<(&'static str, String, Vec<u8>)>,
 }

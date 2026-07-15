@@ -16,7 +16,7 @@ use cascette_client_storage::container::AccessMode;
 use cascette_client_storage::container::hardlink::HardLinkContainer;
 
 use crate::error::InstallationResult;
-use crate::extract::validate_output_path;
+use crate::extract::{PathNormalizer, validate_output_path};
 
 /// Handles loose file operations for a product directory.
 pub struct LooseFileHandler {
@@ -24,7 +24,11 @@ pub struct LooseFileHandler {
     install_path: PathBuf,
     hardlink_container: HardLinkContainer,
     hardlinks_supported: bool,
-    completed: HashSet<[u8; 16]>,
+    /// Paths already written. Tracking is per-destination, not per-encoding-key,
+    /// so a single content blob shared across N install manifest entries is
+    /// written to all N destinations (matching Agent.exe).
+    completed_paths: HashSet<PathBuf>,
+    normalizer: PathNormalizer,
     /// Files written directly (BLTE decode + write, bypassing CASC round-trip).
     direct_written: usize,
 }
@@ -70,7 +74,8 @@ impl LooseFileHandler {
             install_path,
             hardlink_container,
             hardlinks_supported,
-            completed: HashSet::new(),
+            completed_paths: HashSet::new(),
+            normalizer: PathNormalizer::new(),
             direct_written: 0,
         })
     }
@@ -83,16 +88,17 @@ impl LooseFileHandler {
         installation: &Installation,
         key_store: Option<&(dyn cascette_crypto::TactKeyProvider + Send + Sync)>,
     ) -> InstallationResult<()> {
-        if self.completed.contains(ekey) {
-            return Ok(());
-        }
-
         // Normalize install manifest paths: backslash → slash, and on
-        // case-sensitive filesystems uppercase directory components to avoid
-        // mixed-case duplicates (both "Utils/" and "UTILS/" appear).
-        let normalized_path = crate::extract::normalize_install_path(file_path);
+        // case-sensitive filesystems collapse case-variant directory
+        // references onto the first casing seen (both "Utils/" and "UTILS/"
+        // appear in Blizzard manifests).
+        let normalized_path = self.normalizer.normalize(file_path);
         let product_dir = self.install_path.join(&self.subfolder);
         let destination = product_dir.join(&normalized_path);
+
+        if self.completed_paths.contains(&destination) {
+            return Ok(());
+        }
 
         // Reject paths that escape the product directory (e.g. "../../../etc/passwd")
         validate_output_path(&product_dir, &destination)?;
@@ -110,7 +116,7 @@ impl LooseFileHandler {
             {
                 Ok(()) => {
                     debug!(path = %file_path, "hardlink created");
-                    self.completed.insert(*ekey);
+                    self.completed_paths.insert(destination);
                     return Ok(());
                 }
                 Err(e) => {
@@ -130,7 +136,7 @@ impl LooseFileHandler {
         };
         tokio::fs::write(&destination, &data).await?;
         debug!(path = %file_path, "loose file copied");
-        self.completed.insert(*ekey);
+        self.completed_paths.insert(destination);
 
         Ok(())
     }
@@ -142,20 +148,20 @@ impl LooseFileHandler {
     /// size, then performs an atomic rename with retries.
     pub async fn write_loose_file(
         &mut self,
-        ekey: &[u8; 16],
+        _ekey: &[u8; 16],
         file_path: &str,
         blte_data: &[u8],
     ) -> InstallationResult<()> {
-        if self.completed.contains(ekey) {
-            return Ok(());
-        }
-
         // Normalize install manifest paths: backslash → slash, and on
-        // case-sensitive filesystems uppercase directory components to avoid
-        // mixed-case duplicates (both "Utils/" and "UTILS/" appear).
-        let normalized_path = crate::extract::normalize_install_path(file_path);
+        // case-sensitive filesystems collapse case-variant directory
+        // references onto the first casing seen.
+        let normalized_path = self.normalizer.normalize(file_path);
         let product_dir = self.install_path.join(&self.subfolder);
         let destination = product_dir.join(&normalized_path);
+
+        if self.completed_paths.contains(&destination) {
+            return Ok(());
+        }
 
         // Reject paths that escape the product directory
         crate::extract::validate_output_path(&product_dir, &destination)?;
@@ -208,22 +214,25 @@ impl LooseFileHandler {
         }
 
         debug!(path = %file_path, bytes = raw_data.len(), "loose file written directly");
-        self.completed.insert(*ekey);
+        self.completed_paths.insert(destination);
         self.direct_written += 1;
 
         Ok(())
     }
 
-    /// Check if a file has already been completed.
-    pub fn is_completed(&self, ekey: &[u8; 16]) -> bool {
-        self.completed.contains(ekey)
+    /// Check if a destination path has already been written.
+    pub fn is_path_completed(&self, destination: &std::path::Path) -> bool {
+        self.completed_paths.contains(destination)
     }
 
     /// Get the current report.
     pub fn report(&self) -> LooseFileReport {
         // Files written via write_loose_file (direct BLTE decode + write) are always "copied".
         // Files placed via on_file_complete are hardlinked when supported, copied otherwise.
-        let via_casc = self.completed.len().saturating_sub(self.direct_written);
+        let via_casc = self
+            .completed_paths
+            .len()
+            .saturating_sub(self.direct_written);
         LooseFileReport {
             linked: if self.hardlinks_supported {
                 via_casc

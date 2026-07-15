@@ -41,7 +41,14 @@ pub struct InstallReport {
 
 /// Mapping from encoding key bytes to install manifest file path.
 /// Used to identify which downloaded files need loose file placement.
-type InstallManifestPaths = HashMap<[u8; 16], String>;
+/// Maps an encoding key to every install-manifest path that references it.
+///
+/// Multiple manifest entries can share one encoding key when their content
+/// is identical (e.g. an `Info.plist` file deduplicated across N locale
+/// subdirectories inside a macOS .app bundle). Each path must still be
+/// materialized on disk to match Agent.exe's output, so the value is a
+/// `Vec` rather than a single `String`.
+type InstallManifestPaths = HashMap<[u8; 16], Vec<String>>;
 
 /// Pipeline state machine states.
 enum PipelineState {
@@ -113,6 +120,14 @@ impl InstallPipeline {
         endpoints: Vec<CdnEndpoint>,
         progress: impl Fn(ProgressEvent) + Send + Sync,
     ) -> InstallationResult<InstallReport> {
+        // Loose-only mode: skip CASC writes entirely. Fetch only the install
+        // manifest, download the loose files (Wow.exe, DLLs, locale packs),
+        // write layout metadata, and return. The wow client will bootstrap
+        // CASC content from the CDN on first launch.
+        if self.config.mode == crate::config::InstallMode::LooseOnly {
+            return super::install_loose::run(self.config, cdn, endpoints, progress).await;
+        }
+
         let mut state = PipelineState::FetchingConfigs;
 
         loop {
@@ -197,14 +212,18 @@ impl InstallPipeline {
                         "download manifest classification complete"
                     );
 
-                    // Build encoding key -> file path map for install manifest entries.
+                    // Build encoding key -> file paths map for install manifest entries.
                     // Used by the loose file handler to know which downloads need
-                    // placement in the product subfolder.
-                    let install_manifest_paths: InstallManifestPaths = install_artifacts
-                        .required
-                        .iter()
-                        .map(|a| (*a.encoding_key.as_bytes(), a.path.clone()))
-                        .collect();
+                    // placement in the product subfolder. One encoding key can map
+                    // to multiple paths when the same content is referenced from
+                    // multiple manifest entries; all paths must be materialized.
+                    let mut install_manifest_paths: InstallManifestPaths = HashMap::new();
+                    for artifact in &install_artifacts.required {
+                        install_manifest_paths
+                            .entry(*artifact.encoding_key.as_bytes())
+                            .or_default()
+                            .push(artifact.path.clone());
+                    }
 
                     // Keep install and download artifacts separate so loose files
                     // (install manifest) are downloaded before CASC blobs (download
@@ -264,6 +283,7 @@ impl InstallPipeline {
                         return Err(InstallationError::InvalidConfig("no endpoints".to_string()));
                     }
 
+                    // Regular archive indices (from /data/ path).
                     let archive_keys: Vec<String> = manifests
                         .cdn_config
                         .archives()
@@ -271,18 +291,92 @@ impl InstallPipeline {
                         .map(|a| a.content_key.clone())
                         .collect();
 
+                    // Patch archive indices (from /patch/ path).
+                    let patch_keys: Vec<String> = manifests
+                        .cdn_config
+                        .patch_archives()
+                        .iter()
+                        .map(|a| a.content_key.clone())
+                        .collect();
+
+                    // file-index and patch-file-index (loose file indices).
+                    let file_index_key = manifests.cdn_config.file_index().map(String::from);
+                    let patch_file_index_key =
+                        manifests.cdn_config.patch_file_index().map(String::from);
+
+                    // Data-path keys: regular archives + file-index
+                    let mut data_keys = archive_keys.clone();
+                    if let Some(ref fi) = file_index_key {
+                        data_keys.push(fi.clone());
+                    }
+
+                    // Patch-path keys: patch archives + patch-file-index
+                    let mut patch_path_keys = patch_keys.clone();
+                    if let Some(ref pfi) = patch_file_index_key {
+                        patch_path_keys.push(pfi.clone());
+                    }
+
+                    info!(
+                        archives = archive_keys.len(),
+                        patch_archives = patch_keys.len(),
+                        file_index = file_index_key.is_some(),
+                        patch_file_index = patch_file_index_key.is_some(),
+                        "downloading CDN archive indices"
+                    );
+
+                    // Download regular archive indices (data path)
                     let indices_downloaded = download::download_archive_indices(
                         &cdn,
                         &endpoints,
-                        &archive_keys,
+                        &data_keys,
                         &indices_dir,
                         self.config.index_batch_size,
                         &progress,
                     )
                     .await?;
 
+                    // Download patch archive indices (patch path)
+                    if !patch_path_keys.is_empty() {
+                        let patch_downloaded = download::download_patch_archive_indices(
+                            &cdn,
+                            &endpoints,
+                            &patch_path_keys,
+                            &indices_dir,
+                            self.config.index_batch_size,
+                            &progress,
+                        )
+                        .await?;
+                        info!(
+                            patch_indices = patch_downloaded,
+                            "patch archive indices downloaded"
+                        );
+                    }
+
+                    // Generate archive-group index (combined index of all
+                    // individual archive indices). The client tries this
+                    // first for faster lookups; falls back to individual
+                    // indices if missing.
+                    if let Some(group_hash) = manifests.cdn_config.archive_group() {
+                        download::generate_group_index(
+                            &indices_dir,
+                            &archive_keys,
+                            group_hash,
+                            false,
+                        )?;
+                    }
+                    if let Some(group_hash) = manifests.cdn_config.patch_archive_group() {
+                        download::generate_group_index(
+                            &indices_dir,
+                            &patch_keys,
+                            group_hash,
+                            true,
+                        )?;
+                    }
+
                     // Parse downloaded indices into a lookup map for archive
                     // byte-range fallback when loose blob downloads fail.
+                    // Only regular archive indices are used for the lookup;
+                    // patch and file indices are consumed by the client.
                     let archive_lookup =
                         download::load_archive_indices(&indices_dir, &archive_keys)?;
 
@@ -297,7 +391,7 @@ impl InstallPipeline {
                 }
 
                 PipelineState::Downloading {
-                    manifests,
+                    mut manifests,
                     install_artifacts,
                     download_artifacts,
                     indices_downloaded,
@@ -307,6 +401,52 @@ impl InstallPipeline {
                     // Open local installation
                     let installation = Installation::open(self.config.install_path.join("Data"))?;
                     installation.initialize().await?;
+
+                    // Write bootstrap files (encoding, install, download, root)
+                    // to local CASC storage. The client expects these in the
+                    // data archives, indexed via the local IDX files.
+                    {
+                        use cascette_crypto::EncodingKey;
+
+                        for (label, ekey_hex, blte_data) in
+                            std::mem::take(&mut manifests.bootstrap_blte)
+                        {
+                            let size = blte_data.len();
+                            let ekey = match EncodingKey::from_hex(&ekey_hex) {
+                                Ok(k) => k,
+                                Err(e) => {
+                                    warn!(
+                                        file = label,
+                                        error = %e,
+                                        "invalid bootstrap ekey, skipping"
+                                    );
+                                    continue;
+                                }
+                            };
+                            match installation
+                                .write_raw_blte_with_ekey(blte_data, &ekey)
+                                .await
+                            {
+                                Ok(()) => {
+                                    info!(
+                                        file = label,
+                                        size,
+                                        ekey = %ekey_hex,
+                                        "bootstrap file written to CASC storage"
+                                    );
+                                }
+                                Err(e) => {
+                                    warn!(
+                                        file = label,
+                                        error = %e,
+                                        "failed to write bootstrap file to CASC storage"
+                                    );
+                                }
+                            }
+                        }
+                        installation.flush_indices().await?;
+                    }
+
                     let installation = Arc::new(installation);
 
                     let build_config_hash = self
@@ -356,39 +496,42 @@ impl InstallPipeline {
                          blte_data: Option<Vec<u8>>| {
                             let handler = handler_ref.clone();
                             let ekey = *artifact.encoding_key.as_bytes();
-                            let path = install_manifest_paths.get(&ekey).cloned();
+                            let paths = install_manifest_paths.get(&ekey).cloned();
                             let inst = Arc::clone(inst);
                             let ks = key_store_ref.clone();
                             async move {
                                 let Some(handler) = handler else { return };
-                                let Some(file_path) = path else { return };
+                                let Some(paths) = paths else { return };
                                 let mut h = handler.lock().await;
-                                if let Some(data) = blte_data {
-                                    // Loose file: decode BLTE and write directly to filesystem.
-                                    if let Err(e) =
-                                        h.write_loose_file(&ekey, &file_path, &data).await
-                                    {
-                                        warn!(
-                                            path = %file_path,
-                                            error = %e,
-                                            "loose file write failed"
-                                        );
-                                    }
-                                } else {
-                                    // CASC file: hardlink or copy from archive storage.
-                                    let key_ref = ks.as_ref().map(|k| {
-                                        &**k as &(
-                                             dyn cascette_crypto::TactKeyProvider + Send + Sync
-                                         )
-                                    });
-                                    if let Err(e) =
-                                        h.on_file_complete(&ekey, &file_path, &inst, key_ref).await
-                                    {
-                                        warn!(
-                                            path = %file_path,
-                                            error = %e,
-                                            "loose file placement failed"
-                                        );
+                                for file_path in &paths {
+                                    if let Some(ref data) = blte_data {
+                                        // Loose file: decode BLTE and write directly to filesystem.
+                                        if let Err(e) =
+                                            h.write_loose_file(&ekey, file_path, data).await
+                                        {
+                                            warn!(
+                                                path = %file_path,
+                                                error = %e,
+                                                "loose file write failed"
+                                            );
+                                        }
+                                    } else {
+                                        // CASC file: hardlink or copy from archive storage.
+                                        let key_ref = ks.as_ref().map(|k| {
+                                            &**k as &(
+                                                 dyn cascette_crypto::TactKeyProvider + Send + Sync
+                                             )
+                                        });
+                                        if let Err(e) = h
+                                            .on_file_complete(&ekey, file_path, &inst, key_ref)
+                                            .await
+                                        {
+                                            warn!(
+                                                path = %file_path,
+                                                error = %e,
+                                                "loose file placement failed"
+                                            );
+                                        }
                                     }
                                 }
                             }

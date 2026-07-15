@@ -23,6 +23,28 @@ pub const LOCAL_HEADER_SIZE: usize = 0x1E; // 30 bytes
 /// Jenkins hash seed for computing header checksum_a.
 const CHECKSUM_A_SEED: u32 = 0x3D6B_E971;
 
+/// Lookup table for checksum_b phase 2 XOR mask.
+/// Extracted from WoW.exe 1.13.2.31650 at address 0x14217D690.
+/// 16 entries indexed by `(global_offset + 0x1E) & 0xF`.
+const CHECKSUM_B_LUT: [u32; 16] = [
+    0x0493_96B8,
+    0x72A8_2A9B,
+    0xEE62_6CCA,
+    0x9917_754F,
+    0x15DE_40B1,
+    0xF5A8_A9B6,
+    0x421E_AC7E,
+    0xA9D5_5C9A,
+    0x317F_D40C,
+    0x04FA_F80D,
+    0x3D6B_E971,
+    0x5293_3CFD,
+    0x27F6_4B7D,
+    0xC6F5_C11B,
+    0xD575_7E3A,
+    0x6C38_8745,
+];
+
 /// 30-byte local header preceding each BLTE entry in `.data` archives.
 #[derive(Debug, Clone)]
 pub struct LocalHeader {
@@ -42,29 +64,42 @@ pub struct LocalHeader {
 impl LocalHeader {
     /// Create a new local header for BLTE data.
     ///
-    /// Create a new local header for BLTE data:
     /// - Only the first 9 bytes of the encoding key are reversed and stored;
     ///   the remaining 7 bytes are zero-padded.
-    /// - `encoded_size` = BLTE data size (LE on disk).
+    /// - `encoded_size` = total entry size including this 30-byte header
+    ///   (i.e., `LOCAL_HEADER_SIZE + blte_payload_size`). Matches what the
+    ///   Blizzard agent stores in both the local header and the IDX entry.
     /// - `status` = 1 (normal entry).
-    /// - `jenkins_hash` and `xor_checksum` are both 0 during initial write.
-    ///   They are computed later during header reconstruction.
-    pub fn new(encoding_key: [u8; 16], blte_size: u32, _base_offset: usize) -> Self {
+    /// - `global_offset` is the byte position of this header across all
+    ///   data files; used for both checksum_a and checksum_b computation.
+    pub fn new(encoding_key: [u8; 16], encoded_size: u32, global_offset: usize) -> Self {
         // Reverse only the first 9 bytes; zero-pad the rest.
-        // Reference: dynamic.cpp:160-164
         let mut reversed_key = [0u8; 16];
         for i in 0..9 {
             reversed_key[i] = encoding_key[8 - i];
         }
         // bytes 9..16 stay zero
 
-        Self {
+        let mut header = Self {
             encoding_key: reversed_key,
-            encoded_size: blte_size,
-            flags: 1,      // status = 1 (normal entry)
-            checksum_a: 0, // computed during RepairReconstructionHeaders
-            checksum_b: 0, // computed during RepairReconstructionHeaders
-        }
+            encoded_size,
+            flags: 1, // status = 1 (normal entry)
+            checksum_a: 0,
+            checksum_b: 0,
+        };
+
+        // Compute and set both checksums.
+        // checksum_a must be computed first (it occupies bytes 0x16-0x19
+        // which are read during checksum_b accumulation).
+        let mut bytes = header.to_bytes();
+        let checksum_a = Self::compute_checksum_a(&bytes);
+        bytes[0x16..0x1A].copy_from_slice(&checksum_a.to_le_bytes());
+        header.checksum_a = checksum_a;
+
+        let checksum_b = Self::compute_checksum_b(&bytes, global_offset);
+        header.checksum_b = checksum_b;
+
+        header
     }
 
     /// Compute checksum_a: Jenkins hash of the first 22 bytes with seed 0x3D6BE971.
@@ -72,16 +107,40 @@ impl LocalHeader {
         hashlittle(&header_bytes[..0x16], CHECKSUM_A_SEED)
     }
 
-    /// Compute checksum_b: XOR accumulation of the first 26 bytes.
+    /// Compute checksum_b for the local file header.
     ///
-    /// Uses rotating 4-byte index `(base_offset + i) & 3` to distribute
-    /// bytes across the 4-byte checksum.
-    pub fn compute_checksum_b(header_bytes: &[u8; LOCAL_HEADER_SIZE], base_offset: usize) -> u32 {
-        let mut checksum = [0u8; 4];
+    /// Two-phase algorithm matching the binary at `BuildLocalFileHeader`
+    /// (0x140cccdc0):
+    ///
+    /// 1. XOR-accumulate bytes 0..26 into a 4-byte register, rotating
+    ///    by `(global_offset + i) & 3`.
+    /// 2. Derive a 4-byte XOR mask from `CHECKSUM_B_LUT` and the
+    ///    global offset, then XOR the accumulator with it.
+    ///
+    /// `header_bytes` must have checksum_a already written at 0x16-0x19.
+    /// `global_offset` is the entry's position across all data files.
+    pub fn compute_checksum_b(header_bytes: &[u8; LOCAL_HEADER_SIZE], global_offset: usize) -> u32 {
+        // Phase 1: XOR accumulate bytes 0..26
+        let mut accum = [0u8; 4];
         for (i, &byte) in header_bytes[..0x1A].iter().enumerate() {
-            checksum[(base_offset + i) & 3] ^= byte;
+            accum[(global_offset + i) & 3] ^= byte;
         }
-        u32::from_le_bytes(checksum)
+
+        // Phase 2: derive XOR mask from LUT
+        // mask = LUT[(global_offset + 0x1E) & 0xF] ^ (global_offset + 0x1E)
+        let offset_plus_header = global_offset.wrapping_add(LOCAL_HEADER_SIZE);
+        let lut_index = offset_plus_header & 0xF;
+        let mask_u32 = CHECKSUM_B_LUT[lut_index] ^ (offset_plus_header as u32);
+        let mask = mask_u32.to_le_bytes();
+
+        // XOR accumulator with mask, using the same rotation
+        let mut result = [0u8; 4];
+        for i in 0..4u8 {
+            let j = (global_offset.wrapping_add(0x1A).wrapping_add(i as usize)) & 3;
+            result[i as usize] = accum[j] ^ mask[j];
+        }
+
+        u32::from_le_bytes(result)
     }
 
     /// Validate both checksums against the header contents.
@@ -183,9 +242,10 @@ mod tests {
         // Status/flags should be 1 (normal entry)
         assert_eq!(header.flags, 1);
 
-        // Checksums are 0 during initial write (computed later by repair)
-        assert_eq!(header.checksum_a, 0);
-        assert_eq!(header.checksum_b, 0);
+        // Checksums are computed during construction
+        assert_ne!(header.checksum_a, 0, "checksum_a must be non-zero");
+        // checksum_b can be zero for specific offsets, so just verify round-trip
+        assert!(header.validate_checksums(0), "checksums must validate");
 
         // Round-trip through bytes
         let bytes = header.to_bytes();

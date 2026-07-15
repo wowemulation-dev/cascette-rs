@@ -1092,6 +1092,180 @@ pub async fn download_archive_indices<S: CdnSource + 'static>(
     Ok(downloaded)
 }
 
+/// Download patch archive index files to the indices directory.
+///
+/// Same as `download_archive_indices` but uses the `/patch/` CDN path
+/// for patch archive content.
+pub async fn download_patch_archive_indices<S: CdnSource + 'static>(
+    cdn: &Arc<S>,
+    endpoints: &[CdnEndpoint],
+    patch_keys: &[String],
+    indices_dir: &Path,
+    batch_size: usize,
+    progress: &(impl Fn(ProgressEvent) + Send + Sync),
+) -> InstallationResult<usize> {
+    if endpoints.is_empty() {
+        return Err(crate::error::InstallationError::InvalidConfig(
+            "no CDN endpoints".to_string(),
+        ));
+    }
+
+    let mut downloaded: usize = 0;
+    let total = patch_keys.len();
+
+    let mut to_download: Vec<(usize, String)> = Vec::new();
+    for (i, key) in patch_keys.iter().enumerate() {
+        let index_path = indices_dir.join(format!("{key}.index"));
+        if index_path.exists() {
+            debug!(key = %key, "patch archive index already exists, skipping");
+            continue;
+        }
+        to_download.push((i, key.clone()));
+    }
+
+    info!(
+        total = total,
+        to_download = to_download.len(),
+        "downloading patch archive indices"
+    );
+
+    for batch_start in (0..to_download.len()).step_by(batch_size) {
+        let batch_end = (batch_start + batch_size).min(to_download.len());
+        let endpoints_owned: Vec<CdnEndpoint> = endpoints.to_vec();
+        let futures: Vec<_> = (batch_start..batch_end)
+            .map(|i| {
+                let (idx, ref key) = to_download[i];
+                progress(ProgressEvent::ArchiveIndexDownloading { index: idx, total });
+                let key = key.clone();
+                let endpoints = endpoints_owned.clone();
+                let cdn = Arc::clone(cdn);
+                async move {
+                    let mut last_err = None;
+                    for ep in &endpoints {
+                        match cdn.download_patch_archive_index(ep, &key).await {
+                            Ok(data) => return Ok((key, data)),
+                            Err(e) => {
+                                last_err = Some(e);
+                            }
+                        }
+                    }
+                    Err(last_err.unwrap_or_else(|| {
+                        crate::error::InstallationError::Cdn("no endpoints available".to_string())
+                    }))
+                }
+            })
+            .collect();
+
+        let results: Vec<InstallationResult<(String, Vec<u8>)>> = stream::iter(futures)
+            .buffer_unordered(batch_size)
+            .collect()
+            .await;
+
+        for result in results {
+            match result {
+                Ok((key, data)) => {
+                    let index_path = indices_dir.join(format!("{key}.index"));
+                    tokio::fs::write(&index_path, &data).await?;
+                    downloaded += 1;
+                    progress(ProgressEvent::ArchiveIndexComplete { archive_key: key });
+                }
+                Err(e) => {
+                    warn!(error = %e, "failed to download patch archive index");
+                }
+            }
+        }
+    }
+
+    Ok(downloaded)
+}
+
+/// Generate an archive-group index from individual archive indices.
+///
+/// Parses each `{key}.index` file from `indices_dir`, merges them into
+/// a single combined index using `archive_group::build_merged`, and
+/// writes the result as `{group_hash}.index`.
+///
+/// `is_patch` controls logging labels only.
+pub fn generate_group_index(
+    indices_dir: &Path,
+    archive_keys: &[String],
+    group_hash: &str,
+    is_patch: bool,
+) -> InstallationResult<()> {
+    use cascette_formats::archive::build_merged;
+
+    let group_path = indices_dir.join(format!("{group_hash}.index"));
+    if group_path.exists() {
+        debug!(
+            hash = %group_hash,
+            "archive group index already exists, skipping generation"
+        );
+        return Ok(());
+    }
+
+    let label = if is_patch { "patch" } else { "data" };
+
+    // Parse all individual indices
+    let mut parsed: Vec<(u16, ArchiveIndex)> = Vec::with_capacity(archive_keys.len());
+    for (i, key) in archive_keys.iter().enumerate() {
+        let index_path = indices_dir.join(format!("{key}.index"));
+        if !index_path.exists() {
+            debug!(key = %key, "individual index missing, skipping for group");
+            continue;
+        }
+
+        let file = std::fs::File::open(&index_path).map_err(|e| {
+            crate::error::InstallationError::Format(format!(
+                "failed to open index {key} for group merge: {e}"
+            ))
+        })?;
+        let mut reader = std::io::BufReader::new(file);
+
+        match ArchiveIndex::parse(&mut reader) {
+            Ok(index) => {
+                parsed.push((i as u16, index));
+            }
+            Err(e) => {
+                warn!(key = %key, error = %e, "failed to parse index for group merge");
+            }
+        }
+    }
+
+    if parsed.is_empty() {
+        warn!(label, "no indices parsed, skipping group generation");
+        return Ok(());
+    }
+
+    // Build references for build_merged
+    let refs: Vec<(u16, &ArchiveIndex)> = parsed.iter().map(|(idx, index)| (*idx, index)).collect();
+
+    // Generate the merged group index
+    let mut output = Vec::new();
+    let cursor = std::io::Cursor::new(&mut output);
+    build_merged(&refs, cursor).map_err(|e| {
+        crate::error::InstallationError::Format(format!(
+            "failed to build {label} archive group: {e}"
+        ))
+    })?;
+
+    // Write to disk
+    std::fs::write(&group_path, &output).map_err(|e| {
+        crate::error::InstallationError::Format(format!(
+            "failed to write {label} archive group index: {e}"
+        ))
+    })?;
+
+    info!(
+        label,
+        hash = %group_hash,
+        archives = parsed.len(),
+        size = output.len(),
+        "generated archive group index"
+    );
+
+    Ok(())
+}
+
 /// Collect locally known encoding keys from an existing checkpoint.
 #[must_use]
 pub fn collect_known_keys(checkpoint: &Option<Checkpoint>) -> HashSet<String> {

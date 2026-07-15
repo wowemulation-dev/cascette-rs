@@ -66,7 +66,7 @@ impl TactKeysProvider {
                     requires_auth: false,
                 },
                 rate_limit: Some(10),
-                cache_ttl: Duration::from_secs(86400),
+                cache_ttl: Duration::from_hours(24),
             },
             client,
             cache_dir,

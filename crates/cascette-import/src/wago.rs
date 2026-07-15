@@ -67,7 +67,7 @@ impl WagoProvider {
                 requires_auth: false,
             },
             rate_limit: Some(60),
-            cache_ttl: Duration::from_secs(3600),
+            cache_ttl: Duration::from_hours(1),
         };
 
         crate::ensure_crypto_provider();

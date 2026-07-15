@@ -32,8 +32,15 @@ pub trait CdnSource: Send + Sync {
         length: u64,
     ) -> InstallationResult<Vec<u8>>;
 
-    /// Download an archive `.index` file from CDN.
+    /// Download an archive `.index` file from CDN (`/data/` path).
     async fn download_archive_index(
+        &self,
+        endpoint: &CdnEndpoint,
+        archive_key: &str,
+    ) -> InstallationResult<Vec<u8>>;
+
+    /// Download a patch archive `.index` file from CDN (`/patch/` path).
+    async fn download_patch_archive_index(
         &self,
         endpoint: &CdnEndpoint,
         archive_key: &str,
@@ -72,6 +79,16 @@ impl CdnSource for CdnClient {
         archive_key: &str,
     ) -> InstallationResult<Vec<u8>> {
         Self::download_archive_index(self, endpoint, archive_key)
+            .await
+            .map_err(InstallationError::from)
+    }
+
+    async fn download_patch_archive_index(
+        &self,
+        endpoint: &CdnEndpoint,
+        archive_key: &str,
+    ) -> InstallationResult<Vec<u8>> {
+        Self::download_patch_archive_index(self, endpoint, archive_key)
             .await
             .map_err(InstallationError::from)
     }

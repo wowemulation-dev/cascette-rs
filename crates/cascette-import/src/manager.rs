@@ -267,7 +267,7 @@ mod tests {
                         requires_auth: false,
                     },
                     rate_limit: None,
-                    cache_ttl: Duration::from_secs(300),
+                    cache_ttl: Duration::from_mins(5),
                 },
                 available: true,
             }

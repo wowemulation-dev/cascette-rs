@@ -243,8 +243,37 @@ pub struct InstallConfig {
     /// `install_path/game_subfolder/` as each file completes download.
     pub game_subfolder: Option<String>,
 
+    /// Installation mode. Default `Full` produces a complete CASC store
+    /// equivalent to a full Battle.net install. `LooseOnly` produces only
+    /// the loose files plus root metadata; the wow client will bootstrap
+    /// CASC content from the CDN itself on first launch.
+    pub mode: InstallMode,
+
     /// Optional encryption key provider for BLTE decryption.
     pub key_store: Option<Arc<dyn TactKeyProvider + Send + Sync>>,
+}
+
+/// Installation modes.
+///
+/// `Full` writes a fully-populated CASC store (`Data/data/data.NNN`,
+/// `Data/data/<bucket>NNNNNNNN.idx`, `Data/indices/*.index`,
+/// `Data/config/*`) plus all loose files. The client launches without
+/// needing to download anything more.
+///
+/// `LooseOnly` writes only loose files (`<subfolder>/Wow.exe` etc.) plus
+/// root layout files (`.build.info`, `.product.db`, `.patch.result`,
+/// `<subfolder>/.flavor.info`) and an empty `Data/{config,data,indices}`
+/// directory tree. The client bootstraps the CASC content from the
+/// configured CDN on first launch — visible to the user as the
+/// "performing initial setup of required data files" UI.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum InstallMode {
+    /// Full CASC install (default; matches Agent.exe behavior).
+    #[default]
+    Full,
+    /// Loose files + layout metadata only; client bootstraps CASC from CDN.
+    LooseOnly,
 }
 
 impl std::fmt::Debug for InstallConfig {
@@ -283,6 +312,7 @@ impl InstallConfig {
             resume: true,
             backfill_mode: false,
             game_subfolder: None,
+            mode: InstallMode::Full,
             key_store: None,
         }
     }

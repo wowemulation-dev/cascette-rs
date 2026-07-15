@@ -592,6 +592,47 @@ impl Installation {
         Ok(encoding_key)
     }
 
+    /// Write pre-encoded BLTE data with an explicit encoding key.
+    ///
+    /// Unlike `write_raw_blte`, this does not recompute the encoding key
+    /// from the data. Use this for bootstrap files (encoding, install,
+    /// download, root) where the ekey is known from the build config
+    /// and may differ from `MD5(blte_data)` due to CDN re-encoding.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if data cannot be written
+    pub async fn write_raw_blte_with_ekey(
+        &self,
+        blte_data: Vec<u8>,
+        ekey: &EncodingKey,
+    ) -> Result<()> {
+        debug!(
+            "Writing raw BLTE data ({} bytes) with explicit ekey {}",
+            blte_data.len(),
+            hex::encode(ekey.as_bytes())
+        );
+
+        let (archive_id, archive_offset, size) = {
+            let mut archive_manager = self.archive_manager.write().await;
+            archive_manager.write_raw_content_with_ekey(&blte_data, ekey.as_bytes())?
+        };
+
+        {
+            let mut index_manager = self.index_manager.write().await;
+            index_manager.add_entry(ekey, archive_id, archive_offset, size)?;
+        }
+
+        info!(
+            "Wrote raw BLTE to archive {} at offset {} (explicit ekey: {})",
+            archive_id,
+            archive_offset,
+            hex::encode(ekey.as_bytes())
+        );
+
+        Ok(())
+    }
+
     /// Initialize installation by loading local indices and archives
     ///
     /// # Errors

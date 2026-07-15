@@ -133,8 +133,11 @@ async fn download_with_archive_fallback<S: CdnSource>(
 /// Download archive indices from CDN into memory and build a lookup map.
 ///
 /// Unlike the install pipeline's `download_archive_indices()` which writes
-/// to disk, this builds an in-memory lookup for the metadata phase.
-async fn build_archive_lookup<S: CdnSource>(
+/// to disk, this builds an in-memory lookup. Used by the metadata phase
+/// (lazy fallback for pruned loose blobs) and by the loose-only install
+/// pipeline (some older builds have all install-manifest blobs pruned
+/// from CDN as loose objects but still served via archive byte-ranges).
+pub(crate) async fn build_archive_lookup<S: CdnSource>(
     cdn: &S,
     endpoints: &[CdnEndpoint],
     cdn_config: &CdnConfig,
@@ -480,6 +483,26 @@ pub async fn resolve_manifests<S: CdnSource>(
         None
     };
 
+    // Collect raw BLTE bytes for bootstrap files that must be written
+    // to local CASC storage. The client expects these indexed in the
+    // local IDX so it can resolve content keys at startup.
+    // Use the ekeys from the build config / encoding resolution, not
+    // MD5(blte_data), because CDN re-encoding can change the hash.
+    let bootstrap_blte = vec![
+        ("encoding", encoding_ekey.to_string(), encoding_data),
+        (
+            "install",
+            hex::encode(install_ekey.as_bytes()),
+            install_data,
+        ),
+        (
+            "download",
+            hex::encode(download_ekey.as_bytes()),
+            download_data,
+        ),
+        ("root", hex::encode(root_ekey.as_bytes()), root_data),
+    ];
+
     let manifests = BuildManifests {
         build_config,
         cdn_config,
@@ -490,6 +513,7 @@ pub async fn resolve_manifests<S: CdnSource>(
         size,
         patch_index,
         patch_config_data,
+        bootstrap_blte,
     };
 
     Ok(manifests)

@@ -4,8 +4,9 @@
 //! product subdirectories (e.g., `_classic_era_/`). Path normalization
 //! handles mixed-case directory names from the install manifest.
 
+use std::collections::HashMap;
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use tokio::sync::Semaphore;
 use tracing::{debug, info, warn};
@@ -69,6 +70,7 @@ impl ExtractPipeline {
 
         let semaphore = Arc::new(Semaphore::new(self.config.max_concurrent));
         let installation = Arc::new(installation);
+        let normalizer = PathNormalizer::new();
         let mut extracted: usize = 0;
         let mut failed: usize = 0;
         let mut skipped: usize = 0;
@@ -83,7 +85,7 @@ impl ExtractPipeline {
                 continue;
             }
 
-            let normalized = normalize_install_path(&entry.path);
+            let normalized = normalizer.normalize(&entry.path);
             let output_file = self.config.output_path.join(&normalized);
 
             progress(ProgressEvent::ExtractStarted {
@@ -143,42 +145,91 @@ impl ExtractPipeline {
     }
 }
 
-/// Normalize a file path from the install manifest for case-sensitive filesystems.
+/// Case-preserving path normalizer for install manifest paths.
 ///
-/// On Linux/macOS, directory names are uppercased to handle mixed-case
-/// directory references in Blizzard's install manifest (e.g., both `Utils/`
-/// and `UTILS/` appear). Filename case is preserved.
+/// Blizzard's install manifests reference the same directory with mixed
+/// casing across entries (e.g. both `Utils/` and `UTILS/` appear). On
+/// case-sensitive filesystems this would create two sibling directories
+/// holding what is logically one bundle. This normalizer collapses
+/// case-variant references onto the first casing seen for each directory,
+/// preserving Blizzard's intended casing rather than uppercasing everything.
 ///
-/// On Windows (case-insensitive), only backslash-to-forward-slash conversion
-/// is applied.
-#[must_use]
-pub fn normalize_install_path(file_path: &str) -> String {
-    let path = file_path.replace('\\', "/");
+/// Filenames are always preserved verbatim.
+///
+/// The instance must be shared across all writes in a single install for
+/// the collision-resolution to work; each install gets its own normalizer.
+#[derive(Debug, Default, Clone)]
+pub struct PathNormalizer {
+    /// Maps a lowercased directory path (`utils/blizzard error.app/contents`)
+    /// to the first casing seen for it (`Utils/Blizzard Error.app/Contents`).
+    dir_case: Arc<Mutex<HashMap<String, String>>>,
+}
 
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
-    {
-        let components: Vec<&str> = path.split('/').collect();
-        if components.len() > 1 {
-            let mut normalized = Vec::with_capacity(components.len());
-            for (i, component) in components.iter().enumerate() {
-                if i < components.len() - 1 {
-                    // Directory component: uppercase for case-insensitive matching
-                    normalized.push(component.to_uppercase());
-                } else {
-                    // Filename: preserve original case
-                    normalized.push((*component).to_string());
-                }
+impl PathNormalizer {
+    /// Create an empty normalizer.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Normalize an install manifest path:
+    /// - converts `\` to `/`
+    /// - on case-sensitive filesystems, rewrites each directory component to
+    ///   the first casing seen for it (registering new components verbatim)
+    /// - preserves the filename verbatim
+    ///
+    /// On case-insensitive filesystems (Windows), only the backslash
+    /// conversion is applied.
+    #[must_use]
+    pub fn normalize(&self, file_path: &str) -> String {
+        let path = file_path.replace('\\', "/");
+
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        {
+            let components: Vec<&str> = path.split('/').collect();
+            if components.len() <= 1 {
+                return path;
             }
-            normalized.join("/")
-        } else {
+
+            let mut canonical: Vec<String> = Vec::with_capacity(components.len());
+            let mut key = String::new();
+            let mut map = self.dir_case.lock().expect("PathNormalizer mutex poisoned");
+
+            for (i, component) in components.iter().enumerate() {
+                if i == components.len() - 1 {
+                    canonical.push((*component).to_string());
+                    continue;
+                }
+                if !key.is_empty() {
+                    key.push('/');
+                }
+                key.push_str(&component.to_lowercase());
+
+                let cased = map
+                    .entry(key.clone())
+                    .or_insert_with(|| (*component).to_string())
+                    .clone();
+                canonical.push(cased);
+            }
+
+            canonical.join("/")
+        }
+
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        {
             path
         }
     }
+}
 
-    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
-    {
-        path
-    }
+/// Stateless path normalizer for one-off conversions (tests, single-file
+/// utilities). Does not resolve case-variant collisions across calls — use
+/// [`PathNormalizer`] for that.
+///
+/// Replaces `\` with `/` and preserves the original case.
+#[must_use]
+pub fn normalize_install_path(file_path: &str) -> String {
+    file_path.replace('\\', "/")
 }
 
 /// Validate that an output path does not escape the output directory.
@@ -216,31 +267,65 @@ mod tests {
     use super::*;
 
     #[test]
-    fn normalize_backslashes() {
-        assert_eq!(normalize_install_path("Interface\\Icons\\file.blp"), {
-            #[cfg(any(target_os = "linux", target_os = "macos"))]
-            {
-                "INTERFACE/ICONS/file.blp"
-            }
-            #[cfg(not(any(target_os = "linux", target_os = "macos")))]
-            {
-                "Interface/Icons/file.blp"
-            }
-        });
+    fn stateless_normalize_converts_backslashes() {
+        assert_eq!(
+            normalize_install_path("Interface\\Icons\\file.blp"),
+            "Interface/Icons/file.blp"
+        );
     }
 
     #[test]
-    fn normalize_single_component() {
+    fn stateless_normalize_preserves_case() {
+        assert_eq!(
+            normalize_install_path("Utils/ScanDLLs.lua"),
+            "Utils/ScanDLLs.lua"
+        );
+    }
+
+    #[test]
+    fn stateless_normalize_single_component() {
         assert_eq!(normalize_install_path("readme.txt"), "readme.txt");
     }
 
     #[test]
-    fn normalize_preserves_filename_case() {
-        let result = normalize_install_path("Utils/ScanDLLs.lua");
+    fn normalizer_preserves_first_seen_casing() {
+        let n = PathNormalizer::new();
+        let first = n.normalize("Utils\\foo.lua");
         #[cfg(any(target_os = "linux", target_os = "macos"))]
-        assert_eq!(result, "UTILS/ScanDLLs.lua");
+        assert_eq!(first, "Utils/foo.lua");
         #[cfg(not(any(target_os = "linux", target_os = "macos")))]
-        assert_eq!(result, "Utils/ScanDLLs.lua");
+        assert_eq!(first, "Utils/foo.lua");
+
+        let second = n.normalize("UTILS\\bar.lua");
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        assert_eq!(second, "Utils/bar.lua");
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        assert_eq!(second, "UTILS/bar.lua");
+    }
+
+    #[test]
+    fn normalizer_handles_nested_directories() {
+        let n = PathNormalizer::new();
+        let first = n.normalize("Interface/Icons/foo.blp");
+        assert_eq!(first, "Interface/Icons/foo.blp");
+
+        let second = n.normalize("INTERFACE/icons/bar.blp");
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        assert_eq!(second, "Interface/Icons/bar.blp");
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        assert_eq!(second, "INTERFACE/icons/bar.blp");
+    }
+
+    #[test]
+    fn normalizer_preserves_filename_case() {
+        let n = PathNormalizer::new();
+        assert_eq!(n.normalize("Utils/ScanDLLs.lua"), "Utils/ScanDLLs.lua");
+    }
+
+    #[test]
+    fn normalizer_single_component() {
+        let n = PathNormalizer::new();
+        assert_eq!(n.normalize("readme.txt"), "readme.txt");
     }
 
     #[test]

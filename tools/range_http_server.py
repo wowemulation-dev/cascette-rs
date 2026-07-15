@@ -60,13 +60,39 @@ class ThreadPoolHTTPServer(ThreadingMixIn, HTTPServer):
         finally:
             self.shutdown_request(request)
 
+    def handle_error(self, request, client_address):
+        """Suppress traceback noise for benign peer-disconnect errors.
+
+        BrokenPipeError and ConnectionResetError are routine when a client
+        cancels an in-flight Range request after it has read what it
+        needed. The default ``BaseServer.handle_error`` dumps a 30-line
+        Python traceback per occurrence, which drowns the access log on
+        a busy CASC bootstrap. Anything else falls through to the default.
+        """
+        exc = sys.exc_info()[1]
+        if isinstance(exc, (BrokenPipeError, ConnectionResetError)):
+            return
+        super().handle_error(request, client_address)
+
     def server_close(self):
         super().server_close()
         self._pool.shutdown(wait=False)
 
 
 class RangeHTTPRequestHandler(SimpleHTTPRequestHandler):
-    """SimpleHTTPRequestHandler with Range header support."""
+    """SimpleHTTPRequestHandler with Range header support.
+
+    Forces ``HTTP/1.1`` on responses so the wow client gets keep-alive
+    connections matching what Blizzard's real CDN serves. The default
+    HTTP/1.0 sends ``Connection: close`` on every response; under the
+    client's high-concurrency Range-fetch pattern this surfaces as
+    ``Failed to make data resident ... results are truncated`` errors
+    in ``_classic_/Logs/Tact.log`` because the client's reader sees a
+    socket close before its parser finishes consuming the response body
+    of a pipelined request.
+    """
+
+    protocol_version = "HTTP/1.1"
 
     def send_head(self):
         """Serve a GET request, handling Range headers."""
@@ -150,12 +176,43 @@ class RangeHTTPRequestHandler(SimpleHTTPRequestHandler):
         return _BoundedFile(f, content_length)
 
     def log_message(self, format, *args):
-        """Thread-safe log output with thread name prefix."""
+        """Thread-safe log output with thread name prefix.
+
+        Includes the User-Agent and Range request headers so we can
+        attribute requests to specific clients (e.g. cascette-agent vs.
+        the patched Wow.exe) and see partial-content access patterns.
+        """
         thread = threading.current_thread().name
+        ua = self.headers.get("User-Agent", "-") if hasattr(self, "headers") else "-"
+        rng = self.headers.get("Range", "-") if hasattr(self, "headers") else "-"
         sys.stderr.write(
             f"{thread} - {self.address_string()} - "
-            f"[{self.log_date_time_string()}] {format % args}\n"
+            f"[{self.log_date_time_string()}] {format % args} "
+            f'ua="{ua}" range="{rng}"\n'
         )
+
+    def copyfile(self, source, outputfile):
+        """Stream source to outputfile, swallowing peer disconnects.
+
+        The patched WoW client cancels Range requests mid-stream once it
+        has read the bytes it needs; this raises BrokenPipeError or
+        ConnectionResetError from inside ``shutil.copyfileobj``. Those are
+        normal HTTP behavior and not server bugs, but the default
+        threading server prints a full traceback for each, drowning the
+        access log. We log a single line and move on.
+        """
+        try:
+            super().copyfile(source, outputfile)
+        except (BrokenPipeError, ConnectionResetError) as exc:
+            self.log_message('client disconnected mid-stream (%s)', type(exc).__name__)
+
+    def handle_one_request(self):
+        """Same wrapper for request-line read disconnects."""
+        try:
+            super().handle_one_request()
+        except (BrokenPipeError, ConnectionResetError) as exc:
+            self.log_message('client disconnected (%s)', type(exc).__name__)
+            self.close_connection = True
 
 
 class _BoundedFile:

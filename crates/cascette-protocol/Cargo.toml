@@ -37,7 +37,6 @@ dashmap = { workspace = true }
 mail-parser = { workspace = true }
 cms = { workspace = true }
 der = { workspace = true }
-asn1 = { workspace = true }
 x509-cert = { workspace = true }
 rsa = { workspace = true }
 sha2 = { workspace = true }
@@ -84,7 +83,7 @@ getrandom_02 = { workspace = true, features = ["js"] }
 tempfile = { workspace = true }
 wiremock = { workspace = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-mockall = "0.14"
+mockall = "0.15"
 
 # Crypto provider for reqwest in tests
 rustls = { workspace = true }
@@ -121,7 +120,7 @@ path = "examples/build_file_tree.rs"
 [package.metadata.cargo-machete]
 # These dependencies are used for V1 MIME format support and other features
 # getrandom_02 is a renamed dep to enable the "js" feature for getrandom 0.2 on WASM
-ignored = ["asn1", "async-trait", "cascette-crypto", "digest", "getrandom_02", "url"]
+ignored = ["async-trait", "cascette-crypto", "digest", "getrandom_02", "url"]
 
 [lints]
 workspace = true

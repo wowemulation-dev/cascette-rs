@@ -54,7 +54,8 @@ pub mod verify;
 // Re-exports
 pub use cdn_source::CdnSource;
 pub use config::{
-    ExtractConfig, InstallConfig, RepairConfig, TagQuery, UpdateConfig, VerifyConfig, VerifyMode,
+    ExtractConfig, InstallConfig, InstallMode, RepairConfig, TagQuery, UpdateConfig, VerifyConfig,
+    VerifyMode,
 };
 pub use error::{InstallationError, InstallationResult};
 pub use pipeline::install::InstallPipeline;

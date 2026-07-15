@@ -26,13 +26,23 @@ with `tursodb`.
 
 ## Reverse Engineering Resources
 
-- Management docs: `~/Repos/github.com/wowemulation-dev/management/src/reverse-engineering/agent-3.13.3/`
+- Agent docs: `~/Repos/github.com/wowemulation-dev/management/src/reverse-engineering/battle.net/agent/2.39.4/9390/`
   - Tag system: `manifests/installation-manifest-tags.md`, `manifests/tag-system-detailed-analysis.md`
   - Install workflow: `manifests/installation-workflow-diagram.md`
   - TACT/CDN: `tact/` (encoding, batch-download, container-storage, loose-file-placement, etc.)
   - Agent HTTP API: `agent/http-router.md`, `agent/http-client.md`
   - SQLite schema: `agent/sqlite-schema.md`
-- Binary Ninja MCP: use for decompiling Agent.exe when docs are insufficient
+  - CASC internals: `casc/`
+  - Protobuf definitions: `protobuf/`
+  - All-In-One installer flow: `aio/`
+- Client docs: `~/Repos/github.com/wowemulation-dev/management/src/reverse-engineering/wow-classic/1.13.2/31650/`
+  - Engine: `engine/`, Game logic: `game/`
+  - Storage/CASC client side: `storm/`, `tact/`
+  - Battle.net services client: `bgs/`
+  - Network protocol: `wire/`
+- Ghidra MCP: use for decompiling Agent.exe or Wow.exe when docs are insufficient.
+  **Note:** the agent and client Ghidra projects cannot be open simultaneously —
+  switch between them via `mcp__ghidra__open_program` / `switch_program` as needed.
 
 ## Procedure
 
@@ -102,6 +112,29 @@ python3 ~/Repos/github.com/wowemulation-dev/cascette-rs/tools/range_http_server.
 Run with `run_in_background: true`. Do **not** use `python3 -m http.server`
 -- it ignores Range headers and serves full files.
 
+**Seed the Ribbit responses for this build** so the patched client can read
+versions/cdns from the same local server:
+
+```bash
+~/Repos/github.com/wowemulation-dev/cascette-rs/tools/setup_local_ribbit.sh \
+  EU wow 31650 \
+  /run/media/$(whoami)/NGDP/mirrors/cdn.blizzard.com \
+  localhost:8000 tpr/wow
+```
+
+The script fetches the historical `versions` and `cdns` BPSV files from
+Arctium's archive (`http://ngdp.arctium.io/<region>/<product>/<build>/`),
+rewrites every Hosts/Servers entry in `cdns` to the local host, and places
+them under `<mirror_root>/tpr/wow/{versions,cdns}` so the range HTTP server
+serves them at `http://localhost:8000/tpr/wow/{versions,cdns}`.
+
+Verify both files are reachable before continuing:
+
+```bash
+curl -sf http://localhost:8000/tpr/wow/versions | head -5
+curl -sf http://localhost:8000/tpr/wow/cdns | head -5
+```
+
 ### 2. Prepare the environment
 
 Create a dedicated WINE prefix for the installation. The client will live at
@@ -115,8 +148,9 @@ rm -rf ~/.local/share/cascette/agent/
 # Create a fresh win64 WINE prefix
 WINEARCH=win64 \
   WINEPREFIX=/home/$USER/Downloads/wine_wow_classic_test \
-  winecfg
-# Set Windows version to Windows 10 in the dialog, then close it.
+  wineboot --init
+WINEPREFIX=/home/$USER/Downloads/wine_wow_classic_test \
+  wine reg add 'HKCU\Software\Wine' /v Version /d win10 /f
 
 # Install Gecko and Mono runtimes
 WINEPREFIX=/home/$USER/Downloads/wine_wow_classic_test \
@@ -126,12 +160,30 @@ WINEPREFIX=/home/$USER/Downloads/wine_wow_classic_test \
 WINEPREFIX=/home/$USER/Downloads/wine_wow_classic_test \
   wine "/home/$USER/.cache/wine/wine-mono-10.4.1-x86.msi" /quiet
 
+# Install CJK fonts (Source Han Sans + replacement registry entries) so the
+# client renders Chinese / Japanese / Korean glyphs in menus and language
+# selection. Without this, zh/ja/ko strings appear as boxes.
+WINEPREFIX=/home/$USER/Downloads/wine_wow_classic_test \
+  winetricks -q cjkfonts
+
 # Create the installation target directory inside the prefix
 mkdir -p "/home/$USER/Downloads/wine_wow_classic_test/drive_c/users/Public/Games/WoW Classic"
 ```
 
 Note: always use absolute paths for `WINEPREFIX`. WINE resolves `~` relative
 to its own fake filesystem root, not the real home directory.
+
+**Between launches, always purge stale wineserver state:**
+
+```bash
+pkill wineserver 2>/dev/null
+sleep 2
+rm -rf /tmp/.wine-1000/*
+```
+
+Skipping this leaves orphaned `/tmp/.wine-1000/server-28-*` lock directories
+from killed runs, and the next `wine` invocation hangs in `anon_pipe_read`
+indefinitely without producing output.
 
 ### 3. Build and run cascette-agent
 
@@ -204,6 +256,45 @@ are not written to the filesystem. Agent.exe receives this from the launcher;
 the value comes from the `.product.db` protobuf (`game_subfolder` field 13)
 or the product config's `shared_container_default_subfolder`.
 
+#### Optional: loose-only mode
+
+For faster iteration during testing — and as a deliberately supported
+short-cut for users who don't need a fully-populated CASC store — pass
+`"mode": "loose_only"` in the `/register` body. The agent will write only
+the loose files (`Wow.exe`, DLLs, locale packs, BlizzardError.exe, etc.)
+and the root layout metadata (`.build.info`, `.product.db`,
+`.patch.result`, `<subfolder>/.flavor.info`), then exit. The wow client
+bootstraps `Data/{config,data,indices}` content from the configured CDN
+on first launch — visible to the user as the "performing initial setup
+of required data files" UI for one to ten minutes depending on bandwidth.
+
+```bash
+curl -s -X POST http://127.0.0.1:1120/register \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "instructions_product": "NGDP",
+    "instructions_patch_url": "http://us.patch.battle.net:1119/wow_classic",
+    "uid": "wow_classic",
+    "product": "wow_classic",
+    "install_dir": "/home/'"$USER"'/Downloads/wine_wow_classic_test/drive_c/users/Public/Games/WoW Classic",
+    "region": "eu",
+    "subfolder": "_classic_",
+    "primary_locale_hint": "enUS",
+    "build_config": "2c915a9a226a3f35af6c65fcc7b6ca4a",
+    "cdn_config":   "c54b41b3195b9482ce0d3c6bf0b86cdb",
+    "mode": "loose_only"
+  }' | jq .
+```
+
+For wow_classic / wow_classic_era this reduces the agent's disk write
+volume from ~4 GiB CASC archives to ~150 MiB of loose files. Trade-off:
+the user pays the CDN-bootstrap time on first launch instead of during
+agent install.
+
+The omitting `mode` field (or setting it to `"full"`) preserves the
+default behavior: full CASC install equivalent to a real Battle.net
+Agent.exe install.
+
 ### 5. Monitor progress
 
 ```bash
@@ -254,9 +345,46 @@ diff <(find "$OUTPUT"    -type f -exec du -b {} \; | sed "s|$OUTPUT/||"    | sor
      <(find "$REFERENCE" -type f -exec du -b {} \; | sed "s|$REFERENCE/||" | sort -k2)
 ```
 
-### 7. WINE smoke-test
+### 7. Patch the client with wow-patcher
 
-Run the client in the test WINE prefix to verify it starts correctly:
+The freshly installed `Wow.exe` is configured to talk to Blizzard's live patch
+and CDN servers. To smoke-test against the local mirror (and, optionally,
+private-server endpoints), patch the executable using
+`~/Repos/github.com/wowemulation-dev/wow-patcher`.
+
+`wow-patcher` rewrites Battle.net portal strings, RSA / Ed25519 keys, and the
+embedded version / CDNs URLs inside `Wow.exe`. Point both URLs at the local
+HTTP server so every client request stays on the same host. The Ribbit
+responses were seeded in step 1 via `setup_local_ribbit.sh`.
+
+```bash
+# Build wow-patcher once (cached on subsequent runs)
+cargo build --release \
+  --manifest-path ~/Repos/github.com/wowemulation-dev/wow-patcher/Cargo.toml
+
+PATCHER=~/Repos/github.com/wowemulation-dev/wow-patcher/target/release/wow-patcher
+WOWDIR="/home/$USER/Downloads/wine_wow_classic_test/drive_c/users/Public/Games/WoW Classic/_classic_"
+
+# Patch Wow.exe — write to Wow-patched.exe, then swap.
+"$PATCHER" \
+  -l "$WOWDIR/Wow.exe" \
+  -o "$WOWDIR/Wow-patched.exe" \
+  --version-url "http://localhost:8000/tpr/wow/versions" \
+  --cdns-url    "http://localhost:8000/tpr/wow/cdns" \
+  -v
+
+mv "$WOWDIR/Wow.exe"         "$WOWDIR/Wow.exe.bak"
+mv "$WOWDIR/Wow-patched.exe" "$WOWDIR/Wow.exe"
+```
+
+When using a different CDN source from step 1, substitute that host into
+both URLs and re-run `setup_local_ribbit.sh` against that server's mirror
+tree. Use `--dry-run -v` first if you want to preview the byte-level patches
+without writing.
+
+### 8. WINE smoke-test
+
+Run the patched client in the test WINE prefix to verify it starts correctly:
 
 ```bash
 WINEPREFIX=/home/$USER/Downloads/wine_wow_classic_test \
@@ -273,7 +401,7 @@ If the client shows an "updated version available" dialog, `.patch.result` is
 missing or contains a non-zero value. If DLLs or locale files are missing,
 check the install manifest tag filtering.
 
-### 8. On failure: diagnose and fix
+### 9. On failure: diagnose and fix
 
 ```bash
 # Stop the agent (find its PID since it runs as a background task)
@@ -290,8 +418,8 @@ the CDN request log leading up to the failure.
 Then:
 
 1. Read the relevant management docs under
-   `~/Repos/github.com/wowemulation-dev/management/src/reverse-engineering/agent-3.13.3/`.
-2. If docs are insufficient, use the Binary Ninja MCP to decompile Agent.exe.
+   `~/Repos/github.com/wowemulation-dev/management/src/reverse-engineering/battle.net/agent/2.39.4/9390/`.
+2. If docs are insufficient, use the Ghidra MCP to decompile Agent.exe.
 3. Fix the issue in `cascette-agent` or the crate it depends on
    (`cascette-installation`, `cascette-protocol`, `cascette-formats`, etc.).
 4. Record the root cause and fix in the "Known Issues and Lessons Learned"
@@ -310,6 +438,19 @@ Repeat until the output matches the reference installation.
 # Phase 2: wow_classic 1.13.7.38631 — Update and Smoke-Test
 
 **Prerequisite:** Phase 1 must complete with a fully validated 1.13.2.31650 installation before starting this phase.
+
+Re-seed the Ribbit responses for the new build before starting:
+
+```bash
+~/Repos/github.com/wowemulation-dev/cascette-rs/tools/setup_local_ribbit.sh \
+  EU wow 38631 \
+  /run/media/$(whoami)/NGDP/mirrors/cdn.blizzard.com \
+  localhost:8000 tpr/wow
+```
+
+This overwrites `<mirror_root>/tpr/wow/{versions,cdns}` with files referencing
+build `38631`. The patcher in Phase 2.3 will continue to point at
+`http://localhost:8000/tpr/wow/{versions,cdns}` — no patcher arguments change.
 
 ## Parameters
 
@@ -335,8 +476,9 @@ configs to apply the update in-place.
 # Create a fresh win64 WINE prefix for the upgrade test
 WINEARCH=win64 \
   WINEPREFIX=/home/$USER/Downloads/wine_wow_classic_upgrade \
-  winecfg
-# Set Windows version to Windows 10, then close.
+  wineboot --init
+WINEPREFIX=/home/$USER/Downloads/wine_wow_classic_upgrade \
+  wine reg add 'HKCU\Software\Wine' /v Version /d win10 /f
 
 WINEPREFIX=/home/$USER/Downloads/wine_wow_classic_upgrade \
   wine "/home/$USER/.cache/wine/wine-gecko-2.47.4-x86.msi" /quiet
@@ -344,6 +486,8 @@ WINEPREFIX=/home/$USER/Downloads/wine_wow_classic_upgrade \
   wine "/home/$USER/.cache/wine/wine-gecko-2.47.4-x86_64.msi" /quiet
 WINEPREFIX=/home/$USER/Downloads/wine_wow_classic_upgrade \
   wine "/home/$USER/.cache/wine/wine-mono-10.4.1-x86.msi" /quiet
+WINEPREFIX=/home/$USER/Downloads/wine_wow_classic_upgrade \
+  winetricks -q cjkfonts
 
 # Copy the validated 1.13.2 installation into the prefix
 mkdir -p "/home/$USER/Downloads/wine_wow_classic_upgrade/drive_c/users/Public/Games/WoW Classic"
@@ -396,8 +540,9 @@ produces the reference to diff against the upgraded prefix.
 # Create a fresh win64 WINE prefix for the 1.13.7 reference install
 WINEARCH=win64 \
   WINEPREFIX=/home/$USER/Downloads/wine_wow_classic_1137 \
-  winecfg
-# Set Windows version to Windows 10, then close.
+  wineboot --init
+WINEPREFIX=/home/$USER/Downloads/wine_wow_classic_1137 \
+  wine reg add 'HKCU\Software\Wine' /v Version /d win10 /f
 
 WINEPREFIX=/home/$USER/Downloads/wine_wow_classic_1137 \
   wine "/home/$USER/.cache/wine/wine-gecko-2.47.4-x86.msi" /quiet
@@ -405,6 +550,8 @@ WINEPREFIX=/home/$USER/Downloads/wine_wow_classic_1137 \
   wine "/home/$USER/.cache/wine/wine-gecko-2.47.4-x86_64.msi" /quiet
 WINEPREFIX=/home/$USER/Downloads/wine_wow_classic_1137 \
   wine "/home/$USER/.cache/wine/wine-mono-10.4.1-x86.msi" /quiet
+WINEPREFIX=/home/$USER/Downloads/wine_wow_classic_1137 \
+  winetricks -q cjkfonts
 
 mkdir -p "/home/$USER/Downloads/wine_wow_classic_1137/drive_c/users/Public/Games/WoW Classic"
 
@@ -466,7 +613,16 @@ diff <(find "$UPGRADED" -type f -exec du -b {} \; | sed "s|$UPGRADED/||" | sort 
 
 Stale files left over from 1.13.2 are acceptable in the upgraded directory. Missing or size-mismatched files are failures that require diagnosis.
 
-### Phase 2.3: WINE smoke-test
+### Phase 2.3: Patch the clients with wow-patcher
+
+Patch both the upgraded and the fresh `Wow.exe` so they target the chosen CDN
+mirror. Use the same procedure as Phase 1 step 7, repeating it once per
+prefix. Substitute `WOWDIR` with each prefix's `_classic_` directory:
+
+- `/home/$USER/Downloads/wine_wow_classic_upgrade/drive_c/users/Public/Games/WoW Classic/_classic_`
+- `/home/$USER/Downloads/wine_wow_classic_1137/drive_c/users/Public/Games/WoW Classic/_classic_`
+
+### Phase 2.4: WINE smoke-test
 
 Each output directory is tested by running the client in its own WINE prefix.
 This is a manual check — the goal is to confirm the client launches, asks for
@@ -503,7 +659,7 @@ rm -rf /home/$USER/Downloads/wine_wow_classic_upgrade \
        /home/$USER/Downloads/wine_wow_classic_1137
 ```
 
-### Phase 2.4: On failure — diagnose and fix
+### Phase 2.5: On failure — diagnose and fix
 
 Follow the same diagnosis steps as Phase 1 step 7. Additionally:
 
@@ -533,7 +689,7 @@ The `.build.info` Tags field uses compound conditional tags
 `tag_names()` for manifest filtering, and compound tags via `build_info_tags()`
 for `.build.info`. Do not pass the compound tag syntax to the install pipeline.
 
-Tag system docs: `management/src/reverse-engineering/agent-3.13.3/manifests/`.
+Tag system docs: `management/src/reverse-engineering/battle.net/agent/2.39.4/9390/manifests/`.
 
 ### Startup recovery
 
@@ -613,7 +769,7 @@ executor now routes:
 - `is_loose_file = false`: written to CASC via `write_raw_blte()`, then
   optionally hardlinked/copied to the product directory.
 
-Relevant RE docs: `management/src/reverse-engineering/agent-3.13.3/tact/loose-file-placement.md`
+Relevant RE docs: `management/src/reverse-engineering/battle.net/agent/2.39.4/9390/tact/loose-file-placement.md`
 
 ### Archive segment size limit is 1 GiB
 
@@ -637,7 +793,7 @@ representing the total install footprint.
 The size manifest is **not** cross-referenced against the download manifest.
 File classification uses the install manifest, not the size manifest.
 
-Relevant RE docs: `management/src/reverse-engineering/agent-3.13.3/tact/size-manifest.md`
+Relevant RE docs: `management/src/reverse-engineering/battle.net/agent/2.39.4/9390/tact/size-manifest.md`
 
 ### Range requests require a capable HTTP server
 
@@ -748,8 +904,8 @@ containing `0` after all other layout files.
 
 When fixing issues discovered during integration testing, validate the fix
 against the reverse-engineered Agent.exe documentation at
-`~/Repos/github.com/wowemulation-dev/management/src/reverse-engineering/agent-3.13.3/`.
-If the docs are insufficient, use the Binary Ninja MCP to decompile the
+`~/Repos/github.com/wowemulation-dev/management/src/reverse-engineering/battle.net/agent/2.39.4/9390/`.
+If the docs are insufficient, use the Ghidra MCP to decompile the
 relevant function in Agent.exe directly. Do not merge fixes without verifying
 they match Agent.exe behavior.
 

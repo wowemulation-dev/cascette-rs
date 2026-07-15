@@ -116,7 +116,13 @@ impl IndexEntry {
             ));
         }
         // Read offset based on the size - special handling for archive-groups
+        // and file-index (offset_bytes = 0).
         let (offset, archive_index) = match offset_bytes {
+            0 => {
+                // file-index / patch-file-index: each entry is a standalone loose file,
+                // so there is no archive offset. Entry payload is just (ekey, size).
+                (0u64, None)
+            }
             4 => {
                 let mut bytes = [0u8; 4];
                 bytes.copy_from_slice(&data[pos..pos + 4]);
@@ -166,6 +172,9 @@ impl IndexEntry {
 
         // Write offset (big-endian)
         match offset_bytes {
+            0 => {
+                // file-index / patch-file-index: no offset field on disk.
+            }
             4 => data.extend_from_slice(&(self.offset as u32).to_be_bytes()),
             5 => {
                 let bytes = self.offset.to_be_bytes();
@@ -220,6 +229,7 @@ pub struct IndexFooter {
     /// Page size in kilobytes (always 4)
     pub page_size_kb: u8,
     /// Archive offset field size in bytes:
+    /// - 0 for file-index / patch-file-index (each entry is a standalone loose file)
     /// - 4 for regular archives
     /// - 5 for larger archives
     /// - 6 for archive-groups (2 bytes archive index + 4 bytes offset)
@@ -289,7 +299,14 @@ impl IndexFooter {
     /// Validate footer integrity using MD5
     pub fn is_valid(&self) -> bool {
         let expected = self.calculate_footer_hash();
-        let actual_len = self.footer_hash.len().min(self.footer_hash_bytes as usize);
+        let actual_len = self
+            .footer_hash
+            .len()
+            .min(self.footer_hash_bytes as usize)
+            .min(expected.len());
+        if actual_len == 0 {
+            return false;
+        }
         self.footer_hash[..actual_len] == expected[..actual_len]
     }
 
@@ -328,10 +345,14 @@ impl IndexFooter {
             )));
         }
 
-        // Support variable offset_bytes (4, 5, or 6 bytes)
-        if ![4, 5, 6].contains(&self.offset_bytes) {
+        // Support variable offset_bytes:
+        // 0 = file-index / patch-file-index (no archive offset, entry is standalone)
+        // 4 = regular archive index
+        // 5 = larger archive index
+        // 6 = archive-group (2 bytes archive index + 4 bytes offset)
+        if ![0, 4, 5, 6].contains(&self.offset_bytes) {
             return Err(ArchiveError::InvalidFormat(format!(
-                "Offset bytes should be 4, 5, or 6, got {}",
+                "Offset bytes should be 0, 4, 5, or 6, got {}",
                 self.offset_bytes
             )));
         }
@@ -401,6 +422,16 @@ impl IndexFooter {
     /// Check if this index is an archive-group
     pub fn is_archive_group(&self) -> bool {
         self.offset_bytes == 6
+    }
+
+    /// Check if this index is a file-index / patch-file-index.
+    ///
+    /// File indices use `offset_bytes = 0` because each entry describes a
+    /// standalone loose file on the CDN rather than a region inside a bundled
+    /// archive. Each entry is just `(ekey, size)`; the file lives at the usual
+    /// `data/{ekey[0:2]}/{ekey[2:4]}/{ekey}` path.
+    pub fn is_file_index(&self) -> bool {
+        self.offset_bytes == 0
     }
 }
 
@@ -1386,6 +1417,29 @@ mod tests {
     }
 
     #[test]
+    fn test_index_entry_round_trip_file_index() {
+        // file-index entries have offset_bytes = 0 (no archive offset).
+        let original = IndexEntry::new(
+            vec![
+                0x00, 0x00, 0x63, 0x21, 0xda, 0xc1, 0x75, 0x67, 0xcf, 0x90, 0x3d, 0xcd, 0x08, 0x89,
+                0xc5, 0xec,
+            ],
+            0x0001_2345,
+            0,
+        );
+
+        let buffer = original.to_bytes(4, 0).expect("write to_bytes");
+        // 16 (ekey) + 4 (size) + 0 (offset) = 20 bytes per entry.
+        assert_eq!(buffer.len(), 20);
+
+        let parsed = IndexEntry::parse(&buffer, 16, 4, 0).expect("parse entry");
+        assert_eq!(parsed.encoding_key, original.encoding_key);
+        assert_eq!(parsed.size, original.size);
+        assert_eq!(parsed.offset, 0);
+        assert_eq!(parsed.archive_index, None);
+    }
+
+    #[test]
     fn test_footer_format_validation() {
         let toc_hash = vec![0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0];
         let mut footer = IndexFooter::new(toc_hash, 1);
@@ -1431,6 +1485,68 @@ mod tests {
             footer.validate_format(),
             Err(ArchiveError::InvalidFormat(_))
         ));
+    }
+
+    #[test]
+    fn test_file_index_round_trip() {
+        // Build a small file-index (offset_bytes = 0) and parse it back to verify
+        // every entry survives the round trip with full 16-byte ekeys.
+        let mut builder = ArchiveIndexBuilder::with_config(16, 0, 4);
+        let entries = [
+            ([0x01u8; 16], 1024u32),
+            ([0x02u8; 16], 2048),
+            ([0x03u8; 16], 4096),
+            ([0xFFu8; 16], 8192),
+        ];
+        for (ekey, size) in entries {
+            builder.add_entry_full(ekey, size, 0);
+        }
+
+        let mut buf = Cursor::new(Vec::new());
+        let built = builder.build(&mut buf).expect("build file-index");
+        assert!(built.footer.is_file_index());
+        assert!(!built.footer.is_archive_group());
+
+        let parsed = ArchiveIndex::parse(Cursor::new(buf.into_inner())).expect("parse file-index");
+        assert_eq!(parsed.entries.len(), entries.len());
+        assert!(parsed.footer.is_file_index());
+
+        // Entries should round-trip with offset = 0 and the full 16-byte ekey.
+        for (parsed_entry, (expected_ekey, expected_size)) in parsed.entries.iter().zip(entries) {
+            assert_eq!(parsed_entry.encoding_key, expected_ekey.to_vec());
+            assert_eq!(parsed_entry.size, expected_size);
+            assert_eq!(parsed_entry.offset, 0);
+            assert_eq!(parsed_entry.archive_index, None);
+        }
+    }
+
+    #[test]
+    fn test_footer_offset_bytes_zero_accepted() {
+        // file-index / patch-file-index uses offset_bytes = 0 because each entry
+        // describes a standalone loose file (no archive offset).
+        let toc_hash = vec![0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0];
+        let mut footer = IndexFooter::new(toc_hash, 1);
+        footer.offset_bytes = 0;
+        // Re-compute the footer hash so is_valid() passes for the new field set.
+        footer.footer_hash = footer.calculate_footer_hash();
+
+        assert!(footer.is_valid());
+        assert!(footer.validate_format().is_ok());
+        assert!(footer.is_file_index());
+        assert!(!footer.is_archive_group());
+
+        // offset_bytes = 1, 2, 3 are still invalid.
+        for invalid in [1u8, 2, 3, 7, 255] {
+            footer.offset_bytes = invalid;
+            footer.footer_hash = footer.calculate_footer_hash();
+            assert!(
+                matches!(
+                    footer.validate_format(),
+                    Err(ArchiveError::InvalidFormat(_))
+                ),
+                "offset_bytes = {invalid} should be rejected"
+            );
+        }
     }
 
     #[test]

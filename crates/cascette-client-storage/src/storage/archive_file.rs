@@ -281,11 +281,7 @@ impl ArchiveManager {
         // Compute encoding key as MD5(blte_data) — content-addressable
         let encoding_key = EncodingKey::from_data(&blte_data);
 
-        // Build the 30-byte local header
-        let blte_size = u32::try_from(blte_data.len())
-            .map_err(|e| StorageError::Archive(format!("BLTE data too large: {e}")))?;
-
-        // Combined size: 30-byte header + BLTE data
+        // Total entry size: 30-byte local header + BLTE data
         let total_size = u32::try_from(LOCAL_HEADER_SIZE + blte_data.len())
             .map_err(|e| StorageError::Archive(format!("Total data too large: {e}")))?;
 
@@ -303,8 +299,12 @@ impl ArchiveManager {
             *positions.get(&archive_id).unwrap_or(&0)
         };
 
-        // Build local header with checksums (needs write position for checksum_b)
-        let header = LocalHeader::new(*encoding_key.as_bytes(), blte_size, offset as usize);
+        // Global offset = segment base + file offset. Used for header checksums.
+        let global_offset = u64::from(archive_id) * SEGMENT_SIZE + offset;
+
+        // Build local header with checksums.
+        // encoded_size includes the 30-byte header itself.
+        let header = LocalHeader::new(*encoding_key.as_bytes(), total_size, global_offset as usize);
         let header_bytes = header.to_bytes();
 
         // Write local header + BLTE data
@@ -341,9 +341,6 @@ impl ArchiveManager {
         let encoding_key = EncodingKey::from_data(blte_data);
 
         // Build the 30-byte local header
-        let blte_size = u32::try_from(blte_data.len())
-            .map_err(|e| StorageError::Archive(format!("BLTE data too large: {e}")))?;
-
         let total_size = u32::try_from(LOCAL_HEADER_SIZE + blte_data.len())
             .map_err(|e| StorageError::Archive(format!("Total data too large: {e}")))?;
 
@@ -359,7 +356,10 @@ impl ArchiveManager {
             *positions.get(&archive_id).unwrap_or(&0)
         };
 
-        let header = LocalHeader::new(*encoding_key.as_bytes(), blte_size, offset as usize);
+        // Global offset = segment base + file offset. Used for header checksums.
+        let global_offset = u64::from(archive_id) * SEGMENT_SIZE + offset;
+
+        let header = LocalHeader::new(*encoding_key.as_bytes(), total_size, global_offset as usize);
         let header_bytes = header.to_bytes();
 
         let mut combined = Vec::with_capacity(LOCAL_HEADER_SIZE + blte_data.len());
@@ -375,9 +375,57 @@ impl ArchiveManager {
         let offset_u32 = u32::try_from(offset)
             .map_err(|e| StorageError::Archive(format!("Offset too large: {e}")))?;
 
-        // Return blte_size (not total_size) — the IDX `encoded_size` field
-        // stores the BLTE data size, matching the local header's encoded_size.
-        Ok((archive_id, offset_u32, blte_size, *encoding_key.as_bytes()))
+        // IDX encoded_size includes the 30-byte local header.
+        Ok((archive_id, offset_u32, total_size, *encoding_key.as_bytes()))
+    }
+
+    /// Write pre-encoded BLTE data with an explicit encoding key.
+    ///
+    /// Like `write_raw_content` but uses the provided `ekey` for the local
+    /// header instead of computing `MD5(blte_data)`. Use for bootstrap files
+    /// where the ekey is known from the build config.
+    ///
+    /// Returns `(archive_id, offset, total_size)` where total_size
+    /// includes the 30-byte local header.
+    pub fn write_raw_content_with_ekey(
+        &mut self,
+        blte_data: &[u8],
+        ekey: &[u8; 16],
+    ) -> Result<(u16, u32, u32)> {
+        let total_size = u32::try_from(LOCAL_HEADER_SIZE + blte_data.len())
+            .map_err(|e| StorageError::Archive(format!("Total data too large: {e}")))?;
+
+        let archive_id = self.select_archive_for_write_sized(u64::from(total_size));
+
+        if !self.archives.contains_key(&archive_id) {
+            self.create_archive(archive_id)?;
+        }
+
+        let offset = {
+            let positions = self.write_positions.read();
+            *positions.get(&archive_id).unwrap_or(&0)
+        };
+
+        let global_offset = u64::from(archive_id) * SEGMENT_SIZE + offset;
+
+        let header = LocalHeader::new(*ekey, total_size, global_offset as usize);
+        let header_bytes = header.to_bytes();
+
+        let mut combined = Vec::with_capacity(LOCAL_HEADER_SIZE + blte_data.len());
+        combined.extend_from_slice(&header_bytes);
+        combined.extend_from_slice(blte_data);
+        self.write_to_archive(archive_id, offset, &combined)?;
+
+        {
+            let mut positions = self.write_positions.write();
+            positions.insert(archive_id, offset + u64::from(total_size));
+        }
+
+        let offset_u32 = u32::try_from(offset)
+            .map_err(|e| StorageError::Archive(format!("Offset too large: {e}")))?;
+
+        // IDX encoded_size includes the 30-byte local header.
+        Ok((archive_id, offset_u32, total_size))
     }
 
     /// Select archive for writing that has room for `needed_bytes`.
@@ -408,17 +456,26 @@ impl ArchiveManager {
     const SEGMENT_HEADER_SIZE: u64 = 480;
 
     /// Create a new archive file with a 480-byte segment header.
+    ///
+    /// Generates 16 reconstruction headers (one per KMT bucket) with
+    /// keys that hash to each bucket index and valid checksums.
     fn create_archive(&self, id: u16) -> Result<()> {
         let filename = format!("data.{id:03}");
         let path = self.base_path.join(filename);
 
-        // Write the 480-byte segment header (all zeros initially).
-        // Reference: dynamic.cpp:289-291, CreateSegment writes kSegmentHeaderSize zeros.
+        // Compute path hash (MD5 of base path string) for segment key
+        // generation. The Blizzard agent hashes the normalized data path.
+        let path_str = self.base_path.to_string_lossy();
+        let path_hash = cascette_crypto::ContentKey::from_data(path_str.as_bytes());
+        let path_hash_bytes: [u8; 16] = *path_hash.as_bytes();
+
+        // Generate segment header with proper reconstruction headers.
+        let seg_header = crate::storage::segment::SegmentHeader::generate(id, &path_hash_bytes);
+
         {
             let mut file = File::create(&path)
                 .map_err(|e| StorageError::Archive(format!("Failed to create archive: {e}")))?;
-            let header = vec![0u8; Self::SEGMENT_HEADER_SIZE as usize];
-            std::io::Write::write_all(&mut file, &header).map_err(|e| {
+            std::io::Write::write_all(&mut file, &seg_header.to_bytes()).map_err(|e| {
                 StorageError::Archive(format!("Failed to write segment header: {e}"))
             })?;
         }
@@ -1144,8 +1201,8 @@ mod tests {
             "encoding key in header should match returned key (first 9 bytes)"
         );
 
-        // Verify encoded_size matches the BLTE data size
-        assert_eq!(header.encoded_size + LOCAL_HEADER_SIZE as u32, total_size);
+        // encoded_size includes the 30-byte local header
+        assert_eq!(header.encoded_size, total_size);
     }
 
     #[test]
