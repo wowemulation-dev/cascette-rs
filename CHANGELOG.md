@@ -49,8 +49,18 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `LayoutWritten` for per-phase progress tracking
 - cascette-agent: CDN override environment variables (`CASCETTE_AGENT_CDN_HOSTS`,
   `CASCETTE_AGENT_CDN_PATH`) logged at startup and at metadata resolution time
+- cascette-crypto: `salsa20_vector` example — emits a Salsa20 test vector from
+  cascette-rs for cross-verification with the C++ `Salsa20Cipher`
+- cascette-formats: BLTE cross-verification examples for interop with C++ CascLib —
+  `gen_lz4_cross` and `decode_lz4_cross` (LZ4 via lz4_flex both directions),
+  `gen_encrypted_blte` and `decode_enc` (encrypted 'E' blocks), and `encrypt_vector`
+  (raw Salsa20-encrypted chunk emission)
 
 ### Changed
+
+- tools: `generate_wow_paths.sh` and `verify_mirror_sizes.sh` include the new build
+  wow_classic_titan 3.80.2.68943 (1061 builds total); stale per-product build-count
+  comments removed from `verify_mirror_sizes.sh`
 
 - cascette-installation: `InstallConfig`, `UpdateConfig`, and `ExtractConfig` use
   `tag_query: TagQuery` instead of `platform_tags` and `locale` fields

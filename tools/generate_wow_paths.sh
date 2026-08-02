@@ -7,7 +7,7 @@
 #
 # Data source: cascette-py wago_builds.db (wago.tools + BlizzTrack).
 # Generated: 2026-05-28
-# Builds: 1060 across wow, wow_classic, wow_classic_era, wow_classic_titan, wow_anniversary
+# Builds: 1061 across wow, wow_classic, wow_classic_era, wow_classic_titan, wow_anniversary
 #
 # Output files are written atomically: build_file_tree writes to a temp file,
 # which is moved into place only on success. Partial output from failed runs
@@ -28,7 +28,7 @@ BFT="${BFT:-./target/release/examples/build_file_tree}"
 CDN="https://archive.wow.tools"
 CDN_PATH="tpr/wow"
 OUTDIR="${OUTDIR:-./paths}"
-TOTAL=1060
+TOTAL=1061
 SKIPPED=0
 OK=0
 FAIL=0
@@ -2202,6 +2202,8 @@ run_build "$OUTDIR/wow_classic_titan_3.80.1.68654_9255b9a6.txt" "$BFT" wow_class
 run_build "$OUTDIR/wow_classic_titan_3.80.1.68768_1110a750.txt" "$BFT" wow_classic_titan 1110a75034fcde9f356954a3c1f61b69 5c54a0d47454dfd8204a49d8a59afea1 "$CDN" "$CDN_PATH" --paths
 # wow_classic_titan 3.80.1.68805 bc=8d43cf13c55c95b1d7e060f9ce74547c cc=5eeeb7a664e41a88349215461af353bb
 run_build "$OUTDIR/wow_classic_titan_3.80.1.68805_8d43cf13.txt" "$BFT" wow_classic_titan 8d43cf13c55c95b1d7e060f9ce74547c 5eeeb7a664e41a88349215461af353bb "$CDN" "$CDN_PATH" --paths
+# wow_classic_titan 3.80.2.68943 bc=9bebac287f82ec81b050a88119f2ab46 cc=72c730bef365effe8a1373203e9c8c56
+run_build "$OUTDIR/wow_classic_titan_3.80.2.68943_9bebac28.txt" "$BFT" wow_classic_titan 9bebac287f82ec81b050a88119f2ab46 72c730bef365effe8a1373203e9c8c56 "$CDN" "$CDN_PATH" --paths
 
 echo "Done. ok=$OK failed=$FAIL skipped=$SKIPPED ($(ls "$OUTDIR" | wc -l) files in $OUTDIR)" >&2
 if ((FAIL > 0)); then
