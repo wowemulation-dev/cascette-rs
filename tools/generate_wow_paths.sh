@@ -25,7 +25,7 @@
 set -uo pipefail
 
 BFT="${BFT:-./target/release/examples/build_file_tree}"
-CDN="https://archive.wow.tools"
+CDN="https://level3.blizzard.com"
 CDN_PATH="tpr/wow"
 OUTDIR="${OUTDIR:-./paths}"
 TOTAL=0
@@ -680,8 +680,12 @@ run_build "$OUTDIR/wow_9.2.7.45338_cfafa43d.txt" "$BFT" wow 938f71f7d82546227259
 run_build "$OUTDIR/wow_9.2.7.45745_8be9cf98.txt" "$BFT" wow 43b2762b8e4a57c4771a5cf9a1d99661 8be9cf988078dd923677d222be5dfe38 "$CDN" "$CDN_PATH" --paths
 # wow 12.0.7.68887 bc=0fcf22030198cca211997a998743ba7f cc=5eeeb7a664e41a88349215461af353bb
 run_build "$OUTDIR/wow_12.0.7.68887_0fcf2203.txt" "$BFT" wow 0fcf22030198cca211997a998743ba7f 5eeeb7a664e41a88349215461af353bb "$CDN" "$CDN_PATH" --paths
-# wow 12.0.7.68974 bc=96db6554c1ba271b52390175d50589f3 cc=13ce4301f8cb9fda1cd03d8b32bcf916
-run_build "$OUTDIR/wow_12.0.7.68974_96db6554.txt" "$BFT" wow 96db6554c1ba271b52390175d50589f3 13ce4301f8cb9fda1cd03d8b32bcf916 "$CDN" "$CDN_PATH" --paths
+# wow 12.0.7.68974 bc=96db6554c1ba271b52390175d50589f3 cc=9a824cce21b48ebf0b11367ae32d1597
+run_build "$OUTDIR/wow_12.0.7.68974_96db6554.txt" "$BFT" wow 96db6554c1ba271b52390175d50589f3 9a824cce21b48ebf0b11367ae32d1597 "$CDN" "$CDN_PATH" --paths
+# wow 12.1.0.69214 bc=742fe96462414a88e1b1c35f5d09e2c5 cc=58c5b154cd4305b529d77f8cabe995a0
+run_build "$OUTDIR/wow_12.1.0.69214_742fe964.txt" "$BFT" wow 742fe96462414a88e1b1c35f5d09e2c5 58c5b154cd4305b529d77f8cabe995a0 "$CDN" "$CDN_PATH" --paths
+# wow 12.1.0.69273 bc=8fc12df3f3746ac3760a7edcd4cf0ec4 cc=9a824cce21b48ebf0b11367ae32d1597
+run_build "$OUTDIR/wow_12.1.0.69273_8fc12df3.txt" "$BFT" wow 8fc12df3f3746ac3760a7edcd4cf0ec4 9a824cce21b48ebf0b11367ae32d1597 "$CDN" "$CDN_PATH" --paths
 
 # wow 10.0.0.46181 bc=8cc219f402853e62a659185cf57de96a cc=4668c189ee585b7ac16ae35bb90a781b
 run_build "$OUTDIR/wow_10.0.0.46181_4668c189.txt" "$BFT" wow 8cc219f402853e62a659185cf57de96a 4668c189ee585b7ac16ae35bb90a781b "$CDN" "$CDN_PATH" --paths
@@ -1237,8 +1241,8 @@ run_build "$OUTDIR/wow_12.0.5.67403_0d9860f7.txt" "$BFT" wow 11d3219f80f8ffa6f23
 run_build "$OUTDIR/wow_12.0.5.67451_1824e670.txt" "$BFT" wow 0aacf4f96df375d90c805554d07b61ff 1824e670e59e0c6b67be2f7f2296e840 "$CDN" "$CDN_PATH" --paths
 # wow 12.0.5.67602 bc=847a33c58a55d0a52d323d1cc6ee7d72 cc=6a9a636d09c782d5ff7f1d960e043d9f
 run_build "$OUTDIR/wow_12.0.5.67602_6a9a636d.txt" "$BFT" wow 847a33c58a55d0a52d323d1cc6ee7d72 6a9a636d09c782d5ff7f1d960e043d9f "$CDN" "$CDN_PATH" --paths
-# wow 12.0.5.67823 bc=399d19713d9fe33f5c84e6935a515e2d cc=8610593d001ed7a4ef1a003d3a4538a7
-run_build "$OUTDIR/wow_12.0.5.67823_8610593d.txt" "$BFT" wow 399d19713d9fe33f5c84e6935a515e2d 8610593d001ed7a4ef1a003d3a4538a7 "$CDN" "$CDN_PATH" --paths
+# wow 12.0.5.67823 bc=399d19713d9fe33f5c84e6935a515e2d cc=5041b30215d06a0c5403d6af9a9456df
+run_build "$OUTDIR/wow_12.0.5.67823_8610593d.txt" "$BFT" wow 399d19713d9fe33f5c84e6935a515e2d 5041b30215d06a0c5403d6af9a9456df "$CDN" "$CDN_PATH" --paths
 # wow 12.0.7.67808 bc=29c0b9858abc172f5a6a29377c8493d8 cc=2374bc9b22181d368eab210a0374bdf0
 run_build "$OUTDIR/wow_12.0.7.67808_2374bc9b.txt" "$BFT" wow 29c0b9858abc172f5a6a29377c8493d8 2374bc9b22181d368eab210a0374bdf0 "$CDN" "$CDN_PATH" --paths
 # wow 12.0.7.68182 bc=f50c48c3afefa874e474e57d2405dd93 cc=fb665ecbea0fb5665e1ca58b30227472
@@ -1247,14 +1251,14 @@ run_build "$OUTDIR/wow_12.0.7.68182_fb665ecb.txt" "$BFT" wow f50c48c3afefa874e47
 run_build "$OUTDIR/wow_12.0.7.68232_75f5efa0.txt" "$BFT" wow a4d8fd2b48cfdc71faed5c403a736c68 75f5efa00f27bd95c698f4024c00cb81 "$CDN" "$CDN_PATH" --paths
 # wow 12.0.7.68235 bc=9d40dfb399a5e38d263d301c1162b6e3 cc=c04aae25c788be2d903d099232776718
 run_build "$OUTDIR/wow_12.0.7.68235_c04aae25.txt" "$BFT" wow 9d40dfb399a5e38d263d301c1162b6e3 c04aae25c788be2d903d099232776718 "$CDN" "$CDN_PATH" --paths
-# wow 12.0.7.68256 bc=03c2b83ef84786c476ab5d6b5696612d cc=a84be43ded0ba32d1617242ee87fa646
-run_build "$OUTDIR/wow_12.0.7.68256_a84be43d.txt" "$BFT" wow 03c2b83ef84786c476ab5d6b5696612d a84be43ded0ba32d1617242ee87fa646 "$CDN" "$CDN_PATH" --paths
-# wow 12.0.7.68275 bc=7d4236927405a1a168e6571ee2a8e00b cc=42eace50c6e197394f888924b471df4c
-run_build "$OUTDIR/wow_12.0.7.68275_42eace50.txt" "$BFT" wow 7d4236927405a1a168e6571ee2a8e00b 42eace50c6e197394f888924b471df4c "$CDN" "$CDN_PATH" --paths
+# wow 12.0.7.68256 bc=03c2b83ef84786c476ab5d6b5696612d cc=080396f7a57021a4a0f4fbf0371c6de0
+run_build "$OUTDIR/wow_12.0.7.68256_a84be43d.txt" "$BFT" wow 03c2b83ef84786c476ab5d6b5696612d 080396f7a57021a4a0f4fbf0371c6de0 "$CDN" "$CDN_PATH" --paths
+# wow 12.0.7.68275 bc=7d4236927405a1a168e6571ee2a8e00b cc=fccf4c94de71f6d8543a63801ddbf0f2
+run_build "$OUTDIR/wow_12.0.7.68275_42eace50.txt" "$BFT" wow 7d4236927405a1a168e6571ee2a8e00b fccf4c94de71f6d8543a63801ddbf0f2 "$CDN" "$CDN_PATH" --paths
 # wow 12.0.7.68367 bc=d39191da08bd9b3e9cceaad833b4d5ba cc=bebc96b5cfff6149becf9069d1fbb859
 run_build "$OUTDIR/wow_12.0.7.68367_bebc96b5.txt" "$BFT" wow d39191da08bd9b3e9cceaad833b4d5ba bebc96b5cfff6149becf9069d1fbb859 "$CDN" "$CDN_PATH" --paths
-# wow 12.0.7.68453 bc=34a1a445ae41066c7f7a6564892d8bdd cc=2da464eb7ff0f412114799e89e5453b2
-run_build "$OUTDIR/wow_12.0.7.68453_34a1a445.txt" "$BFT" wow 34a1a445ae41066c7f7a6564892d8bdd 2da464eb7ff0f412114799e89e5453b2 "$CDN" "$CDN_PATH" --paths
+# wow 12.0.7.68453 bc=34a1a445ae41066c7f7a6564892d8bdd cc=1deda1a1fd806f80590fc17ccbf4f852
+run_build "$OUTDIR/wow_12.0.7.68453_34a1a445.txt" "$BFT" wow 34a1a445ae41066c7f7a6564892d8bdd 1deda1a1fd806f80590fc17ccbf4f852 "$CDN" "$CDN_PATH" --paths
 
 # wow_anniversary 2.5.5.65340 bc=1272ef5be270d8aadda6f213ee152544 cc=dc6b58108dcf80651311523f370a2035
 run_build "$OUTDIR/wow_anniversary_2.5.5.65340_dc6b5810.txt" "$BFT" wow_anniversary 1272ef5be270d8aadda6f213ee152544 dc6b58108dcf80651311523f370a2035 "$CDN" "$CDN_PATH" --paths
@@ -1282,24 +1286,24 @@ run_build "$OUTDIR/wow_anniversary_2.5.5.66567_e96ac31b.txt" "$BFT" wow_annivers
 run_build "$OUTDIR/wow_anniversary_2.5.5.66765_12f22daa.txt" "$BFT" wow_anniversary 146490b888d45ad42f8ac5e2de6b7d3d 12f22daaa492104d81be26a49793dbed "$CDN" "$CDN_PATH" --paths
 # wow_anniversary 2.5.5.67157 bc=a96cd2d6b9135ca5e6f53a2927bb83c4 cc=a4ae293c478d89f00ef637d12a0c2e04
 run_build "$OUTDIR/wow_anniversary_2.5.5.67157_a4ae293c.txt" "$BFT" wow_anniversary a96cd2d6b9135ca5e6f53a2927bb83c4 a4ae293c478d89f00ef637d12a0c2e04 "$CDN" "$CDN_PATH" --paths
-# wow_anniversary 2.5.5.67511 bc=b57fb5113b62c73c4c9ee8b977b91d18 cc=8610593d001ed7a4ef1a003d3a4538a7
-run_build "$OUTDIR/wow_anniversary_2.5.5.67511_8610593d.txt" "$BFT" wow_anniversary b57fb5113b62c73c4c9ee8b977b91d18 8610593d001ed7a4ef1a003d3a4538a7 "$CDN" "$CDN_PATH" --paths
+# wow_anniversary 2.5.5.67511 bc=b57fb5113b62c73c4c9ee8b977b91d18 cc=2d8e5f5a523b73403c961ee50e875d70
+run_build "$OUTDIR/wow_anniversary_2.5.5.67511_8610593d.txt" "$BFT" wow_anniversary b57fb5113b62c73c4c9ee8b977b91d18 2d8e5f5a523b73403c961ee50e875d70 "$CDN" "$CDN_PATH" --paths
 # wow_anniversary 2.5.5.67852 bc=bc5e6071acd67f7a86a2730a1afe3fd9 cc=938e83ee682e94cc47e7bed94c0a4b55
 run_build "$OUTDIR/wow_anniversary_2.5.5.67852_938e83ee.txt" "$BFT" wow_anniversary bc5e6071acd67f7a86a2730a1afe3fd9 938e83ee682e94cc47e7bed94c0a4b55 "$CDN" "$CDN_PATH" --paths
 # wow_anniversary 2.5.5.68101 bc=bc3b8e61b6ba9f0686029dca74271889 cc=d3d3c884b11a7f550bca82fd0d5a3e40
 run_build "$OUTDIR/wow_anniversary_2.5.5.68101_d3d3c884.txt" "$BFT" wow_anniversary bc3b8e61b6ba9f0686029dca74271889 d3d3c884b11a7f550bca82fd0d5a3e40 "$CDN" "$CDN_PATH" --paths
-# wow_anniversary 2.5.6.68502 bc=cedfb91c7860b2f5752e38e13c7d9ea5 cc=2da464eb7ff0f412114799e89e5453b2
-run_build "$OUTDIR/wow_anniversary_2.5.6.68502_2da464eb.txt" "$BFT" wow_anniversary cedfb91c7860b2f5752e38e13c7d9ea5 2da464eb7ff0f412114799e89e5453b2 "$CDN" "$CDN_PATH" --paths
-# wow_anniversary 2.5.6.68575 bc=7d418167a40670b76b3b2a02c7cb682f cc=95df665e244e1c9c61c9b97830320388
-run_build "$OUTDIR/wow_anniversary_2.5.6.68575_7d418167.txt" "$BFT" wow_anniversary 7d418167a40670b76b3b2a02c7cb682f 95df665e244e1c9c61c9b97830320388 "$CDN" "$CDN_PATH" --paths
+# wow_anniversary 2.5.6.68502 bc=cedfb91c7860b2f5752e38e13c7d9ea5 cc=1deda1a1fd806f80590fc17ccbf4f852
+run_build "$OUTDIR/wow_anniversary_2.5.6.68502_2da464eb.txt" "$BFT" wow_anniversary cedfb91c7860b2f5752e38e13c7d9ea5 1deda1a1fd806f80590fc17ccbf4f852 "$CDN" "$CDN_PATH" --paths
+# wow_anniversary 2.5.5.68575 bc=7d418167a40670b76b3b2a02c7cb682f cc=38bfbaeb7f6c2a293def5ab2873b7784
+run_build "$OUTDIR/wow_anniversary_2.5.5.68575_7d418167.txt" "$BFT" wow_anniversary 7d418167a40670b76b3b2a02c7cb682f 38bfbaeb7f6c2a293def5ab2873b7784 "$CDN" "$CDN_PATH" --paths
 # wow_anniversary 2.5.6.68749 bc=2026cf997f1c3df6c0c4a4749690395e cc=cdd540cf71fba841a296f3c6da69ff30
 run_build "$OUTDIR/wow_anniversary_2.5.6.68749_2026cf99.txt" "$BFT" wow_anniversary 2026cf997f1c3df6c0c4a4749690395e cdd540cf71fba841a296f3c6da69ff30 "$CDN" "$CDN_PATH" --paths
-# wow_anniversary 2.5.6.68775 bc=48733c01faf635d8220af49ac03c206c cc=5c54a0d47454dfd8204a49d8a59afea1
-run_build "$OUTDIR/wow_anniversary_2.5.6.68775_48733c01.txt" "$BFT" wow_anniversary 48733c01faf635d8220af49ac03c206c 5c54a0d47454dfd8204a49d8a59afea1 "$CDN" "$CDN_PATH" --paths
+# wow_anniversary 2.5.6.68775 bc=48733c01faf635d8220af49ac03c206c cc=b20264e873e1b14626ca639483cd2bcc
+run_build "$OUTDIR/wow_anniversary_2.5.6.68775_48733c01.txt" "$BFT" wow_anniversary 48733c01faf635d8220af49ac03c206c b20264e873e1b14626ca639483cd2bcc "$CDN" "$CDN_PATH" --paths
 # wow_anniversary 2.5.6.68941 bc=a28e58bce063f7ce3051a07a3588bcf1 cc=d7bdbe77b648d19d4a4449c3d2fe7df8
 run_build "$OUTDIR/wow_anniversary_2.5.6.68941_a28e58bc.txt" "$BFT" wow_anniversary a28e58bce063f7ce3051a07a3588bcf1 d7bdbe77b648d19d4a4449c3d2fe7df8 "$CDN" "$CDN_PATH" --paths
-# wow_anniversary 2.5.6.69110 bc=c5ade9dade89ac36fb4b2d9fd6c09a9a cc=481a61979f7082e323be3d2ec8bff1f9
-run_build "$OUTDIR/wow_anniversary_2.5.6.69110_c5ade9da.txt" "$BFT" wow_anniversary c5ade9dade89ac36fb4b2d9fd6c09a9a 481a61979f7082e323be3d2ec8bff1f9 "$CDN" "$CDN_PATH" --paths
+# wow_anniversary 2.5.6.69110 bc=c5ade9dade89ac36fb4b2d9fd6c09a9a cc=9a824cce21b48ebf0b11367ae32d1597
+run_build "$OUTDIR/wow_anniversary_2.5.6.69110_c5ade9da.txt" "$BFT" wow_anniversary c5ade9dade89ac36fb4b2d9fd6c09a9a 9a824cce21b48ebf0b11367ae32d1597 "$CDN" "$CDN_PATH" --paths
 
 # wow_classic 1.13.0.28211 bc=bf24b9d67a4a9c7cc0ce59d63df459a8 cc=2b5b60cdbcd07c5f88c23385069ead40
 run_build "$OUTDIR/wow_classic_1.13.0.28211_2b5b60cd.txt" "$BFT" wow_classic bf24b9d67a4a9c7cc0ce59d63df459a8 2b5b60cdbcd07c5f88c23385069ead40 "$CDN" "$CDN_PATH" --paths
@@ -1833,32 +1837,34 @@ run_build "$OUTDIR/wow_classic_5.5.3.66565_e96ac31b.txt" "$BFT" wow_classic d919
 run_build "$OUTDIR/wow_classic_5.5.3.66839_b8341765.txt" "$BFT" wow_classic 05d5c5a0f3bda2495943ab2864a3e182 b8341765e3e67c5b6a0679cdfbad9ff2 "$CDN" "$CDN_PATH" --paths
 # wow_classic 5.5.3.67158 bc=70ade877cbbef31b2f400e16b2052e91 cc=a4ae293c478d89f00ef637d12a0c2e04
 run_build "$OUTDIR/wow_classic_5.5.3.67158_a4ae293c.txt" "$BFT" wow_classic 70ade877cbbef31b2f400e16b2052e91 a4ae293c478d89f00ef637d12a0c2e04 "$CDN" "$CDN_PATH" --paths
-# wow_classic 5.5.3.67509 bc=289239ac8f51a5e66fe04c341043db9d cc=8610593d001ed7a4ef1a003d3a4538a7
-run_build "$OUTDIR/wow_classic_5.5.3.67509_8610593d.txt" "$BFT" wow_classic 289239ac8f51a5e66fe04c341043db9d 8610593d001ed7a4ef1a003d3a4538a7 "$CDN" "$CDN_PATH" --paths
-# wow_classic 5.5.4.67849 bc=94f4c222778c98dcdbdfa6c2a6df7d39 cc=8610593d001ed7a4ef1a003d3a4538a7
-run_build "$OUTDIR/wow_classic_5.5.4.67849_8610593d.txt" "$BFT" wow_classic 94f4c222778c98dcdbdfa6c2a6df7d39 8610593d001ed7a4ef1a003d3a4538a7 "$CDN" "$CDN_PATH" --paths
+# wow_classic 5.5.3.67509 bc=289239ac8f51a5e66fe04c341043db9d cc=2d8e5f5a523b73403c961ee50e875d70
+run_build "$OUTDIR/wow_classic_5.5.3.67509_8610593d.txt" "$BFT" wow_classic 289239ac8f51a5e66fe04c341043db9d 2d8e5f5a523b73403c961ee50e875d70 "$CDN" "$CDN_PATH" --paths
+# wow_classic 5.5.4.67849 bc=94f4c222778c98dcdbdfa6c2a6df7d39 cc=938e83ee682e94cc47e7bed94c0a4b55
+run_build "$OUTDIR/wow_classic_5.5.4.67849_8610593d.txt" "$BFT" wow_classic 94f4c222778c98dcdbdfa6c2a6df7d39 938e83ee682e94cc47e7bed94c0a4b55 "$CDN" "$CDN_PATH" --paths
 # wow_classic 5.5.4.67969 bc=74d42378456e4335f6074fca5e4a9949 cc=8faa0d2387cd2f9b90d2292a127d4dbd
 run_build "$OUTDIR/wow_classic_5.5.4.67969_8faa0d23.txt" "$BFT" wow_classic 74d42378456e4335f6074fca5e4a9949 8faa0d2387cd2f9b90d2292a127d4dbd "$CDN" "$CDN_PATH" --paths
 # wow_classic 5.5.4.68016 bc=4ee3cad3cb29cd695acf2148dc988efb cc=3f8912b8acc34e1cf78d902ebd03ba18
 run_build "$OUTDIR/wow_classic_5.5.4.68016_3f8912b8.txt" "$BFT" wow_classic 4ee3cad3cb29cd695acf2148dc988efb 3f8912b8acc34e1cf78d902ebd03ba18 "$CDN" "$CDN_PATH" --paths
 # wow_classic 5.5.4.68042 bc=9f3c86b65454bae85b192692062bcb1d cc=72bd1b18e3ed5bccdc5ee378b54e4644
 run_build "$OUTDIR/wow_classic_5.5.4.68042_72bd1b18.txt" "$BFT" wow_classic 9f3c86b65454bae85b192692062bcb1d 72bd1b18e3ed5bccdc5ee378b54e4644 "$CDN" "$CDN_PATH" --paths
-# wow_classic 5.5.4.68077 bc=7a50513882e105feb6241874f520c881 cc=d3d3c884b11a7f550bca82fd0d5a3e40
-run_build "$OUTDIR/wow_classic_5.5.4.68077_d3d3c884.txt" "$BFT" wow_classic 7a50513882e105feb6241874f520c881 d3d3c884b11a7f550bca82fd0d5a3e40 "$CDN" "$CDN_PATH" --paths
-# wow_classic 5.5.4.68159 bc=385e98d716641a8e5011281f9c6f5bbc cc=a84be43ded0ba32d1617242ee87fa646
-run_build "$OUTDIR/wow_classic_5.5.4.68159_a84be43d.txt" "$BFT" wow_classic 385e98d716641a8e5011281f9c6f5bbc a84be43ded0ba32d1617242ee87fa646 "$CDN" "$CDN_PATH" --paths
-# wow_classic 5.5.4.68317 bc=284135abf50ae8095e8db7b5f5afaaa5 cc=42eace50c6e197394f888924b471df4c
-run_build "$OUTDIR/wow_classic_5.5.4.68317_42eace50.txt" "$BFT" wow_classic 284135abf50ae8095e8db7b5f5afaaa5 42eace50c6e197394f888924b471df4c "$CDN" "$CDN_PATH" --paths
-# wow_classic 5.5.4.68571 bc=b141f2b426b86df1e70d72a7bd360a9f cc=95df665e244e1c9c61c9b97830320388
-run_build "$OUTDIR/wow_classic_5.5.4.68571_b141f2b4.txt" "$BFT" wow_classic b141f2b426b86df1e70d72a7bd360a9f 95df665e244e1c9c61c9b97830320388 "$CDN" "$CDN_PATH" --paths
+# wow_classic 5.5.4.68077 bc=7a50513882e105feb6241874f520c881 cc=b3579e79322821c6be935a05c7a6ee2f
+run_build "$OUTDIR/wow_classic_5.5.4.68077_d3d3c884.txt" "$BFT" wow_classic 7a50513882e105feb6241874f520c881 b3579e79322821c6be935a05c7a6ee2f "$CDN" "$CDN_PATH" --paths
+# wow_classic 5.5.4.68159 bc=385e98d716641a8e5011281f9c6f5bbc cc=fb665ecbea0fb5665e1ca58b30227472
+run_build "$OUTDIR/wow_classic_5.5.4.68159_a84be43d.txt" "$BFT" wow_classic 385e98d716641a8e5011281f9c6f5bbc fb665ecbea0fb5665e1ca58b30227472 "$CDN" "$CDN_PATH" --paths
+# wow_classic 5.5.4.68317 bc=284135abf50ae8095e8db7b5f5afaaa5 cc=e0fb5fa94ab1850fef6f8820fea3062d
+run_build "$OUTDIR/wow_classic_5.5.4.68317_42eace50.txt" "$BFT" wow_classic 284135abf50ae8095e8db7b5f5afaaa5 e0fb5fa94ab1850fef6f8820fea3062d "$CDN" "$CDN_PATH" --paths
+# wow_classic 5.5.4.68571 bc=b141f2b426b86df1e70d72a7bd360a9f cc=f69dda4c5555d0032b60fde41e840463
+run_build "$OUTDIR/wow_classic_5.5.4.68571_b141f2b4.txt" "$BFT" wow_classic b141f2b426b86df1e70d72a7bd360a9f f69dda4c5555d0032b60fde41e840463 "$CDN" "$CDN_PATH" --paths
 # wow_classic 5.5.4.68716 bc=3e2eb14e3216f836d801fc592505aedb cc=534ded0400b3e158ae129155caec86ca
 run_build "$OUTDIR/wow_classic_5.5.4.68716_3e2eb14e.txt" "$BFT" wow_classic 3e2eb14e3216f836d801fc592505aedb 534ded0400b3e158ae129155caec86ca "$CDN" "$CDN_PATH" --paths
-# wow_classic 5.5.4.68806 bc=4e3e166daecb389c0831fa94cf669307 cc=5eeeb7a664e41a88349215461af353bb
-run_build "$OUTDIR/wow_classic_5.5.4.68806_4e3e166d.txt" "$BFT" wow_classic 4e3e166daecb389c0831fa94cf669307 5eeeb7a664e41a88349215461af353bb "$CDN" "$CDN_PATH" --paths
+# wow_classic 5.5.4.68806 bc=4e3e166daecb389c0831fa94cf669307 cc=567b2b5d89b03ec5b51f4e875d5ed0de
+run_build "$OUTDIR/wow_classic_5.5.4.68806_4e3e166d.txt" "$BFT" wow_classic 4e3e166daecb389c0831fa94cf669307 567b2b5d89b03ec5b51f4e875d5ed0de "$CDN" "$CDN_PATH" --paths
 # wow_classic 5.5.4.69032 bc=4ddc88e6c1d5fada3bcbae26541bc481 cc=1354dece3c5f48240c3fe3dccb32a361
 run_build "$OUTDIR/wow_classic_5.5.4.69032_4ddc88e6.txt" "$BFT" wow_classic 4ddc88e6c1d5fada3bcbae26541bc481 1354dece3c5f48240c3fe3dccb32a361 "$CDN" "$CDN_PATH" --paths
 # wow_classic 5.5.4.69078 bc=5bfab3bdf11f4cd87e0aa0b2b1992bb5 cc=13ce4301f8cb9fda1cd03d8b32bcf916
 run_build "$OUTDIR/wow_classic_5.5.4.69078_5bfab3bd.txt" "$BFT" wow_classic 5bfab3bdf11f4cd87e0aa0b2b1992bb5 13ce4301f8cb9fda1cd03d8b32bcf916 "$CDN" "$CDN_PATH" --paths
+# wow_classic 5.5.4.69155 bc=8ca6e8ce7d7793c68237e40242347f47 cc=9a824cce21b48ebf0b11367ae32d1597
+run_build "$OUTDIR/wow_classic_5.5.4.69155_8ca6e8ce.txt" "$BFT" wow_classic 8ca6e8ce7d7793c68237e40242347f47 9a824cce21b48ebf0b11367ae32d1597 "$CDN" "$CDN_PATH" --paths
 
 # wow_classic_era 1.13.2.30786 bc=c8470ae1807bb4f59c1667a6054e6535 cc=3d014cd9e5940b029109685aee932149
 run_build "$OUTDIR/wow_classic_era_1.13.2.30786_3d014cd9.txt" "$BFT" wow_classic_era c8470ae1807bb4f59c1667a6054e6535 3d014cd9e5940b029109685aee932149 "$CDN" "$CDN_PATH" --paths
@@ -2154,14 +2160,14 @@ run_build "$OUTDIR/wow_classic_era_1.15.8.65989_ba594fac.txt" "$BFT" wow_classic
 run_build "$OUTDIR/wow_classic_era_1.15.8.66129_9ed325ff.txt" "$BFT" wow_classic_era 261359eb73293d65a055361231495beb 9ed325ff36f6b9abf8c8dc83055b2a38 "$CDN" "$CDN_PATH" --paths
 # wow_classic_era 1.15.8.66564 bc=19ee40225eb91ac0c5808f497ff9457b cc=e96ac31b3e09478731646839347892e4
 run_build "$OUTDIR/wow_classic_era_1.15.8.66564_e96ac31b.txt" "$BFT" wow_classic_era 19ee40225eb91ac0c5808f497ff9457b e96ac31b3e09478731646839347892e4 "$CDN" "$CDN_PATH" --paths
-# wow_classic_era 1.15.8.67156 bc=20e35f5a4823e522736fcb683d0f0d3d cc=8610593d001ed7a4ef1a003d3a4538a7
-run_build "$OUTDIR/wow_classic_era_1.15.8.67156_8610593d.txt" "$BFT" wow_classic_era 20e35f5a4823e522736fcb683d0f0d3d 8610593d001ed7a4ef1a003d3a4538a7 "$CDN" "$CDN_PATH" --paths
-# wow_classic_era 1.15.9.68808 bc=7f281ee1deb86ea8f6e582795c2a1cfd cc=5eeeb7a664e41a88349215461af353bb
-run_build "$OUTDIR/wow_classic_era_1.15.9.68808_7f281ee1.txt" "$BFT" wow_classic_era 7f281ee1deb86ea8f6e582795c2a1cfd 5eeeb7a664e41a88349215461af353bb "$CDN" "$CDN_PATH" --paths
+# wow_classic_era 1.15.8.67156 bc=20e35f5a4823e522736fcb683d0f0d3d cc=a4ae293c478d89f00ef637d12a0c2e04
+run_build "$OUTDIR/wow_classic_era_1.15.8.67156_8610593d.txt" "$BFT" wow_classic_era 20e35f5a4823e522736fcb683d0f0d3d a4ae293c478d89f00ef637d12a0c2e04 "$CDN" "$CDN_PATH" --paths
+# wow_classic_era 1.15.9.68808 bc=7f281ee1deb86ea8f6e582795c2a1cfd cc=1113c05066d6b6d4ca706b9bebad3f1f
+run_build "$OUTDIR/wow_classic_era_1.15.9.68808_7f281ee1.txt" "$BFT" wow_classic_era 7f281ee1deb86ea8f6e582795c2a1cfd 1113c05066d6b6d4ca706b9bebad3f1f "$CDN" "$CDN_PATH" --paths
 # wow_classic_era 1.15.9.68940 bc=f622d60e2229df3f290a83452599308e cc=d7bdbe77b648d19d4a4449c3d2fe7df8
 run_build "$OUTDIR/wow_classic_era_1.15.9.68940_f622d60e.txt" "$BFT" wow_classic_era f622d60e2229df3f290a83452599308e d7bdbe77b648d19d4a4449c3d2fe7df8 "$CDN" "$CDN_PATH" --paths
-# wow_classic_era 1.15.9.69109 bc=9f9686341092239cfa4812a0ba153dc6 cc=481a61979f7082e323be3d2ec8bff1f9
-run_build "$OUTDIR/wow_classic_era_1.15.9.69109_9f968634.txt" "$BFT" wow_classic_era 9f9686341092239cfa4812a0ba153dc6 481a61979f7082e323be3d2ec8bff1f9 "$CDN" "$CDN_PATH" --paths
+# wow_classic_era 1.15.9.69109 bc=9f9686341092239cfa4812a0ba153dc6 cc=9a824cce21b48ebf0b11367ae32d1597
+run_build "$OUTDIR/wow_classic_era_1.15.9.69109_9f968634.txt" "$BFT" wow_classic_era 9f9686341092239cfa4812a0ba153dc6 9a824cce21b48ebf0b11367ae32d1597 "$CDN" "$CDN_PATH" --paths
 
 # wow_classic_titan 3.80.0.64393 bc=d8ac1242c2655856ef94a6410a48b70b cc=f00286961a0ac7fcb3832996306b6759
 run_build "$OUTDIR/wow_classic_titan_3.80.0.64393_f0028696.txt" "$BFT" wow_classic_titan d8ac1242c2655856ef94a6410a48b70b f00286961a0ac7fcb3832996306b6759 "$CDN" "$CDN_PATH" --paths
@@ -2197,28 +2203,28 @@ run_build "$OUTDIR/wow_classic_titan_3.80.1.67155_a4ae293c.txt" "$BFT" wow_class
 run_build "$OUTDIR/wow_classic_titan_3.80.1.67342_197773dd.txt" "$BFT" wow_classic_titan a263fa2eb4b77e159b963766d6cc80d3 197773ddf73eb63cd9892a92f1b26301 "$CDN" "$CDN_PATH" --paths
 # wow_classic_titan 3.80.1.67400 bc=036ee0b54994d9871d50a312d740458a cc=904eed9d15d661b6600529b41f1550d1
 run_build "$OUTDIR/wow_classic_titan_3.80.1.67400_904eed9d.txt" "$BFT" wow_classic_titan 036ee0b54994d9871d50a312d740458a 904eed9d15d661b6600529b41f1550d1 "$CDN" "$CDN_PATH" --paths
-# wow_classic_titan 3.80.1.67621 bc=b669838c928ea2d1c732d3178c7ba76e cc=8610593d001ed7a4ef1a003d3a4538a7
-run_build "$OUTDIR/wow_classic_titan_3.80.1.67621_8610593d.txt" "$BFT" wow_classic_titan b669838c928ea2d1c732d3178c7ba76e 8610593d001ed7a4ef1a003d3a4538a7 "$CDN" "$CDN_PATH" --paths
-# wow_classic_titan 3.80.1.68044 bc=938dfd94bfb4c3f1dc224fbfe9b8cec8 cc=d3d3c884b11a7f550bca82fd0d5a3e40
-run_build "$OUTDIR/wow_classic_titan_3.80.1.68044_d3d3c884.txt" "$BFT" wow_classic_titan 938dfd94bfb4c3f1dc224fbfe9b8cec8 d3d3c884b11a7f550bca82fd0d5a3e40 "$CDN" "$CDN_PATH" --paths
-# wow_classic_titan 3.80.1.68181 bc=31c00009559de599ec8ecdb878aade00 cc=a84be43ded0ba32d1617242ee87fa646
-run_build "$OUTDIR/wow_classic_titan_3.80.1.68181_a84be43d.txt" "$BFT" wow_classic_titan 31c00009559de599ec8ecdb878aade00 a84be43ded0ba32d1617242ee87fa646 "$CDN" "$CDN_PATH" --paths
-# wow_classic_titan 3.80.1.68318 bc=e1e1b5aea3a7fb428f1fc7fff1b21bf9 cc=42eace50c6e197394f888924b471df4c
-run_build "$OUTDIR/wow_classic_titan_3.80.1.68318_42eace50.txt" "$BFT" wow_classic_titan e1e1b5aea3a7fb428f1fc7fff1b21bf9 42eace50c6e197394f888924b471df4c "$CDN" "$CDN_PATH" --paths
-# wow_classic_titan 3.80.1.68572 bc=82ce555064a8d245c805d2f03456b549 cc=95df665e244e1c9c61c9b97830320388
-run_build "$OUTDIR/wow_classic_titan_3.80.1.68572_82ce5550.txt" "$BFT" wow_classic_titan 82ce555064a8d245c805d2f03456b549 95df665e244e1c9c61c9b97830320388 "$CDN" "$CDN_PATH" --paths
-# wow_classic_titan 3.80.1.68654 bc=9255b9a6b4ec7c10dd64b59ae6e3c923 cc=6d1fdc623c9483541197d4014bb925dc
-run_build "$OUTDIR/wow_classic_titan_3.80.1.68654_9255b9a6.txt" "$BFT" wow_classic_titan 9255b9a6b4ec7c10dd64b59ae6e3c923 6d1fdc623c9483541197d4014bb925dc "$CDN" "$CDN_PATH" --paths
-# wow_classic_titan 3.80.1.68768 bc=1110a75034fcde9f356954a3c1f61b69 cc=5c54a0d47454dfd8204a49d8a59afea1
-run_build "$OUTDIR/wow_classic_titan_3.80.1.68768_1110a750.txt" "$BFT" wow_classic_titan 1110a75034fcde9f356954a3c1f61b69 5c54a0d47454dfd8204a49d8a59afea1 "$CDN" "$CDN_PATH" --paths
-# wow_classic_titan 3.80.1.68805 bc=8d43cf13c55c95b1d7e060f9ce74547c cc=5eeeb7a664e41a88349215461af353bb
-run_build "$OUTDIR/wow_classic_titan_3.80.1.68805_8d43cf13.txt" "$BFT" wow_classic_titan 8d43cf13c55c95b1d7e060f9ce74547c 5eeeb7a664e41a88349215461af353bb "$CDN" "$CDN_PATH" --paths
+# wow_classic_titan 3.80.1.67621 bc=b669838c928ea2d1c732d3178c7ba76e cc=43a220bee3bf82b2025ee4381215b3d9
+run_build "$OUTDIR/wow_classic_titan_3.80.1.67621_8610593d.txt" "$BFT" wow_classic_titan b669838c928ea2d1c732d3178c7ba76e 43a220bee3bf82b2025ee4381215b3d9 "$CDN" "$CDN_PATH" --paths
+# wow_classic_titan 3.80.1.68044 bc=938dfd94bfb4c3f1dc224fbfe9b8cec8 cc=013cf1d689abf77218fe3b62470333f5
+run_build "$OUTDIR/wow_classic_titan_3.80.1.68044_d3d3c884.txt" "$BFT" wow_classic_titan 938dfd94bfb4c3f1dc224fbfe9b8cec8 013cf1d689abf77218fe3b62470333f5 "$CDN" "$CDN_PATH" --paths
+# wow_classic_titan 3.80.1.68181 bc=31c00009559de599ec8ecdb878aade00 cc=9b3d90957c290b0ef95808bec3a6b345
+run_build "$OUTDIR/wow_classic_titan_3.80.1.68181_a84be43d.txt" "$BFT" wow_classic_titan 31c00009559de599ec8ecdb878aade00 9b3d90957c290b0ef95808bec3a6b345 "$CDN" "$CDN_PATH" --paths
+# wow_classic_titan 3.80.1.68318 bc=e1e1b5aea3a7fb428f1fc7fff1b21bf9 cc=709f9f3e64971b2e8155440cbafd25ca
+run_build "$OUTDIR/wow_classic_titan_3.80.1.68318_42eace50.txt" "$BFT" wow_classic_titan e1e1b5aea3a7fb428f1fc7fff1b21bf9 709f9f3e64971b2e8155440cbafd25ca "$CDN" "$CDN_PATH" --paths
+# wow_classic_titan 3.80.1.68572 bc=82ce555064a8d245c805d2f03456b549 cc=f69dda4c5555d0032b60fde41e840463
+run_build "$OUTDIR/wow_classic_titan_3.80.1.68572_82ce5550.txt" "$BFT" wow_classic_titan 82ce555064a8d245c805d2f03456b549 f69dda4c5555d0032b60fde41e840463 "$CDN" "$CDN_PATH" --paths
+# wow_classic_titan 3.80.1.68654 bc=9255b9a6b4ec7c10dd64b59ae6e3c923 cc=2afc17881c95bc4ea963a963706f8e02
+run_build "$OUTDIR/wow_classic_titan_3.80.1.68654_9255b9a6.txt" "$BFT" wow_classic_titan 9255b9a6b4ec7c10dd64b59ae6e3c923 2afc17881c95bc4ea963a963706f8e02 "$CDN" "$CDN_PATH" --paths
+# wow_classic_titan 3.80.1.68768 bc=1110a75034fcde9f356954a3c1f61b69 cc=dda36dd97a1614b3c24c56f3cfd99184
+run_build "$OUTDIR/wow_classic_titan_3.80.1.68768_1110a750.txt" "$BFT" wow_classic_titan 1110a75034fcde9f356954a3c1f61b69 dda36dd97a1614b3c24c56f3cfd99184 "$CDN" "$CDN_PATH" --paths
+# wow_classic_titan 3.80.1.68805 bc=8d43cf13c55c95b1d7e060f9ce74547c cc=6781d7fe67ca1bccd3381ccc7cfad9bb
+run_build "$OUTDIR/wow_classic_titan_3.80.1.68805_8d43cf13.txt" "$BFT" wow_classic_titan 8d43cf13c55c95b1d7e060f9ce74547c 6781d7fe67ca1bccd3381ccc7cfad9bb "$CDN" "$CDN_PATH" --paths
 # wow_classic_titan 3.80.2.68943 bc=9bebac287f82ec81b050a88119f2ab46 cc=72c730bef365effe8a1373203e9c8c56
 run_build "$OUTDIR/wow_classic_titan_3.80.2.68943_9bebac28.txt" "$BFT" wow_classic_titan 9bebac287f82ec81b050a88119f2ab46 72c730bef365effe8a1373203e9c8c56 "$CDN" "$CDN_PATH" --paths
 # wow_classic_titan 3.80.2.69077 bc=368995a1f9b0709c27dcc80552810ebf cc=13ce4301f8cb9fda1cd03d8b32bcf916
 run_build "$OUTDIR/wow_classic_titan_3.80.2.69077_368995a1.txt" "$BFT" wow_classic_titan 368995a1f9b0709c27dcc80552810ebf 13ce4301f8cb9fda1cd03d8b32bcf916 "$CDN" "$CDN_PATH" --paths
-# wow_classic_titan 3.80.2.69137 bc=b7ccc184ffe73fafb5e6443778754ffe cc=481a61979f7082e323be3d2ec8bff1f9
-run_build "$OUTDIR/wow_classic_titan_3.80.2.69137_b7ccc184.txt" "$BFT" wow_classic_titan b7ccc184ffe73fafb5e6443778754ffe 481a61979f7082e323be3d2ec8bff1f9 "$CDN" "$CDN_PATH" --paths
+# wow_classic_titan 3.80.2.69137 bc=b7ccc184ffe73fafb5e6443778754ffe cc=9a824cce21b48ebf0b11367ae32d1597
+run_build "$OUTDIR/wow_classic_titan_3.80.2.69137_b7ccc184.txt" "$BFT" wow_classic_titan b7ccc184ffe73fafb5e6443778754ffe 9a824cce21b48ebf0b11367ae32d1597 "$CDN" "$CDN_PATH" --paths
 
 echo "Done. $TOTAL builds: ok=$OK failed=$FAIL skipped=$SKIPPED ($(ls "$OUTDIR" | wc -l) files in $OUTDIR)" >&2
 if ((FAIL > 0)); then
