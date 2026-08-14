@@ -30,7 +30,7 @@ homepage = "https://github.com/wowemulation-dev/cascette-rs"
 thiserror = "2.0"
 
 # Binary format handling
-binrw = "0.15"
+binrw = "0.15.2"
 
 # Utilities
 hex = "0.4"
