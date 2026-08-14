@@ -1,11 +1,14 @@
 // Throwaway: emit an encrypted BLTE chunk (cascette-rs) for C++ cross-verification.
 // The encrypted content is ['N'] + payload (inner uncompressed mode), matching
 // what the Agent's 'E' decode expects to recurse on.
-use cascette_formats::blte::EncryptionSpec;
-use cascette_formats::blte::compression::encrypt_chunk_with_key;
+use cascette_formats::blte::{EncryptionSpec, encrypt_chunk_with_key};
 
 fn hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("{:02x}", b)).collect()
+    bytes.iter().fold(String::new(), |mut s, b| {
+        use std::fmt::Write as _;
+        let _ = write!(s, "{b:02x}");
+        s
+    })
 }
 
 fn main() {
