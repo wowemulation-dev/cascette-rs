@@ -1,7 +1,7 @@
 // Throwaway cross-verification generator: builds an LZ4 BLTE with cascette-rs
 // (lz4_flex) so the C++ LZ4HCDecoder can decode it, proving interop.
-use cascette_formats::blte::{BlteBuilder, CompressionMode};
 use cascette_formats::CascFormat;
+use cascette_formats::blte::{BlteBuilder, CompressionMode};
 
 fn main() {
     let data: Vec<u8> = (0..2000u32).map(|i| (i & 0xFF) as u8).collect();

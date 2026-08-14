@@ -304,7 +304,12 @@ impl ArchiveManager {
 
         // Build local header with checksums.
         // encoded_size includes the 30-byte header itself.
-        let header = LocalHeader::new(*encoding_key.as_bytes(), total_size, global_offset as usize);
+        let header = LocalHeader::new(
+            *encoding_key.as_bytes(),
+            total_size,
+            global_offset as usize,
+            0,
+        );
         let header_bytes = header.to_bytes();
 
         // Write local header + BLTE data
@@ -359,7 +364,12 @@ impl ArchiveManager {
         // Global offset = segment base + file offset. Used for header checksums.
         let global_offset = u64::from(archive_id) * SEGMENT_SIZE + offset;
 
-        let header = LocalHeader::new(*encoding_key.as_bytes(), total_size, global_offset as usize);
+        let header = LocalHeader::new(
+            *encoding_key.as_bytes(),
+            total_size,
+            global_offset as usize,
+            0,
+        );
         let header_bytes = header.to_bytes();
 
         let mut combined = Vec::with_capacity(LOCAL_HEADER_SIZE + blte_data.len());
@@ -408,7 +418,7 @@ impl ArchiveManager {
 
         let global_offset = u64::from(archive_id) * SEGMENT_SIZE + offset;
 
-        let header = LocalHeader::new(*ekey, total_size, global_offset as usize);
+        let header = LocalHeader::new(*ekey, total_size, global_offset as usize, 0);
         let header_bytes = header.to_bytes();
 
         let mut combined = Vec::with_capacity(LOCAL_HEADER_SIZE + blte_data.len());
@@ -1194,11 +1204,11 @@ mod tests {
         let header =
             LocalHeader::from_bytes(&raw).expect("local header should parse from raw bytes");
 
-        // Verify first 9 bytes of encoding key match (header only stores 9 reversed)
+        // Verify full 16-byte encoding key matches (header stores full key reversed)
         assert_eq!(
-            &header.original_encoding_key()[..9],
-            &encoding_key[..9],
-            "encoding key in header should match returned key (first 9 bytes)"
+            &header.original_encoding_key()[..],
+            &encoding_key[..],
+            "encoding key in header should match returned key"
         );
 
         // encoded_size includes the 30-byte local header
@@ -1272,16 +1282,13 @@ mod tests {
             .expect("open");
 
         // Now write content after the segment header.
-        // Only the first 9 bytes survive the reverse+zero-pad round-trip.
+        // The full 16-byte key survives the full-reverse round-trip.
         let encoding_key = [0xAA; 16];
-        let expected_key = [
-            0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00,
-        ];
+        let expected_key = encoding_key;
         let total_size = 100u32;
         let bucket = bucket_hash(&encoding_key[..9], 0);
 
-        let local_header = LocalHeader::new(encoding_key, total_size, 0);
+        let local_header = LocalHeader::new(encoding_key, total_size, 0, 0);
         let mut updated_header = manager
             .read_segment_header(archive_id)
             .expect("read_segment_header");
@@ -1325,7 +1332,7 @@ mod tests {
         let encoding_key = [0xDD; 16];
         let base_offset = 0;
         let bucket = bucket_hash(&encoding_key[..9], 0);
-        let mut local_header = LocalHeader::new(encoding_key, 500, base_offset);
+        let mut local_header = LocalHeader::new(encoding_key, 500, base_offset, 0);
         let bytes_a = local_header.to_bytes();
         local_header.checksum_a = LocalHeader::compute_checksum_a(&bytes_a);
         let bytes_b = local_header.to_bytes();
@@ -1363,17 +1370,11 @@ mod tests {
             .expect("open");
 
         // Pick two keys that hash to different buckets.
-        // Only the first 9 bytes survive the reverse+zero-pad round-trip.
+        // The full 16-byte key survives the full-reverse round-trip.
         let key_a = [0x11; 16];
         let key_b = [0x12; 16];
-        let expected_key_a = [
-            0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00,
-        ];
-        let expected_key_b = [
-            0x12, 0x12, 0x12, 0x12, 0x12, 0x12, 0x12, 0x12, 0x12, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00,
-        ];
+        let expected_key_a = key_a;
+        let expected_key_b = key_b;
         let bucket_a = bucket_hash(&key_a[..9], 0);
         let bucket_b = bucket_hash(&key_b[..9], 0);
         assert_ne!(
@@ -1383,14 +1384,14 @@ mod tests {
 
         // Write first entry
         let mut header = manager.read_segment_header(archive_id).expect("read");
-        header.set_bucket_header(bucket_a, LocalHeader::new(key_a, 100, 0));
+        header.set_bucket_header(bucket_a, LocalHeader::new(key_a, 100, 0, 1));
         manager
             .write_segment_header(archive_id, &header)
             .expect("write a");
 
         // Write second entry
         let mut header = manager.read_segment_header(archive_id).expect("read");
-        header.set_bucket_header(bucket_b, LocalHeader::new(key_b, 200, 0));
+        header.set_bucket_header(bucket_b, LocalHeader::new(key_b, 200, 0, 1));
         manager
             .write_segment_header(archive_id, &header)
             .expect("write b");

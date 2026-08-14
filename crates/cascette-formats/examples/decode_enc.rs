@@ -1,5 +1,5 @@
-use cascette_formats::blte::BlteFile;
 use cascette_formats::CascFormat;
+use cascette_formats::blte::BlteFile;
 use std::env;
 fn main() {
     let data = std::fs::read(env::args().nth(1).expect("file")).expect("read");

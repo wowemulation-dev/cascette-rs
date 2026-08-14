@@ -50,13 +50,13 @@ impl SegmentHeader {
 
         let mut headers = std::array::from_fn(|i| {
             let global_offset = seg_base as usize + i * LOCAL_HEADER_SIZE;
-            LocalHeader::new([0u8; 16], enc_size, global_offset)
+            LocalHeader::new([0u8; 16], enc_size, global_offset, 1)
         });
 
         for (bucket, header) in headers.iter_mut().enumerate() {
             let key = generate_segment_key(path_hash, segment_index, bucket as u8);
             let global_offset = seg_base as usize + bucket * LOCAL_HEADER_SIZE;
-            *header = LocalHeader::new(key, enc_size, global_offset);
+            *header = LocalHeader::new(key, enc_size, global_offset, 1);
         }
 
         Self { headers }
@@ -65,7 +65,9 @@ impl SegmentHeader {
     /// Create a zeroed segment header (for new/empty segments).
     pub fn zeroed() -> Self {
         Self {
-            headers: std::array::from_fn(|i| LocalHeader::new([0u8; 16], 0, i * LOCAL_HEADER_SIZE)),
+            headers: std::array::from_fn(|i| {
+                LocalHeader::new([0u8; 16], 0, i * LOCAL_HEADER_SIZE, 1)
+            }),
         }
     }
 
@@ -78,7 +80,7 @@ impl SegmentHeader {
         }
 
         let mut headers =
-            std::array::from_fn(|i| LocalHeader::new([0u8; 16], 0, i * LOCAL_HEADER_SIZE));
+            std::array::from_fn(|i| LocalHeader::new([0u8; 16], 0, i * LOCAL_HEADER_SIZE, 1));
 
         for (i, header) in headers.iter_mut().enumerate() {
             let offset = i * LOCAL_HEADER_SIZE;
@@ -918,7 +920,7 @@ mod tests {
             0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x00, 0x00,
         ];
-        let local = LocalHeader::new(key, 1000, 0);
+        let local = LocalHeader::new(key, 1000, 0, 0);
 
         header.set_bucket_header(5, local);
 
@@ -935,7 +937,7 @@ mod tests {
             0xBB, 0xBB, 0xBB, 0xBB, 0xBB, 0xBB, 0xBB, 0xBB, 0xBB, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x00, 0x00,
         ];
-        let local = LocalHeader::new(key, 500, 0);
+        let local = LocalHeader::new(key, 500, 0, 0);
 
         // bucket 0x13 should be masked to 0x03
         header.set_bucket_header(0x13, local);
@@ -949,7 +951,7 @@ mod tests {
         let mut header = SegmentHeader::zeroed();
         let key = [0xCC; 16];
         let base_offset = 0;
-        let mut local = LocalHeader::new(key, 2000, base_offset);
+        let mut local = LocalHeader::new(key, 2000, base_offset, 0);
 
         // LocalHeader::new leaves checksums at 0. Compute them in the correct
         // order: checksum_a first (uses bytes[..0x16], before checksum_a
@@ -984,8 +986,8 @@ mod tests {
             0x00, 0x00,
         ];
 
-        header.set_bucket_header(2, LocalHeader::new(key_a, 100, 0));
-        header.set_bucket_header(9, LocalHeader::new(key_b, 200, 0));
+        header.set_bucket_header(2, LocalHeader::new(key_a, 100, 0, 1));
+        header.set_bucket_header(9, LocalHeader::new(key_b, 200, 0, 1));
 
         // Both should be present
         assert_eq!(header.bucket_header(2).original_encoding_key(), key_a);

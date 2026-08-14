@@ -749,8 +749,12 @@ impl Container for DynamicContainer {
         // writes that start at offset 0 have no header region to update.
         if offset as usize >= crate::storage::segment::SEGMENT_HEADER_SIZE {
             let bucket = crate::storage::segment::bucket_hash(&encoding_key[..9], 0);
-            let local_header =
-                crate::storage::local_header::LocalHeader::new(encoding_key, total_size, 0);
+            let local_header = crate::storage::local_header::LocalHeader::new(
+                encoding_key,
+                total_size,
+                0,
+                1, // reconstruction header
+            );
             let archive = self.archive.read();
             let mut seg_header = archive.read_segment_header(archive_id).unwrap_or_default();
             seg_header.set_bucket_header(bucket, local_header);

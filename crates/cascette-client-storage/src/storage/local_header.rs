@@ -64,26 +64,38 @@ pub struct LocalHeader {
 impl LocalHeader {
     /// Create a new local header for BLTE data.
     ///
-    /// - Only the first 9 bytes of the encoding key are reversed and stored;
-    ///   the remaining 7 bytes are zero-padded.
+    /// - The full 16-byte encoding key is reversed and stored, matching
+    ///   Agent.exe's `BuildLocalFileHeader` writes (verified byte-identical
+    ///   against a client-written entry: key field = full key reversed).
     /// - `encoded_size` = total entry size including this 30-byte header
     ///   (i.e., `LOCAL_HEADER_SIZE + blte_payload_size`). Matches what the
     ///   Blizzard agent stores in both the local header and the IDX entry.
-    /// - `status` = 1 (normal entry).
+    /// - `flags` = 0 for normal data entries, 1 for segment reconstruction
+    ///   headers. Verified against a client-written 1.13.2.31650 store:
+    ///   614/632 data-entry headers carry flags=0, while the 16 segment
+    ///   reconstruction headers carry flags=1.
     /// - `global_offset` is the byte position of this header across all
     ///   data files; used for both checksum_a and checksum_b computation.
-    pub fn new(encoding_key: [u8; 16], encoded_size: u32, global_offset: usize) -> Self {
-        // Reverse only the first 9 bytes; zero-pad the rest.
+    pub fn new(
+        encoding_key: [u8; 16],
+        encoded_size: u32,
+        global_offset: usize,
+        flags: u16,
+    ) -> Self {
+        // Reverse the full 16 bytes, matching Agent.exe writes. The client
+        // stores the complete reversed key (not a 9-byte truncated form);
+        // cascette-rs previously stored only 9 bytes reversed + zero pad,
+        // which produced headers that differ from the agent's.
         let mut reversed_key = [0u8; 16];
-        for i in 0..9 {
-            reversed_key[i] = encoding_key[8 - i];
+        for i in 0..16 {
+            reversed_key[i] = encoding_key[15 - i];
         }
         // bytes 9..16 stay zero
 
         let mut header = Self {
             encoding_key: reversed_key,
             encoded_size,
-            flags: 1, // status = 1 (normal entry)
+            flags,
             checksum_a: 0,
             checksum_b: 0,
         };
@@ -198,13 +210,15 @@ impl LocalHeader {
         })
     }
 
-    /// Get the original encoding key (first 9 bytes un-reversed).
+    /// Get the original encoding key (full 16 bytes un-reversed).
     ///
-    /// Only the first 9 bytes are meaningful; bytes 9-15 are zero.
+    /// Recovers the complete key the header was built from. The first
+    /// 9 bytes are the truncated EKey stored in the IDX; bytes 9-15 are
+    /// the remainder of the full 16-byte key.
     pub fn original_encoding_key(&self) -> [u8; 16] {
         let mut key = [0u8; 16];
-        for (i, byte) in key.iter_mut().take(9).enumerate() {
-            *byte = self.encoding_key[8 - i];
+        for (i, byte) in key.iter_mut().enumerate() {
+            *byte = self.encoding_key[15 - i];
         }
         key
     }
@@ -228,19 +242,18 @@ mod tests {
         ];
         let blte_size = 1234;
 
-        let header = LocalHeader::new(key, blte_size, 0);
+        let header = LocalHeader::new(key, blte_size, 0, 0);
 
-        // First 9 bytes of key reversed, rest zero-padded
-        assert_eq!(header.encoding_key[0], 0x09); // key[8] reversed to [0]
-        assert_eq!(header.encoding_key[8], 0x01); // key[0] reversed to [8]
-        assert_eq!(header.encoding_key[9], 0x00); // zero-padded
-        assert_eq!(header.encoding_key[15], 0x00);
+        // Full 16-byte key reversed (byte-identical to Agent.exe writes)
+        assert_eq!(header.encoding_key[0], 0x10); // key[15] reversed to [0]
+        assert_eq!(header.encoding_key[8], 0x08); // key[7] reversed to [8]
+        assert_eq!(header.encoding_key[15], 0x01); // key[0] reversed to [15]
 
         // Size is the BLTE data size
         assert_eq!(header.encoded_size, blte_size);
 
-        // Status/flags should be 1 (normal entry)
-        assert_eq!(header.flags, 1);
+        // Flags default to 0 for normal data entries
+        assert_eq!(header.flags, 0);
 
         // Checksums are computed during construction
         assert_ne!(header.checksum_a, 0, "checksum_a must be non-zero");
@@ -266,17 +279,15 @@ mod tests {
             0x0F, 0x10,
         ];
 
-        let header = LocalHeader::new(key, 100, 0);
+        let header = LocalHeader::new(key, 100, 0, 0);
         let recovered = header.original_encoding_key();
-        // Only first 9 bytes are recoverable
-        assert_eq!(&recovered[..9], &key[..9]);
-        // Rest is zero (original bytes 9-15 are lost)
-        assert_eq!(&recovered[9..], &[0u8; 7]);
+        // Full key recoverable (byte-identical to Agent.exe writes)
+        assert_eq!(&recovered[..], &key[..]);
     }
 
     #[test]
     fn test_blte_size() {
-        let header = LocalHeader::new([0u8; 16], 500, 0);
+        let header = LocalHeader::new([0u8; 16], 500, 0, 0);
         assert_eq!(header.blte_size(), 500);
     }
 
