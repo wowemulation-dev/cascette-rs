@@ -690,6 +690,10 @@ run_build "$OUTDIR/wow_12.1.0.69273_8fc12df3.txt" "$BFT" wow 8fc12df3f3746ac3760
 run_build "$OUTDIR/wow_12.1.0.69283_f507aaae.txt" "$BFT" wow f507aaae210daf1d12d95a4dfccbd040 5ef8939f380eb23992bc3a57a829855e "$CDN" "$CDN_PATH" --paths
 # wow 12.1.0.69299 bc=bd275481f39b6f0d5fde63de0720e302 cc=5ef8939f380eb23992bc3a57a829855e
 run_build "$OUTDIR/wow_12.1.0.69299_bd275481.txt" "$BFT" wow bd275481f39b6f0d5fde63de0720e302 5ef8939f380eb23992bc3a57a829855e "$CDN" "$CDN_PATH" --paths
+# wow 12.1.0.69323 bc=556a2f9961dfe98b258e3f0ec0370b97 cc=08b17c5c06341772936f3da38a8f838c
+run_build "$OUTDIR/wow_12.1.0.69323_556a2f99.txt" "$BFT" wow 556a2f9961dfe98b258e3f0ec0370b97 08b17c5c06341772936f3da38a8f838c "$CDN" "$CDN_PATH" --paths
+# wow 12.1.0.69382 bc=b0264e6e2f2ec76e5bbc7827cfe3a3e0 cc=881d4b0faa88969de2c99ad18d10090e
+run_build "$OUTDIR/wow_12.1.0.69382_b0264e6e.txt" "$BFT" wow b0264e6e2f2ec76e5bbc7827cfe3a3e0 881d4b0faa88969de2c99ad18d10090e "$CDN" "$CDN_PATH" --paths
 
 # wow 10.0.0.46181 bc=8cc219f402853e62a659185cf57de96a cc=4668c189ee585b7ac16ae35bb90a781b
 run_build "$OUTDIR/wow_10.0.0.46181_4668c189.txt" "$BFT" wow 8cc219f402853e62a659185cf57de96a 4668c189ee585b7ac16ae35bb90a781b "$CDN" "$CDN_PATH" --paths
