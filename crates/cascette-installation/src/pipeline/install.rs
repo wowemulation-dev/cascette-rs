@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
+use cascette_crypto::ContentKey;
 
 use tracing::{info, warn};
 
@@ -18,6 +19,7 @@ use crate::pipeline::download;
 use crate::pipeline::loose;
 use crate::pipeline::manifests::BuildManifests;
 use crate::pipeline::metadata;
+use crate::pipeline::root_content;
 use crate::progress::ProgressEvent;
 
 /// Report from a completed installation.
@@ -625,6 +627,55 @@ impl InstallPipeline {
                         failed_files: combined_failed,
                     };
 
+                    // Phase 3: Build-config loose files + root-content pass.
+                    // The client reads TVFS manifests, the patch index, and the
+                    // patched VFS shards on a fresh install; the download
+                    // manifest does not include them. The root manifest
+                    // enumerates the real content set (the download manifest
+                    // only tag-filters it). Both must be present or the client
+                    // re-fetches from the CDN on first start.
+                    {
+                        use std::collections::HashSet;
+                        // Tag-selected ekeys from the download manifest.
+                        let selected: HashSet<Vec<u8>> = download_artifacts
+                            .required
+                            .iter()
+                            .map(|a| a.encoding_key.as_bytes().to_vec())
+                            .collect();
+                        let loose_written =
+                            root_content::fetch_loose_build_files(
+                                cdn.as_ref(),
+                                &endpoints,
+                                &manifests.build_config,
+                                &installation,
+                            )
+                            .await;
+                        let root_report = if let Some(root_ekey) = manifests
+                            .build_config
+                            .root()
+                            .and_then(|h| ContentKey::from_hex(h).ok())
+                            .and_then(|ck| manifests.encoding.find_encoding(&ck))
+                        {
+                            root_content::fetch_root_content(
+                                cdn.as_ref(),
+                                &endpoints,
+                                &root_ekey,
+                                &manifests.encoding,
+                                &selected,
+                                &archive_lookup,
+                                &installation,
+                            )
+                            .await
+                        } else {
+                            Default::default()
+                        };
+                        info!(
+                            loose_files_written = loose_written,
+                            root_content_written = root_report.root_content_written,
+                            unresolved_root = root_report.unresolved_root_entries,
+                            "build-config loose + root content passes complete"
+                        );
+                    }
                     // Flush index entries to disk so the client can read them
                     // without a full index rebuild on first startup.
                     installation.flush_indices().await?;
