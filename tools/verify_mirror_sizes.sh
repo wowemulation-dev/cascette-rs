@@ -29,7 +29,7 @@
 # Environment:
 #   BFT       Path to build_file_tree binary (default: ./target/release/examples/build_file_tree)
 #   MIRROR    Path to local NGDP mirror (default: /run/media/danielsreichenbach/NGDP/mirrors/cdn.blizzard.com)
-#   OUT       Output file for mismatched paths (default: ./mismatched_paths.txt)
+#   MISMATCHED_PATHS  Output file for mismatched paths (default: ./mismatched_paths.txt)
 #   CDN_PATH  CDN base path for WoW products (default: tpr/wow)
 #
 set -uo pipefail
@@ -37,7 +37,7 @@ set -uo pipefail
 BFT="${BFT:-./target/release/examples/build_file_tree}"
 MIRROR="${MIRROR:-/run/media/danielsreichenbach/NGDP/mirrors/cdn.blizzard.com}"
 CDN_PATH="${CDN_PATH:-tpr/wow}"
-OUT="${OUT:-./mismatched_paths.txt}"
+MISMATCHED_PATHS="${MISMATCHED_PATHS:-./mismatched_paths.txt}"
 
 if [[ ! -x "$BFT" ]]; then
 	echo "ERROR: build_file_tree not found at $BFT" >&2
@@ -76,7 +76,7 @@ verify_build() {
 		if [[ -n "$mismatched" ]]; then
 			while IFS= read -r p; do
 				[[ -n "$p" ]] && echo "$p"
-			done <<<"$mismatched" >>"$OUT_TMP"
+			done <<<"$mismatched" >>"$MISMATCHED_PATHS_TMP"
 			local count
 			count=$(echo "$mismatched" | wc -l)
 			((MISMATCH_FILES += count))
@@ -96,9 +96,9 @@ verify_build() {
 }
 
 # Prepare output file (atomic write via temp file).
-OUTDIR=$(dirname "$OUT")
-mkdir -p "$OUTDIR"
-OUT_TMP=$(mktemp "${OUT}.XXXXXX")
+MISMATCH_DIR=$(dirname "$MISMATCHED_PATHS")
+mkdir -p "$MISMATCH_DIR"
+MISMATCHED_PATHS_TMP=$(mktemp "${MISMATCHED_PATHS}.XXXXXX")
 
 OK=0
 MISSING=0
@@ -109,7 +109,7 @@ START=$(date +%s)
 
 TOTAL=0
 echo "Verifying builds against $MIRROR ..." >&2
-echo "Writing mismatched paths to $OUT" >&2
+echo "Writing mismatched paths to $MISMATCHED_PATHS" >&2
 echo "" >&2
 
 # wow 6.0.2.19033 bc=e9a6c927158d7e1444bfd1d5a57c7556 cc=b79ca6e8dd8ee742d3b51a058f1a29ca
@@ -2206,15 +2206,15 @@ echo "Other errors:       $FAIL" >&2
 echo "Elapsed:            ${ELAPSED}s" >&2
 
 # Sort and deduplicate, then atomically move into place.
-if [[ -f "$OUT_TMP" ]]; then
-	sort -u "$OUT_TMP" -o "$OUT_TMP"
-	UNIQUE=$(wc -l <"$OUT_TMP")
-	mv "$OUT_TMP" "$OUT"
+if [[ -f "$MISMATCHED_PATHS_TMP" ]]; then
+	sort -u "$MISMATCHED_PATHS_TMP" -o "$MISMATCHED_PATHS_TMP"
+	UNIQUE=$(wc -l <"$MISMATCHED_PATHS_TMP")
+	mv "$MISMATCHED_PATHS_TMP" "$MISMATCHED_PATHS"
 	echo "" >&2
-	echo "Mismatched paths written to $OUT ($UNIQUE unique files)" >&2
+	echo "Mismatched paths written to $MISMATCHED_PATHS ($UNIQUE unique files)" >&2
 else
-	rm -f "$OUT_TMP"
-	: >"$OUT"
+	rm -f "$MISMATCHED_PATHS_TMP"
+	: >"$MISMATCHED_PATHS"
 	echo "" >&2
-	echo "No mismatches found. $OUT written (empty)." >&2
+	echo "No mismatches found. $MISMATCHED_PATHS written (empty)." >&2
 fi
