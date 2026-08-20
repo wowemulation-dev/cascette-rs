@@ -27,15 +27,16 @@
 #   # then paste into the build list section below
 #
 # Environment:
-#   BFT     Path to build_file_tree binary (default: ./target/release/examples/build_file_tree)
-#   MIRROR  Path to local NGDP mirror (default: /run/media/danielsreichenbach/NGDP/mirrors/cdn.blizzard.com)
-#   OUT     Output file for mismatched paths (default: ./mismatched_paths.txt)
+#   BFT       Path to build_file_tree binary (default: ./target/release/examples/build_file_tree)
+#   MIRROR    Path to local NGDP mirror (default: /run/media/danielsreichenbach/NGDP/mirrors/cdn.blizzard.com)
+#   OUT       Output file for mismatched paths (default: ./mismatched_paths.txt)
+#   CDN_PATH  CDN base path for WoW products (default: tpr/wow)
 #
 set -uo pipefail
 
 BFT="${BFT:-./target/release/examples/build_file_tree}"
 MIRROR="${MIRROR:-/run/media/danielsreichenbach/NGDP/mirrors/cdn.blizzard.com}"
-CDN_PATH="tpr/wow"
+CDN_PATH="${CDN_PATH:-tpr/wow}"
 OUT="${OUT:-./mismatched_paths.txt}"
 
 if [[ ! -x "$BFT" ]]; then
