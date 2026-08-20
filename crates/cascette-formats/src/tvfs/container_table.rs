@@ -145,6 +145,20 @@ impl ContainerFileTable {
         Self::read_entry_at(&self.data, cft_offset as usize, header)
     }
 
+    /// Read the raw 9-byte EKey at an arbitrary byte offset into the CFT.
+    ///
+    /// The CFT is addressed by byte offset from VFS spans, but its entry
+    /// stride is NOT fixed across builds: patched VFS shards (1.15.4+) store
+    /// a flat array of 9-byte ekeys, while other manifests use wider
+    /// flag-derived entries. This returns the ekey bytes at `offset`
+    /// directly, which is correct for both layouts when the caller has
+    /// validated the offset is on a real entry boundary.
+    pub fn ekey_at(&self, cft_offset: u32, ekey_size: usize) -> Option<&[u8]> {
+        let start = cft_offset as usize;
+        let end = start.checked_add(ekey_size)?;
+        self.data.get(start..end)
+    }
+
     /// Get entry by sequential index (for enumeration).
     pub fn get_entry(&self, index: u32) -> Option<&ContainerEntry> {
         self.entries.get(index as usize)
