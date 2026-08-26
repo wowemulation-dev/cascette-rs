@@ -1314,8 +1314,10 @@ verify_build "wow" "12.1.0.69323" "556a2f9961dfe98b258e3f0ec0370b97" "08b17c5c06
 verify_build "wow" "12.1.0.69382" "b0264e6e2f2ec76e5bbc7827cfe3a3e0" "881d4b0faa88969de2c99ad18d10090e"
 # wow 12.1.0.69404 bc=cfacf8406f26370199753c06462477ff cc=bcb4e3ada71eeca015d6d77532b266f4
 verify_build "wow" "12.1.0.69404" "cfacf8406f26370199753c06462477ff" "bcb4e3ada71eeca015d6d77532b266f4"
-# wow 12.1.0.69465 bc=f603957530b9ffb32f28f7151dc2eb60 cc=e09fd531f334a6c74cbe7e48a3538a9f
-verify_build "wow" "12.1.0.69465" "f603957530b9ffb32f28f7151dc2eb60" "e09fd531f334a6c74cbe7e48a3538a9f"
+# wow 12.1.0.69465 bc=f603957530b9ffb32f28f7151dc2eb60 cc=ef5632326410b59d728b391f26ca52db
+verify_build "wow" "12.1.0.69465" "f603957530b9ffb32f28f7151dc2eb60" "ef5632326410b59d728b391f26ca52db"
+# wow 12.1.0.69497 bc=f5e9c4b067c202305fdb932fc0fb2182 cc=ef5632326410b59d728b391f26ca52db
+verify_build "wow" "12.1.0.69497" "f5e9c4b067c202305fdb932fc0fb2182" "ef5632326410b59d728b391f26ca52db"
 
 # wow_anniversary 2.5.5.65340 bc=1272ef5be270d8aadda6f213ee152544 cc=dc6b58108dcf80651311523f370a2035
 verify_build "wow_anniversary" "2.5.5.65340" "1272ef5be270d8aadda6f213ee152544" "dc6b58108dcf80651311523f370a2035"
@@ -1359,8 +1361,8 @@ verify_build "wow_anniversary" "2.5.6.68749" "2026cf997f1c3df6c0c4a4749690395e" 
 verify_build "wow_anniversary" "2.5.6.68775" "48733c01faf635d8220af49ac03c206c" "b20264e873e1b14626ca639483cd2bcc"
 # wow_anniversary 2.5.6.68941 bc=a28e58bce063f7ce3051a07a3588bcf1 cc=d7bdbe77b648d19d4a4449c3d2fe7df8
 verify_build "wow_anniversary" "2.5.6.68941" "a28e58bce063f7ce3051a07a3588bcf1" "d7bdbe77b648d19d4a4449c3d2fe7df8"
-# wow_anniversary 2.5.6.69110 bc=c5ade9dade89ac36fb4b2d9fd6c09a9a cc=e09fd531f334a6c74cbe7e48a3538a9f
-verify_build "wow_anniversary" "2.5.6.69110" "c5ade9dade89ac36fb4b2d9fd6c09a9a" "e09fd531f334a6c74cbe7e48a3538a9f"
+# wow_anniversary 2.5.6.69110 bc=c5ade9dade89ac36fb4b2d9fd6c09a9a cc=ef5632326410b59d728b391f26ca52db
+verify_build "wow_anniversary" "2.5.6.69110" "c5ade9dade89ac36fb4b2d9fd6c09a9a" "ef5632326410b59d728b391f26ca52db"
 
 # wow_classic 1.13.0.28211 bc=bf24b9d67a4a9c7cc0ce59d63df459a8 cc=2b5b60cdbcd07c5f88c23385069ead40
 verify_build "wow_classic" "1.13.0.28211" "bf24b9d67a4a9c7cc0ce59d63df459a8" "2b5b60cdbcd07c5f88c23385069ead40"
@@ -1918,8 +1920,8 @@ verify_build "wow_classic" "5.5.4.69032" "4ddc88e6c1d5fada3bcbae26541bc481" "135
 verify_build "wow_classic" "5.5.4.69078" "5bfab3bdf11f4cd87e0aa0b2b1992bb5" "13ce4301f8cb9fda1cd03d8b32bcf916"
 # wow_classic 5.5.4.69155 bc=8ca6e8ce7d7793c68237e40242347f47 cc=643ba58b5e8503dc0b00917081b1b08d
 verify_build "wow_classic" "5.5.4.69155" "8ca6e8ce7d7793c68237e40242347f47" "643ba58b5e8503dc0b00917081b1b08d"
-# wow_classic 5.5.4.69383 bc=c7284613d625abcda82a74d2f05e5bab cc=e09fd531f334a6c74cbe7e48a3538a9f
-verify_build "wow_classic" "5.5.4.69383" "c7284613d625abcda82a74d2f05e5bab" "e09fd531f334a6c74cbe7e48a3538a9f"
+# wow_classic 5.5.4.69383 bc=c7284613d625abcda82a74d2f05e5bab cc=ef5632326410b59d728b391f26ca52db
+verify_build "wow_classic" "5.5.4.69383" "c7284613d625abcda82a74d2f05e5bab" "ef5632326410b59d728b391f26ca52db"
 # wow_classic_era 1.13.7.38704 bc=30daec22777cbe6ab7a0aa31ce621f1b cc=572649a9eda7c06a42b37858d27fbc0f
 verify_build "wow_classic_era" "1.13.7.38704" "30daec22777cbe6ab7a0aa31ce621f1b" "572649a9eda7c06a42b37858d27fbc0f"
 # wow_classic_era 1.13.7.39605 bc=f7a064c574781e96a483a6d8da2bdefc cc=aea89f4edbafc0736170edb663580849
@@ -2134,8 +2136,8 @@ verify_build "wow_classic_era" "1.15.8.67156" "20e35f5a4823e522736fcb683d0f0d3d"
 verify_build "wow_classic_era" "1.15.9.68808" "7f281ee1deb86ea8f6e582795c2a1cfd" "1113c05066d6b6d4ca706b9bebad3f1f"
 # wow_classic_era 1.15.9.68940 bc=f622d60e2229df3f290a83452599308e cc=d7bdbe77b648d19d4a4449c3d2fe7df8
 verify_build "wow_classic_era" "1.15.9.68940" "f622d60e2229df3f290a83452599308e" "d7bdbe77b648d19d4a4449c3d2fe7df8"
-# wow_classic_era 1.15.9.69109 bc=9f9686341092239cfa4812a0ba153dc6 cc=e09fd531f334a6c74cbe7e48a3538a9f
-verify_build "wow_classic_era" "1.15.9.69109" "9f9686341092239cfa4812a0ba153dc6" "e09fd531f334a6c74cbe7e48a3538a9f"
+# wow_classic_era 1.15.9.69109 bc=9f9686341092239cfa4812a0ba153dc6 cc=ef5632326410b59d728b391f26ca52db
+verify_build "wow_classic_era" "1.15.9.69109" "9f9686341092239cfa4812a0ba153dc6" "ef5632326410b59d728b391f26ca52db"
 
 # wow_classic_titan 3.80.0.64393 bc=d8ac1242c2655856ef94a6410a48b70b cc=f00286961a0ac7fcb3832996306b6759
 verify_build "wow_classic_titan" "3.80.0.64393" "d8ac1242c2655856ef94a6410a48b70b" "f00286961a0ac7fcb3832996306b6759"
@@ -2191,8 +2193,10 @@ verify_build "wow_classic_titan" "3.80.1.68805" "8d43cf13c55c95b1d7e060f9ce74547
 verify_build "wow_classic_titan" "3.80.2.68943" "9bebac287f82ec81b050a88119f2ab46" "72c730bef365effe8a1373203e9c8c56"
 # wow_classic_titan 3.80.2.69077 bc=368995a1f9b0709c27dcc80552810ebf cc=13ce4301f8cb9fda1cd03d8b32bcf916
 verify_build "wow_classic_titan" "3.80.2.69077" "368995a1f9b0709c27dcc80552810ebf" "13ce4301f8cb9fda1cd03d8b32bcf916"
-# wow_classic_titan 3.80.2.69137 bc=b7ccc184ffe73fafb5e6443778754ffe cc=e09fd531f334a6c74cbe7e48a3538a9f
-verify_build "wow_classic_titan" "3.80.2.69137" "b7ccc184ffe73fafb5e6443778754ffe" "e09fd531f334a6c74cbe7e48a3538a9f"
+# wow_classic_titan 3.80.2.69137 bc=b7ccc184ffe73fafb5e6443778754ffe cc=481a61979f7082e323be3d2ec8bff1f9
+verify_build "wow_classic_titan" "3.80.2.69137" "b7ccc184ffe73fafb5e6443778754ffe" "481a61979f7082e323be3d2ec8bff1f9"
+# wow_classic_titan 3.80.2.69496 bc=eb583f143feb7b23ea9ea052c8ea2928 cc=ef5632326410b59d728b391f26ca52db
+verify_build "wow_classic_titan" "3.80.2.69496" "eb583f143feb7b23ea9ea052c8ea2928" "ef5632326410b59d728b391f26ca52db"
 
 # ── Summary ─────────────────────────────────────────────────────────────
 ELAPSED=$(($(date +%s) - START))
