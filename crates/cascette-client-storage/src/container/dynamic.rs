@@ -613,6 +613,7 @@ impl DynamicContainer {
 }
 
 impl Container for DynamicContainer {
+    #[allow(clippy::unused_async_trait_impl)]
     async fn reserve(&self, _key: &[u8; 16]) -> Result<()> {
         if !self.access_mode.can_write() {
             return Err(StorageError::AccessDenied(
@@ -625,6 +626,7 @@ impl Container for DynamicContainer {
         Ok(())
     }
 
+    #[allow(clippy::unused_async_trait_impl)]
     async fn read(&self, key: &[u8; 16], _offset: u64, _len: u32, buf: &mut [u8]) -> Result<usize> {
         if !self.access_mode.can_read() {
             return Err(StorageError::AccessDenied(
@@ -695,6 +697,7 @@ impl Container for DynamicContainer {
         Ok(copy_len)
     }
 
+    #[allow(clippy::unused_async_trait_impl)]
     async fn write(&self, key: &[u8; 16], data: &[u8]) -> Result<()> {
         if !self.access_mode.can_write() {
             return Err(StorageError::AccessDenied(
@@ -776,6 +779,7 @@ impl Container for DynamicContainer {
         Ok(())
     }
 
+    #[allow(clippy::unused_async_trait_impl)]
     async fn remove(&self, key: &[u8; 16]) -> Result<()> {
         if !self.access_mode.can_write() {
             return Err(StorageError::AccessDenied(
@@ -800,6 +804,7 @@ impl Container for DynamicContainer {
         Ok(())
     }
 
+    #[allow(clippy::unused_async_trait_impl)]
     async fn query(&self, key: &[u8; 16]) -> Result<bool> {
         let ekey = EncodingKey::from_bytes(*key);
         let index = self.index.read();

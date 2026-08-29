@@ -224,6 +224,7 @@ impl ResidencyContainer {
 }
 
 impl Container for ResidencyContainer {
+    #[allow(clippy::unused_async_trait_impl)]
     async fn reserve(&self, key: &[u8; 16]) -> Result<()> {
         if self.read_only {
             return Err(StorageError::AccessDenied(
@@ -236,6 +237,7 @@ impl Container for ResidencyContainer {
         Ok(())
     }
 
+    #[allow(clippy::unused_async_trait_impl)]
     async fn read(
         &self,
         _key: &[u8; 16],
@@ -249,6 +251,7 @@ impl Container for ResidencyContainer {
         ))
     }
 
+    #[allow(clippy::unused_async_trait_impl)]
     async fn write(&self, _key: &[u8; 16], _data: &[u8]) -> Result<()> {
         // Residency container does not store file data
         Err(StorageError::InvalidFormat(
@@ -256,10 +259,12 @@ impl Container for ResidencyContainer {
         ))
     }
 
+    #[allow(clippy::unused_async_trait_impl)]
     async fn remove(&self, key: &[u8; 16]) -> Result<()> {
         self.mark_non_resident(key)
     }
 
+    #[allow(clippy::unused_async_trait_impl)]
     async fn query(&self, key: &[u8; 16]) -> Result<bool> {
         Ok(self.is_resident(key))
     }

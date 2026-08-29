@@ -126,12 +126,14 @@ impl StaticContainer {
 }
 
 impl Container for StaticContainer {
+    #[allow(clippy::unused_async_trait_impl)]
     async fn reserve(&self, _key: &[u8; 16]) -> Result<()> {
         Err(StorageError::AccessDenied(
             "static container is read-only".to_string(),
         ))
     }
 
+    #[allow(clippy::unused_async_trait_impl)]
     async fn read(&self, key: &[u8; 16], _offset: u64, _len: u32, buf: &mut [u8]) -> Result<usize> {
         if !self.initialized {
             return Err(StorageError::Config(
@@ -157,18 +159,21 @@ impl Container for StaticContainer {
         Ok(copy_len)
     }
 
+    #[allow(clippy::unused_async_trait_impl)]
     async fn write(&self, _key: &[u8; 16], _data: &[u8]) -> Result<()> {
         Err(StorageError::AccessDenied(
             "static container is read-only".to_string(),
         ))
     }
 
+    #[allow(clippy::unused_async_trait_impl)]
     async fn remove(&self, _key: &[u8; 16]) -> Result<()> {
         Err(StorageError::AccessDenied(
             "static container is read-only".to_string(),
         ))
     }
 
+    #[allow(clippy::unused_async_trait_impl)]
     async fn query(&self, key: &[u8; 16]) -> Result<bool> {
         if !self.initialized {
             return Ok(false);

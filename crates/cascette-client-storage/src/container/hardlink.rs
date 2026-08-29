@@ -689,6 +689,7 @@ impl HardLinkContainer {
 }
 
 impl Container for HardLinkContainer {
+    #[allow(clippy::unused_async_trait_impl)]
     async fn reserve(&self, _key: &[u8; 16]) -> Result<()> {
         if !self.supported {
             return Err(StorageError::Config(
@@ -703,6 +704,7 @@ impl Container for HardLinkContainer {
         Ok(())
     }
 
+    #[allow(clippy::unused_async_trait_impl)]
     async fn read(
         &self,
         _key: &[u8; 16],
@@ -723,6 +725,7 @@ impl Container for HardLinkContainer {
         ))
     }
 
+    #[allow(clippy::unused_async_trait_impl)]
     async fn write(&self, _key: &[u8; 16], _data: &[u8]) -> Result<()> {
         // Hard link container creates links, not data writes
         Err(StorageError::InvalidFormat(
@@ -730,6 +733,7 @@ impl Container for HardLinkContainer {
         ))
     }
 
+    #[allow(clippy::unused_async_trait_impl)]
     async fn remove(&self, key: &[u8; 16]) -> Result<()> {
         if !self.supported {
             return Err(StorageError::Config(
@@ -748,6 +752,7 @@ impl Container for HardLinkContainer {
         self.remove_file(key, &path)
     }
 
+    #[allow(clippy::unused_async_trait_impl)]
     async fn query(&self, key: &[u8; 16]) -> Result<bool> {
         if !self.supported {
             return Ok(false);
