@@ -15,14 +15,23 @@ fn main() {
     let data = common::data_path();
 
     // Look for shmem files in the data directory
-    let dir = fs::read_dir(&data).expect("failed to read data directory");
+    // Look for shmem files in the data directory. The 1.13.x client writes a
+    // plain `shmem` file (no dot) at Data/data/shmem; some builds/agents use
+    // `.shmem` or `Data/shmem/`. Match all three, skipping lock files.
     let mut shmem_files: Vec<std::path::PathBuf> = Vec::new();
 
+    fn is_shmem_file(name: &str) -> bool {
+        let ext_is_shmem = std::path::Path::new(name)
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("shmem"));
+        (name == "shmem" || ext_is_shmem) && !name.ends_with(".shmem.lock")
+    }
+
+    let dir = fs::read_dir(&data).expect("failed to read data directory");
     for entry in dir {
         let entry = entry.expect("failed to read dir entry");
-        let name = entry.file_name();
-        let name_str = name.to_string_lossy();
-        if name_str.ends_with(".shmem") && !name_str.ends_with(".shmem.lock") {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if is_shmem_file(&name) {
             shmem_files.push(entry.path());
         }
     }
@@ -33,16 +42,15 @@ fn main() {
         let dir = fs::read_dir(parent).expect("failed to read Data directory");
         for entry in dir {
             let entry = entry.expect("failed to read dir entry");
-            let name = entry.file_name();
-            let name_str = name.to_string_lossy();
-            if name_str.ends_with(".shmem") && !name_str.ends_with(".shmem.lock") {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if is_shmem_file(&name) {
                 shmem_files.push(entry.path());
             }
         }
     }
 
     if shmem_files.is_empty() {
-        println!("No .shmem files found in {} or parent", data.display());
+        println!("No shmem file found in {} or parent", data.display());
         println!(
             "The shmem file is only present while the game client or the Blizzard Agent is running."
         );
@@ -91,39 +99,72 @@ fn main() {
             }
         }
 
-        // Round-trip verification
+        // Round-trip verification of the fields cascette-rs models.
+        //
+        // The 1.13.2 client also writes fields this crate does not model yet:
+        //   - 0x04: u32 header size (0x150 = 336)
+        //   - 0x08: path string ("Global\\../Data/data", relative)
+        //   - 0x110: 16 x u32 per-bucket generations
+        //   - 0x150/0x154: v4 tail words (1, 0xFE)
+        // These are printed below and excluded from the round-trip compare so
+        // the check validates the modeled contract only.
         let mut rt_buf = vec![0u8; raw.len()];
         cb.to_mapped(&mut rt_buf);
 
-        // Compare only the header portion (the rest is free space table data)
-        let header_size = match cb.version() {
-            5 => {
-                if cb.pid_tracking().is_some() {
-                    cascette_client_storage::shmem::control_block::V5_EXTENDED_HEADER_SIZE
-                } else {
-                    cascette_client_storage::shmem::control_block::V5_BASE_HEADER_SIZE
-                }
-            }
-            _ => cascette_client_storage::shmem::control_block::V4_HEADER_SIZE,
-        };
+        // Modeled fields: version (0x00), init (0x02), free-space format
+        // (0x108), data size (0x10C). Compare them field by field.
+        let version_ok = raw[0x00] == rt_buf[0x00];
+        let init_ok = raw[0x02] == rt_buf[0x02];
+        let fst_ok = raw[0x108..0x10C] == rt_buf[0x108..0x10C];
+        let ds_ok = raw[0x10C..0x110] == rt_buf[0x10C..0x110];
+        let modeled_ok = version_ok && init_ok && fst_ok && ds_ok;
+        println!(
+            "  Round-trip (modeled fields): {}",
+            if modeled_ok { "PASS" } else { "FAIL" }
+        );
+        if !version_ok {
+            println!("    version: raw={:02x} rt={:02x}", raw[0x00], rt_buf[0x00]);
+        }
+        if !init_ok {
+            println!("    init: raw={:02x} rt={:02x}", raw[0x02], rt_buf[0x02]);
+        }
+        if !fst_ok {
+            println!(
+                "    free-space-format: raw={:02x?} rt={:02x?}",
+                &raw[0x108..0x10C],
+                &rt_buf[0x108..0x10C]
+            );
+        }
+        if !ds_ok {
+            println!(
+                "    data-size: raw={:02x?} rt={:02x?}",
+                &raw[0x10C..0x110],
+                &rt_buf[0x10C..0x110]
+            );
+        }
 
-        let cmp_len = header_size.min(raw.len()).min(rt_buf.len());
-        if raw[..cmp_len] == rt_buf[..cmp_len] {
-            println!("  Round-trip: PASS (header {cmp_len} bytes match)");
-        } else {
-            println!("  Round-trip: FAIL");
-            for (i, (a, b)) in raw[..cmp_len]
+        // Client-specific fields (informational, not yet modeled)
+        if raw.len() >= 0x154 {
+            let hdr_size = u32::from_le_bytes(raw[0x04..0x08].try_into().expect("4 bytes"));
+            let path_end = raw[0x08..0x108]
                 .iter()
-                .zip(rt_buf[..cmp_len].iter())
-                .enumerate()
-            {
-                if a != b {
-                    println!(
-                        "    first diff at offset {i:#x}: original=0x{a:02x} roundtrip=0x{b:02x}"
-                    );
-                    break;
-                }
+                .position(|&b| b == 0)
+                .unwrap_or(0x108 - 0x08);
+            let path = String::from_utf8_lossy(&raw[0x08..0x08 + path_end]);
+            let tail_150 = u32::from_le_bytes(raw[0x150..0x154].try_into().expect("4 bytes"));
+            println!("  Client fields (not modeled):");
+            println!("    header size: {hdr_size} (0x{hdr_size:x})");
+            println!("    path:        {path}");
+            let mut gens: Vec<u32> = Vec::new();
+            for i in 0..16 {
+                gens.push(u32::from_le_bytes(
+                    raw[0x110 + i * 4..0x114 + i * 4]
+                        .try_into()
+                        .expect("4 bytes"),
+                ));
             }
+            println!("    generations: {gens:?}");
+            println!("    tail[0x150]: 0x{tail_150:08x}");
         }
         println!();
     }

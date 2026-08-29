@@ -1748,12 +1748,23 @@ async fn verify_sizes_report(
                             let ekey_hex = hex::encode(&entry.encoding_key);
                             if let Some(&expected) = download_sizes.get(&ekey_hex) {
                                 let path = cdn_file_path(mirror_root, cdn_path, "data", &ekey_hex);
-                                if let Ok(meta) = std::fs::metadata(&path) {
-                                    let actual = meta.len();
-                                    if actual != expected {
+                                match std::fs::metadata(&path) {
+                                    Ok(meta) => {
+                                        let actual = meta.len();
+                                        if actual != expected {
+                                            all_checks.push(SizeCheck {
+                                                expected,
+                                                actual: Some(actual),
+                                                path: path.display().to_string(),
+                                            });
+                                        }
+                                    }
+                                    Err(_) => {
+                                        // File is absent from the mirror. Record it
+                                        // as MISSING so it is reported and logged.
                                         all_checks.push(SizeCheck {
                                             expected,
-                                            actual: Some(actual),
+                                            actual: None,
                                             path: path.display().to_string(),
                                         });
                                     }
@@ -1834,10 +1845,11 @@ async fn verify_sizes_report(
 
     // ── Print report ──────────────────────────────────────────────────────
     if paths_only {
-        // Print one CDN-relative path per mismatched file, nothing else.
+        // Print one CDN-relative path per mismatched or missing file,
+        // nothing else.
         // Deduplicate across builds (same file can appear in multiple builds).
         let mut seen = std::collections::HashSet::new();
-        for check in all_checks.iter().filter(|c| c.status() == "MISMATCH") {
+        for check in all_checks.iter().filter(|c| c.status() != "OK") {
             // Convert absolute path to CDN-relative path.
             // Path format: <mirror_root>/<cdn_path>/<type>/<xx>/<xx>/<hash>
             let relative = check
