@@ -2164,7 +2164,7 @@ run_build "$OUTDIR/wow_classic_titan_3.80.2.69137_b7ccc184.txt" "$BFT" wow_class
 # wow_classic_titan 3.80.2.69496 bc=eb583f143feb7b23ea9ea052c8ea2928 cc=ef5632326410b59d728b391f26ca52db pc=11a7ea270082c4636d7c2edbcda7ae94
 run_build "$OUTDIR/wow_classic_titan_3.80.2.69496_eb583f14.txt" "$BFT" wow_classic_titan eb583f143feb7b23ea9ea052c8ea2928 ef5632326410b59d728b391f26ca52db "$CDN_URL" "$CDN_PATH" --product-config 11a7ea270082c4636d7c2edbcda7ae94 --paths
 
-echo "Done. $TOTAL builds: ok=$OK failed=$FAIL skipped=$SKIPPED ($(ls "$OUTDIR" | wc -l) files in $OUTDIR)" >&2
+echo "Done. $TOTAL builds: ok=$OK failed=$FAIL skipped=$SKIPPED ($(find "$OUTDIR" -maxdepth 1 -type f | wc -l) files in $OUTDIR)" >&2
 if ((FAIL > 0)); then
 	exit 1
 fi
