@@ -16,7 +16,7 @@ pub mod update;
 use crate::validation::BinaryFormatValidator;
 use crate::{Result, StorageError};
 use binrw::Endian;
-use binrw::{BinRead, BinReaderExt, BinResult, BinWrite, BinWriterExt};
+use binrw::{BinRead, BinResult, BinWrite, BinWriterExt};
 use cascette_crypto::jenkins::hashlittle;
 use cascette_crypto::{ContentKey, EncodingKey};
 use std::collections::BTreeMap;
@@ -36,10 +36,10 @@ fn parse_archive_location<R: std::io::Read + std::io::Seek>(
     _args: (),
 ) -> BinResult<ArchiveLocation> {
     // Read high byte of archive ID
-    let index_high = u16::from(reader.read_be::<u8>()?);
+    let index_high = u16::from(binrw::BinReaderExt::read_be::<u8>(reader)?);
 
     // Read 4-byte packed field (big-endian: archive ID low bits + offset)
-    let index_low = reader.read_be::<u32>()?;
+    let index_low = binrw::BinReaderExt::read_be::<u32>(reader)?;
 
     // Extract archive ID: high byte shifted left by 2, plus top 2 bits of low word
     let archive_id = (index_high << 2) | u16::try_from(index_low >> 30).unwrap_or(0);
@@ -605,13 +605,11 @@ impl IndexManager {
     /// Read and validate the index header, returning a legacy-compatible header
     fn read_index_header(reader: &mut BufReader<File>) -> Result<(IndexHeader, usize)> {
         // Read header guarded block (size + hash)
-        let header_block: GuardedBlockHeader = reader
-            .read_le()
+        let header_block: GuardedBlockHeader = binrw::BinReaderExt::read_le(reader)
             .map_err(|e| StorageError::Index(format!("Failed to read header block: {e}")))?;
 
         // Read V2 header inside the guarded block
-        let header_v2: IndexHeaderV2 = reader
-            .read_le()
+        let header_v2: IndexHeaderV2 = binrw::BinReaderExt::read_le(reader)
             .map_err(|e| StorageError::Index(format!("Failed to read header: {e}")))?;
 
         // Validate header
@@ -651,8 +649,7 @@ impl IndexManager {
             .map_err(|e| StorageError::Index(format!("Failed to read header hash: {e}")))?;
 
         // Read entry block guarded header (8 bytes: size + hash)
-        let entry_block: GuardedBlockHeader = reader
-            .read_le()
+        let entry_block: GuardedBlockHeader = binrw::BinReaderExt::read_le(reader)
             .map_err(|e| StorageError::Index(format!("Failed to read entry block header: {e}")))?;
 
         debug!(
