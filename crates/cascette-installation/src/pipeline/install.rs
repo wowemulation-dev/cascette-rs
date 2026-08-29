@@ -1,8 +1,8 @@
 //! Install pipeline: orchestrates the full CASC installation from CDN.
 
+use cascette_crypto::ContentKey;
 use std::collections::HashMap;
 use std::sync::Arc;
-use cascette_crypto::ContentKey;
 
 use tracing::{info, warn};
 
@@ -642,14 +642,13 @@ impl InstallPipeline {
                             .iter()
                             .map(|a| a.encoding_key.as_bytes().to_vec())
                             .collect();
-                        let loose_written =
-                            root_content::fetch_loose_build_files(
-                                cdn.as_ref(),
-                                &endpoints,
-                                &manifests.build_config,
-                                &installation,
-                            )
-                            .await;
+                        let loose_written = root_content::fetch_loose_build_files(
+                            cdn.as_ref(),
+                            &endpoints,
+                            &manifests.build_config,
+                            &installation,
+                        )
+                        .await;
                         let root_report = if let Some(root_ekey) = manifests
                             .build_config
                             .root()
@@ -667,7 +666,7 @@ impl InstallPipeline {
                             )
                             .await
                         } else {
-                            Default::default()
+                            root_content::RootContentReport::default()
                         };
                         info!(
                             loose_files_written = loose_written,

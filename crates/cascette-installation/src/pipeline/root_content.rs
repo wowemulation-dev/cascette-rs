@@ -22,16 +22,16 @@
 //!   without this pass the client re-fetches ~544 files (WDC5/BLP2/REVM) from
 //!   the CDN on first start (7200 requests, no login).
 
-use crate::pipeline::download::ArchiveLookup;
 use crate::CdnSource;
+use crate::pipeline::download::ArchiveLookup;
 use cascette_client_storage::Installation;
 use cascette_crypto::EncodingKey;
+use cascette_formats::CascFormat;
 use cascette_formats::blte::BlteFile;
 use cascette_formats::config::BuildConfig;
 use cascette_formats::encoding::EncodingFile;
 use cascette_formats::root::RootFile;
 use cascette_formats::tvfs::TvfsFile;
-use cascette_formats::CascFormat;
 use cascette_protocol::{CdnEndpoint, ContentType};
 use std::collections::HashSet;
 use tracing::{debug, info, warn};
@@ -68,7 +68,10 @@ pub async fn fetch_loose_build_files<S: CdnSource>(
     }
     for (index, info) in build_config.vfs_entries() {
         if let Some(ekey) = &info.encoding_key {
-            targets.push((Box::leak(format!("vfs-{index}").into_boxed_str()), ekey.clone()));
+            targets.push((
+                Box::leak(format!("vfs-{index}").into_boxed_str()),
+                ekey.clone(),
+            ));
         }
     }
     for info in build_config.patch_index() {
@@ -144,6 +147,7 @@ pub async fn fetch_loose_build_files<S: CdnSource>(
 /// keys resolved through the encoding table. The tag-selected download
 /// manifest ekeys narrow the candidate set; anything still missing from the
 /// store is fetched via archive range request with a loose-blob fallback.
+#[allow(clippy::implicit_hasher)] // HashSet<Vec<u8>> param; default hasher is fine
 pub async fn fetch_root_content<S: CdnSource>(
     cdn: &S,
     endpoints: &[CdnEndpoint],
@@ -216,20 +220,25 @@ pub async fn fetch_root_content<S: CdnSource>(
         }
     }
     report.unresolved_root_entries = unresolved;
-    info!(candidates = candidate_ekeys.len(), "root content candidates");
+    info!(
+        candidates = candidate_ekeys.len(),
+        "root content candidates"
+    );
 
     // Tag filter: keep only ekeys the download manifest selected.
     if !download_selected_ekeys.is_empty() {
         candidate_ekeys.retain(|k| download_selected_ekeys.contains(k));
     }
-    info!(filtered = candidate_ekeys.len(), "root content after tag filter");
+    info!(
+        filtered = candidate_ekeys.len(),
+        "root content after tag filter"
+    );
 
     // Determine what is already in the store (KMT 9-byte prefixes).
     let mut missing: Vec<Vec<u8>> = Vec::new();
     for ekey in candidate_ekeys {
-        let ekey_full = EncodingKey::from_bytes(
-            ekey.as_slice().try_into().expect("16-byte root ekey"),
-        );
+        let ekey_full =
+            EncodingKey::from_bytes(ekey.as_slice().try_into().expect("16-byte root ekey"));
         if installation.has_encoding_key(&ekey_full).await {
             continue; // already in the store
         }
@@ -240,17 +249,16 @@ pub async fn fetch_root_content<S: CdnSource>(
     // Fetch each missing ekey: archive range request first, loose blob fallback.
     let mut written = 0usize;
     for ekey in missing {
-        let ekey_full = EncodingKey::from_bytes(
-            ekey.as_slice().try_into().expect("16-byte root ekey"),
-        );
-        let data = match fetch_one(cdn, endpoints, &ekey_full, archive_lookup).await {
-            Some(d) => d,
-            None => {
-                warn!(ekey = %hex::encode(&ekey), "root content fetch failed");
-                continue;
-            }
+        let ekey_full =
+            EncodingKey::from_bytes(ekey.as_slice().try_into().expect("16-byte root ekey"));
+        let Some(data) = fetch_one(cdn, endpoints, &ekey_full, archive_lookup).await else {
+            warn!(ekey = %hex::encode(&ekey), "root content fetch failed");
+            continue;
         };
-        match installation.write_raw_blte_with_ekey(data, &ekey_full).await {
+        match installation
+            .write_raw_blte_with_ekey(data, &ekey_full)
+            .await
+        {
             Ok(()) => written += 1,
             Err(e) => warn!(ekey = %hex::encode(&ekey), error = %e, "root content write failed"),
         }
