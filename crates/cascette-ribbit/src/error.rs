@@ -94,6 +94,10 @@ pub enum ServerError {
     #[error("Configuration error: {0}")]
     Config(#[from] ConfigError),
 
+    /// TLS configuration or startup error
+    #[error("TLS error: {0}")]
+    Tls(String),
+
     /// Server shutdown error
     #[error("Server shutdown error: {0}")]
     Shutdown(String),

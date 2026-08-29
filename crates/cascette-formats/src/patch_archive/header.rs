@@ -10,7 +10,7 @@ pub const STANDARD_KEY_SIZE: u8 = 16;
 
 /// Patch Archive header (10 bytes, big-endian)
 ///
-/// Agent.exe validation (`tact::PatchManifestReader::ParseHeader` at 0x6a6487):
+/// Validation constraints:
 /// - Version: 1-2
 /// - Key sizes: 1-16 each
 /// - Block size bits: 12-24
@@ -45,8 +45,7 @@ pub struct PatchArchiveHeader {
 
     /// Format flags
     ///
-    /// - Bit 0 (0x01): plain data mode (informational, Agent.exe logs but
-    ///   does not reject)
+    /// - Bit 0 (0x01): plain data mode (informational, logged but not rejected)
     /// - Bit 1 (0x02): extended header present with encoding info
     pub flags: u8,
 }
@@ -82,9 +81,6 @@ impl PatchArchiveHeader {
     }
 
     /// Validate header fields
-    ///
-    /// Checks match Agent.exe `tact::PatchManifestReader::ParseHeader` at
-    /// 0x6a6487.
     pub fn validate(&self) -> PatchArchiveResult<()> {
         if &self.magic != b"PA" {
             return Err(PatchArchiveError::InvalidMagic(self.magic));

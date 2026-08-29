@@ -10,6 +10,7 @@ use crate::server::AppState;
 /// v2 commands return raw BPSV responses (no MIME wrapping).
 ///
 /// Supported commands:
+/// - `v2/products/summary` (list all products)
 /// - `v2/products/{product}/versions`
 /// - `v2/products/{product}/cdns`
 /// - `v2/products/{product}/bgdl`
@@ -17,7 +18,28 @@ use crate::server::AppState;
 /// # Errors
 ///
 /// Returns `ProtocolError` if the command is invalid or processing fails.
-pub fn handle_v2_command(command: &str, state: &AppState) -> Result<String, ProtocolError> {
+pub async fn handle_v2_command(command: &str, state: &AppState) -> Result<String, ProtocolError> {
+    // Special case: v2/products/summary endpoint
+    if command == "v2/products/summary" {
+        let db = state.database().await;
+        let products = db.products();
+        let seqn = if products.is_empty() {
+            use std::time::{SystemTime, UNIX_EPOCH};
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs()
+        } else {
+            products
+                .iter()
+                .map(|p| state.current_seqn(p))
+                .max()
+                .unwrap_or(0)
+        };
+        let response = BpsvResponse::summary(&products, seqn);
+        return Ok(response.to_string());
+    }
+
     // Parse command format: v2/products/{product}/{endpoint}
     let parts: Vec<&str> = command.split('/').collect();
 
@@ -30,13 +52,12 @@ pub fn handle_v2_command(command: &str, state: &AppState) -> Result<String, Prot
     let product = parts[2];
     let endpoint = parts[3];
 
-    // Get build for product
-    let build = state
-        .database()
+    let db = state.database().await;
+    let build = db
         .latest_build(product)
         .ok_or_else(|| ProtocolError::InvalidCommand(format!("Product not found: {product}")))?;
 
-    let seqn = state.current_seqn();
+    let seqn = state.current_seqn(product);
 
     // Generate appropriate BPSV response
     let response = match endpoint {
@@ -69,8 +90,8 @@ mod tests {
         file.write_all(b"[{\"id\":1,\"product\":\"test_product\",\"version\":\"1.0.0\",\"build\":\"1\",\"build_config\":\"0123456789abcdef0123456789abcdef\",\"cdn_config\":\"fedcba9876543210fedcba9876543210\",\"product_config\":null,\"build_time\":\"2024-01-01T00:00:00+00:00\",\"encoding_ekey\":\"aaaabbbbccccddddeeeeffffaaaaffff\",\"root_ekey\":\"bbbbccccddddeeeeffffaaaabbbbcccc\",\"install_ekey\":\"ccccddddeeeeffffaaaabbbbccccdddd\",\"download_ekey\":\"ddddeeeeffffaaaabbbbccccddddeeee\"}]").unwrap();
 
         let config = ServerConfig {
-            http_bind: "0.0.0.0:8080".parse().unwrap(),
-            tcp_bind: "0.0.0.0:1119".parse().unwrap(),
+            http_bind: "127.0.0.1:8080".parse().unwrap(),
+            tcp_bind: "127.0.0.1:1119".parse().unwrap(),
             builds: file.path().to_path_buf(),
             cdn_hosts: "cdn.test.com".to_string(),
             cdn_path: "test/path".to_string(),
@@ -84,7 +105,7 @@ mod tests {
     #[tokio::test]
     async fn test_v2_versions() {
         let state = create_test_state();
-        let result = handle_v2_command("v2/products/test_product/versions", &state);
+        let result = handle_v2_command("v2/products/test_product/versions", &state).await;
         assert!(result.is_ok());
         let response = result.unwrap();
         assert!(response.contains("Region!STRING"));
@@ -94,7 +115,7 @@ mod tests {
     #[tokio::test]
     async fn test_v2_cdns() {
         let state = create_test_state();
-        let result = handle_v2_command("v2/products/test_product/cdns", &state);
+        let result = handle_v2_command("v2/products/test_product/cdns", &state).await;
         assert!(result.is_ok());
         let response = result.unwrap();
         assert!(response.contains("Name!STRING"));
@@ -104,21 +125,33 @@ mod tests {
     #[tokio::test]
     async fn test_v2_bgdl() {
         let state = create_test_state();
-        let result = handle_v2_command("v2/products/test_product/bgdl", &state);
+        let result = handle_v2_command("v2/products/test_product/bgdl", &state).await;
         assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_v2_summary() {
+        let state = create_test_state();
+        let result = handle_v2_command("v2/products/summary", &state).await;
+        assert!(result.is_ok());
+        let response = result.unwrap();
+        assert!(response.contains("Product!STRING:0"));
+        assert!(response.contains("Seqn!DEC:4"));
+        assert!(response.contains("Flags!STRING:0"));
+        assert!(response.contains("test_product"));
     }
 
     #[tokio::test]
     async fn test_v2_invalid_format() {
         let state = create_test_state();
-        let result = handle_v2_command("v2/invalid", &state);
+        let result = handle_v2_command("v2/invalid", &state).await;
         assert!(result.is_err());
     }
 
     #[tokio::test]
     async fn test_v2_product_not_found() {
         let state = create_test_state();
-        let result = handle_v2_command("v2/products/nonexistent/versions", &state);
+        let result = handle_v2_command("v2/products/nonexistent/versions", &state).await;
         assert!(result.is_err());
     }
 }

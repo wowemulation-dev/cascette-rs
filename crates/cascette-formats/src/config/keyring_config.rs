@@ -1,9 +1,8 @@
 //! Keyring Config file format implementation
 //!
 //! Keyring Config files contain encryption keys for decrypting protected CASC content.
-//! Each entry maps an 8-byte key ID to a 16-byte encryption key. Agent.exe uses these
-//! keys via its `tact::KeyGetter::LoadKeyring` function for Salsa20 decryption of BLTE
-//! encrypted blocks.
+//! Each entry maps an 8-byte key ID to a 16-byte encryption key used for Salsa20
+//! decryption of BLTE encrypted blocks.
 //!
 //! Keyring config hashes are referenced in the Ribbit versions response `KeyRing` column,
 //! not in build configs. The config is fetched from CDN using the standard config path.

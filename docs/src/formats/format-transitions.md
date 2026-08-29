@@ -164,7 +164,7 @@ size = <content_key> <encoding_key>
 
 ### BLTE Format Evolution
 
-BLTE (Block Table Encoded) compression has remained stable but usage patterns
+BLTE (Block Table Encoding) compression has remained stable but usage patterns
 evolved:
 
 #### Compression Type Usage by Era
@@ -279,8 +279,3 @@ Formats not yet tracked for transitions:
 
 - [Format Evolution Analysis Tools](https://github.com/wowemulation-dev/cascette-py)
 
----
-
-*Last Updated*: 2025-08-23
-*Verification Status*: Automated verification scripts created and tested
-*Next Review*: After implementing Rust parsers based on verified formats

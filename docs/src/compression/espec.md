@@ -632,7 +632,8 @@ fn parse_zlib(input: &str) -> IResult<&str, ESpec> {
 ESpec parser:
 
 - **Plain (n)** - Uncompressed content
-- **ZLib compression (z)** - Level [1,9], variant (mpq/zlib/lz4hc), window bits [8,15]; all optional, 3-param syntax supported
+- **ZLib compression (z)** - Level [1,9], variant (mpq/zlib/lz4hc), window bits
+  [8,15]; all optional, 3-param syntax supported
 - **Encryption (e)** - Key, IV, and nested content encoding
 - **Block-based (b)** - Variable and fixed block specifications
 - **BCPack (c)** - Optional BCn version [1,7]; bare `c` accepted
@@ -649,4 +650,3 @@ ESpec parser:
 
 ESpec patterns are validated across all CASC formats to ensure correct
 parsing and processing of compression and encryption specifications.
-

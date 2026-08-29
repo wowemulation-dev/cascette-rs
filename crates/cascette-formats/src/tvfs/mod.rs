@@ -205,20 +205,44 @@ impl TvfsFile {
         Ok(output)
     }
 
-    /// Resolve a file path to its container entry.
-    pub fn resolve_path(&self, path: &str) -> Option<&ContainerEntry> {
+    /// Resolve a file path to its encoding key (truncated EKey bytes).
+    ///
+    /// Returns the raw ekey at the VFS span's CFT offset. The CFT entry
+    /// stride is derived empirically (GCD of span offsets) so both the
+    /// fixed-stride and flat-ekey (patched VFS, 1.15.4+) layouts resolve.
+    pub fn resolve_path(&self, path: &str) -> Option<Vec<u8>> {
         let vfs_offset = self.path_table.resolve_path(path)?;
-        // Find the VFS entry at this offset
         let vfs_entry = self
             .vfs_table
             .entries
             .iter()
             .find(|e| e.offset == vfs_offset)?;
         let span = vfs_entry.spans.first()?;
+        // Fall back to the flag-derived entry size when the CFT is too
+        // small to infer a stride (degenerate single-entry manifests).
+        let stride = self
+            .cft_stride()
+            .unwrap_or_else(|| self.header.cft_entry_size());
+        if !(span.cft_offset as usize).is_multiple_of(stride) {
+            return None; // offset not on an entry boundary (unresolvable layout)
+        }
         self.container_table
-            .entries
-            .iter()
-            .find(|e| e.offset == span.cft_offset)
+            .ekey_at(span.cft_offset, self.header.ekey_size as usize)
+            .map(|bytes| bytes.to_vec())
+    }
+
+    /// Empirically derive the CFT entry stride as the GCD of all span
+    /// cft_offsets. The CFT entry size is not fixed across builds: patched
+    /// VFS shards (1.15.4+) store a flat 9-byte ekey array where spans
+    /// align to ekey_size, not to the flag-derived entry size.
+    pub fn cft_stride(&self) -> Option<usize> {
+        let mut stride = 0usize;
+        for entry in &self.vfs_table.entries {
+            for span in &entry.spans {
+                stride = gcd(stride, span.cft_offset as usize);
+            }
+        }
+        if stride == 0 { None } else { Some(stride) }
     }
 
     /// Enumerate all files in the TVFS.
@@ -243,6 +267,16 @@ impl crate::CascFormat for TvfsFile {
         self.build()
             .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
     }
+}
+
+/// Greatest common divisor (Euclid).
+fn gcd(mut a: usize, mut b: usize) -> usize {
+    while b != 0 {
+        let t = b;
+        b = a % b;
+        a = t;
+    }
+    a
 }
 
 #[cfg(test)]
@@ -350,5 +384,73 @@ mod tests {
 
         h.cft_table_size = 0x100_0000;
         assert_eq!(h.cft_offs_size(), 4);
+    }
+
+    #[test]
+    fn test_gcd() {
+        assert_eq!(gcd(0, 9), 9);
+        assert_eq!(gcd(9, 18), 9);
+        assert_eq!(gcd(27, 9), 9);
+        assert_eq!(gcd(35, 70), 35);
+        assert_eq!(gcd(0, 0), 0);
+    }
+
+    #[test]
+    fn test_resolve_path_flat_cft() {
+        // Patched-VFS layout: CFT is a flat 9-byte ekey array; span
+        // cft_offsets are multiples of ekey_size (9), not the flag-derived
+        // entry size (27 with flags=0x7). GCD-stride resolution must find
+        // the ekey at offsets 0, 9, 18 (which land mid-27-byte "entry").
+        let ekeys: Vec<Vec<u8>> = (0..3).map(|i| vec![i + 1; 9]).collect();
+        let cft_data: Vec<u8> = ekeys.iter().flatten().copied().collect();
+
+        // VFS table: 3 single-span entries at cft offsets 0, 9, 18
+        let mut vfs_data = Vec::new();
+        for off in [0u32, 9, 18] {
+            vfs_data.push(1); // span_count
+            vfs_data.extend_from_slice(&0u32.to_be_bytes()); // file_offset
+            vfs_data.extend_from_slice(&100u32.to_be_bytes()); // span_length
+            vfs_data.push(off as u8); // cft_offset (1-byte width)
+        }
+
+        // Path table: 3 files, one per VFS entry
+        let mut path_data = Vec::new();
+        for i in 0..3 {
+            let name = format!("f{i}").into_bytes();
+            path_data.push(0); // separator
+            path_data.push(name.len() as u8);
+            path_data.extend_from_slice(&name);
+            path_data.push(0xFF); // leaf
+            path_data.extend_from_slice(&((i * 10) as u32).to_be_bytes()); // vfs_offset
+        }
+
+        // Assemble: header(46) + path + est(0) + cft + vfs
+        let path_off = 46u32;
+        let cft_off = path_off + path_data.len() as u32;
+        let vfs_off = cft_off + cft_data.len() as u32;
+        let mut header = Vec::new();
+        header.extend_from_slice(b"TVFS");
+        header.extend_from_slice(&[1, 46, 9, 9]); // ver, hdr_sz, ekey, pkey
+        header.extend_from_slice(&0x07u32.to_be_bytes()); // flags: ckey+est+patch
+        header.extend_from_slice(&path_off.to_be_bytes());
+        header.extend_from_slice(&(path_data.len() as u32).to_be_bytes());
+        header.extend_from_slice(&vfs_off.to_be_bytes());
+        header.extend_from_slice(&(vfs_data.len() as u32).to_be_bytes());
+        header.extend_from_slice(&cft_off.to_be_bytes());
+        header.extend_from_slice(&(cft_data.len() as u32).to_be_bytes());
+        header.extend_from_slice(&0u16.to_be_bytes()); // max_depth
+        header.extend_from_slice(&0u32.to_be_bytes()); // est_off
+        header.extend_from_slice(&0u32.to_be_bytes()); // est_sz
+
+        let mut blob = header;
+        blob.extend_from_slice(&path_data);
+        blob.extend_from_slice(&cft_data);
+        blob.extend_from_slice(&vfs_data);
+
+        let tvfs = TvfsFile::parse(&blob).expect("parse");
+        assert_eq!(tvfs.resolve_path("f0").unwrap(), ekeys[0]);
+        assert_eq!(tvfs.resolve_path("f1").unwrap(), ekeys[1]); // offset 9
+        assert_eq!(tvfs.resolve_path("f2").unwrap(), ekeys[2]); // offset 18
+        assert_eq!(tvfs.cft_stride(), Some(9));
     }
 }

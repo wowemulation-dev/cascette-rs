@@ -1,0 +1,22 @@
+[package]
+name = "cascette-proto"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Generated protobuf types for Blizzard Agent protocol messages"
+readme = "README.md"
+keywords = ["casc", "protobuf", "agent", "ngdp"]
+categories = ["encoding", "game-development"]
+
+[dependencies]
+prost = { workspace = true }
+
+[build-dependencies]
+prost-build = "0.14"
+
+[lints]
+workspace = true

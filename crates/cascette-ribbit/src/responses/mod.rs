@@ -20,7 +20,7 @@
 //!     hosts: "cdn.arctium.tools".to_string(),
 //!     path: "tpr/wow".to_string(),
 //!     servers: "https://cdn.arctium.tools".to_string(),
-//!     config_path: "tpr/wow".to_string(),
+//!     config_path: "tpr/configs/data".to_string(),
 //! };
 //!
 //! let response = BpsvResponse::cdns(&cdn_config, 1730534400);

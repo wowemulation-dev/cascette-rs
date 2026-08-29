@@ -2,6 +2,47 @@
 
 This page covers testing conventions and practices for cascette-rs.
 
+## Pre-Submission Quality Gates
+
+Run these commands before every commit or PR. They match the CI workflow
+exactly. CI sets `RUSTFLAGS="-D warnings"` globally, so any warning becomes a
+hard error. **Running without that flag hides issues that will fail CI.**
+
+```bash
+# Format check
+cargo fmt --all -- --check
+
+# Compilation — all targets, warnings as errors
+RUSTFLAGS="-D warnings" cargo check --workspace --all-targets
+
+# Clippy — all targets, warnings as errors
+RUSTFLAGS="-D warnings" cargo clippy --workspace --all-targets
+
+# Tests — default features, warnings as errors
+RUSTFLAGS="-D warnings" cargo nextest run --profile ci --workspace
+
+# Tests — no default features
+RUSTFLAGS="-D warnings" cargo nextest run --profile ci --no-default-features --workspace
+
+# Documentation — warnings as errors
+RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
+
+# WASM compilation check
+RUSTFLAGS="-D warnings" cargo check --target wasm32-unknown-unknown -p cascette-crypto -p cascette-formats
+```
+
+All seven checks must pass before submitting changes. A PR that fails any
+of these will not be merged.
+
+### Common Pitfalls
+
+Running `cargo clippy` without `RUSTFLAGS="-D warnings"` produces warnings
+that silently pass locally but fail CI. Always use the exact commands above.
+
+Tests that use `.unwrap()` or `.expect()` in `#[cfg(test)]` modules need
+`#[allow(clippy::unwrap_used, clippy::expect_used)]` on the module — the
+workspace lints flag these even in tests.
+
 ## Test Organization
 
 ### Module Structure
@@ -242,7 +283,8 @@ fn test_parse_with_invalid_data_returns_checksum_error() {
 
 ## Running Tests
 
-This project uses [cargo-nextest](https://nexte.st/) for faster, parallel test execution with better output formatting.
+This project uses [cargo-nextest](https://nexte.st/) for faster, parallel test
+execution with better output formatting.
 
 ### Basic Commands
 
@@ -383,7 +425,9 @@ cargo nextest-integration  # Integration tests only
 
 ### Flamegraphs
 
-The project supports flamegraph generation using [cargo-flamegraph](https://github.com/flamegraph-rs/flamegraph). Flamegraphs help visualize CPU time spent in different functions during execution.
+The project supports flamegraph generation using
+[cargo-flamegraph](https://github.com/flamegraph-rs/flamegraph). Flamegraphs
+help visualize CPU time spent in different functions during execution.
 
 #### Generating Flamegraphs Locally
 

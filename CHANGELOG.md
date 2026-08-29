@@ -10,6 +10,202 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- cascette-installation: `geolocation` module — derives ISO 3166-1 country codes
+  and Blizzard CDN region from the OS timezone via `iana-time-zone` and `isocountry`
+  crates. Populates `acct-{alpha3}` and `geoip-{alpha2}` tags in `.build.info`
+  without network-based GeoIP lookups
+- cascette-installation: `TagQuery::apply_geo_defaults()` fills missing
+  `account_country` and `geo_ip_country` from timezone detection. Launcher
+  overrides take precedence when present
+- cascette-agent: install and update pipelines call `apply_geo_defaults()` so
+  `.build.info` Tags column includes country segments by default
+- cascette-agent: concurrent launcher binary installation during install and
+  backfill operations. Resolves `bts` (bootstrapper) product metadata and
+  spawns a separate install pipeline for the launcher, sharing the CASC
+  container with the game content install
+- cascette-protocol: `product_config` module — fetches and parses per-product
+  JSON configuration from CDN. Extracts `launcher_install_info` for bootstrapper
+  resolution and provides `fallback_product_tag()` for older builds without
+  a `ProductConfig` column
+- cascette-protocol: `CdnClient::http_client()` accessor for operations outside
+  the standard CDN content type URL scheme
+- cascette-agent: `resolve_bootstrapper_metadata()` in executor helpers — queries
+  `bts/versions` by product tag and `bts/cdns` by geographic region
+- cascette-agent: `build_launcher_install_config()` — constructs `InstallConfig`
+  for the launcher with `game_subfolder: None` and `"launcher"` extra tag
+- cascette-installation: `TagQuery::extra_tags` field for additional manifest
+  filter tags beyond platform, architecture, and locale
+- cascette-agent: schema v7 migration adds `product_config_hash` column to
+  products table
+- cascette-installation: `TagQuery` struct for structured tag filtering — replaces
+  flat `platform_tags: Vec<String>` + `locale: String` with typed fields for
+  platform, architecture, locale, region, speech, and text. `tag_names()` returns
+  manifest filter tags; `build_info_tags()` generates the `.build.info` Tags column
+  format with `?` group delimiters and `:` config separators matching Blizzard Agent
+- cascette-installation: `tag_matched` field on `ArtifactSet` tracks how many
+  entries matched the tag query before dedup against local keys
+- cascette-installation: `ProgressEvent` variants — `ManifestDownloading`,
+  `ManifestComplete`, `LooseFilePhaseStarted`, `LooseFilePhaseComplete`,
+  `LayoutWritten` for per-phase progress tracking
+- cascette-agent: CDN override environment variables (`CASCETTE_AGENT_CDN_HOSTS`,
+  `CASCETTE_AGENT_CDN_PATH`) logged at startup and at metadata resolution time
+- cascette-crypto: `salsa20_vector` example — emits a Salsa20 test vector from
+  cascette-rs for cross-verification with the C++ `Salsa20Cipher`
+- cascette-formats: BLTE cross-verification examples for interop with C++ CascLib —
+  `gen_lz4_cross` and `decode_lz4_cross` (LZ4 via lz4_flex both directions),
+  `gen_encrypted_blte` and `decode_enc` (encrypted 'E' blocks), and `encrypt_vector`
+  (raw Salsa20-encrypted chunk emission)
+
+### Changed
+
+- tools: `generate_wow_paths.sh` and `verify_mirror_sizes.sh` include the new build
+  wow_classic_titan 3.80.2.68943 (1061 builds total); stale per-product build-count
+  comments removed from `verify_mirror_sizes.sh`
+
+- cascette-installation: `InstallConfig`, `UpdateConfig`, and `ExtractConfig` use
+  `tag_query: TagQuery` instead of `platform_tags` and `locale` fields
+- cascette-installation: `.build.info` Tags column now generates multi-config format
+  (e.g. `Windows x86_64 US? enUS speech?:Windows x86_64 US? enUS text?`)
+- cascette-installation: `.product.db` `LanguageOption` derived from `tag_query`
+  speech/text flags instead of hardcoded value
+- cascette-installation: loose (install manifest) files download before CASC
+  (download manifest) blobs, matching Blizzard Agent phase ordering
+- cascette-installation: classification logging shows tag list, tag match counts,
+  and `.build.info` tags format
+
+### Fixed
+
+- cascette-installation: tag filtering now includes locale and content-type tags
+  (`enUS`, `speech`, `text`), preventing oversized downloads that ignored locale
+- cascette-installation: `bytes` field on `ProgressEvent::FileComplete` set
+  correctly from download result instead of on `FileDownloading`
+- cascette-agent: `build_install_config` and `build_update_config` construct
+  `TagQuery` with locale and region instead of appending locale to platform tags
+
+### Added
+
+- cascette-protocol: `build_file_tree` example — walks a CASC build's file tree
+  from a build config hash and CDN config hash. Supports local mirror mode
+  (`/path/to/mirror tpr/wow`) and online CDN mode (`https://host tpr/wow`).
+  `--paths` flag emits one CDN path per tracked file for piping. Archive index
+  scanning runs concurrently via `futures::join_all`.
+- cascette-formats: size manifest rewrite — dedicated header, entry, builder,
+  and error modules replace the previous single-file implementation. Binary
+  layout matches wowdev.wiki DS format: 15-byte header, optional tag bitfields,
+  9-byte ekey + 4-byte esize entries.
+
+### Fixed
+
+- cascette-formats: broken intra-doc link `[SizeHeader]` in `size/mod.rs` now
+  uses the full path `[crate::size::SizeHeader]` so `RUSTDOCFLAGS=-D warnings`
+  passes across all render contexts
+- cascette-formats: hex literal in size header test corrected from
+  `0x0123_4567_89` to `0x0001_2345_6789` to satisfy `unusual_byte_groupings`
+
+### Added
+
+- cascette-agent: README sections for configuration, CLI flags, environment
+  variables, local CDN mirror setup, mirror directory layout, fallback behavior,
+  historical installs, and non-WoW product path overrides
+
+### Fixed
+
+- tests: resolve five clippy violations across integration test files
+  (`format_push_string`, `needless_collect`, `redundant_clone`,
+  `assertions_on_constants`); update `test_resolve_metadata_with_overrides`
+  assertion to match the prepend behavior introduced in the prior fix
+- cascette-agent: CDN override hosts are now prepended to Ribbit-advertised
+  endpoints instead of replacing them; both standard and historical installs use
+  the same fallback chain (overrides → community mirrors → official CDN)
+- cascette-agent: in-flight operations (`initializing`, `downloading`,
+  `verifying`) are reset to `queued` on startup so interrupted installs resume
+  after an agent restart
+- cascette-agent: progress tracking now sets `phase = "downloading"` when a
+  file transfer begins
+
+### Added
+
+- cascette-proto: new crate — prost-generated protobuf types from
+  `proto_database.proto` matching the Blizzard Agent `product.db` binary format.
+  Messages: `Database`, `ProductInstall`, `ProductConfig`, `ProductLanguage`,
+  `ProductSettings`, `PatchManifest`, `Uid`. Integration tests against 3 real
+  WoW Classic `.product.db` fixtures (1.13.2, 1.14.0, 1.15.2 macOS)
+- cascette-containerless: new crate — containerless storage backend for modern
+  Blizzard titles. Stores content as loose files with Turso-backed encrypted
+  SQLite metadata. Components: `ContainerlessDb`, `loose`, `sparse`, `bgdl`,
+  `block_mover`, `eheader`, `product_db`, `residency`, `ContainerlessStorage`
+- cascette-import: new crate — importers for community NGDP/CASC reference
+  data. Providers: BlizzTrack API, wago.tools TACT keys, WoWDev/TACTKeys text
+  format, community FileDataID listfiles. `ImportManager` coordinates all
+  providers with configurable refresh schedules
+- cascette-installation: new crate — CASC installation, verification, repair,
+  and update pipeline. Pipeline stages: classify, download, install, metadata,
+  manifests, loose, update (with leeching, patch resolution). Patch application:
+  ZBSDIFF1, block-patch, BLTE re-encode. Supporting: CDN source, checkpoint,
+  endpoint scorer, layout parsers, community mirror list
+- cascette-maintenance: new crate — storage maintenance for local CASC
+  installations. GC, compaction (defrag, fill-holes, merger, mover),
+  preservation, and repair (data, loose files, KMT markers)
+- cascette-metadata: new crate — FileDataID resolution and content
+  categorization. `FileDataIdResolver`, `ContentCategorizer`,
+  `MetadataOrchestrator` for the installation pipeline
+- cascette-agent: new crate — HTTP REST service on port 1120 compatible with
+  the Blizzard Agent API. Full axum route table covering all known endpoints.
+  State: `InstallationDb` (SQLite), `OperationQueue`, `ProductRegistry`,
+  `SizeCache`. Binary: `cascette-agent` with clap CLI
+- cascette-crypto: `murmur3_fmix64` for residency fast-path hashing
+- cascette-crypto: `armadillo` module for reading Agent.exe Armadillo key files
+- cascette-crypto: `generate` module: `generate_tact_key()`,
+  `generate_salsa20_iv()` via OS CSPRNG (`getrandom`)
+- cascette-crypto: `ChainedKeyProvider` — chain-of-responsibility lookup across
+  multiple `TactKeyProvider` backends, matching Agent.exe `KeyGetter::LookupKey`
+- cascette-ribbit: `watch` module — file watcher for hot-reload of
+  `builds.json` without server restart
+- cascette-ribbit: `start_tls_server()` — HTTPS server via `axum_server` with
+  ring-backed rustls; `Tls(String)` error variant added to `ServerError`
+- cascette-protocol: `download_from_endpoints()` — CDN endpoint failover,
+  tries each host in order on failure
+- cascette-client-storage: `UpdateSection` — LSM-tree L0 write path for KMT
+  with 24-byte `UpdateEntry`, 512-byte `UpdatePage`, and merge-sort flush
+- cascette-cache: examples for memory cache, multi-layer cache, and verification
+- cascette-formats: `patch_chain` module and `patch_archive/location` module;
+  7 format examples (`parse_build_config`, `blte_encoding`, `manifests`,
+  `encoding_table`, `root_file`, `archive_index`, `binary_patches`)
+- cascette-protocol: examples `cdn_protocol_verification`, `cdn_chain_verification`
+- cascette-crypto: examples `crypto_primitives`, `salsa20_encryption`,
+  `tact_keyring`, `armadillo_keys`
+- cascette-client-storage: `local_verification` example
+- docs: Agent HTTP API reference (`client/agent.md`) expanded from stub to full
+  endpoint documentation with request/response shapes
+
+### Changed
+
+- cascette-ribbit: `AppState::database()` is now `async`, returns
+  `Arc<BuildDatabase>` snapshot backed by `RwLock` for hot-reload safety
+- cascette-ribbit: `current_seqn()` takes `product: &str` and returns
+  per-product `AtomicU64` counter (was a global Unix timestamp)
+- cascette-ribbit: BPSV `## seqn = N` line emitted between header row and data
+  rows, matching real Blizzard server output (was at end of document)
+- cascette-ribbit: benchmark snapshots `Arc<BuildDatabase>` before bench loops
+  to avoid lock contention in hot path
+- cascette-formats: `ArchiveReader::with_keys` and
+  `ArchiveFile::read_blte_at_offset_with_keys` accept `Arc<dyn TactKeyProvider>`
+  / `&dyn TactKeyProvider` instead of concrete `TactKeyStore`
+- cascette-protocol: `CdnArchiveResolver::with_keys` accepts
+  `Arc<dyn TactKeyProvider>` instead of `TactKeyStore`
+- Workspace: add members `cascette-agent`, `cascette-containerless`,
+  `cascette-import`, `cascette-installation`, `cascette-maintenance`,
+  `cascette-metadata`, `cascette-proto`
+- Workspace: add dependencies `uuid`, `chrono`, `sysinfo`, `tokio-util`,
+  `turso`, `prost`, `prost-types`, `tower`, `http-body-util`, `libc`
+- `.mise.toml`: add `protobuf = "latest"` for `protoc` compiler
+- `README.md`: document new crate capabilities; note `protoc` as dev dependency
+
+### Fixed
+
+- cascette-protocol: `download_range()` retries with `RetryPolicy` and handles
+  416 (range not satisfiable), 429 (rate limited), and 5xx responses
+
 - cascette-formats: ESpec CDN test fixtures (50 representative strings from
   Classic Era, Classic, and Retail encoding files) with manifest.json metadata
 - cascette-formats: Integration tests for ESpec parsing against real CDN data
@@ -86,8 +282,7 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - cascette-formats: Patch archive header hash verification via
   `PatchArchive::header_region_size()`, `compute_header_hash()`, and
   `verify_header_hash()`. Validates that MD5 of the header region (fixed header
-  + extended header + block table) matches the CDN content key. Verified against
-  Agent.exe `tact::PatchManifestReader::ParseHeader` at 0x6a6487.
+  + extended header + block table) matches the CDN content key.
 - cascette-formats: Patch Index (`patch_index/`) module for the block-based
   format referenced by build config `patch-index` key. Parses header with block
   descriptors, block type 2 entries (source/target EKey pairs with sizes), and
@@ -129,12 +324,10 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixed
 
 - cascette-client-storage: KMT v8 hash guard now computed via Jenkins
-  hashlittle on 33 bytes (`entry[4..37]`, seed 0, OR `0x80000000`),
-  matching Agent.exe `casc::KmtV8::InsertEntry`. Previously used simple
-  XOR which produced incorrect guards.
+  hashlittle on 33 bytes (`entry[4..37]`, seed 0, OR `0x80000000`).
+  Previously used simple XOR which produced incorrect guards.
 - cascette-client-storage: Reconstruction header `checksum_a` computed via
-  Jenkins hashlittle on first 22 bytes with seed `0x3D6BE971`, matching
-  Agent.exe `sub_72c49f`. Previously zeroed.
+  Jenkins hashlittle on first 22 bytes with seed `0x3D6BE971`. Previously zeroed.
 - cascette-client-storage: Reconstruction header `checksum_b` computed via
   XOR accumulation over first 26 bytes with rotating 4-byte index
   `(base_offset + i) & 3`. Previously zeroed.
@@ -165,9 +358,9 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   encoding EKey, decoded/encoded sizes, and length-prefixed ESpec string when
   flags bit 1 (0x02) is set. All known CDN patch manifests use this flag
 - cascette-formats: Patch archive block sort validation added via
-  `validate_block_sort_order()`, matching Agent.exe `_memcmp` validation
+  `validate_block_sort_order()`
 - cascette-formats: Patch archive key size validation relaxed from exactly 16 to
-  1-16 range, matching Agent.exe `tact::PatchManifestReader::ParseHeader`
+  the valid range 1-16
 - cascette-formats: ESpec encryption IV parsing accepts 1-8 bytes instead of
   exactly 4. CDN data shows Classic uses 4-byte IVs, Retail uses 8-byte IVs
   (99.8% of encrypted entries). Previous parser rejected all Retail IVs.
@@ -198,14 +391,13 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and writes 6 additional bytes for V2 (content_key_size, entry_count_v2,
   v2_unknown). V1 computes content_key_size as `ckey_length + 4`
 - cascette-formats: ZBSDIFF1 header endianness corrected from big-endian to
-  little-endian, matching the original bsdiff format and verified against
-  Agent.exe `tact::BsPatch::ParseHeader` at 0x6fbd1c
+  little-endian, matching the original bsdiff format
 - cascette-formats: ZBSDIFF1 control block integer encoding corrected from
   two's complement (`i64::from_be_bytes`) to sign-magnitude (`offtin`/`offtout`),
   matching the bsdiff format where bit 63 is sign, bits 0-62 are magnitude in
   little-endian order
 - cascette-formats: CDN archive index `ekey_length` validation relaxed from 9-16
-  to 1-16, matching Agent.exe (`tact::CdnIndexFooterValidator` accepts `<= 0x10`)
+  to the valid range 1-16
 - cascette-formats: CDN archive index `element_count` doc comment corrected from
   "number of chunks" to "number of entries". Verified against real CDN data.
 - cascette-formats: `ArchiveIndex::build()` fixed to compute chunk count from
@@ -411,8 +603,8 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- cascette-formats: Renamed fields and constants based on Agent.exe verification
-  - `EncodingHeader::unk_11` renamed to `flags` (verified at 0x6a23e6, must be 0)
+- cascette-formats: Renamed fields and constants
+  - `EncodingHeader::unk_11` renamed to `flags` (must be 0)
   - `TVFS_FLAG_WRITE_SUPPORT` deprecated, use `TVFS_FLAG_ENCODING_SPEC` (0x02)
   - `TvfsHeader::has_write_support()` deprecated, use `has_encoding_spec()`
   - `constants::INDEX_VERSION` renamed to `LOCAL_IDX_VERSION` to distinguish
@@ -581,7 +773,7 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - Memory pooling optimized for NGDP file size classes
   - CDN integration with retry logic and range requests
 - cascette-formats crate: Binary format parsers and builders for NGDP/CASC
-  - BLTE: Block Table Encoded format with compression (ZLib, LZ4) and encryption
+  - BLTE: Block Table Encoding format with compression (ZLib, LZ4) and encryption
   - BPSV: Blizzard Pipe-Separated Values for version and config data
   - Archive: Archive index and data file operations for CDN content storage
   - Encoding: Content key to encoding key mappings

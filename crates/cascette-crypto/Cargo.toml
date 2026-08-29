@@ -16,15 +16,19 @@ thiserror = { workspace = true }
 # Hashing
 md-5 = "0.10"
 
-# Encryption
-salsa20 = "0.10"
-cipher = "0.4"
 
 # Utilities
 hex = { workspace = true }
 
+# Platform paths
+dirs = "6"
+
 # Binary format handling
 binrw = { workspace = true }
+
+# Random number generation (for key/IV generation, not available on WASM)
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+getrandom = { workspace = true }
 
 [dev-dependencies]
 # Testing framework
@@ -33,7 +37,23 @@ tempfile = { workspace = true }
 
 [package.metadata.cargo-machete]
 # These dependencies are used indirectly or for specific features
-ignored = ["cipher", "md-5"]
+ignored = ["md-5"]
 
 [lints]
 workspace = true
+
+[[example]]
+name = "crypto_primitives"
+path = "examples/crypto_primitives.rs"
+
+[[example]]
+name = "salsa20_encryption"
+path = "examples/salsa20_encryption.rs"
+
+[[example]]
+name = "tact_keyring"
+path = "examples/tact_keyring.rs"
+
+[[example]]
+name = "armadillo_keys"
+path = "examples/armadillo_keys.rs"

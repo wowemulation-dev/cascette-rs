@@ -12,7 +12,7 @@ pub struct ESpecTable {
 impl ESpecTable {
     /// Parse `ESpec` table from raw bytes
     ///
-    /// Agent.exe requires:
+    /// Requirements:
     /// - No empty strings (consecutive null bytes are rejected)
     /// - Block must be null-terminated (no trailing non-null data)
     pub fn parse(data: &[u8]) -> Result<Self, EncodingError> {

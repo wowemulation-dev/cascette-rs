@@ -229,7 +229,7 @@ impl ReqwestHttpClient {
 
         let mut last_error = None;
 
-        for server in &self.cdn_servers {
+        for (i, server) in self.cdn_servers.iter().enumerate() {
             let use_https = prefer_https && server.supports_https;
 
             match self.url_builder.build_url_for_product(
@@ -239,15 +239,34 @@ impl ReqwestHttpClient {
                 hash,
                 use_https,
             ) {
-                Ok(url) => match self.get_range(&url, range).await {
-                    Ok(data) => return Ok(data),
-                    Err(e) => {
-                        last_error = Some(StreamingError::CdnFailover {
-                            server: server.host.clone(),
-                            source: Box::new(e),
-                        });
+                Ok(url) => {
+                    tracing::debug!(
+                        host = %server.host,
+                        product = %product,
+                        content_type = ?content_type,
+                        hash = %hash,
+                        server_index = i,
+                        server_count = self.cdn_servers.len(),
+                        "CDN content request: GET {}",
+                        url
+                    );
+                    match self.get_range(&url, range).await {
+                        Ok(data) => return Ok(data),
+                        Err(e) => {
+                            tracing::warn!(
+                                host = %server.host,
+                                hash = %hash,
+                                error = %e,
+                                "CDN content failover: {} failed, trying next",
+                                server.host
+                            );
+                            last_error = Some(StreamingError::CdnFailover {
+                                server: server.host.clone(),
+                                source: Box::new(e),
+                            });
+                        }
                     }
-                },
+                }
                 Err(e) => {
                     last_error = Some(e);
                 }
@@ -276,22 +295,39 @@ impl ReqwestHttpClient {
 
         let mut last_error = None;
 
-        for server in &self.cdn_servers {
+        for (i, server) in self.cdn_servers.iter().enumerate() {
             let use_https = prefer_https && server.supports_https;
 
             match self
                 .url_builder
                 .build_product_config_url(&server.host, hash, use_https)
             {
-                Ok(url) => match self.get_range(&url, range).await {
-                    Ok(data) => return Ok(data),
-                    Err(e) => {
-                        last_error = Some(StreamingError::CdnFailover {
-                            server: server.host.clone(),
-                            source: Box::new(e),
-                        });
+                Ok(url) => {
+                    tracing::debug!(
+                        host = %server.host,
+                        hash = %hash,
+                        server_index = i,
+                        server_count = self.cdn_servers.len(),
+                        "CDN product config request: GET {}",
+                        url
+                    );
+                    match self.get_range(&url, range).await {
+                        Ok(data) => return Ok(data),
+                        Err(e) => {
+                            tracing::warn!(
+                                host = %server.host,
+                                hash = %hash,
+                                error = %e,
+                                "CDN product config failover: {} failed, trying next",
+                                server.host
+                            );
+                            last_error = Some(StreamingError::CdnFailover {
+                                server: server.host.clone(),
+                                source: Box::new(e),
+                            });
+                        }
                     }
-                },
+                }
                 Err(e) => {
                     last_error = Some(e);
                 }
@@ -354,8 +390,15 @@ impl HttpClient for ReqwestHttpClient {
     ) -> Result<Bytes, StreamingError> {
         let mut request = self.client.get(url);
 
-        if let Some(range) = range {
+        if let Some(ref range) = range {
+            tracing::debug!(
+                url = %url,
+                range = %range.to_header_value(),
+                "CDN streaming request: GET (range)"
+            );
             request = request.header("Range", range.to_header_value());
+        } else {
+            tracing::debug!(url = %url, "CDN streaming request: GET");
         }
 
         let response = request
@@ -366,6 +409,12 @@ impl HttpClient for ReqwestHttpClient {
         // Check for successful status codes
         let status = response.status();
         if !status.is_success() && status.as_u16() != 206 {
+            tracing::debug!(
+                url = %url,
+                status = %status,
+                "CDN streaming response: HTTP {}",
+                status
+            );
             return Err(StreamingError::HttpStatus {
                 status_code: status.as_u16(),
                 url: url.to_string(),
@@ -376,6 +425,14 @@ impl HttpClient for ReqwestHttpClient {
             .bytes()
             .await
             .map_err(|source| StreamingError::NetworkRequest { source })?;
+
+        tracing::debug!(
+            url = %url,
+            status = %status,
+            bytes = bytes.len(),
+            "CDN streaming response: {} bytes",
+            bytes.len()
+        );
 
         Ok(bytes)
     }

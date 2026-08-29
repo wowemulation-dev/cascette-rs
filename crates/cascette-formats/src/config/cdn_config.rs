@@ -68,9 +68,11 @@ impl CdnConfig {
             "archives",
             "archives-index-size",
             "archive-group",
+            "archive-group-index-size",
             "patch-archives",
             "patch-archives-index-size",
             "patch-archive-group",
+            "patch-archive-group-index-size",
             "file-index",
             "file-index-size",
             "patch-file-index",
@@ -131,12 +133,28 @@ impl CdnConfig {
             .map(std::string::String::as_str)
     }
 
+    /// Get the archive group index size if present
+    pub fn archive_group_index_size(&self) -> Option<u64> {
+        self.entries
+            .get("archive-group-index-size")
+            .and_then(|v| v.first())
+            .and_then(|s| s.parse().ok())
+    }
+
     /// Get the patch archive group hash if present
     pub fn patch_archive_group(&self) -> Option<&str> {
         self.entries
             .get("patch-archive-group")
             .and_then(|v| v.first())
             .map(std::string::String::as_str)
+    }
+
+    /// Get the patch archive group index size if present
+    pub fn patch_archive_group_index_size(&self) -> Option<u64> {
+        self.entries
+            .get("patch-archive-group-index-size")
+            .and_then(|v| v.first())
+            .and_then(|s| s.parse().ok())
     }
 
     /// Check if patch archives are present

@@ -1,7 +1,10 @@
 //! BPSV (Blizzard Pipe-Separated Values) response generation.
 //!
 //! BPSV is a text format used by Blizzard's NGDP system for metadata exchange.
-//! Format: Header line with column definitions, followed by data rows, optional seqn footer.
+//! Format: Header line with column definitions, seqn line, then data rows.
+//!
+//! The real Blizzard server emits the sequence number between the header row and
+//! the first data row, not at the end of the document.
 
 use crate::config::CdnConfig;
 use crate::database::BuildRecord;
@@ -16,7 +19,7 @@ pub enum BpsvResponseType {
     Cdns,
     /// Background download information (similar to versions)
     Bgdl,
-    /// Product summary (Product, Seqn) - TCP v1 only
+    /// Product summary (Product, Seqn, Flags)
     Summary,
 }
 
@@ -34,25 +37,26 @@ impl BpsvResponse {
     pub fn versions(build: &BuildRecord, seqn: u64) -> Self {
         let mut lines = Vec::new();
 
-        // Header line - must match Blizzard's exact format including KeyRing field
+        // Header line - must match Blizzard's exact format including KeyRing field.
+        // Note: Blizzard uses mixed-case "String" for VersionsName, not "STRING".
         lines.push(
-            "Region!STRING:0|BuildConfig!HEX:16|CDNConfig!HEX:16|KeyRing!HEX:16|BuildId!DEC:4|VersionsName!STRING:0|ProductConfig!HEX:16"
+            "Region!STRING:0|BuildConfig!HEX:16|CDNConfig!HEX:16|KeyRing!HEX:16|BuildId!DEC:4|VersionsName!String:0|ProductConfig!HEX:16"
                 .to_string(),
         );
 
+        // Sequence number between header and data rows (Blizzard format)
+        lines.push(format!("## seqn = {seqn}"));
+
         // Data rows for each region (same build across all regions)
-        // Real Blizzard API uses 7 regions: us, eu, cn, kr, tw, sg, xx
+        // Blizzard returns 5 regions: us, eu, cn, kr, tw
         let product_config = build.product_config.as_deref().unwrap_or("");
         let keyring = build.keyring.as_deref().unwrap_or("");
-        for region in ["us", "eu", "cn", "kr", "tw", "sg", "xx"] {
+        for region in ["us", "eu", "cn", "kr", "tw"] {
             lines.push(format!(
                 "{region}|{}|{}|{keyring}|{}|{}|{product_config}",
                 build.build_config, build.cdn_config, build.build, build.version
             ));
         }
-
-        // Sequence number footer
-        lines.push(format!("## seqn = {seqn}"));
 
         Self {
             response_type: BpsvResponseType::Versions,
@@ -71,6 +75,9 @@ impl BpsvResponse {
                 .to_string(),
         );
 
+        // Sequence number between header and data rows (Blizzard format)
+        lines.push(format!("## seqn = {seqn}"));
+
         // Data rows for each region (same CDN config across all regions)
         for region in ["us", "eu", "kr", "tw", "cn"] {
             lines.push(format!(
@@ -78,9 +85,6 @@ impl BpsvResponse {
                 cdn_config.path, cdn_config.hosts, cdn_config.servers, cdn_config.config_path
             ));
         }
-
-        // Sequence number footer
-        lines.push(format!("## seqn = {seqn}"));
 
         Self {
             response_type: BpsvResponseType::Cdns,
@@ -98,17 +102,23 @@ impl BpsvResponse {
     }
 
     /// Create summary response listing all products.
+    ///
+    /// The v2 summary format includes a `Flags` column. Each product appears once
+    /// with an empty flags value. Real Blizzard servers emit multiple rows per product
+    /// with flags like `cdn` and `bgdl`, each with independent seqn values. Our server
+    /// currently tracks a single seqn per product, so we emit one row per product.
     #[must_use]
     pub fn summary(products: &[&str], seqn: u64) -> Self {
-        let mut lines = vec!["Product!STRING:0|Seqn!DEC:4".to_string()];
+        let mut lines = vec![
+            "Product!STRING:0|Seqn!DEC:4|Flags!STRING:0".to_string(),
+            // Sequence number between header and data rows (Blizzard format)
+            format!("## seqn = {seqn}"),
+        ];
 
         // Data rows for each product
         for product in products {
-            lines.push(format!("{product}|{seqn}"));
+            lines.push(format!("{product}|{seqn}|"));
         }
-
-        // Sequence number footer
-        lines.push(format!("## seqn = {seqn}"));
 
         Self {
             response_type: BpsvResponseType::Summary,
@@ -131,7 +141,8 @@ impl BpsvResponse {
 
 impl fmt::Display for BpsvResponse {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.lines.join("\n"))
+        // Blizzard terminates BPSV responses with a trailing newline.
+        writeln!(f, "{}", self.lines.join("\n"))
     }
 }
 
@@ -150,10 +161,10 @@ mod tests {
             keyring: None,
             product_config: None,
             build_time: "2019-11-21T18:33:35+00:00".to_string(),
-            encoding_ekey: "aaaabbbbccccddddeeeeffffaaaaffff".to_string(),
-            root_ekey: "bbbbccccddddeeeeffffaaaabbbbcccc".to_string(),
-            install_ekey: "ccccddddeeeeffffaaaabbbbccccdddd".to_string(),
-            download_ekey: "ddddeeeeffffaaaabbbbccccddddeeee".to_string(),
+            encoding_ekey: Some("aaaabbbbccccddddeeeeffffaaaaffff".to_string()),
+            root_ekey: Some("bbbbccccddddeeeeffffaaaabbbbcccc".to_string()),
+            install_ekey: Some("ccccddddeeeeffffaaaabbbbccccdddd".to_string()),
+            download_ekey: Some("ddddeeeeffffaaaabbbbccccddddeeee".to_string()),
             cdn_path: None,
         }
     }
@@ -166,11 +177,22 @@ mod tests {
         let text = response.to_string();
         assert!(text.contains("Region!STRING:0|BuildConfig!HEX:16"));
         assert!(text.contains("KeyRing!HEX:16"));
+        // Blizzard uses mixed-case "String" for VersionsName
+        assert!(text.contains("VersionsName!String:0"));
         assert!(text.contains("us|596c212114208f0f849c6b6e596e6680"));
         assert!(text.contains("## seqn = 1730534400"));
 
-        // Should have 7 regions + header + footer = 9 lines
-        assert_eq!(text.lines().count(), 9);
+        // Should have header + seqn + 5 regions = 7 lines (+ trailing newline)
+        let lines: Vec<&str> = text.lines().collect();
+        assert_eq!(lines.len(), 7);
+
+        // seqn must appear on line 2 (between header and data rows)
+        assert!(lines[0].starts_with("Region!"), "line 0 is the header");
+        assert_eq!(lines[1], "## seqn = 1730534400");
+        assert!(lines[2].starts_with("us|"));
+
+        // Must end with trailing newline
+        assert!(text.ends_with('\n'));
     }
 
     #[test]
@@ -179,7 +201,7 @@ mod tests {
             hosts: "cdn.arctium.tools".to_string(),
             path: "tpr/wow".to_string(),
             servers: "https://cdn.arctium.tools/?fallbackProtocol=http".to_string(),
-            config_path: "tpr/wow".to_string(),
+            config_path: "tpr/configs/data".to_string(),
         };
 
         let response = BpsvResponse::cdns(&cdn_config, 1_730_534_400);
@@ -196,9 +218,9 @@ mod tests {
         let response = BpsvResponse::summary(&products, 1_730_534_400);
 
         let text = response.to_string();
-        assert!(text.contains("Product!STRING:0|Seqn!DEC:4"));
-        assert!(text.contains("wow|1730534400"));
-        assert!(text.contains("wow_classic|1730534400"));
+        assert!(text.contains("Product!STRING:0|Seqn!DEC:4|Flags!STRING:0"));
+        assert!(text.contains("wow|1730534400|"));
+        assert!(text.contains("wow_classic|1730534400|"));
         assert!(text.contains("## seqn = 1730534400"));
     }
 

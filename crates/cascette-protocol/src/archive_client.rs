@@ -10,7 +10,7 @@ use crate::archive::file::{ArchiveLocation, ArchiveResolver};
 use crate::archive::index::ArchiveIndex;
 use crate::blte::BlteFile;
 use binrw::BinRead;
-use cascette_crypto::TactKeyStore;
+use cascette_crypto::TactKeyProvider;
 use std::io::Cursor;
 use std::sync::Arc;
 use std::time::Duration;
@@ -325,8 +325,8 @@ pub struct CdnArchiveResolver {
     resolver: ArchiveResolver,
     /// CDN client for network operations
     client: Arc<PooledCdnClient>,
-    /// Optional key store for decryption
-    key_store: Option<TactKeyStore>,
+    /// Optional key provider for decryption
+    key_store: Option<Arc<dyn TactKeyProvider>>,
 }
 
 #[allow(dead_code)] // Future CDN integration
@@ -340,8 +340,8 @@ impl CdnArchiveResolver {
         }
     }
 
-    /// Set key store for decryption
-    pub fn with_keys(mut self, key_store: TactKeyStore) -> Self {
+    /// Set key provider for decryption
+    pub fn with_keys(mut self, key_store: Arc<dyn TactKeyProvider>) -> Self {
         self.key_store = Some(key_store);
         self
     }
@@ -398,7 +398,7 @@ impl CdnArchiveResolver {
         let blte = BlteFile::read_options(&mut cursor, binrw::Endian::Big, ())?;
 
         let content = if let Some(ref key_store) = self.key_store {
-            blte.decompress_with_keys(key_store)?
+            blte.decompress_with_keys(&**key_store)?
         } else {
             blte.decompress()?
         };

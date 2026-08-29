@@ -112,7 +112,7 @@ async fn start_test_server() -> (SocketAddr, SocketAddr, Arc<AppState>) {
                 {
                     let command = command.trim();
                     if let Ok(response) =
-                        cascette_ribbit::tcp::handlers::handle_command(command, &state)
+                        cascette_ribbit::tcp::handlers::handle_command(command, &state).await
                     {
                         let socket = reader.into_inner();
                         let _ = socket.write_all(response.as_bytes()).await;
@@ -334,11 +334,11 @@ async fn test_client_parses_multi_region_responses() {
 
     let response = result.expect("Multi-region query result should be Ok");
 
-    // Verify we have 7 regions (us, eu, cn, kr, tw, sg, xx)
+    // Verify we have 5 regions (us, eu, cn, kr, tw)
     assert_eq!(
         response.rows().len(),
-        7,
-        "Response should have 7 regional rows"
+        5,
+        "Response should have 5 regional rows"
     );
 
     // Verify each region has data

@@ -59,8 +59,11 @@ impl TactClient {
     #[cfg(not(target_arch = "wasm32"))]
     pub async fn query(&self, endpoint: &str) -> Result<BpsvDocument> {
         // Transform TCP Ribbit endpoint format to TACT format
+        // TCP: v1/summary -> TACT v2: /v2/summary
         // TCP: v1/products/{product}/versions -> TACT: /{product}/versions
-        let tact_endpoint = if endpoint.starts_with("v1/products/") {
+        let tact_endpoint = if endpoint == "v1/summary" {
+            "/v2/summary"
+        } else if endpoint.starts_with("v1/products/") {
             endpoint.strip_prefix("v1/products").unwrap_or(endpoint)
         } else {
             endpoint
@@ -98,8 +101,11 @@ impl TactClient {
     #[cfg(target_arch = "wasm32")]
     pub async fn query(&self, endpoint: &str) -> Result<BpsvDocument> {
         // Transform TCP Ribbit endpoint format to TACT format
+        // TCP: v1/summary -> TACT v2: /v2/summary
         // TCP: v1/products/{product}/versions -> TACT: /{product}/versions
-        let tact_endpoint = if endpoint.starts_with("v1/products/") {
+        let tact_endpoint = if endpoint == "v1/summary" {
+            "/v2/summary"
+        } else if endpoint.starts_with("v1/products/") {
             endpoint.strip_prefix("v1/products").unwrap_or(endpoint)
         } else {
             endpoint
@@ -292,6 +298,26 @@ mod tests {
         let result = client.query("v1/products/wow/versions").await;
 
         assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_summary_url_construction() {
+        let mock_server = MockServer::start().await;
+        let summary_bpsv = "Product!STRING:0|Seqn!DEC:4|Flags!STRING:0\n## seqn = 100\nwow|100|\n";
+
+        // v1/summary should map to /v2/summary
+        Mock::given(method("GET"))
+            .and(path("/v2/summary"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(summary_bpsv))
+            .mount(&mock_server)
+            .await;
+
+        let client = TactClient::new(mock_server.uri(), true).expect("Operation should succeed");
+        let result = client.query("v1/summary").await;
+
+        assert!(result.is_ok());
+        let doc = result.expect("Operation should succeed");
+        assert!(!doc.rows().is_empty());
     }
 
     #[tokio::test]

@@ -38,7 +38,7 @@ and shared memory IPC.
 
 ## Usage
 
-```rust,ignore
+```rust
 use cascette_client_storage::{Storage, StorageConfig};
 
 // Initialize storage system

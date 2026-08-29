@@ -19,25 +19,27 @@ use super::IndexEntry;
 /// Size of a single update entry in bytes.
 pub const UPDATE_ENTRY_SIZE: usize = 24;
 
-/// Size of a single update page in bytes.
-pub const UPDATE_PAGE_SIZE: usize = 512;
+/// Size of a single update page in bytes (4 KB).
+/// Update pages are 4 KB aligned.
+pub const UPDATE_PAGE_SIZE: usize = 0x1000;
 
-/// Maximum entries per update page (512 / 24 = 21).
+/// Maximum entries per update page (4096 / 24 = 170).
 pub const ENTRIES_PER_PAGE: usize = UPDATE_PAGE_SIZE / UPDATE_ENTRY_SIZE;
 
-/// Minimum update section size in bytes (60 pages).
-pub const MIN_UPDATE_SECTION_SIZE: usize = 0x7800;
+/// Minimum update section size in bytes (12 pages of 4KB = 48 KB).
+/// Reference IDX files have 12 update pages (0x24000..0x30000 = 48 KB).
+pub const MIN_UPDATE_SECTION_SIZE: usize = 12 * UPDATE_PAGE_SIZE;
 
-/// Alignment boundary for the update section start (64 KB).
-pub const UPDATE_SECTION_ALIGNMENT: usize = 0x1_0000;
+/// Alignment boundary for the update section start (4 KB).
+/// Alignment: `(sorted_end + 0xfff) & ~0xfff`.
+pub const UPDATE_SECTION_ALIGNMENT: usize = 0x1000;
 
 /// Sync interval: every 8th page triggers a 4KB sync.
 pub const SYNC_PAGE_INTERVAL: usize = 8;
 
 /// Status byte values for update entries.
 ///
-/// These match the Agent.exe status encoding:
-/// `(is_header ^ 1) + 6` yields 7 for data, 6 for header.
+/// Status encoding: `(is_header ^ 1) + 6` yields 7 for data, 6 for header.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum UpdateStatus {
@@ -302,7 +304,7 @@ pub struct UpdateSection {
 }
 
 impl UpdateSection {
-    /// Create a new empty update section with minimum capacity (60 pages).
+    /// Create a new empty update section with minimum capacity (12 pages).
     pub fn new() -> Self {
         let capacity_pages = MIN_UPDATE_SECTION_SIZE / UPDATE_PAGE_SIZE;
         Self {
@@ -693,7 +695,7 @@ mod tests {
     #[test]
     fn test_update_section_capacity() {
         let section = UpdateSection::with_capacity(UPDATE_PAGE_SIZE * 2);
-        assert_eq!(section.capacity_pages(), 60); // min 60 pages enforced
+        assert_eq!(section.capacity_pages(), 12); // min 12 pages enforced
 
         let mut section = UpdateSection::with_capacity(UPDATE_PAGE_SIZE * 100);
         assert_eq!(section.capacity_pages(), 100);

@@ -7,13 +7,14 @@ content. The system provides geographical distribution of content through
 HTTP/HTTPS endpoints, with automatic failover and load balancing capabilities.
 
 > **Note**: Code examples in this document illustrate concepts. For working
-> implementations, see the `cascette` CLI or the cascette-protocol crate.
+> implementations, see the cascette-protocol crate.
 
 ## Discovery and Access Flow
 
 ### Product Discovery
 
-Product discovery begins with a v1/summary query to the Ribbit TCP service:
+Product discovery begins with a summary query. On HTTPS TACT v2, this is
+`/v2/summary`; on TCP Ribbit, this is `v1/summary`:
 
 ```mermaid
 sequenceDiagram
@@ -21,7 +22,7 @@ sequenceDiagram
     participant Ribbit
     participant CDN
 
-    Client->>Ribbit: v1/summary (TCP)
+    Client->>Ribbit: /v2/summary (HTTPS) or v1/summary (TCP)
     Ribbit-->>Client: Available products
 
     Client->>Ribbit: v2/versions/{product}
@@ -74,7 +75,10 @@ The v2 API provides three primary endpoints:
 **CRITICAL**: Always extract the `Path` field from CDN responses. Never assume
 paths based on product names. For example, all WoW products (`wow`,
 `wow_classic`, `wow_classic_era`, `wow_classic_titan`, `wow_anniversary`) use
-`tpr/wow` despite having different product codes.
+`tpr/wow` despite having different product codes. `agent` uses `tpr/bnt001`,
+`bna` uses `tpr/bnt002`, `bts` uses `tpr/bnt004`, and `catalogs` uses
+`tpr/catalogs`. See
+[Supported Products](../products.md) for the full mapping.
 
 ### Content Download Workflow
 
@@ -316,6 +320,22 @@ China (`cn`) region has special considerations:
 
 Several community-maintained mirrors provide NGDP content:
 
+#### archive.wow.tools
+
+- **Protocol**: HTTPS
+
+- **Status**: Active
+
+- **Coverage**: Historical NGDP content archive — first choice for old builds
+
+#### casc.wago.tools
+
+- **Protocol**: HTTPS (HTTP redirects to HTTPS)
+
+- **Status**: Active
+
+- **Coverage**: Full NGDP mirror
+
 #### cdn.arctium.tools
 
 - **Protocol**: HTTP only
@@ -323,22 +343,6 @@ Several community-maintained mirrors provide NGDP content:
 - **Status**: Active
 
 - **Coverage**: Full NGDP content mirror
-
-#### casc.wago.tools
-
-- **Protocol**: HTTP with HTTPS redirects
-
-- **Status**: Active
-
-- **Coverage**: Full NGDP mirror
-
-#### archive.wow.tools
-
-- **Protocol**: HTTPS
-
-- **Status**: Active
-
-- **Coverage**: Historical NGDP content archive
 
 ### Mirror Usage
 
@@ -695,4 +699,3 @@ Implement efficient caching:
   mismatches and retry from an alternate CDN
 - **Encryption Keys**: CASC uses static community-maintained keys; see
   [Salsa20 Encryption](../encryption/salsa20.md) for key management details
-

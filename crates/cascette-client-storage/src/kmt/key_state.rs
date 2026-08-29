@@ -240,8 +240,8 @@ impl ResidencyEntry {
 
     /// Compute the hash guard from serialized entry bytes.
     ///
-    /// Agent.exe: `JenkinsHashLittle2(&entry[4], 0x21, 0) | 0x80000000`
-    /// Hashes bytes [4..37] (33 bytes: ekey + span + update_type) with seed 0.
+    /// Hashes bytes [4..37] (33 bytes: ekey + span + update_type) with seed 0,
+    /// then sets bit 31: `hashlittle(entry[4..37], 0) | 0x80000000`.
     pub fn compute_hash_guard(entry_bytes: &[u8; RESIDENCY_ENTRY_SIZE]) -> u32 {
         hashlittle(&entry_bytes[4..37], 0) | 0x8000_0000
     }
@@ -290,9 +290,7 @@ impl ResidencyEntry {
 
 /// MurmurHash3 64-bit finalizer for fast residency checks.
 ///
-/// Uses the two MurmurHash3 constants from Agent.exe:
-/// - `0xff51afd7_ed558ccd`
-/// - `0xc4ceb9fe_1a85ec53`
+/// Uses the standard MurmurHash3 64-bit finalization constants.
 pub fn murmurhash3_finalize(mut k: u64) -> u64 {
     k ^= k >> 33;
     k = k.wrapping_mul(0xff51_afd7_ed55_8ccd);
@@ -401,7 +399,7 @@ impl Default for ResidencyPage {
 ///
 /// Stores per-key residency state in pages organized by bucket hash.
 /// Provides MurmurHash3 fast-path for `is_resident()` and two-pass
-/// `scan_keys()` matching Agent.exe behavior.
+/// `scan_keys()` for collecting resident keys.
 pub struct ResidencyDb {
     /// Per-bucket pages.
     buckets: [Vec<ResidencyPage>; RESIDENCY_BUCKET_COUNT],

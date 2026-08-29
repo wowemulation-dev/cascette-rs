@@ -16,3 +16,6 @@ perf.data*
 
 # mdBook build output
 /docs/book/
+
+# generated files for build file lists
+/paths/

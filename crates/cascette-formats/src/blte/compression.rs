@@ -2,11 +2,29 @@
 
 use super::chunk::CompressionMode;
 use super::error::{BlteError, BlteResult};
-use cascette_crypto::TactKeyStore;
+use crate::CascFormat;
+use cascette_crypto::TactKeyProvider;
 use cascette_crypto::salsa20::{decrypt_salsa20, encrypt_salsa20};
 use flate2::Compression;
 use flate2::read::{ZlibDecoder, ZlibEncoder};
 use std::io::Read;
+
+/// Default LZ4 block size (2^14 = 16 KiB) for the bnl block framing.
+///
+/// RE (Battle.net-Setup binary, verified in Ghidra 2026-08-18): the bnl LZ4
+/// stream header carries an exponent k with 1 KiB < 2^k <= 64 KiB; k = 14
+/// (16 KiB) matches the binary's own default bound estimate (n/255 + 16 + n
+/// computed for the 16 KiB ring buffers at DecoderZ +0x404b/+0x804b).
+const LZ4_DEFAULT_BLOCK_SIZE: usize = 0x4000;
+
+/// LZ4 dictionary window: matches may reference the preceding 64 KiB of
+/// output (dual dictionaries at DecoderZ +0x1012c/+0x2012c).
+const LZ4_DICT_WINDOW: usize = 64 * 1024;
+
+/// Size of the bnl LZ4 stream header (format byte + two BE32 totals +
+/// block-size exponent). Pinned by the `m_inputSize == headerSize` assert
+/// at lz4decode.cpp:0x95 (DecoderZ::Decode 0x4e65b0).
+const LZ4_HEADER_SIZE: usize = 10;
 
 /// Maximum allowed decompression size (1 GB)
 ///
@@ -14,6 +32,12 @@ use std::io::Read;
 /// compression bombs. WoW's largest individual files are typically under
 /// 100 MB, so 1 GB provides ample headroom while preventing abuse.
 pub const MAX_DECOMPRESSION_SIZE: usize = 1024 * 1024 * 1024;
+
+/// Maximum recursion depth for Frame (F) codec.
+///
+/// Only one level of recursion is supported. Deeper nesting is not observed
+/// in practice and is rejected to prevent stack overflow.
+const MAX_FRAME_DEPTH: usize = 1;
 
 /// Compress data using specified mode
 pub fn compress_chunk(data: &[u8], mode: CompressionMode) -> BlteResult<Vec<u8>> {
@@ -28,28 +52,55 @@ pub fn compress_chunk(data: &[u8], mode: CompressionMode) -> BlteResult<Vec<u8>>
             Ok(compressed)
         }
         CompressionMode::LZ4 => {
-            // LZ4 compression: 8-byte LE decompressed size prefix + single LZ4 block.
+            // LZ4 compression: bnl stream framing verified against the
+            // Battle.net-Setup binary (Ghidra, 2026-08-18).
             //
-            // The WoWDev wiki describes a different format with headerVersion,
-            // BE size, and blockShift for sub-blocks. However, Agent.exe 3.13.3
-            // (`tact::Codec::DecodeLZ4` at 0x6f5fdb) is a stub that returns
-            // error 5 — LZ4 decompression is not implemented in that binary.
-            // This implementation uses the 8-byte LE prefix format observed in
-            // real WoW BLTE data.
-            let decompressed_size = data.len() as u64;
+            // [10-byte header][back-to-back raw LZ4 blocks]:
+            //   byte 0     format = 0x01
+            //   bytes 1-4  BE32 total compressed size (blocks only)
+            //   bytes 5-8  BE32 total decompressed size
+            //   byte 9     exponent k; block size = 2^k,
+            //              1 KiB < block <= 64 KiB
+            //
+            // Non-final blocks decompress to exactly the block size (the
+            // framing invariant the streaming core relies on); each block
+            // may reference the preceding 64 KiB of output. Empty input
+            // produces the header alone (both totals zero).
+            //
+            // The prior format here (8-byte LE size prefix + single block,
+            // attributed to "real WoW BLTE data") matched no Blizzard
+            // binary: the Agent stubs BLTE '4' (error 5), and the Setup
+            // binary parses the 10-byte bnl header above.
+            let block_size = LZ4_DEFAULT_BLOCK_SIZE;
+            let mut blocks: Vec<u8> = Vec::new();
+            let mut dict_tail: Vec<u8> = Vec::new();
+            let mut offset = 0;
 
-            // Pre-allocate with worst-case size (LZ4 worst case is ~1.06x original size)
-            // We need 8 bytes for the size header plus the compressed data
-            let max_compressed_size = lz4_flex::block::get_maximum_output_size(data.len());
-            let mut result = vec![0u8; 8 + max_compressed_size];
+            while offset < data.len() {
+                let n = (data.len() - offset).min(block_size);
+                let input = &data[offset..offset + n];
+                let block = if dict_tail.is_empty() {
+                    lz4_flex::block::compress(input)
+                } else {
+                    lz4_flex::block::compress_with_dict(input, &dict_tail)
+                };
+                blocks.extend_from_slice(&block);
 
-            result[0..8].copy_from_slice(&decompressed_size.to_le_bytes());
+                // Maintain the output tail (dictionary window).
+                dict_tail.extend_from_slice(input);
+                let keep = dict_tail.len().min(LZ4_DICT_WINDOW);
+                let drop = dict_tail.len() - keep;
+                dict_tail.drain(..drop);
 
-            let compressed_len = lz4_flex::block::compress_into(data, &mut result[8..])
-                .map_err(|e| BlteError::CompressionError(format!("LZ4 compression failed: {e}")))?;
+                offset += n;
+            }
 
-            // Truncate to actual size
-            result.truncate(8 + compressed_len);
+            let mut result = Vec::with_capacity(LZ4_HEADER_SIZE + blocks.len());
+            result.push(0x01);
+            result.extend_from_slice(&((blocks.len() as u32).to_be_bytes()));
+            result.extend_from_slice(&((data.len() as u32).to_be_bytes()));
+            result.push(14); // exponent: 2^14 = LZ4_DEFAULT_BLOCK_SIZE
+            result.extend_from_slice(&blocks);
             Ok(result)
         }
         CompressionMode::Encrypted => {
@@ -58,15 +109,27 @@ pub fn compress_chunk(data: &[u8], mode: CompressionMode) -> BlteResult<Vec<u8>>
                 "Use encrypt_chunk_with_key for encryption mode".to_string(),
             ))
         }
-        #[allow(deprecated)]
-        CompressionMode::Frame => Err(super::error::BlteError::UnsupportedCompressionMode(
-            mode.as_byte(),
+        CompressionMode::Frame => Err(BlteError::CompressionError(
+            "Frame (recursive BLTE) compression is not supported".to_string(),
         )),
     }
 }
 
 /// Decompress chunk data
 pub fn decompress_chunk(data: &[u8], mode: CompressionMode) -> BlteResult<Vec<u8>> {
+    decompress_chunk_recursive(data, mode, 0)
+}
+
+/// Decompress chunk data with recursion depth tracking.
+///
+/// Frame (F) chunks contain a complete BLTE file as their payload. This
+/// function limits recursion to `MAX_FRAME_DEPTH` levels to prevent stack
+/// overflow from maliciously nested containers.
+fn decompress_chunk_recursive(
+    data: &[u8],
+    mode: CompressionMode,
+    depth: usize,
+) -> BlteResult<Vec<u8>> {
     match mode {
         CompressionMode::None => Ok(data.to_vec()),
         CompressionMode::ZLib => {
@@ -97,63 +160,196 @@ pub fn decompress_chunk(data: &[u8], mode: CompressionMode) -> BlteResult<Vec<u8
 
             Ok(decompressed)
         }
-        CompressionMode::LZ4 => {
-            // LZ4 decompression: 8-byte LE decompressed size prefix + single LZ4 block.
-            // See compression comment above for format rationale.
-            if data.len() < 8 {
-                return Err(BlteError::CompressionError(
-                    "LZ4 data too short - missing size header".to_string(),
-                ));
-            }
-
-            let size_header = u64::from_le_bytes(
-                data[0..8]
-                    .try_into()
-                    .map_err(|_| BlteError::CompressionError("Invalid size header".to_string()))?,
-            );
-
-            // Convert to usize with bounds checking
-            let decompressed_size = usize::try_from(size_header).map_err(|_| {
-                BlteError::CompressionError("Decompressed size too large".to_string())
-            })?;
-
-            // Security: Check against maximum decompression size to prevent DoS
-            if decompressed_size > MAX_DECOMPRESSION_SIZE {
-                return Err(BlteError::CompressionError(format!(
-                    "LZ4 decompressed size {} exceeds limit of {} bytes",
-                    decompressed_size, MAX_DECOMPRESSION_SIZE
-                )));
-            }
-
-            // Decompress the remaining data
-            let compressed_data = &data[8..];
-
-            let decompressed = lz4_flex::block::decompress(compressed_data, decompressed_size)
-                .map_err(|e| {
-                    BlteError::CompressionError(format!("LZ4 decompression failed: {e}"))
-                })?;
-
-            // Validate decompressed size matches expected
-            if decompressed.len() != decompressed_size {
-                return Err(BlteError::CompressionError(format!(
-                    "LZ4 decompression size mismatch: expected {decompressed_size}, got {}",
-                    decompressed.len()
-                )));
-            }
-
-            Ok(decompressed)
-        }
+        CompressionMode::LZ4 => decompress_lz4_bnl(data),
         CompressionMode::Encrypted => {
             // Encryption mode requires special handling via decrypt_chunk_with_keys
             Err(BlteError::CompressionError(
                 "Use decrypt_chunk_with_keys for encrypted chunks".to_string(),
             ))
         }
-        #[allow(deprecated)]
-        CompressionMode::Frame => Err(super::error::BlteError::UnsupportedCompressionMode(
-            mode.as_byte(),
-        )),
+        CompressionMode::Frame => {
+            // Frame codec: chunk payload is a complete BLTE container.
+            // Parse the inner BLTE and decompress it, enforcing depth limit.
+            if depth >= MAX_FRAME_DEPTH {
+                return Err(BlteError::RecursionLimitExceeded {
+                    max_depth: MAX_FRAME_DEPTH,
+                });
+            }
+
+            let inner_blte = super::BlteFile::parse(data).map_err(|e| {
+                BlteError::CompressionError(format!("Failed to parse inner BLTE frame: {e}"))
+            })?;
+
+            // Decompress all inner chunks with incremented depth
+            let mut result = Vec::new();
+            for (index, chunk) in inner_blte.chunks.iter().enumerate() {
+                let decompressed = decompress_chunk_recursive(&chunk.data, chunk.mode, depth + 1)?;
+                let _ = index;
+                result.extend_from_slice(&decompressed);
+            }
+            Ok(result)
+        }
     }
+}
+
+/// Decompress a BLTE '4' payload using the bnl stream framing.
+///
+/// RE (Battle.net-Setup binary, Ghidra 2026-08-18): the payload is a
+/// 10-byte header (format 0x01, BE32 compressed total, BE32 decompressed
+/// total, block-size exponent k with 1 KiB < 2^k <= 64 KiB) followed by
+/// back-to-back raw LZ4 blocks. Non-final blocks decompress to exactly the
+/// block size; the last block ends with a literal-only sequence at input
+/// end. Matches may reference the preceding 64 KiB of output.
+fn decompress_lz4_bnl(data: &[u8]) -> BlteResult<Vec<u8>> {
+    let lz4_err =
+        |msg: &str| BlteError::CompressionError(format!("LZ4 decompression failed: {msg}"));
+
+    if data.len() < LZ4_HEADER_SIZE {
+        return Err(lz4_err("data too short for the 10-byte bnl header"));
+    }
+
+    if data[0] != 0x01 {
+        return Err(lz4_err(&format!(
+            "unsupported format byte 0x{:02X}",
+            data[0]
+        )));
+    }
+
+    let compressed_total = u32::from_be_bytes(
+        data[1..5]
+            .try_into()
+            .map_err(|_| lz4_err("invalid header"))?,
+    ) as usize;
+    let decompressed_total = u32::from_be_bytes(
+        data[5..9]
+            .try_into()
+            .map_err(|_| lz4_err("invalid header"))?,
+    ) as usize;
+    let exponent = data[9];
+
+    if exponent >= 32 {
+        return Err(lz4_err(&format!(
+            "block-size exponent {exponent} out of range"
+        )));
+    }
+    let block_size: usize = 1usize << exponent;
+    // RE (DecoderZ::Decode @ lz4decode.cpp:0x8e): 0x400 < 2^k <= 0x10000.
+    if block_size <= 0x400 || block_size > 0x10000 {
+        return Err(lz4_err(&format!(
+            "block size 0x{block_size:X} out of range (0x800..=0x10000)"
+        )));
+    }
+
+    // Security: cap the claimed output before allocating.
+    if decompressed_total > MAX_DECOMPRESSION_SIZE {
+        return Err(lz4_err(&format!(
+            "decompressed size {decompressed_total} exceeds limit of {MAX_DECOMPRESSION_SIZE} bytes"
+        )));
+    }
+
+    if compressed_total + LZ4_HEADER_SIZE != data.len() {
+        return Err(lz4_err(
+            "header compressed total does not match payload size",
+        ));
+    }
+
+    let src = &data[LZ4_HEADER_SIZE..];
+    let mut output = Vec::with_capacity(decompressed_total);
+    let mut src_pos = 0usize;
+
+    while output.len() < decompressed_total {
+        let remaining = decompressed_total - output.len();
+        let cap = remaining.min(block_size);
+
+        // Walk one block's LZ4 token stream to find its input extent. A
+        // block ends when its output reaches the cap or its literals end
+        // at input end (the framing invariant of the streaming core).
+        let mut ip = 0usize;
+        let mut block_out = 0usize;
+        loop {
+            if src_pos + ip >= compressed_total {
+                return Err(lz4_err("truncated block stream"));
+            }
+            let token = src[src_pos + ip];
+            ip += 1;
+
+            let mut lit_len = usize::from(token >> 4);
+            if lit_len == 15 {
+                loop {
+                    if src_pos + ip >= compressed_total {
+                        return Err(lz4_err("truncated literal length"));
+                    }
+                    let ext = src[src_pos + ip];
+                    ip += 1;
+                    lit_len += usize::from(ext);
+                    if ext != 255 {
+                        break;
+                    }
+                }
+            }
+            if src_pos + ip + lit_len > compressed_total {
+                return Err(lz4_err("literals exceed block stream"));
+            }
+            ip += lit_len;
+            block_out += lit_len;
+            if block_out > cap {
+                return Err(lz4_err("block output exceeds cap"));
+            }
+
+            if block_out == cap || src_pos + ip == compressed_total {
+                break;
+            }
+
+            // Match part: 2-byte offset + optional length extension.
+            if src_pos + ip + 2 > compressed_total {
+                return Err(lz4_err("truncated match offset"));
+            }
+            ip += 2;
+            let mut match_len = usize::from(token & 0x0F);
+            if match_len == 15 {
+                loop {
+                    if src_pos + ip >= compressed_total {
+                        return Err(lz4_err("truncated match length"));
+                    }
+                    let ext = src[src_pos + ip];
+                    ip += 1;
+                    match_len += usize::from(ext);
+                    if ext != 255 {
+                        break;
+                    }
+                }
+            }
+            block_out += match_len + 4;
+            if block_out > cap {
+                return Err(lz4_err("block output exceeds cap"));
+            }
+        }
+
+        // Decode the block with dictionary continuity: matches may
+        // reference the preceding 64 KiB of already-produced output.
+        let dict_start = output.len().saturating_sub(LZ4_DICT_WINDOW);
+        let dict = output[dict_start..].to_vec();
+
+        let block = &src[src_pos..src_pos + ip];
+        let decoded = lz4_flex::block::decompress_with_dict(block, cap, &dict)
+            .map_err(|e| BlteError::CompressionError(format!("LZ4 decompression failed: {e}")))?;
+
+        if decoded.len() != cap {
+            return Err(lz4_err(&format!(
+                "block decompressed to {} bytes, expected {cap}",
+                decoded.len()
+            )));
+        }
+
+        output.extend_from_slice(&decoded);
+        src_pos += ip;
+    }
+
+    if src_pos != compressed_total {
+        return Err(lz4_err("trailing bytes after the final block"));
+    }
+
+    Ok(output)
 }
 
 #[cfg(test)]
@@ -179,34 +375,34 @@ mod tests {
     }
 
     #[test]
-    fn test_compress_lz4() {
+    fn test_compress_lz4_bnl_header() {
         let data = b"Hello, BLTE! This is a test of LZ4 compression.";
         let compressed =
             compress_chunk(data, CompressionMode::LZ4).expect("Test operation should succeed");
 
-        // Should have 8-byte size header + compressed data
-        assert!(compressed.len() >= 8);
-
-        // First 8 bytes should be the decompressed size in little-endian
-        let size_bytes = &compressed[0..8];
-        let stored_size =
-            u64::from_le_bytes(size_bytes.try_into().expect("Operation should succeed"));
-        assert_eq!(stored_size, data.len() as u64);
+        // 10-byte bnl header: format 0x01, BE32 compressed, BE32 decompressed,
+        // exponent k (block = 2^k). RE: DecoderZ::Decode 0x4e65b0.
+        assert!(compressed.len() >= 10);
+        assert_eq!(compressed[0], 0x01);
+        let stored_compressed =
+            u32::from_be_bytes(compressed[1..5].try_into().expect("slice length"));
+        let stored_decompressed =
+            u32::from_be_bytes(compressed[5..9].try_into().expect("slice length"));
+        assert_eq!(stored_decompressed, data.len() as u32);
+        assert_eq!(stored_compressed as usize + 10, compressed.len());
+        assert_eq!(compressed[9], 14); // default block 2^14 = 16 KiB
     }
 
     #[test]
     fn test_decompress_lz4() {
         let data = b"Hello, BLTE! This is a test of LZ4 decompression.";
 
-        // First compress the data
         let compressed =
             compress_chunk(data, CompressionMode::LZ4).expect("Test operation should succeed");
 
-        // Then decompress it
         let decompressed = decompress_chunk(&compressed, CompressionMode::LZ4)
             .expect("Test operation should succeed");
 
-        // Should match original
         assert_eq!(decompressed, data);
     }
 
@@ -224,15 +420,12 @@ mod tests {
         ];
 
         for (i, original_data) in test_cases.into_iter().enumerate() {
-            // Compress
             let compressed = compress_chunk(original_data, CompressionMode::LZ4)
                 .expect("Test compression should succeed");
 
-            // Decompress
             let decompressed = decompress_chunk(&compressed, CompressionMode::LZ4)
                 .expect("Test decompression should succeed");
 
-            // Verify
             assert_eq!(
                 decompressed, original_data,
                 "Round-trip failed for test case {i}"
@@ -241,18 +434,55 @@ mod tests {
     }
 
     #[test]
+    fn test_lz4_multi_block_round_trip() {
+        // 64 KiB + tail: forces at least five 16 KiB blocks and exercises
+        // the 64 KiB dictionary window clamp (the last block's dict starts
+        // at output.len() - 64 KiB, referencing earlier blocks).
+        let data: Vec<u8> = (0..(5 * LZ4_DEFAULT_BLOCK_SIZE + 100))
+            .map(|i| ((i * 31 + i / 64) & 0xFF) as u8)
+            .collect();
+
+        let compressed =
+            compress_chunk(&data, CompressionMode::LZ4).expect("compression should succeed");
+        assert!(compressed.len() < data.len(), "should actually compress");
+
+        let decompressed = decompress_chunk(&compressed, CompressionMode::LZ4)
+            .expect("decompression should succeed");
+        assert_eq!(decompressed, data);
+    }
+
+    #[test]
     fn test_lz4_invalid_data() {
-        // Test with too short data (missing size header)
-        let short_data = &[0x34, 0x01, 0x02];
+        // Too short for the 10-byte bnl header
+        let short_data = &[0x01, 0x00, 0x00];
         let result = decompress_chunk(short_data, CompressionMode::LZ4);
         assert!(result.is_err());
 
-        // Test with invalid compressed data
-        let mut invalid_data = vec![0u8; 8]; // 8-byte size header
-        invalid_data.extend_from_slice(&[0xFF; 10]); // Invalid LZ4 data
-        invalid_data[0..8].copy_from_slice(&100u64.to_le_bytes()); // Size header
+        // Bad format byte (must be 0x01)
+        let mut bad_format = vec![0u8; 16];
+        bad_format[0] = 0x02;
+        let result = decompress_chunk(&bad_format, CompressionMode::LZ4);
+        assert!(result.is_err());
 
-        let result = decompress_chunk(&invalid_data, CompressionMode::LZ4);
+        // Block-size exponent out of range (k=10 -> 0x400 is rejected;
+        // k=17 -> 0x20000 is rejected. RE: lz4decode.cpp:0x8e)
+        for bad_k in [9u8, 10, 17] {
+            let original = b"content";
+            let mut payload =
+                compress_chunk(original, CompressionMode::LZ4).expect("compression should succeed");
+            payload[9] = bad_k;
+            let result = decompress_chunk(&payload, CompressionMode::LZ4);
+            assert!(result.is_err(), "exponent {bad_k} should be rejected");
+        }
+
+        // Corrupt block data after a valid header
+        let original = b"some compressible content repeated repeated repeated";
+        let mut payload =
+            compress_chunk(original, CompressionMode::LZ4).expect("compression should succeed");
+        let block_start = 10;
+        payload[block_start] ^= 0xFF;
+        payload[block_start + 3] ^= 0x55;
+        let result = decompress_chunk(&payload, CompressionMode::LZ4);
         assert!(result.is_err());
     }
 
@@ -262,9 +492,24 @@ mod tests {
         let mut compressed =
             compress_chunk(original, CompressionMode::LZ4).expect("Test operation should succeed");
 
-        // Corrupt the size header to indicate wrong decompressed size
-        let wrong_size = (original.len() * 2) as u64;
-        compressed[0..8].copy_from_slice(&wrong_size.to_le_bytes());
+        // Corrupt the BE32 decompressed total at header offset 5.
+        let wrong_size = (original.len() * 2) as u32;
+        compressed[5..9].copy_from_slice(&wrong_size.to_be_bytes());
+
+        let result = decompress_chunk(&compressed, CompressionMode::LZ4);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_lz4_header_compressed_total_mismatch() {
+        let original = b"Hello, world!";
+        let mut compressed =
+            compress_chunk(original, CompressionMode::LZ4).expect("Test operation should succeed");
+
+        // Claim one extra compressed byte in the header.
+        let wrong_total =
+            u32::from_be_bytes(compressed[1..5].try_into().expect("slice length")) + 1;
+        compressed[1..5].copy_from_slice(&wrong_total.to_be_bytes());
 
         let result = decompress_chunk(&compressed, CompressionMode::LZ4);
         assert!(result.is_err());
@@ -614,6 +859,74 @@ mod tests {
     }
 
     #[test]
+    fn test_frame_decompression() {
+        use crate::CascFormat;
+        use crate::blte::BlteFile;
+
+        // Create an inner BLTE file with uncompressed data
+        let inner_data = b"Hello from inside a Frame chunk!";
+        let inner_blte = BlteFile::single_chunk(inner_data.to_vec(), CompressionMode::None)
+            .expect("inner BLTE creation should succeed");
+        let inner_bytes = inner_blte.build().expect("inner BLTE build should succeed");
+
+        // Decompress as Frame codec
+        let result = decompress_chunk(&inner_bytes, CompressionMode::Frame);
+        assert!(result.is_ok(), "Frame decompression failed: {:?}", result);
+        assert_eq!(result.unwrap(), inner_data);
+    }
+
+    #[test]
+    fn test_frame_with_compressed_inner() {
+        use crate::CascFormat;
+        use crate::blte::BlteFile;
+
+        // Create inner BLTE with ZLib compression
+        let inner_data = b"ZLib-compressed data inside a Frame chunk for testing";
+        let inner_blte = BlteFile::single_chunk(inner_data.to_vec(), CompressionMode::ZLib)
+            .expect("inner BLTE creation should succeed");
+        let inner_bytes = inner_blte.build().expect("inner BLTE build should succeed");
+
+        let result = decompress_chunk(&inner_bytes, CompressionMode::Frame);
+        assert!(result.is_ok(), "Frame decompression failed: {:?}", result);
+        assert_eq!(result.unwrap(), inner_data);
+    }
+
+    #[test]
+    fn test_frame_recursion_depth_guard() {
+        use crate::CascFormat;
+        use crate::blte::BlteFile;
+        use crate::blte::chunk::ChunkData;
+
+        // Create an inner BLTE that itself has a Frame chunk (F-inside-F)
+        let leaf_data = b"leaf data";
+        let leaf_blte = BlteFile::single_chunk(leaf_data.to_vec(), CompressionMode::None)
+            .expect("leaf BLTE should succeed");
+        let leaf_bytes = leaf_blte.build().expect("leaf build should succeed");
+
+        // Build a middle BLTE with a Frame chunk containing the leaf
+        let middle_chunk =
+            ChunkData::from_compressed(CompressionMode::Frame, leaf_bytes.clone(), None);
+        let middle_blte =
+            BlteFile::multi_chunk(vec![middle_chunk]).expect("middle BLTE should succeed");
+        let middle_bytes = middle_blte.build().expect("middle build should succeed");
+
+        // Decompress the middle as a Frame — this is F(F(N)), depth 2, should fail
+        let result = decompress_chunk(&middle_bytes, CompressionMode::Frame);
+        assert!(result.is_err(), "Should reject F-inside-F");
+        assert!(
+            result.unwrap_err().to_string().contains("recursion limit"),
+            "Error should mention recursion limit"
+        );
+    }
+
+    #[test]
+    fn test_frame_compress_rejected() {
+        let data = b"Cannot produce Frame-encoded data";
+        let result = compress_chunk(data, CompressionMode::Frame);
+        assert!(result.is_err());
+    }
+
+    #[test]
     fn test_decrypt_nested_encryption_rejected() {
         let key_name = 0x1234_5678_90AB_CDEF;
         let iv = [0x11, 0x22, 0x33, 0x44];
@@ -747,7 +1060,7 @@ pub fn encrypt_chunk_with_key(
 /// Expects data without the 0x45 mode byte
 pub fn decrypt_chunk_with_keys(
     data: &[u8],
-    key_store: &TactKeyStore,
+    key_store: &dyn TactKeyProvider,
     block_index: usize,
 ) -> BlteResult<Vec<u8>> {
     if data.len() < 17 {
@@ -784,9 +1097,12 @@ pub fn decrypt_chunk_with_keys(
     offset += 8;
 
     // Look up key
-    let key = key_store.get(key_name).ok_or_else(|| {
-        BlteError::CompressionError(format!("Encryption key not found: 0x{key_name:016X}"))
-    })?;
+    let key = key_store
+        .get_key(key_name)
+        .map_err(|e| BlteError::CompressionError(format!("Key lookup failed: {e}")))?
+        .ok_or_else(|| {
+            BlteError::CompressionError(format!("Encryption key not found: 0x{key_name:016X}"))
+        })?;
 
     if data.len() < offset + 1 {
         return Err(BlteError::CompressionError(
@@ -830,7 +1146,7 @@ pub fn decrypt_chunk_with_keys(
     let decrypted_data = match encryption_type {
         0x53 => {
             // Salsa20 decryption (accepts 4 or 8 byte IV)
-            decrypt_salsa20(encrypted_data, key, iv, block_index).map_err(|e| {
+            decrypt_salsa20(encrypted_data, &key, iv, block_index).map_err(|e| {
                 BlteError::CompressionError(format!("Salsa20 decryption failed: {e}"))
             })?
         }

@@ -3,8 +3,8 @@
 
 [tools]
 # ── Toolchain ──────────────────────────────────
-rust = "1.92"
-node = "22"
+rust = "stable"
+node = "24"
 
 # ── Build tools ────────────────────────────────
 "cargo:cross" = "latest"
@@ -17,13 +17,14 @@ node = "22"
 
 # ── Linting and auditing ─────────────────────
 "cargo:cargo-deny" = "latest"
-"npm:markdownlint-cli2" = "latest"
+"npm:markdownlint-cli" = "latest"
 actionlint = "latest"
 
 # ── Documentation ─────────────────────────────
-mdbook = "latest"
+"cargo:mdbook" = "latest"
 "cargo:mdbook-mermaid" = "latest"
 
 # ── Profiling ─────────────────────────────────
 "cargo:flamegraph" = "latest"
 "cargo:inferno" = "latest"
+protobuf = "latest"

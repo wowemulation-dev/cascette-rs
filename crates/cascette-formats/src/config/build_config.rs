@@ -425,7 +425,7 @@ impl BuildConfig {
 
     /// Get build-file-db information (containerless mode)
     ///
-    /// When present, activates containerless mode in Agent.exe. The value
+    /// When present, activates containerless mode. The value
     /// references an encrypted SQLite database containing file metadata.
     pub fn build_file_db(&self) -> Option<BuildInfo> {
         let values = self.entries.get("build-file-db")?;
@@ -542,7 +542,7 @@ impl BuildConfig {
 
     /// Get no-frame-encoding flag
     ///
-    /// When set, Agent.exe uses version 3.0.0 for the encoding format.
+    /// When set, the Blizzard Agent uses version 3.0.0 for the encoding format.
     pub fn no_frame_encoding(&self) -> bool {
         self.entries
             .get("no-frame-encoding")

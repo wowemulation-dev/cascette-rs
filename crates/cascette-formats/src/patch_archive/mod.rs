@@ -100,6 +100,8 @@ mod compression;
 mod entry;
 mod error;
 mod header;
+/// Patch data location types for CDN archive resolution
+pub mod location;
 pub(crate) mod parser;
 mod utils;
 
@@ -112,6 +114,7 @@ pub use compression::{
 pub use entry::PatchEntry;
 pub use error::{PatchArchiveError, PatchArchiveResult};
 pub use header::PatchArchiveHeader;
+pub use location::PatchLocation;
 
 /// Complete Patch Archive with block-based structure
 ///
@@ -163,8 +166,8 @@ impl PatchArchive {
     /// Compute the size of the header region in bytes
     ///
     /// The header region includes the fixed header (10 bytes), optional
-    /// extended header, and block table. Agent.exe computes MD5 over this
-    /// region at `tact::PatchManifestReader::ParseHeader` (0x6a6487).
+    /// extended header, and block table. MD5 is computed over this region
+    /// for header integrity verification.
     ///
     /// Layout:
     /// - Fixed header: 10 bytes
@@ -204,9 +207,9 @@ impl PatchArchive {
 
     /// Verify the header hash against an expected content key
     ///
-    /// Agent.exe computes MD5 of the header region (fixed header + extended
-    /// header + block table) and compares it against the content key used to
-    /// fetch the file from CDN. The hash is NOT stored in the binary itself.
+    /// Computes MD5 of the header region (fixed header + extended header +
+    /// block table) and compares it against the expected content key used to
+    /// fetch the file from CDN. The hash is not stored in the file itself.
     ///
     /// # Arguments
     ///
@@ -227,9 +230,7 @@ impl PatchArchive {
         Ok(())
     }
 
-    /// Validate that blocks are sorted by CKey
-    ///
-    /// Agent.exe validates this with `_memcmp` during parsing at 0x6a6487.
+    /// Validate that blocks are sorted by CKey.
     pub fn validate_block_sort_order(&self) -> PatchArchiveResult<()> {
         for window in self.blocks.windows(2) {
             if window[0].last_file_ckey > window[1].last_file_ckey {

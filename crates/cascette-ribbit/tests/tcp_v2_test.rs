@@ -77,7 +77,7 @@ async fn start_test_server() -> (SocketAddr, Arc<AppState>) {
                 {
                     let command = command.trim();
                     if let Ok(response) =
-                        cascette_ribbit::tcp::handlers::handle_command(command, &state)
+                        cascette_ribbit::tcp::handlers::handle_command(command, &state).await
                     {
                         let socket = reader.into_inner();
                         let _ = socket.write_all(response.as_bytes()).await;
@@ -143,16 +143,16 @@ async fn test_tcp_v2_versions_command() {
     assert!(header.contains("CDNConfig!HEX:16"));
     assert!(header.contains("KeyRing!HEX:16"));
     assert!(header.contains("BuildId!DEC:4"));
-    assert!(header.contains("VersionsName!STRING:0"));
+    assert!(header.contains("VersionsName!String:0"));
 
-    // Should have 7 data rows (one per region)
+    // Should have 5 data rows (one per region)
     let data_line_count = lines
         .iter()
         .filter(|l| !l.is_empty() && !l.contains("Region!STRING") && !l.contains("seqn"))
         .count();
     assert_eq!(
-        data_line_count, 7,
-        "Should have 7 regions (us, eu, cn, kr, tw, sg, xx)"
+        data_line_count, 5,
+        "Should have 5 regions (us, eu, cn, kr, tw)"
     );
 
     // Verify regions
@@ -161,8 +161,6 @@ async fn test_tcp_v2_versions_command() {
     assert!(response.contains("cn|"));
     assert!(response.contains("kr|"));
     assert!(response.contains("tw|"));
-    assert!(response.contains("sg|"));
-    assert!(response.contains("xx|"));
 
     // Verify build data
     assert!(response.contains("0123456789abcdef0123456789abcdef"));
@@ -170,11 +168,12 @@ async fn test_tcp_v2_versions_command() {
     assert!(response.contains("42597"));
     assert!(response.contains("1.14.2.42597"));
 
-    // Last line should be sequence number
-    let last_line = lines
-        .last()
-        .expect("Response should have at least one line for sequence number");
-    assert!(last_line.starts_with("## seqn = "));
+    // Sequence number must be on line 2 (between header and data rows)
+    assert!(
+        lines[1].starts_with("## seqn = "),
+        "seqn must appear between header and data rows, got: {}",
+        lines[1]
+    );
 }
 
 #[tokio::test]
@@ -217,14 +216,39 @@ async fn test_tcp_v2_bgdl_command() {
     assert!(response.contains("Region!STRING:0"));
     assert!(response.contains("BuildConfig!HEX:16"));
 
-    // Should have 7 regions
+    // Should have 5 regions
     assert!(response.contains("us|"));
     assert!(response.contains("eu|"));
     assert!(response.contains("cn|"));
     assert!(response.contains("kr|"));
     assert!(response.contains("tw|"));
-    assert!(response.contains("sg|"));
-    assert!(response.contains("xx|"));
+}
+
+#[tokio::test]
+async fn test_tcp_v2_summary_command() {
+    let (addr, _state) = start_test_server().await;
+
+    let response = send_tcp_v2_command(addr, "v2/products/summary").await;
+
+    assert!(!response.is_empty());
+
+    let lines: Vec<&str> = response.lines().collect();
+
+    // First line should be summary header
+    let header = lines[0];
+    assert!(header.contains("Product!STRING:0"));
+    assert!(header.contains("Seqn!DEC:4"));
+    assert!(header.contains("Flags!STRING:0"));
+
+    // Sequence number between header and data rows
+    assert!(
+        lines[1].starts_with("## seqn = "),
+        "seqn must appear between header and data rows, got: {}",
+        lines[1]
+    );
+
+    // Should contain the test product
+    assert!(response.contains("wow|"));
 }
 
 #[tokio::test]

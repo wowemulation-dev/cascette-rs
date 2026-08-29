@@ -1,8 +1,7 @@
 //! Patch Index header and block descriptor types
 //!
 //! The patch index header is at the start of the file (unlike CDN archive
-//! indices which have a footer). Parsed by
-//! `tact::PatchIndexReader::ParseHeader` at 0x6a4f0b.
+//! indices which have a footer).
 
 use super::error::{PatchIndexError, PatchIndexResult};
 

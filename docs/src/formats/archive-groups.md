@@ -33,6 +33,9 @@ indices:
 archive_index = hash(encoding_key) % 65536
 ```
 
+Note: the hash function takes the first 2 bytes of `md5(encoding_key)` as a
+big-endian u16, which naturally produces values in range 0-65535.
+
 This explains why:
 
 - All archive-groups use indices 0-65535 despite only ~606 CDN archives existing

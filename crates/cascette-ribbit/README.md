@@ -2,30 +2,82 @@
 
 Ribbit protocol server for NGDP/CASC installations.
 
-## Protocols
+Implements all protocol variants used by the Blizzard Agent and game
+clients, plus community extensions for versioned (historical) builds.
 
-### HTTP/HTTPS (TACT v2)
+## Endpoint Reference
 
-- `GET /{product}/versions` - Version information
-- `GET /{product}/cdns` - CDN configuration
-- `GET /{product}/bgdl` - Background download information
+### TCP Ribbit (port 1119)
 
-### TCP (Ribbit v1)
+Line-based protocol. The client sends a command string terminated by
+`\r\n` or `\n`; the server responds with BPSV (v2) or MIME-wrapped
+BPSV (v1).
 
-MIME-wrapped responses with SHA-256 checksums:
+#### v1 -- MIME-wrapped with SHA-256 checksum
 
-- `v1/products/{product}/versions`
-- `v1/products/{product}/cdns`
-- `v1/products/{product}/bgdl`
-- `v1/summary` - List all products
+| Command | Status |
+|---------|--------|
+| `v1/products/{product}/versions` | implemented |
+| `v1/products/{product}/cdns` | implemented |
+| `v1/products/{product}/bgdl` | implemented |
+| `v1/summary` | implemented |
 
-### TCP (Ribbit v2)
+#### v2 -- raw BPSV
 
-Raw BPSV responses:
+| Command | Status |
+|---------|--------|
+| `v2/products/{product}/versions` | implemented |
+| `v2/products/{product}/cdns` | implemented |
+| `v2/products/{product}/bgdl` | implemented |
+| `v2/products/summary` | implemented |
 
-- `v2/products/{product}/versions`
-- `v2/products/{product}/cdns`
-- `v2/products/{product}/bgdl`
+### HTTP v1 (legacy path format)
+
+Used by older game clients (pre-1.15.8) after binary patching. The
+Blizzard Agent also uses this format on port 1119 over plain HTTP.
+
+Blizzard URL pattern: `http://{region}.patch.battle.net:1119/{product}/{endpoint}`
+
+| Route | Status |
+|-------|--------|
+| `GET /{product}/versions` | implemented |
+| `GET /{product}/cdns` | implemented |
+| `GET /{product}/bgdl` | implemented |
+
+### HTTPS v2 (modern path format)
+
+Used by newer game clients and community tools.
+
+Blizzard URL pattern: `https://{region}.version.battle.net/v2/products/{product}/{endpoint}`
+
+| Route | Status |
+|-------|--------|
+| `GET /v2/products/{product}/versions` | implemented |
+| `GET /v2/products/{product}/cdns` | implemented |
+| `GET /v2/products/{product}/bgdl` | implemented |
+| `GET /v2/products/summary` | implemented |
+
+### Versioned API (community extension)
+
+Returns metadata for a specific historical build instead of the latest.
+This allows patched clients running older versions to receive matching
+build/CDN configs without being told to update.
+
+| Route | Status |
+|-------|--------|
+| `GET /v2/products/{product}/versions/{build}` | implemented |
+| `GET /v2/products/{product}/cdns/{build}` | implemented |
+| `GET /v2/products/{product}/bgdl/{build}` | implemented |
+| `GET /{product}/versions/{build}` | implemented |
+| `GET /{product}/cdns/{build}` | implemented |
+| `GET /{product}/bgdl/{build}` | implemented |
+
+### Web UI (dashboard)
+
+| Route | Status |
+|-------|--------|
+| `GET /` | implemented |
+| `GET /{product}/builds` | implemented |
 
 ## Usage
 
@@ -50,8 +102,8 @@ async fn main() -> anyhow::Result<()> {
 
 Configuration via CLI arguments or environment variables:
 
-- `--http-bind` / `CASCETTE_RIBBIT_HTTP_BIND` (default: `0.0.0.0:8080`)
-- `--tcp-bind` / `CASCETTE_RIBBIT_TCP_BIND` (default: `0.0.0.0:1119`)
+- `--http-bind` / `CASCETTE_RIBBIT_HTTP_BIND` (default: `127.0.0.1:8080`)
+- `--tcp-bind` / `CASCETTE_RIBBIT_TCP_BIND` (default: `127.0.0.1:1119`)
 - `--builds` / `CASCETTE_RIBBIT_BUILDS` (default: `./builds.json`)
 - `--cdn-hosts` / `CASCETTE_RIBBIT_CDN_HOSTS` (default: `cdn.arctium.tools`)
 - `--cdn-path` / `CASCETTE_RIBBIT_CDN_PATH` (default: `tpr/wow`)

@@ -108,9 +108,9 @@ impl Default for CacheConfig {
             disk_max_size_bytes: 8 * 1024 * 1024 * 1024, // 8GB disk cache
             disk_max_file_size: 100 * 1024 * 1024,       // 100MB max file size
             // Protocol-specific TTLs
-            ribbit_ttl: Duration::from_secs(300), // 5 minutes for version info
-            cdn_ttl: Duration::from_secs(3600),   // 1 hour for CDN content
-            config_ttl: Duration::from_secs(1800), // 30 minutes for config files
+            ribbit_ttl: Duration::from_mins(5), // 5 minutes for version info
+            cdn_ttl: Duration::from_hours(1),   // 1 hour for CDN content
+            config_ttl: Duration::from_mins(30), // 30 minutes for config files
         }
     }
 }
@@ -165,9 +165,9 @@ impl CacheConfig {
             memory_max_size_bytes: 1024 * 1024 * 1024, // 1GB memory cache
             disk_max_size_bytes: 32 * 1024 * 1024 * 1024, // 32GB disk cache
             disk_max_file_size: 500 * 1024 * 1024,     // 500MB max file size
-            ribbit_ttl: Duration::from_secs(180),      // 3 minutes for faster updates
-            cdn_ttl: Duration::from_secs(7200),        // 2 hours for CDN content
-            config_ttl: Duration::from_secs(900),      // 15 minutes for config files
+            ribbit_ttl: Duration::from_mins(3),        // 3 minutes for faster updates
+            cdn_ttl: Duration::from_hours(2),          // 2 hours for CDN content
+            config_ttl: Duration::from_mins(15),       // 15 minutes for config files
         }
     }
 
@@ -179,9 +179,9 @@ impl CacheConfig {
             memory_max_size_bytes: 32 * 1024 * 1024, // 32MB memory cache
             disk_max_size_bytes: 1024 * 1024 * 1024, // 1GB disk cache
             disk_max_file_size: 10 * 1024 * 1024,    // 10MB max file size
-            ribbit_ttl: Duration::from_secs(600),    // 10 minutes
-            cdn_ttl: Duration::from_secs(3600),      // 1 hour
-            config_ttl: Duration::from_secs(1800),   // 30 minutes
+            ribbit_ttl: Duration::from_mins(10),     // 10 minutes
+            cdn_ttl: Duration::from_hours(1),        // 1 hour
+            config_ttl: Duration::from_mins(30),     // 30 minutes
         }
     }
 }

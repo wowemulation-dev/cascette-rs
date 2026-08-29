@@ -1,4 +1,4 @@
-# BLTE (Block Table Encoded) Format
+# BLTE (Block Table Encoding) Format
 
 BLTE is NGDP's container format for compressed and optionally encrypted content.
 It provides block-based compression, encryption support, and efficient streaming
@@ -156,7 +156,7 @@ Standard zlib compression:
 [0x5A] [2-byte zlib header] [deflate stream...]
 ```
 
-**Important**: Most implementations skip the zlib header and use raw deflate.
+**Note**: flate2's `ZlibDecoder` handles the zlib header internally. No manual header skipping is needed.
 
 ### LZ4 (0x34)
 
@@ -174,12 +174,11 @@ LZ4HC (high compression) format:
 
 **Format discrepancy**: The WoWDev wiki describes a different LZ4 format with
 `headerVersion` (1 byte), 64-bit big-endian size, `blockShift` (1 byte, range
-5-16), and multiple sub-blocks of `1 << blockShift` bytes each. Agent.exe
-3.13.3 uses the 8-byte LE prefix + single block format documented above.
-`tact::Codec::DecodeLZ4` at 0x6f5fdb is a stub in Agent.exe 3.13.3 (returns
-error 5), so the LZ4 format cannot be fully verified from this binary version.
-cascette-rs matches the Agent.exe format. The wiki format may apply to a newer
-protocol version or a different product.
+5-16), and multiple sub-blocks of `1 << blockShift` bytes each. The Blizzard
+agent uses the 8-byte LE prefix + single block format documented above, and
+its LZ4 decoder is a stub returning error 5 (not implemented in that version).
+cascette-rs matches the observed wire format. The wiki format may apply to a
+newer protocol version or a different product.
 
 ## Encryption Format
 
@@ -302,10 +301,8 @@ fn decompress_chunk(data: &[u8]) -> Result<Vec<u8>> {
             Ok(data[1..].to_vec())
         },
         0x5A => {
-            // ZLib - decompress using deflate
-            // Skip: [0x5A] [78 9C] (zlib header)
-            let deflate_data = &data[3..];
-            decompress_deflate(deflate_data)
+            // ZLib - pass full data to zlib decoder (handles header internally)
+            decompress_zlib(&data[1..])
         },
         0x34 => {
             // LZ4 - high compression
@@ -413,7 +410,7 @@ downloads, allowing streaming installation of large files.
 Critical checks:
 
 1. Verify BLTE magic number
-2. Validate flags == 0x0F for extended headers
+2. Validate flags == 0x0F (standard) or 0x10 (extended with dual checksums)
 3. Check chunk count > 0 when header_size > 0
 4. MD5 checksums are available via `verify_checksum()` on each chunk (not
    verified automatically during parsing)
@@ -492,18 +489,6 @@ BLTE parser and builder:
 
 - Both standard (0x0F) and extended (0x10) chunk formats supported
 
-### Python Tools (cascette-py)
-
-Analysis and decompression tool supports:
-
-- None (N), ZLib (Z), Frame (F) modes
-
-- LZ4 (4) - Analysis only, decompression requires Rust implementation
-
-- Encrypted (E) - Detection and metadata extraction
-
-See <https://github.com/wowemulation-dev/cascette-py> for the Python
-implementation.
 ## References
 
 - [wowdev.wiki BLTE documentation](https://wowdev.wiki/CASC#BLTE)

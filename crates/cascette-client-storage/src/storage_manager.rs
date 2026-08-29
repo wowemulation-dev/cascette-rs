@@ -98,7 +98,6 @@ impl Storage {
         use crate::{DATA_DIR, ECACHE_DIR, HARDLINK_DIR, INDICES_DIR, RESIDENCY_DIR};
 
         // CASC creates five subdirectories under the storage root.
-        // tact::BuildRepairState::RepairContainers.
         let required_dirs = [
             ("data", DATA_DIR),
             ("indices", INDICES_DIR),

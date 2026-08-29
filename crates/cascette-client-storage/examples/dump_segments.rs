@@ -72,7 +72,7 @@ fn main() {
             println!(
                 "  bucket={bucket:>2} EKey={} size_hdr={:>8} flags=0x{:04x} ckA=0x{:08x} ckB=0x{:08x}",
                 common::hex_str(&ekey),
-                lh.size_with_header,
+                lh.encoded_size,
                 lh.flags,
                 lh.checksum_a,
                 lh.checksum_b,

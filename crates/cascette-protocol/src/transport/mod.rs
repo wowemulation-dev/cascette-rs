@@ -59,21 +59,24 @@ impl HttpClient {
             .pool_idle_timeout(Duration::from_secs(30)) // Shorter timeout for protocol requests
             .pool_max_idle_per_host(10) // Moderate pooling to reduce memory usage
             // Timeouts optimized for NGDP response patterns
-            .timeout(Duration::from_secs(45)) // Reasonable timeout for Ribbit/CDN
+            .timeout(Duration::from_secs(45)) // Per-request timeout; failover handles stalled hosts
             .connect_timeout(Duration::from_secs(10)) // Fast connect timeout
             // Network optimizations
             .tcp_nodelay(true) // Disable Nagle for low-latency
-            .tcp_keepalive(Duration::from_secs(60)) // Keep connections alive
+            .tcp_keepalive(Duration::from_mins(1)) // Keep connections alive
             // TLS - use rustls for security and WASM compatibility
             .use_rustls_tls()
             .https_only(false) // Allow HTTP for some NGDP endpoints
-            // HTTP/2 optimization - don't assume prior knowledge
-            .http2_adaptive_window(true) // Adaptive HTTP/2 flow control
+            // HTTP/1.1 only — matches Blizzard Agent behavior. HTTP/2 multiplexes
+            // requests over a single TCP connection; when Cloudflare CDN drops
+            // that connection, all in-flight requests fail simultaneously,
+            // defeating multi-host failover.
+            .http1_only()
             // Compression - enable for protocol responses
             .gzip(true)
             .brotli(true)
             .deflate(true)
-            // Redirect handling for CDN (5 matches Agent.exe)
+            // Redirect handling for CDN (5 matches the Blizzard Agent)
             .redirect(reqwest::redirect::Policy::limited(5))
             // User agent for NGDP traffic
             .user_agent("cascette-protocol/0.1.0")
@@ -116,12 +119,12 @@ impl HttpClient {
         // TLS - always use rustls for security and WASM compatibility
         builder = builder.use_rustls_tls();
 
-        // HTTP/2 configuration
-        if config.http2_prior_knowledge {
-            builder = builder.http2_prior_knowledge();
-        } else {
-            builder = builder.http2_adaptive_window(true);
-        }
+        // HTTP version configuration
+        builder = match config.http_version {
+            HttpVersion::Http1Only => builder.http1_only(),
+            HttpVersion::Http2 => builder.http2_adaptive_window(true),
+            HttpVersion::Http2PriorKnowledge => builder.http2_prior_knowledge(),
+        };
 
         // Compression configuration
         if config.enable_compression {
@@ -176,29 +179,46 @@ impl Default for HttpClient {
     }
 }
 
+/// HTTP version negotiation policy.
+///
+/// Default is `Http1Only` to match Blizzard Agent behavior and avoid HTTP/2
+/// stream reset issues when CDN hosts share a Cloudflare edge (HTTP/2
+/// multiplexes all requests over a single TCP connection; a connection drop
+/// fails all hosts).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum HttpVersion {
+    /// HTTP/1.1 only. Matches Blizzard Agent behavior.
+    #[default]
+    Http1Only,
+    /// HTTP/2 with ALPN negotiation (adaptive window sizing).
+    Http2,
+    /// HTTP/2 with prior knowledge (skip ALPN, faster but less compatible).
+    Http2PriorKnowledge,
+}
+
 /// HTTP client configuration with performance tuning options.
 ///
 /// Note: On WASM, many of these options are ignored as they're not supported
 /// by the browser's Fetch API. The configuration is kept consistent across
 /// platforms for API compatibility.
 ///
-/// Differences from Agent.exe defaults are intentional unless noted:
-/// - Agent uses 60s connect timeout; we use 10s (more appropriate for a library)
-/// - Agent limits to 3 connections per host; we use 10 (higher throughput)
-/// - Agent forces HTTP/1.1; we enable HTTP/2 with adaptive window sizing
-/// - Agent uses 256KB receive buffer; we use OS defaults
+/// Differences from Blizzard Agent defaults are intentional unless noted:
+/// - The Agent uses 60s connect timeout; we use 10s (more appropriate for a library)
+/// - The Agent limits to 3 connections per host; we use 10 (higher throughput)
+/// - The Agent forces HTTP/1.1; we default to HTTP/1.1 too (HTTP/2 opt-in)
+/// - The Agent uses 256KB receive buffer; we use OS defaults
 ///
-/// # Known limitations vs Agent.exe
+/// # Known limitations vs the Blizzard Agent
 ///
-/// The following Agent.exe parameters are not configurable through reqwest:
+/// The following Blizzard Agent parameters are not configurable through reqwest:
 ///
-/// - **Low speed limit** (Agent: 100 bps / 60s) — reqwest has no stall
+/// - **Low speed limit** (100 bps / 60s) — reqwest has no stall
 ///   detection. Would need application-layer throughput monitoring.
-/// - **Receive buffer** (Agent: 256KB `SO_RCVBUF`) — reqwest does not
+/// - **Receive buffer** (256KB `SO_RCVBUF`) — reqwest does not
 ///   expose socket options. OS default applies.
-/// - **DNS cache TTL** (Agent: 300s) — reqwest uses the system resolver.
+/// - **DNS cache TTL** (300s) — reqwest uses the system resolver.
 ///   Custom TTL requires a custom resolver.
-/// - **Total connection pool cap** (Agent: 12 total) — reqwest only
+/// - **Total connection pool cap** (12 total) — reqwest only
 ///   exposes per-host idle limits, not total active connections.
 #[derive(Debug, Clone)]
 pub struct HttpConfig {
@@ -207,7 +227,7 @@ pub struct HttpConfig {
     pub pool_idle_timeout: Duration,
 
     /// Maximum idle connections per host.
-    /// Agent.exe uses 3; we default to 10 for higher throughput.
+    /// The Blizzard Agent uses 3; we default to 10 for higher throughput.
     /// (ignored on WASM - browser manages connections)
     pub pool_max_idle_per_host: usize,
 
@@ -216,7 +236,7 @@ pub struct HttpConfig {
     pub timeout: Duration,
 
     /// Connection timeout.
-    /// Agent.exe uses 60s; we default to 10s for faster failure detection.
+    /// The Blizzard Agent uses 60s; we default to 10s for faster failure detection.
     /// (ignored on WASM - browser manages connections)
     pub connect_timeout: Duration,
 
@@ -228,17 +248,17 @@ pub struct HttpConfig {
     /// (ignored on WASM - no TCP access)
     pub tcp_keepalive: Option<Duration>,
 
-    /// Use HTTP/2 prior knowledge (faster but less compatible).
-    /// Agent.exe forces HTTP/1.1; we use HTTP/2 adaptive by default.
+    /// HTTP version policy. Default is `Http1Only` to match the Blizzard Agent
+    /// and avoid HTTP/2 stream reset issues with Cloudflare CDN redirects.
     /// (ignored on WASM - browser negotiates protocol)
-    pub http2_prior_knowledge: bool,
+    pub http_version: HttpVersion,
 
     /// Enable compression (gzip, brotli, deflate).
     /// (supported on WASM)
     pub enable_compression: bool,
 
     /// Maximum number of HTTP redirects to follow.
-    /// Default: 5 (matches Agent.exe).
+    /// Default: 5 (matches the Blizzard Agent).
     /// (ignored on WASM - browser manages redirects)
     pub max_redirects: usize,
 }
@@ -251,10 +271,10 @@ impl Default for HttpConfig {
             timeout: Duration::from_secs(45),
             connect_timeout: Duration::from_secs(10),
             tcp_nodelay: true,
-            tcp_keepalive: Some(Duration::from_secs(60)),
-            http2_prior_knowledge: false, // More compatible default
-            enable_compression: true,     // Compress protocol responses
-            max_redirects: 5,             // Matches Agent.exe default
+            tcp_keepalive: Some(Duration::from_mins(1)),
+            http_version: HttpVersion::Http1Only,
+            enable_compression: true, // Compress protocol responses
+            max_redirects: 5,         // Matches the Blizzard Agent default
         }
     }
 }
@@ -263,13 +283,13 @@ impl HttpConfig {
     /// Configuration optimized for high-throughput NGDP workloads
     pub fn high_performance() -> Self {
         Self {
-            pool_idle_timeout: Duration::from_secs(60),
+            pool_idle_timeout: Duration::from_mins(1),
             pool_max_idle_per_host: 50, // More connections for throughput
-            timeout: Duration::from_secs(120),
+            timeout: Duration::from_mins(2),
             connect_timeout: Duration::from_secs(5), // Fast connect for high perf
             tcp_nodelay: true,
             tcp_keepalive: Some(Duration::from_secs(30)),
-            http2_prior_knowledge: true, // Assume HTTP/2 support
+            http_version: HttpVersion::Http2PriorKnowledge,
             enable_compression: true,
             max_redirects: 5,
         }
@@ -284,7 +304,7 @@ impl HttpConfig {
             connect_timeout: Duration::from_secs(10),
             tcp_nodelay: false,  // Allow Nagle to batch small requests
             tcp_keepalive: None, // No keep-alive to save memory
-            http2_prior_knowledge: false,
+            http_version: HttpVersion::Http1Only,
             enable_compression: false, // Disable compression to save CPU/memory
             max_redirects: 5,
         }

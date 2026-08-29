@@ -10,7 +10,7 @@ and local storage (CASC).
 
 The archive system provides:
 
-- Bulk storage of game assets in `.archive` files
+- Bulk storage of game assets in archive files
 
 - Index files for fast content location
 
@@ -174,8 +174,6 @@ struct ArchiveIndexFooter {  // 28 bytes total
 
 - Page/chunk size consistently 4096 bytes
 
-- Item length consistently 24 bytes (0x18)
-
 - Archive filename = MD5 hash of the footer
 
 - Footer validation uses MD5 hashing (first 8 bytes of hash)
@@ -247,7 +245,7 @@ https://cdn.domain.com/tpr/wow/data/{hash[:2]}/{hash[2:4]}/{hash}.index
 2. Append '.index' to form index URL
 3. Fetch and parse index file
 4. Search entries for target EKey
-5. Use offset/size to retrieve from corresponding .archive file
+5. Use offset/size to retrieve from corresponding archive file
 
 **Self-Referential Naming**:
 
@@ -261,7 +259,7 @@ providing a unique identifier that validates the index contents.
 **Purpose**: Maps content keys to local data file locations using bucket algorithm
 **Key Type**: Content keys (MD5 hashes from Root file)
 **Key Length**: ALWAYS 9 bytes (truncated for space efficiency in local storage)
-**Implementation**: `cascette-client-storage/src/index.rs`
+**Implementation**: `cascette-client-storage`
 
 See the [comparison table](#key-differences-between-index-systems) at the end
 of this document for a full side-by-side comparison.
@@ -299,23 +297,17 @@ struct IDXJournalHeader {  // 18 bytes + block table
 
 - One journal file per bucket
 
-## Loose Files Index
+## Loose Files
 
-For files not in archives:
+Files not stored in archives are kept as individual files on disk using a
+two-level directory structure derived from the encoding key hex:
 
-```c
-struct LooseFilesIndex {
-    uint32_t magic;              // 'LIDX'
-    uint32_t version;
-    uint32_t entry_count;
-
-    struct Entry {
-        uint8_t  encoding_key[16];
-        uint32_t file_size;
-        uint8_t  file_hash[16];  // For verification
-    } entries[];
-};
+```text
+{root}/{ekey_hex[0..2]}/{ekey_hex[2..4]}/{ekey_hex}
 ```
+
+There is no structured index for loose files. The file system directory
+structure itself serves as the lookup mechanism.
 
 ## Archive Lookup Process
 
@@ -461,10 +453,10 @@ data/
 ├── config/           # Configuration files
 ├── data/            # Archive files
 │   ├── 00/
-│   │   ├── 00/{hash}.archive
+│   │   ├── 00/{hash}
 │   │   └── ...
 │   └── ff/
-│       └── ff/{hash}.archive
+│       └── ff/{hash}
 ├── indices/         # Index files
 │   ├── {hash}.index
 │   └── ...
@@ -540,6 +532,7 @@ validates version equals 7 and warns on unexpected versions.
 | Entry Size | Variable (24 typical) | Fixed 18 bytes |
 | Location | CDN download | Client Data/ directory |
 | Crate | cascette-formats | cascette-client-storage |
+
 ## References
 
 - See [Encoding Documentation](encoding.md) for key lookup

@@ -56,6 +56,7 @@ pub mod http;
 pub mod responses;
 pub mod server;
 pub mod tcp;
+pub mod watch;
 
 // Re-exports for public API
 pub use config::{CdnConfig, ServerConfig};

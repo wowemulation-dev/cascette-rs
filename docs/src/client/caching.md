@@ -46,7 +46,7 @@ The crate provides specialized caches for NGDP content types:
 
 Caches the NGDP resolution chain:
 
-```
+```text
 Root File → Content Key
 Content Key → Encoding Key
 Encoding Key → CDN Location
@@ -89,6 +89,7 @@ classes optimized for these patterns:
 | Huge | > 8 MB | Large archives, cinematics |
 
 Benefits:
+
 - Reduced allocation overhead
 - Better memory locality
 - Thread-local pools for zero-contention
@@ -194,6 +195,7 @@ sequenceDiagram
 ```
 
 Features:
+
 - Automatic CDN fallback on cache miss
 - Retry logic with exponential backoff
 - Multiple CDN endpoint failover
@@ -212,6 +214,7 @@ StreamingConfig {
 ```
 
 Streaming enables:
+
 - Processing files larger than available memory
 - Progressive validation during download
 - Early error detection

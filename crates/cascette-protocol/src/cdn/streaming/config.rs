@@ -13,19 +13,19 @@ use super::{bootstrap::CdnBootstrap, http::CdnServer};
 /// network timeouts, buffer sizes, connection pooling, and retry behavior.
 /// Default values are tuned for typical CDN usage patterns.
 ///
-/// # Known limitations vs Agent.exe
+/// # Known limitations vs the Blizzard Agent
 ///
-/// The following Agent.exe connection parameters are not configurable
+/// The following Blizzard Agent connection parameters are not configurable
 /// through reqwest and are documented here for reference:
 ///
-/// - **Low speed limit** (Agent: 100 bps / 60s) — reqwest does not expose
+/// - **Low speed limit** (100 bps / 60s) — reqwest does not expose
 ///   a stall detection equivalent. Application-layer stall detection would
 ///   need to track throughput during stream consumption.
-/// - **Receive buffer** (Agent: 256KB `SO_RCVBUF`) — reqwest does not
+/// - **Receive buffer** (256KB `SO_RCVBUF`) — reqwest does not
 ///   expose socket options. The OS default applies.
-/// - **DNS cache TTL** (Agent: 300s) — reqwest uses the system resolver.
+/// - **DNS cache TTL** (300s) — reqwest uses the system resolver.
 ///   A custom TTL would require a custom DNS resolver implementation.
-/// - **Total connection pool cap** (Agent: 12) — reqwest only exposes
+/// - **Total connection pool cap** (12) — reqwest only exposes
 ///   per-host idle connection limits, not a total active connection cap.
 #[derive(Debug, Clone)]
 pub struct StreamingConfig {
@@ -80,7 +80,7 @@ pub struct StreamingConfig {
     pub max_ranges_per_request: usize,
 
     /// Maximum number of HTTP redirects to follow.
-    /// Default: 5 (matches Agent.exe and the non-streaming client).
+    /// Default: 5 (matches the Blizzard Agent and the non-streaming client).
     pub max_redirects: usize,
 
     /// Retry configuration

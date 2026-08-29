@@ -205,6 +205,21 @@ pub enum InstallAction {
         /// Registry configuration
         add_remove_programs_key: AddRemoveProgramsConfig,
     },
+    /// Delete folder action (uninstall)
+    DeleteFolder {
+        /// Folder deletion configuration
+        delete_folder: DeleteFolderConfig,
+    },
+    /// Delete file action (uninstall)
+    DeleteFile {
+        /// File deletion configuration
+        delete_file: DeleteFileConfig,
+    },
+    /// Delete registry key list (install/uninstall cleanup)
+    DeleteRegistryKeyList {
+        /// Registry key deletion configuration
+        delete_registry_key_list: DeleteRegistryKeyListConfig,
+    },
 }
 
 /// Shortcut configuration
@@ -227,8 +242,14 @@ pub struct ShortcutConfig {
 /// Add/Remove Programs configuration
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AddRemoveProgramsConfig {
+    /// Support contact name
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub contact: Option<String>,
     /// Display name in Add/Remove Programs
     pub display_name: String,
+    /// Help/support URL
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub helplink: Option<String>,
     /// Icon path
     pub icon_path: String,
     /// Install path
@@ -241,6 +262,37 @@ pub struct AddRemoveProgramsConfig {
     pub uid: String,
     /// Uninstall path
     pub uninstall_path: String,
+}
+
+/// Delete folder configuration
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DeleteFolderConfig {
+    /// Paths relative to root to delete
+    pub relative_paths: Vec<String>,
+    /// Root path variable (e.g. "%titlepath%", "%game%")
+    pub root: String,
+}
+
+/// Delete file configuration
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DeleteFileConfig {
+    /// Paths relative to root to delete
+    pub relative_paths: Vec<String>,
+    /// Root path variable (e.g. "%game%")
+    pub root: String,
+}
+
+/// Delete registry key list configuration
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DeleteRegistryKeyListConfig {
+    /// Registry flags ("WOW_32BIT", "WOW_BOTH")
+    pub flags: String,
+    /// Registry key type ("HKEY_LOCAL_MACHINE")
+    pub key_type: String,
+    /// Root registry path
+    pub root: String,
+    /// Subkeys to delete
+    pub subkeys: Vec<String>,
 }
 
 /// Platform-specific configurations

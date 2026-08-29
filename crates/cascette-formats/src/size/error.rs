@@ -9,7 +9,7 @@ pub enum SizeError {
     #[error("Invalid magic: expected 'DS', got {0:?}")]
     InvalidMagic([u8; 2]),
 
-    /// Unsupported format version (must be non-zero and <= 2)
+    /// Unsupported format version
     #[error("Unsupported version: {0}")]
     UnsupportedVersion(u8),
 
@@ -22,12 +22,8 @@ pub enum SizeError {
         actual: usize,
     },
 
-    /// Invalid esize byte width in V1 header (must be 1-8)
-    #[error("Invalid eSize byte count '{0}' in size manifest header")]
-    InvalidEsizeWidth(u8),
-
-    /// Invalid EKey size (must be 1-16)
-    #[error("Invalid ekey_size: must be 1-16, got {0}")]
+    /// Invalid ekey_size value (must be 1–16)
+    #[error("Invalid ekey_size {0}: must be 1–16")]
     InvalidEKeySize(u8),
 
     /// Entry count mismatch between header and parsed entries
@@ -57,17 +53,13 @@ pub enum SizeError {
         actual: u64,
     },
 
-    /// Binary read/write error
-    #[error("Binary parsing error: {0}")]
-    BinRead(String),
-
-    /// Binary write error
-    #[error("Binary write error: {0}")]
-    BinWrite(String),
-
     /// IO error during parsing or building
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
+
+    /// Binary read/write error (from binrw shim)
+    #[error("Binary parsing error: {0}")]
+    BinRead(String),
 }
 
 impl From<binrw::Error> for SizeError {
@@ -93,13 +85,10 @@ mod tests {
         assert!(err.to_string().contains('3'));
 
         let err = SizeError::TruncatedData {
-            expected: 19,
+            expected: 15,
             actual: 5,
         };
-        assert!(err.to_string().contains("19"));
-
-        let err = SizeError::InvalidEsizeWidth(0);
-        assert!(err.to_string().contains('0'));
+        assert!(err.to_string().contains("15"));
 
         let err = SizeError::InvalidEKeySize(0);
         assert!(err.to_string().contains('0'));

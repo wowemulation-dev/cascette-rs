@@ -392,58 +392,6 @@ struct DifferentialDownload {
 }
 ```
 
-### Peer-to-Peer Support
-
-Share downloaded content locally:
-
-```rust
-struct P2PManager {
-    local_peers: Vec<PeerInfo>,
-    shared_files: HashSet<[u8; 16]>,
-}
-```
-
-## Parser Implementation Status
-
-### Python Parser (cascette-py)
-
-**Status**: Complete
-
-**Capabilities**:
-
-- Version 1-3 header parsing with DL magic detection
-
-- 40-bit big-endian compressed size parsing
-
-- Priority system with base priority adjustment (v3)
-
-- Tag parsing with bitmap support (tags stored after all entries)
-
-- Platform/architecture tag identification with type classification
-
-- Sample entry display (first 100 entries)
-
-- Format evolution tracking across versions
-
-- BLTE decompression for compressed manifests
-
-- Correct entry/tag ordering (entries first, then tags)
-
-**Verified Against**:
-
-- WoW 11.0.5.57689 (2.4M entries, 28 tags)
-
-- WoW 9.0.2.37176 (Shadowlands)
-
-- WoW 7.3.5.25848 (Legion)
-
-- WoW Classic builds
-
-**Known Issues**: None
-
-See <https://github.com/wowemulation-dev/cascette-py> for the Python
-implementation.
-
 ## Version History
 
 The Download manifest format has evolved through 3 versions:

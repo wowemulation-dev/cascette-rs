@@ -84,7 +84,7 @@ impl CdnClient {
     }
 
     /// Fetch content by key
-    #[allow(clippy::unused_async)] // Keep async for consistent public API
+    #[allow(clippy::unused_async, clippy::unused_async_trait_impl)] // Keep async for consistent public API
     pub async fn fetch_content(&self, content_key: ContentKey) -> NgdpCacheResult<Bytes> {
         let hex_key = hex::encode(content_key.to_string());
         let path = format!("data/{}/{}/{}", &hex_key[0..2], &hex_key[2..4], hex_key);
@@ -93,7 +93,7 @@ impl CdnClient {
     }
 
     /// Fetch encoding file
-    #[allow(clippy::unused_async)] // Keep async for consistent public API
+    #[allow(clippy::unused_async, clippy::unused_async_trait_impl)] // Keep async for consistent public API
     pub async fn fetch_encoding(&self, encoding_key: EncodingKey) -> NgdpCacheResult<Bytes> {
         let hex_key = hex::encode(encoding_key.to_string());
         let path = format!("data/{}/{}/{}", &hex_key[0..2], &hex_key[2..4], hex_key);
@@ -102,7 +102,7 @@ impl CdnClient {
     }
 
     /// Fetch config file
-    #[allow(clippy::unused_async)] // Keep async for consistent public API
+    #[allow(clippy::unused_async, clippy::unused_async_trait_impl)] // Keep async for consistent public API
     pub async fn fetch_config(&self, config_hash: &str) -> NgdpCacheResult<Bytes> {
         let path = format!(
             "config/{}/{}/{}",
@@ -114,7 +114,7 @@ impl CdnClient {
     }
 
     /// Fetch archive with range request
-    #[allow(clippy::unused_async)] // Keep async for consistent public API
+    #[allow(clippy::unused_async, clippy::unused_async_trait_impl)] // Keep async for consistent public API
     pub async fn fetch_archive_range(
         &self,
         archive_name: &str,

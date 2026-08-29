@@ -16,7 +16,7 @@ Working implementation of all 14 NGDP/CASC formats.
 ## Supported Formats
 
 - `archive` - CDN archive indices for content location
-- `blte` - Block Table Encoded compression and encryption
+- `blte` - Block Table Encoding compression and encryption
 - `bpsv` - Blizzard Pipe-Separated Values format
 - `cdn` - CDN-specific configuration formats
 - `config` - Build, CDN, product, and patch configurations

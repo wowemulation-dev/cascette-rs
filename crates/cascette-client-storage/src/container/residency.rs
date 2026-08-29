@@ -26,11 +26,6 @@ const RESIDENCY_TOKEN: &str = ".residency";
 
 /// Residency container for file-level download tracking.
 ///
-/// Configuration from `tact_ResidencyContainer` (0x30 = 48 bytes):
-/// - offset 0x0c: product_name
-/// - offset 0x28: residency_db (casc::Residency object)
-/// - offset 0x2c: read_only flag
-///
 /// Tracks which encoding keys are fully resident (downloaded).
 /// Partial downloads are tracked via byte spans using
 /// `mark_span_non_resident`.
@@ -141,8 +136,7 @@ impl ResidencyContainer {
 
     /// Mark a key as fully resident (downloaded).
     ///
-    /// CASC calls `casc::Residency::UpdateResidency` which
-    /// updates the KMT V8 entry with update type Set(1).
+    /// Updates the KMT V8 entry with update type Set(1).
     pub fn mark_resident(&self, key: &[u8; 16]) -> Result<()> {
         if self.read_only {
             return Err(StorageError::AccessDenied(
@@ -197,7 +191,7 @@ impl ResidencyContainer {
     ///
     /// Pass 1: count entries across all 16 buckets.
     /// Pass 2: populate the output vector.
-    /// Matches Agent.exe's `casc::Residency::OpenScanner` behavior.
+    /// Uses a two-pass scanning approach for collecting resident keys.
     pub fn scan_keys(&self) -> Vec<[u8; 16]> {
         self.db.read().scan_keys()
     }
@@ -230,6 +224,7 @@ impl ResidencyContainer {
 }
 
 impl Container for ResidencyContainer {
+    #[allow(clippy::unused_async_trait_impl)]
     async fn reserve(&self, key: &[u8; 16]) -> Result<()> {
         if self.read_only {
             return Err(StorageError::AccessDenied(
@@ -242,6 +237,7 @@ impl Container for ResidencyContainer {
         Ok(())
     }
 
+    #[allow(clippy::unused_async_trait_impl)]
     async fn read(
         &self,
         _key: &[u8; 16],
@@ -255,6 +251,7 @@ impl Container for ResidencyContainer {
         ))
     }
 
+    #[allow(clippy::unused_async_trait_impl)]
     async fn write(&self, _key: &[u8; 16], _data: &[u8]) -> Result<()> {
         // Residency container does not store file data
         Err(StorageError::InvalidFormat(
@@ -262,10 +259,12 @@ impl Container for ResidencyContainer {
         ))
     }
 
+    #[allow(clippy::unused_async_trait_impl)]
     async fn remove(&self, key: &[u8; 16]) -> Result<()> {
         self.mark_non_resident(key)
     }
 
+    #[allow(clippy::unused_async_trait_impl)]
     async fn query(&self, key: &[u8; 16]) -> Result<bool> {
         Ok(self.is_resident(key))
     }

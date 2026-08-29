@@ -1,0 +1,58 @@
+[package]
+name = "cascette-containerless"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Containerless storage backend: loose files with encrypted SQLite metadata"
+readme = "README.md"
+keywords = ["casc", "containerless", "storage", "sqlite", "agent"]
+categories = ["game-development", "filesystem"]
+
+[dependencies]
+# Internal dependencies
+cascette-crypto = { version = "0.2.0", path = "../cascette-crypto" }
+cascette-formats = { version = "0.2.0", path = "../cascette-formats" }
+cascette-proto = { version = "0.2.0", path = "../cascette-proto" }
+
+# Workspace dependencies
+thiserror = { workspace = true }
+tokio = { workspace = true, features = [
+  "fs",
+  "io-util",
+  "macros",
+  "sync",
+  "rt-multi-thread",
+] }
+tracing = { workspace = true }
+hex = { workspace = true }
+md5 = { workspace = true }
+prost = { workspace = true }
+turso = { workspace = true }
+tempfile = { workspace = true }
+
+[target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]
+libc = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util", "macros", "rt-multi-thread"] }
+tempfile = { workspace = true }
+pretty_assertions = { workspace = true }
+
+[[example]]
+name = "containerless_storage"
+path = "examples/containerless_storage.rs"
+
+[[example]]
+name = "containerless_encrypted"
+path = "examples/containerless_encrypted.rs"
+
+[[example]]
+name = "containerless_verification"
+path = "examples/containerless_verification.rs"
+
+[lints]
+workspace = true

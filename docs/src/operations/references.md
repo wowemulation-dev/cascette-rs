@@ -131,7 +131,89 @@ Community wiki documenting WoW file formats and systems.
 Build database with 1,900+ WoW builds.
 
 - **URL**: <https://wago.tools/builds>
-- **Use for**: Build history, version information, product tracking
+- **Use for**: Build history, version information, product tracking (WoW products)
+
+### BlizzTrack
+
+Real-time build tracker covering all Blizzard TACT products with a public REST API.
+
+- **URL**: <https://blizztrack.com>
+- **API base**: `https://blizztrack.com/api/`
+- **API docs (Swagger)**: <https://blizztrack.com/swagger/doc.json>
+- **Use for**: Build history for any TACT product (including `agent`, `bna`, WoW, Overwatch, etc.),
+  archived Ribbit manifest snapshots indexed by sequence number
+
+#### API Endpoints
+
+All responses wrap the payload in `{"success": true, "result": {...}}`.
+
+**Get current versions manifest for a product:**
+
+```bash
+curl https://blizztrack.com/api/manifest/agent/versions
+```
+
+Response fields per region entry: `region`, `name`, `version_name`, `build_id`,
+`build_config`, `cdn_config`, `product_config`.
+
+**Get a historical versions manifest by sequence number:**
+
+```bash
+curl "https://blizztrack.com/api/manifest/agent/versions?seqn=3524803"
+```
+
+**List archived sequence numbers (paginated, max 25 per page):**
+
+```bash
+curl "https://blizztrack.com/api/manifest/agent/seqn?file=versions&limit=5"
+```
+
+Response fields: `seqn`, `created_at`, `tact`, `type`, `refs.versions` (relative URL to
+retrieve that snapshot).
+
+**Get CDN configuration:**
+
+```bash
+curl https://blizztrack.com/api/manifest/agent/cdns
+```
+
+Response fields per region entry: `region`, `name`, `path`, `hosts`, `servers`, `config_path`.
+
+**Example: `agent` product (Blizzard Agent / Battle.net Agent)**
+
+```json
+{
+  "seqn": 3568387,
+  "tact": "agent",
+  "type": "versions",
+  "created_at": "2026-02-23T16:03:11.330006Z",
+  "name": "Battle.net Agent",
+  "data": [
+    {
+      "name": "Americas",
+      "region": "us",
+      "version_name": "2.39.4.9390",
+      "build_id": 9390,
+      "build_config": "4e4525fb80e2c0e58ca0e6d6415a4687",
+      "cdn_config": "749c65c34e2990780795343aea69c255",
+      "product_config": "e4e39428296f4009228ac3ecc91909fb"
+    }
+  ]
+}
+```
+
+The `agent` product uses CDN path `tpr/bnt001` (not `tpr/wow`). Always retrieve
+the path from `/api/manifest/{tact}/cdns` rather than assuming it.
+
+**Get global summary (all products, latest changes):**
+
+```bash
+curl "https://blizztrack.com/api/summary"
+```
+
+Returns a paginated list of recent manifest changes across all tracked products,
+each entry containing `product`, `seqn`, `flags`, `name`, and `refs` for
+navigating to the full manifest snapshot.
 
 ## Community CDN Mirrors
 

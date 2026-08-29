@@ -32,7 +32,7 @@ pub enum DownloadError {
     #[error("Invalid flag size: got {0} bytes, expected {1} bytes")]
     InvalidFlagSize(usize, u8),
 
-    /// Unsupported flag size in header (Agent.exe rejects > 4)
+    /// Unsupported flag size in header (values > 4 are rejected)
     #[error("Unsupported number of flag bytes in download manifest: {0}")]
     UnsupportedFlagSize(u8),
 

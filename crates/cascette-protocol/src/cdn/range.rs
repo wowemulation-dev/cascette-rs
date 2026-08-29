@@ -62,7 +62,7 @@ impl RangeDownloader {
     #[cfg(not(target_arch = "wasm32"))]
     pub fn new() -> Result<Self, RangeError> {
         let client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(180))
+            .timeout(Duration::from_mins(3))
             .build()?;
 
         Ok(Self {

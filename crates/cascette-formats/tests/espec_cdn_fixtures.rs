@@ -303,7 +303,7 @@ fn espec_cdn_mpq_variant() {
 
 #[test]
 fn espec_cdn_multiple_variable_blocks_rejected() {
-    // Agent.exe rejects multiple variable blocks
+    // Multiple variable blocks are rejected
     let result = ESpec::parse("b:{*=n,*=z}");
     assert!(
         matches!(result, Err(ESpecError::MultipleVariableBlocks)),

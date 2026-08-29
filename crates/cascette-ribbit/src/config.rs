@@ -43,12 +43,16 @@ pub struct ServerConfig {
     #[arg(
         long,
         env = "CASCETTE_RIBBIT_HTTP_BIND",
-        default_value = "0.0.0.0:8080"
+        default_value = "127.0.0.1:8080"
     )]
     pub http_bind: SocketAddr,
 
     /// TCP bind address (Ribbit v1/v2)
-    #[arg(long, env = "CASCETTE_RIBBIT_TCP_BIND", default_value = "0.0.0.0:1119")]
+    #[arg(
+        long,
+        env = "CASCETTE_RIBBIT_TCP_BIND",
+        default_value = "127.0.0.1:1119"
+    )]
     pub tcp_bind: SocketAddr,
 
     /// Path to builds JSON database
@@ -96,7 +100,7 @@ impl ServerConfig {
                     .next()
                     .unwrap_or("cdn.arctium.tools")
             ),
-            config_path: self.cdn_path.clone(),
+            config_path: DEFAULT_CONFIG_PATH.to_string(),
         }
     }
 
@@ -160,6 +164,11 @@ impl ServerConfig {
     }
 }
 
+/// Product configuration files always live under this path, separate from
+/// the per-product content path. Blizzard's CDNs BPSV always returns
+/// `tpr/configs/data` in the `ConfigPath` column.
+const DEFAULT_CONFIG_PATH: &str = "tpr/configs/data";
+
 /// CDN configuration for responses.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CdnConfig {
@@ -182,7 +191,7 @@ impl Default for CdnConfig {
             hosts: "cdn.arctium.tools".to_string(),
             path: "tpr/wow".to_string(),
             servers: "https://cdn.arctium.tools/?fallbackProtocol=http".to_string(),
-            config_path: "tpr/wow".to_string(),
+            config_path: DEFAULT_CONFIG_PATH.to_string(),
         }
     }
 }
@@ -201,10 +210,10 @@ impl CdnConfig {
                 .clone()
                 .unwrap_or_else(|| default_config.path.clone()),
             servers: default_config.servers.clone(),
-            config_path: build
-                .cdn_path
-                .clone()
-                .unwrap_or_else(|| default_config.config_path.clone()),
+            // ConfigPath is always tpr/configs/data regardless of the product's
+            // content path. It is a separate namespace for product configuration
+            // files (JSON blobs), not game data.
+            config_path: DEFAULT_CONFIG_PATH.to_string(),
         }
     }
 }
@@ -233,10 +242,10 @@ mod tests {
             keyring: None,
             product_config: None,
             build_time: "2024-01-01T00:00:00+00:00".to_string(),
-            encoding_ekey: "aaaabbbbccccddddeeeeffffgggghhh1".to_string(),
-            root_ekey: "aaaabbbbccccddddeeeeffffgggghhh2".to_string(),
-            install_ekey: "aaaabbbbccccddddeeeeffffgggghhh3".to_string(),
-            download_ekey: "aaaabbbbccccddddeeeeffffgggghhh4".to_string(),
+            encoding_ekey: Some("aaaabbbbccccddddeeeeffffgggghhh1".to_string()),
+            root_ekey: Some("aaaabbbbccccddddeeeeffffgggghhh2".to_string()),
+            install_ekey: Some("aaaabbbbccccddddeeeeffffgggghhh3".to_string()),
+            download_ekey: Some("aaaabbbbccccddddeeeeffffgggghhh4".to_string()),
             cdn_path: Some("tpr/wow_classic".to_string()),
         };
 
@@ -258,10 +267,10 @@ mod tests {
             keyring: None,
             product_config: None,
             build_time: "2024-01-01T00:00:00+00:00".to_string(),
-            encoding_ekey: "aaaabbbbccccddddeeeeffffgggghhh1".to_string(),
-            root_ekey: "aaaabbbbccccddddeeeeffffgggghhh2".to_string(),
-            install_ekey: "aaaabbbbccccddddeeeeffffgggghhh3".to_string(),
-            download_ekey: "aaaabbbbccccddddeeeeffffgggghhh4".to_string(),
+            encoding_ekey: Some("aaaabbbbccccddddeeeeffffgggghhh1".to_string()),
+            root_ekey: Some("aaaabbbbccccddddeeeeffffgggghhh2".to_string()),
+            install_ekey: Some("aaaabbbbccccddddeeeeffffgggghhh3".to_string()),
+            download_ekey: Some("aaaabbbbccccddddeeeeffffgggghhh4".to_string()),
             cdn_path: None,
         };
 
@@ -273,8 +282,8 @@ mod tests {
     #[test]
     fn test_server_config_has_tls() {
         let mut config = ServerConfig {
-            http_bind: "0.0.0.0:8080".parse().unwrap(),
-            tcp_bind: "0.0.0.0:1119".parse().unwrap(),
+            http_bind: "127.0.0.1:8080".parse().unwrap(),
+            tcp_bind: "127.0.0.1:1119".parse().unwrap(),
             builds: PathBuf::from("./builds.json"),
             cdn_hosts: "cdn.example.com".to_string(),
             cdn_path: "tpr/test".to_string(),

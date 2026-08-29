@@ -376,7 +376,7 @@ impl LruManager {
     /// 3. Scan directory for stale `.lru` files
     /// 4. Return accumulated entry count for size accounting
     ///
-    /// This matches Agent.exe's `casc::LRUManager::Run` sequence.
+    /// This matches the CASC LRU manager's run sequence.
     pub async fn run_cycle(
         &mut self,
         size_limit: u64,

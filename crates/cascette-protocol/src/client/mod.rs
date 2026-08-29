@@ -592,10 +592,9 @@ impl RibbitTactClient {
         }
 
         // Check if this is a TCP-only endpoint (not available on WASM)
+        // Note: v1/summary is NOT TCP-only — TACT v2 supports /v2/summary
         #[cfg(not(target_arch = "wasm32"))]
-        let is_tcp_only = endpoint.starts_with("v1/summary")
-            || endpoint.starts_with("v1/certs/")
-            || endpoint.starts_with("v1/ocsp/");
+        let is_tcp_only = endpoint.starts_with("v1/certs/") || endpoint.starts_with("v1/ocsp/");
 
         // Try protocols in order
         #[cfg(not(target_arch = "wasm32"))]
@@ -613,9 +612,7 @@ impl RibbitTactClient {
         // On WASM, TCP-only endpoints are not supported
         #[cfg(target_arch = "wasm32")]
         let response = {
-            let is_tcp_only = endpoint.starts_with("v1/summary")
-                || endpoint.starts_with("v1/certs/")
-                || endpoint.starts_with("v1/ocsp/");
+            let is_tcp_only = endpoint.starts_with("v1/certs/") || endpoint.starts_with("v1/ocsp/");
             if is_tcp_only {
                 return Err(ProtocolError::UnsupportedOnWasm(format!(
                     "TCP-only endpoint '{endpoint}' is not available on WASM"

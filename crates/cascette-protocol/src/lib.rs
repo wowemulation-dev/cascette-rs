@@ -34,7 +34,7 @@
 //!
 //! ## Protocol Support
 //!
-//! ### TACT (Tooling And Content Technology)
+//! ### TACT (Trusted Application Content Transfer)
 //! - **TACT v2 HTTPS**: `{region}.version.battle.net` (port 443)
 //! - **TACT v1 HTTP**: `{region}.patch.battle.net:1119` (fallback)
 //! - **Response Caching**: Automatic caching of BPSV responses
@@ -373,6 +373,7 @@ pub mod config;
 pub mod error;
 pub mod mime_parser;
 pub mod optimized;
+pub mod product_config;
 pub mod retry;
 pub mod transport;
 pub mod v1_mime;
