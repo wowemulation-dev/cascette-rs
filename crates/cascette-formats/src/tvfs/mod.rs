@@ -220,8 +220,10 @@ impl TvfsFile {
         let span = vfs_entry.spans.first()?;
         // Fall back to the flag-derived entry size when the CFT is too
         // small to infer a stride (degenerate single-entry manifests).
-        let stride = self.cft_stride().unwrap_or_else(|| self.header.cft_entry_size());
-        if (span.cft_offset as usize) % stride != 0 {
+        let stride = self
+            .cft_stride()
+            .unwrap_or_else(|| self.header.cft_entry_size());
+        if !(span.cft_offset as usize).is_multiple_of(stride) {
             return None; // offset not on an entry boundary (unresolvable layout)
         }
         self.container_table
@@ -240,11 +242,7 @@ impl TvfsFile {
                 stride = gcd(stride, span.cft_offset as usize);
             }
         }
-        if stride == 0 {
-            None
-        } else {
-            Some(stride)
-        }
+        if stride == 0 { None } else { Some(stride) }
     }
 
     /// Enumerate all files in the TVFS.
@@ -269,6 +267,16 @@ impl crate::CascFormat for TvfsFile {
         self.build()
             .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
     }
+}
+
+/// Greatest common divisor (Euclid).
+fn gcd(mut a: usize, mut b: usize) -> usize {
+    while b != 0 {
+        let t = b;
+        b = a % b;
+        a = t;
+    }
+    a
 }
 
 #[cfg(test)]
@@ -445,14 +453,4 @@ mod tests {
         assert_eq!(tvfs.resolve_path("f2").unwrap(), ekeys[2]); // offset 18
         assert_eq!(tvfs.cft_stride(), Some(9));
     }
-}
-
-/// Greatest common divisor (Euclid).
-fn gcd(mut a: usize, mut b: usize) -> usize {
-    while b != 0 {
-        let t = b;
-        b = a % b;
-        a = t;
-    }
-    a
 }
